@@ -98,14 +98,14 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid)
+    private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid, DotNetPublishStyle? styleOverride)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
 
         var cfg = plan.Configuration;
         var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
-        var style = target.Publish.Style;
+        var style = styleOverride ?? target.Publish.Style;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -121,7 +121,31 @@ public sealed partial class DotNetPublishPipelineRunner
             : target.Publish.OutputPath!;
 
         var outputDir = ResolvePath(plan.ProjectRoot, ApplyTemplate(outputDirTemplate, tokens));
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
+
+        EnsureOutputDirectoryUnlocked(
+            plan,
+            outputDir,
+            contextLabel: $"{target.Name} ({tfm}, {rid}, {style})",
+            serviceName: target.Publish.Service?.ServiceName);
         Directory.CreateDirectory(outputDir);
+
+        var lifecycle = target.Publish.Service?.Lifecycle;
+        if (target.Publish.Service is not null
+            && lifecycle is not null
+            && lifecycle.Enabled
+            && lifecycle.Mode == DotNetPublishServiceLifecycleMode.InlineRebuild)
+        {
+            ExecuteServiceLifecycleInlineBeforePublish(outputDir, target.Name, target.Publish.Service, lifecycle);
+        }
+
+        var stateTransfer = PreserveStateBeforePublish(
+            plan,
+            outputDir,
+            target.Publish.State,
+            tokens,
+            $"{target.Name} ({tfm}, {rid}, {style})");
 
         var publishDir = target.Publish.UseStaging
             ? Path.Combine(Path.GetTempPath(), "PowerForge.DotNetPublish", Guid.NewGuid().ToString("N"))
@@ -175,12 +199,28 @@ public sealed partial class DotNetPublishPipelineRunner
             DirectoryCopy(publishDir, outputDir);
         }
 
+        if (stateTransfer is not null)
+            RestorePreservedState(outputDir, stateTransfer);
+
+        DotNetPublishServicePackageResult? servicePackage = null;
+        if (target.Publish.Service is not null)
+            servicePackage = TryCreateServicePackage(outputDir, target.Name, rid, target.Publish.Service);
+
+        var signedFiles = 0;
         if (target.Publish.Sign?.Enabled == true)
-            TrySignOutput(outputDir, target.Publish.Sign);
+            signedFiles = TrySignOutput(outputDir, target.Publish.Sign);
 
         string? zipPath = null;
         if (target.Publish.Zip)
             zipPath = CreateZip(outputDir, plan, target, rid, tokens);
+
+        if (servicePackage is not null
+            && lifecycle is not null
+            && lifecycle.Enabled
+            && lifecycle.Mode == DotNetPublishServiceLifecycleMode.InlineRebuild)
+        {
+            ExecuteServiceLifecycleInlineAfterPublish(outputDir, servicePackage, lifecycle);
+        }
 
         var summary = SummarizeDirectory(outputDir, rid);
         return new DotNetPublishArtefactResult
@@ -197,7 +237,10 @@ public sealed partial class DotNetPublishPipelineRunner
             TotalBytes = summary.TotalBytes,
             ExePath = summary.ExePath,
             ExeBytes = summary.ExeBytes,
-            Cleanup = cleanup
+            Cleanup = cleanup,
+            ServicePackage = servicePackage,
+            StateTransfer = stateTransfer,
+            SignedFiles = signedFiles
         };
     }
 

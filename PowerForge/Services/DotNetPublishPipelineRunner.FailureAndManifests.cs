@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -58,6 +59,8 @@ public sealed partial class DotNetPublishPipelineRunner
             TargetName = stepEx.Step.TargetName,
             Framework = stepEx.Step.Framework,
             Runtime = stepEx.Step.Runtime,
+            InstallerId = stepEx.Step.InstallerId,
+            GateId = stepEx.Step.GateId,
         };
 
         if (inner is not DotNetPublishCommandException cmdEx)
@@ -126,15 +129,74 @@ public sealed partial class DotNetPublishPipelineRunner
         return Path.GetFullPath(Path.Combine(baseDir, p));
     }
 
-    private static (string? ManifestJson, string? ManifestText) WriteManifests(DotNetPublishPlan plan, List<DotNetPublishArtefactResult> artefacts)
+    private static void EnsurePathWithinRoot(string rootPath, string path, string label)
     {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            throw new InvalidOperationException("ProjectRoot is required for path safety checks.");
+
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException($"{label} must not be empty.");
+
+        var root = Path.GetFullPath(rootPath);
+        var candidate = Path.GetFullPath(path);
+
+        if (PathsEqual(root, candidate)) return;
+
+        var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        var comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!candidate.StartsWith(rootWithSep, comparison))
+        {
+            throw new InvalidOperationException(
+                $"{label} resolves outside ProjectRoot and is blocked by policy. " +
+                $"Path='{candidate}', ProjectRoot='{root}'. " +
+                "Set DotNet.AllowOutputOutsideProjectRoot or DotNet.AllowManifestOutsideProjectRoot to true if this is intentional.");
+        }
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        var comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(
+            left.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            right.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparison);
+    }
+
+    private static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) WriteManifests(DotNetPublishPlan plan, List<DotNetPublishArtefactResult> artefacts)
+    {
+        var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
+            .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Framework, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Runtime, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.OutputDir, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var jsonPath = plan.Outputs.ManifestJsonPath;
         var txtPath = plan.Outputs.ManifestTextPath;
+        var checksumsPath = plan.Outputs.ChecksumsPath;
+
+        if (!plan.AllowManifestOutsideProjectRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(jsonPath))
+                EnsurePathWithinRoot(plan.ProjectRoot, jsonPath!, "ManifestJsonPath");
+            if (!string.IsNullOrWhiteSpace(txtPath))
+                EnsurePathWithinRoot(plan.ProjectRoot, txtPath!, "ManifestTextPath");
+            if (!string.IsNullOrWhiteSpace(checksumsPath))
+                EnsurePathWithinRoot(plan.ProjectRoot, checksumsPath!, "ChecksumsPath");
+        }
 
         if (!string.IsNullOrWhiteSpace(jsonPath))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(jsonPath))!);
-            var json = JsonSerializer.Serialize(artefacts, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(orderedArtefacts, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(jsonPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
@@ -142,7 +204,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(txtPath))!);
             var lines = new List<string>();
-            foreach (var a in artefacts)
+            foreach (var a in orderedArtefacts)
             {
                 var mb = a.TotalBytes / 1024d / 1024d;
                 var exeMb = a.ExeBytes.HasValue ? (a.ExeBytes.Value / 1024d / 1024d) : 0;
@@ -152,7 +214,86 @@ public sealed partial class DotNetPublishPipelineRunner
             File.WriteAllLines(txtPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
-        return (jsonPath, txtPath);
+        if (!string.IsNullOrWhiteSpace(checksumsPath))
+        {
+            var filesToHash = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var a in orderedArtefacts)
+            {
+                foreach (var file in EnumerateFilesSafe(a.OutputDir, "*", SearchOption.AllDirectories))
+                {
+                    var full = Path.GetFullPath(file);
+                    if (!File.Exists(full)) continue;
+                    filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+                }
+
+                if (!string.IsNullOrWhiteSpace(a.ZipPath))
+                {
+                    var zip = Path.GetFullPath(a.ZipPath!);
+                    if (File.Exists(zip))
+                        filesToHash[zip] = ToManifestRelativePath(plan.ProjectRoot, zip);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(jsonPath) && File.Exists(jsonPath!))
+            {
+                var full = Path.GetFullPath(jsonPath!);
+                filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+            }
+
+            if (!string.IsNullOrWhiteSpace(txtPath) && File.Exists(txtPath!))
+            {
+                var full = Path.GetFullPath(txtPath!);
+                filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+            }
+
+            var checksumLines = filesToHash
+                .Select(kv => new { FullPath = kv.Key, Relative = kv.Value })
+                .OrderBy(k => k.Relative, StringComparer.OrdinalIgnoreCase)
+                .Select(k => $"{ComputeSha256(k.FullPath)} *{k.Relative}")
+                .ToArray();
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(checksumsPath!))!);
+            File.WriteAllLines(checksumsPath!, checksumLines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+
+        return (jsonPath, txtPath, checksumsPath);
+    }
+
+    private static string ToManifestRelativePath(string projectRoot, string fullPath)
+    {
+        var root = Path.GetFullPath(projectRoot);
+        var file = Path.GetFullPath(fullPath);
+        var relative = GetRelativePath(root, file);
+        if (string.IsNullOrWhiteSpace(relative))
+            relative = Path.GetFileName(file);
+        return relative.Replace('\\', '/');
+    }
+
+    private static string GetRelativePath(string relativeTo, string path)
+    {
+#if NET472
+        var basePath = Path.GetFullPath(relativeTo)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var baseUri = new Uri(basePath);
+        var targetUri = new Uri(Path.GetFullPath(path));
+        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
+#else
+        return Path.GetRelativePath(relativeTo, path);
+#endif
+    }
+
+    private static string ComputeSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(stream);
+        var sb = new StringBuilder(hash.Length * 2);
+        for (var i = 0; i < hash.Length; i++)
+            sb.Append(hash[i].ToString("x2"));
+        return sb.ToString();
     }
 
 }

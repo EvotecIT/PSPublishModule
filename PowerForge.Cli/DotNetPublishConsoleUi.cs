@@ -186,9 +186,14 @@ internal static class DotNetPublishConsoleUi
 
         summary.AddRow("Succeeded", result.Succeeded ? "[green]true[/]" : "[red]false[/]");
         summary.AddRow("Artefacts", (result.Artefacts?.Length ?? 0).ToString());
+        summary.AddRow("MSI prepares", (result.MsiPrepares?.Length ?? 0).ToString());
+        summary.AddRow("MSI builds", (result.MsiBuilds?.Length ?? 0).ToString());
+        summary.AddRow("Benchmark gates", (result.BenchmarkGates?.Length ?? 0).ToString());
         summary.AddRow("Bytes", totalBytes.ToString("N0"));
         if (!string.IsNullOrWhiteSpace(result.ManifestJsonPath))
             summary.AddRow("Manifest", Markup.Escape(result.ManifestJsonPath));
+        if (!string.IsNullOrWhiteSpace(result.RunReportPath))
+            summary.AddRow("Run report", Markup.Escape(result.RunReportPath));
 
         if (!result.Succeeded && result.Failure is not null)
         {
@@ -309,6 +314,54 @@ internal static class DotNetPublishConsoleUi
             return $"{prefix} Publish {target}{suffix}".Trim();
         }
 
+        if (step.Kind == DotNetPublishStepKind.MsiPrepare)
+        {
+            var installer = string.IsNullOrWhiteSpace(step.InstallerId) ? "(installer)" : step.InstallerId;
+            var target = string.IsNullOrWhiteSpace(step.TargetName) ? string.Empty : $" from {step.TargetName}";
+            var suffixParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(step.Runtime)) suffixParts.Add(step.Runtime!);
+            if (!string.IsNullOrWhiteSpace(step.Framework)) suffixParts.Add(step.Framework!);
+            if (step.Style.HasValue) suffixParts.Add(step.Style.Value.ToString());
+            var suffix = suffixParts.Count == 0 ? string.Empty : $" ({string.Join(", ", suffixParts)})";
+            return $"{prefix} MSI prepare {installer}{target}{suffix}".Trim();
+        }
+
+        if (step.Kind == DotNetPublishStepKind.MsiBuild)
+        {
+            var installer = string.IsNullOrWhiteSpace(step.InstallerId) ? "(installer)" : step.InstallerId;
+            var target = string.IsNullOrWhiteSpace(step.TargetName) ? string.Empty : $" from {step.TargetName}";
+            var suffixParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(step.Runtime)) suffixParts.Add(step.Runtime!);
+            if (!string.IsNullOrWhiteSpace(step.Framework)) suffixParts.Add(step.Framework!);
+            if (step.Style.HasValue) suffixParts.Add(step.Style.Value.ToString());
+            var suffix = suffixParts.Count == 0 ? string.Empty : $" ({string.Join(", ", suffixParts)})";
+            return $"{prefix} MSI build {installer}{target}{suffix}".Trim();
+        }
+
+        if (step.Kind == DotNetPublishStepKind.MsiSign)
+        {
+            var installer = string.IsNullOrWhiteSpace(step.InstallerId) ? "(installer)" : step.InstallerId;
+            var target = string.IsNullOrWhiteSpace(step.TargetName) ? string.Empty : $" from {step.TargetName}";
+            var suffixParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(step.Runtime)) suffixParts.Add(step.Runtime!);
+            if (!string.IsNullOrWhiteSpace(step.Framework)) suffixParts.Add(step.Framework!);
+            if (step.Style.HasValue) suffixParts.Add(step.Style.Value.ToString());
+            var suffix = suffixParts.Count == 0 ? string.Empty : $" ({string.Join(", ", suffixParts)})";
+            return $"{prefix} MSI sign {installer}{target}{suffix}".Trim();
+        }
+
+        if (step.Kind == DotNetPublishStepKind.BenchmarkExtract)
+        {
+            var gate = string.IsNullOrWhiteSpace(step.GateId) ? "(gate)" : step.GateId;
+            return $"{prefix} Benchmark extract {gate}".Trim();
+        }
+
+        if (step.Kind == DotNetPublishStepKind.BenchmarkGate)
+        {
+            var gate = string.IsNullOrWhiteSpace(step.GateId) ? "(gate)" : step.GateId;
+            return $"{prefix} Benchmark gate {gate}".Trim();
+        }
+
         var title = string.IsNullOrWhiteSpace(step.Title) ? step.Kind.ToString() : step.Title.Trim();
         if (step.Kind != DotNetPublishStepKind.Publish && !string.IsNullOrWhiteSpace(step.Runtime))
             title = $"{title} ({step.Runtime})";
@@ -326,6 +379,12 @@ internal static class DotNetPublishConsoleUi
                 DotNetPublishStepKind.Clean => "[grey]CL[/]",
                 DotNetPublishStepKind.Build => "[grey]BL[/]",
                 DotNetPublishStepKind.Publish => "[grey]PB[/]",
+                DotNetPublishStepKind.ServiceLifecycle => "[grey]SV[/]",
+                DotNetPublishStepKind.MsiPrepare => "[grey]MS[/]",
+                DotNetPublishStepKind.MsiBuild => "[grey]MB[/]",
+                DotNetPublishStepKind.MsiSign => "[grey]SG[/]",
+                DotNetPublishStepKind.BenchmarkExtract => "[grey]BX[/]",
+                DotNetPublishStepKind.BenchmarkGate => "[grey]BG[/]",
                 DotNetPublishStepKind.Manifest => "[grey]MF[/]",
                 _ => "[grey]?[/]",
             };
@@ -337,6 +396,12 @@ internal static class DotNetPublishConsoleUi
             DotNetPublishStepKind.Clean => "[yellow]🧹[/]",
             DotNetPublishStepKind.Build => "[yellow]🔨[/]",
             DotNetPublishStepKind.Publish => "[green]📦[/]",
+            DotNetPublishStepKind.ServiceLifecycle => "[yellow]🔧[/]",
+            DotNetPublishStepKind.MsiPrepare => "[yellow]🧱[/]",
+            DotNetPublishStepKind.MsiBuild => "[yellow]🏗️[/]",
+            DotNetPublishStepKind.MsiSign => "[yellow]🔏[/]",
+            DotNetPublishStepKind.BenchmarkExtract => "[yellow]📊[/]",
+            DotNetPublishStepKind.BenchmarkGate => "[yellow]📈[/]",
             DotNetPublishStepKind.Manifest => "[blue]📝[/]",
             _ => "[grey]•[/]",
         };

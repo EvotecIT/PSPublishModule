@@ -7,29 +7,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private void TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
+    private int TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
     {
-        if (sign is null || !sign.Enabled) return;
-        if (!IsWindows())
-        {
-            _logger.Warn("Signing requested but current OS is not Windows. Skipping signing.");
-            return;
-        }
-
-        var signTool = ResolveSignToolPath(sign.ToolPath);
-        if (string.IsNullOrWhiteSpace(signTool))
-        {
-            _logger.Warn("Signing requested but signtool.exe was not found. Skipping signing.");
-            return;
-        }
-
-        var signToolPath = signTool!;
-        if (!File.Exists(signToolPath))
-        {
-            _logger.Warn($"Signing requested but signtool.exe was not found: {signToolPath}. Skipping signing.");
-            return;
-        }
-
+        if (sign is null || !sign.Enabled) return 0;
         var targets = new List<string>();
         try
         {
@@ -41,11 +21,68 @@ public sealed partial class DotNetPublishPipelineRunner
             // ignore
         }
 
-        if (targets.Count == 0) return;
+        var signed = TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
+        return signed.Length;
+    }
 
-        _logger.Info($"Signing {targets.Count} file(s) using {Path.GetFileName(signToolPath)}");
-        foreach (var file in targets.Distinct(StringComparer.OrdinalIgnoreCase))
+    private string[] TrySignFiles(
+        IEnumerable<string> files,
+        string workingDirectory,
+        DotNetPublishSignOptions sign,
+        string? scope)
+    {
+        if (sign is null || !sign.Enabled)
+            return Array.Empty<string>();
+
+        if (!IsWindows())
         {
+            HandlePolicy(
+                sign.OnMissingTool,
+                "Signing requested but current OS is not Windows.");
+            return Array.Empty<string>();
+        }
+
+        var signTool = ResolveSignToolPath(sign.ToolPath);
+        if (string.IsNullOrWhiteSpace(signTool))
+        {
+            HandlePolicy(
+                sign.OnMissingTool,
+                "Signing requested but signtool.exe was not found.");
+            return Array.Empty<string>();
+        }
+
+        var signToolPath = signTool!;
+        if (!File.Exists(signToolPath))
+        {
+            HandlePolicy(
+                sign.OnMissingTool,
+                $"Signing requested but signtool.exe was not found: {signToolPath}.");
+            return Array.Empty<string>();
+        }
+
+        var targets = (files ?? Array.Empty<string>())
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => Path.GetFullPath(f))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (targets.Length == 0)
+            return Array.Empty<string>();
+
+        var label = string.IsNullOrWhiteSpace(scope) ? string.Empty : $" ({scope!.Trim()})";
+        _logger.Info($"Signing {targets.Length} file(s){label} using {Path.GetFileName(signToolPath)}");
+
+        var signed = new List<string>(targets.Length);
+        var runDir = string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory;
+
+        foreach (var file in targets)
+        {
+            if (!File.Exists(file))
+            {
+                HandlePolicy(sign.OnSignFailure, $"Signing target not found: {file}");
+                continue;
+            }
+
             var args = new List<string> { "sign", "/fd", "SHA256" };
             if (!string.IsNullOrWhiteSpace(sign.TimestampUrl))
                 args.AddRange(new[] { "/tr", sign.TimestampUrl!, "/td", "SHA256" });
@@ -67,9 +104,39 @@ public sealed partial class DotNetPublishPipelineRunner
                 args.AddRange(new[] { "/kc", sign.KeyContainer! });
 
             args.Add(file);
-            var res = RunProcess(signToolPath, outputDir, args);
+            var res = RunProcess(signToolPath, runDir, args);
             if (res.ExitCode != 0)
-                _logger.Warn($"Signing failed for '{file}'. {res.StdErr}".Trim());
+            {
+                var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
+                var message = string.IsNullOrWhiteSpace(details)
+                    ? $"Signing failed for '{file}' (exit code: {res.ExitCode})."
+                    : $"Signing failed for '{file}' (exit code: {res.ExitCode}). {details.Trim()}";
+                HandlePolicy(sign.OnSignFailure, message);
+                continue;
+            }
+
+            signed.Add(file);
+        }
+
+        return signed
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void HandlePolicy(DotNetPublishPolicyMode policy, string message)
+    {
+        switch (policy)
+        {
+            case DotNetPublishPolicyMode.Fail:
+                throw new InvalidOperationException(message);
+            case DotNetPublishPolicyMode.Skip:
+                if (_logger.IsVerbose) _logger.Verbose($"{message} (policy=Skip)");
+                break;
+            case DotNetPublishPolicyMode.Warn:
+            default:
+                _logger.Warn(message);
+                break;
         }
     }
 

@@ -203,6 +203,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? Path.Combine(Path.GetDirectoryName(outputDir)!, zipName)
                 : ResolvePath(plan.ProjectRoot, ApplyTemplate(target.Publish.ZipPath!, tokens));
 
+            if (!plan.AllowOutputOutsideProjectRoot)
+                EnsurePathWithinRoot(plan.ProjectRoot, zipPath, $"Target '{target.Name}' zip path");
+
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(zipPath))!);
             if (File.Exists(zipPath)) File.Delete(zipPath);
 
@@ -214,6 +217,228 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Warn($"Failed to create zip for '{target.Name}' ({rid}). Error: {ex.Message}");
             return null;
         }
+    }
+
+    private DotNetPublishServicePackageResult TryCreateServicePackage(
+        string outputDir,
+        string targetName,
+        string rid,
+        DotNetPublishServicePackageOptions service)
+    {
+        if (string.IsNullOrWhiteSpace(outputDir))
+            throw new ArgumentException("Output directory must not be empty.", nameof(outputDir));
+        if (service is null)
+            throw new ArgumentNullException(nameof(service));
+
+        var serviceName = string.IsNullOrWhiteSpace(service.ServiceName)
+            ? targetName
+            : service.ServiceName!.Trim();
+        if (string.IsNullOrWhiteSpace(serviceName))
+            throw new InvalidOperationException("Service package requires a non-empty service name.");
+
+        var displayName = string.IsNullOrWhiteSpace(service.DisplayName)
+            ? serviceName
+            : service.DisplayName!.Trim();
+        var description = string.IsNullOrWhiteSpace(service.Description)
+            ? $"{serviceName} service"
+            : service.Description!.Trim();
+        var arguments = string.IsNullOrWhiteSpace(service.Arguments)
+            ? null
+            : service.Arguments!.Trim();
+
+        var executablePath = ResolveServiceExecutablePath(outputDir, rid, service);
+        EnsurePathWithinRoot(outputDir, executablePath, "Service executable path");
+        var executableRelativePath = GetRelativePath(outputDir, executablePath)
+            .Replace('/', '\\');
+
+        var generateInstall = service.GenerateInstallScript || service.GenerateRunOnceScript;
+        var installPath = generateInstall ? Path.Combine(outputDir, "Install-Service.ps1") : null;
+        var uninstallPath = service.GenerateUninstallScript ? Path.Combine(outputDir, "Uninstall-Service.ps1") : null;
+        var runOncePath = service.GenerateRunOnceScript ? Path.Combine(outputDir, "Run-Once.ps1") : null;
+        var metadataPath = Path.Combine(outputDir, "ServicePackage.json");
+
+        if (!string.IsNullOrWhiteSpace(installPath))
+            File.WriteAllText(
+                installPath!,
+                BuildInstallServiceScript(serviceName, displayName, description, executableRelativePath, arguments),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        if (!string.IsNullOrWhiteSpace(uninstallPath))
+            File.WriteAllText(
+                uninstallPath!,
+                BuildUninstallServiceScript(serviceName),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        if (!string.IsNullOrWhiteSpace(runOncePath))
+            File.WriteAllText(
+                runOncePath!,
+                BuildRunOnceServiceScript(),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        var bootstrapFiles = ApplyConfigBootstrapRules(outputDir, service.ConfigBootstrap);
+
+        var package = new DotNetPublishServicePackageResult
+        {
+            ServiceName = serviceName,
+            DisplayName = displayName,
+            Description = description,
+            ExecutablePath = executableRelativePath,
+            Arguments = arguments,
+            InstallScriptPath = installPath,
+            UninstallScriptPath = uninstallPath,
+            RunOnceScriptPath = runOncePath,
+            MetadataPath = metadataPath,
+            Recovery = service.Recovery is null
+                ? null
+                : new DotNetPublishServiceRecoveryOptions
+                {
+                    Enabled = service.Recovery.Enabled,
+                    ResetPeriodSeconds = service.Recovery.ResetPeriodSeconds,
+                    RestartDelaySeconds = service.Recovery.RestartDelaySeconds,
+                    ApplyToNonCrashFailures = service.Recovery.ApplyToNonCrashFailures,
+                    OnFailure = service.Recovery.OnFailure
+                },
+            ConfigBootstrapFiles = bootstrapFiles
+        };
+
+        var metadataJson = JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(metadataPath, metadataJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        _logger.Info($"Generated service package metadata for '{targetName}' ({rid}) -> {metadataPath}");
+        if (!string.IsNullOrWhiteSpace(installPath))
+            _logger.Info($"Generated service install script -> {installPath}");
+        if (!string.IsNullOrWhiteSpace(uninstallPath))
+            _logger.Info($"Generated service uninstall script -> {uninstallPath}");
+        if (!string.IsNullOrWhiteSpace(runOncePath))
+            _logger.Info($"Generated service run-once script -> {runOncePath}");
+        if (bootstrapFiles.Length > 0)
+            _logger.Info($"Applied {bootstrapFiles.Length} config bootstrap file(s) for '{targetName}' ({rid}).");
+
+        return package;
+    }
+
+    private string[] ApplyConfigBootstrapRules(string outputDir, DotNetPublishConfigBootstrapRule[]? rules)
+    {
+        var applied = new List<string>();
+        foreach (var rule in rules ?? Array.Empty<DotNetPublishConfigBootstrapRule>())
+        {
+            if (rule is null) continue;
+
+            var sourceRel = (rule.SourcePath ?? string.Empty).Trim();
+            var destinationRel = (rule.DestinationPath ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(sourceRel) || string.IsNullOrWhiteSpace(destinationRel))
+                continue;
+
+            var source = ResolvePath(outputDir, sourceRel);
+            var destination = ResolvePath(outputDir, destinationRel);
+
+            EnsurePathWithinRoot(outputDir, source, $"Config bootstrap source '{sourceRel}'");
+            EnsurePathWithinRoot(outputDir, destination, $"Config bootstrap destination '{destinationRel}'");
+
+            if (!File.Exists(source))
+            {
+                HandlePolicy(
+                    rule.OnMissingSource,
+                    $"Config bootstrap source file not found: {source}.");
+                continue;
+            }
+
+            if (File.Exists(destination) && !rule.Overwrite)
+            {
+                _logger.Info($"Config bootstrap skipped existing file: {destination}");
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(source, destination, overwrite: rule.Overwrite);
+
+            var relative = GetRelativePath(outputDir, destination).Replace('/', '\\');
+            applied.Add(relative);
+            _logger.Info($"Config bootstrap applied: {sourceRel} -> {relative}");
+        }
+
+        return applied
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string ResolveServiceExecutablePath(string outputDir, string rid, DotNetPublishServicePackageOptions service)
+    {
+        if (!string.IsNullOrWhiteSpace(service.ExecutablePath))
+        {
+            var resolved = ResolvePath(outputDir, service.ExecutablePath!);
+            if (!File.Exists(resolved))
+                throw new FileNotFoundException(
+                    $"Service executable path not found: {resolved}. " +
+                    "Set Publish.Service.ExecutablePath to a valid file in the output folder.",
+                    resolved);
+            return resolved;
+        }
+
+        var detected = FindMainExecutable(outputDir, rid);
+        if (string.IsNullOrWhiteSpace(detected) || !File.Exists(detected))
+        {
+            throw new FileNotFoundException(
+                $"Failed to auto-detect service executable in output: {outputDir}. " +
+                "Set Publish.Service.ExecutablePath explicitly.");
+        }
+
+        return detected!;
+    }
+
+    private static string BuildInstallServiceScript(
+        string serviceName,
+        string displayName,
+        string description,
+        string executableRelativePath,
+        string? arguments)
+    {
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ServiceName"] = EscapePowerShellSingleQuoted(serviceName),
+            ["DisplayName"] = EscapePowerShellSingleQuoted(displayName),
+            ["Description"] = EscapePowerShellSingleQuoted(description),
+            ["ExecutableRelativePath"] = EscapePowerShellSingleQuoted(executableRelativePath),
+            ["Arguments"] = EscapePowerShellSingleQuoted(arguments ?? string.Empty)
+        };
+
+        return RenderServiceTemplate(
+            "Install-Service.ps1",
+            EmbeddedScripts.Load("Scripts/DotNetPublish/Install-Service.Template.ps1"),
+            tokens);
+    }
+
+    private static string BuildUninstallServiceScript(string serviceName)
+    {
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ServiceName"] = EscapePowerShellSingleQuoted(serviceName)
+        };
+
+        return RenderServiceTemplate(
+            "Uninstall-Service.ps1",
+            EmbeddedScripts.Load("Scripts/DotNetPublish/Uninstall-Service.Template.ps1"),
+            tokens);
+    }
+
+    private static string BuildRunOnceServiceScript()
+    {
+        return RenderServiceTemplate(
+            "Run-Once.ps1",
+            EmbeddedScripts.Load("Scripts/DotNetPublish/Run-Once.Template.ps1"),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static string RenderServiceTemplate(
+        string templateName,
+        string template,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        return ScriptTemplateRenderer.Render(templateName, template, tokens);
+    }
+
+    private static string EscapePowerShellSingleQuoted(string value)
+    {
+        return (value ?? string.Empty).Replace("'", "''");
     }
 
 }

@@ -7,10 +7,28 @@
   "properties": {
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Profile": { "type": ["string", "null"] },
+    "Profiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishProfile" }
+    },
+    "Projects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishProject" }
+    },
+    "Matrix": { "$ref": "#/$defs/DotNetPublishMatrix" },
     "DotNet": { "$ref": "#/$defs/DotNetPublishDotNetOptions" },
     "Targets": {
       "type": "array",
       "items": { "$ref": "#/$defs/DotNetPublishTarget" }
+    },
+    "Installers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishInstaller" }
+    },
+    "BenchmarkGates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishBenchmarkGate" }
     },
     "Outputs": { "$ref": "#/$defs/DotNetPublishOutputs" }
   },
@@ -24,12 +42,99 @@
       "type": "string",
       "enum": ["Unknown", "Cli", "Service", "Library"]
     },
+    "DotNetPublishPolicyMode": {
+      "type": "string",
+      "enum": ["Warn", "Fail", "Skip"]
+    },
+    "DotNetPublishServiceLifecycleMode": {
+      "type": "string",
+      "enum": ["Step", "InlineRebuild"]
+    },
+    "DotNetPublishMsiHarvestMode": {
+      "type": "string",
+      "enum": ["None", "Auto"]
+    },
+    "DotNetPublishBenchmarkMetricSource": {
+      "type": "string",
+      "enum": ["JsonPath", "Regex"]
+    },
+    "DotNetPublishBenchmarkMetricAggregation": {
+      "type": "string",
+      "enum": ["First", "Last", "Min", "Max", "Average"]
+    },
+    "DotNetPublishBaselineMode": {
+      "type": "string",
+      "enum": ["Verify", "Update"]
+    },
+    "DotNetPublishMsiVersionOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Major": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "Minor": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "FloorDateUtc": { "type": ["string", "null"] },
+        "Monotonic": { "type": "boolean" },
+        "StatePath": { "type": ["string", "null"] },
+        "PropertyName": { "type": ["string", "null"] },
+        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "DotNetPublishMsiClientLicenseOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ClientId": { "type": ["string", "null"] },
+        "Path": { "type": ["string", "null"] },
+        "PathTemplate": { "type": ["string", "null"] },
+        "PropertyName": { "type": ["string", "null"] },
+        "OnMissingFile": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "DotNetPublishBenchmarkMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Source": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBenchmarkMetricSource" }, { "type": "null" }] },
+        "Path": { "type": ["string", "null"] },
+        "Pattern": { "type": ["string", "null"] },
+        "Group": { "type": "integer", "minimum": 0 },
+        "Aggregation": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBenchmarkMetricAggregation" }, { "type": "null" }] },
+        "Required": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "DotNetPublishBenchmarkGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Enabled": { "type": "boolean" },
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "BaselinePath": { "type": "string", "minLength": 1 },
+        "BaselineMode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBaselineMode" }, { "type": "null" }] },
+        "FailOnNew": { "type": "boolean" },
+        "RelativeTolerance": { "type": "number", "minimum": 0 },
+        "AbsoluteToleranceMs": { "type": "number", "minimum": 0 },
+        "OnRegression": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnMissingMetric": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "Metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBenchmarkMetric" }
+        }
+      },
+      "required": ["Id", "SourcePath", "BaselinePath", "Metrics"]
+    },
     "DotNetPublishSignOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "Enabled": { "type": "boolean" },
         "ToolPath": { "type": ["string", "null"] },
+        "OnMissingTool": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnSignFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
         "Thumbprint": { "type": ["string", "null"] },
         "SubjectName": { "type": ["string", "null"] },
         "TimestampUrl": { "type": ["string", "null"] },
@@ -39,11 +144,34 @@
         "KeyContainer": { "type": ["string", "null"] }
       }
     },
+    "DotNetPublishStateRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": ["string", "null"] },
+        "Overwrite": { "type": "boolean" }
+      },
+      "required": ["SourcePath"]
+    },
+    "DotNetPublishStatePreservationOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "StoragePath": { "type": ["string", "null"] },
+        "ClearStorage": { "type": "boolean" },
+        "OnMissingSource": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnRestoreFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "Rules": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStateRule" } }
+      }
+    },
     "DotNetPublishPublishOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "Style": { "$ref": "#/$defs/DotNetPublishStyle" },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
         "Framework": { "type": "string", "minLength": 1 },
         "Frameworks": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
@@ -59,29 +187,160 @@
         "ZipNameTemplate": { "type": ["string", "null"] },
         "RenameTo": { "type": ["string", "null"] },
         "ReadyToRun": { "type": ["boolean", "null"] },
-        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] }
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "Service": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServicePackageOptions" }, { "type": "null" }] },
+        "State": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStatePreservationOptions" }, { "type": "null" }] }
+      }
+    },
+    "DotNetPublishServicePackageOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ServiceName": { "type": ["string", "null"] },
+        "DisplayName": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "ExecutablePath": { "type": ["string", "null"] },
+        "Arguments": { "type": ["string", "null"] },
+        "GenerateInstallScript": { "type": "boolean" },
+        "GenerateUninstallScript": { "type": "boolean" },
+        "GenerateRunOnceScript": { "type": "boolean" },
+        "Lifecycle": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServiceLifecycleOptions" }, { "type": "null" }] },
+        "Recovery": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishServiceRecoveryOptions" }, { "type": "null" }] },
+        "ConfigBootstrap": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishConfigBootstrapRule" }
+        }
+      }
+    },
+    "DotNetPublishServiceLifecycleOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Mode": { "$ref": "#/$defs/DotNetPublishServiceLifecycleMode" },
+        "StopIfExists": { "type": "boolean" },
+        "DeleteIfExists": { "type": "boolean" },
+        "Install": { "type": "boolean" },
+        "Start": { "type": "boolean" },
+        "Verify": { "type": "boolean" },
+        "StopTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "WhatIf": { "type": "boolean" },
+        "OnUnsupportedPlatform": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "OnExecutionFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "DotNetPublishServiceRecoveryOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ResetPeriodSeconds": { "type": "integer", "minimum": 1 },
+        "RestartDelaySeconds": { "type": "integer", "minimum": 1 },
+        "ApplyToNonCrashFailures": { "type": "boolean" },
+        "OnFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
+      }
+    },
+    "DotNetPublishConfigBootstrapRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": "string", "minLength": 1 },
+        "Overwrite": { "type": "boolean" },
+        "OnMissingSource": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
       },
-      "anyOf": [
-        { "required": ["Framework"] },
-        { "required": ["Frameworks"] }
-      ]
+      "required": ["SourcePath", "DestinationPath"]
     },
     "DotNetPublishTarget": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "Name": { "type": "string", "minLength": 1 },
+        "ProjectId": { "type": ["string", "null"], "minLength": 1 },
         "ProjectPath": { "type": "string", "minLength": 1 },
         "Kind": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishTargetKind" }, { "type": "null" }] },
         "Publish": { "$ref": "#/$defs/DotNetPublishPublishOptions" }
       },
-      "required": ["Name", "ProjectPath", "Publish"]
+      "required": ["Name", "Publish"],
+      "anyOf": [
+        { "required": ["ProjectPath"] },
+        { "required": ["ProjectId"] }
+      ]
+    },
+    "DotNetPublishProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Path": { "type": "string", "minLength": 1 },
+        "Group": { "type": ["string", "null"] }
+      },
+      "required": ["Id", "Path"]
+    },
+    "DotNetPublishInstaller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PrepareFromTarget": { "type": "string", "minLength": 1 },
+        "StagingPath": { "type": ["string", "null"] },
+        "ManifestPath": { "type": ["string", "null"] },
+        "InstallerProjectId": { "type": ["string", "null"] },
+        "InstallerProjectPath": { "type": ["string", "null"] },
+        "Harvest": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiHarvestMode" }, { "type": "null" }] },
+        "HarvestPath": { "type": ["string", "null"] },
+        "HarvestDirectoryRefId": { "type": ["string", "null"] },
+        "HarvestComponentGroupId": { "type": ["string", "null"] },
+        "Versioning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiVersionOptions" }, { "type": "null" }] },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "ClientLicense": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiClientLicenseOptions" }, { "type": "null" }] }
+      },
+      "required": ["Id", "PrepareFromTarget"]
+    },
+    "DotNetPublishProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Default": { "type": "boolean" },
+        "Targets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Style": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishStyle" }, { "type": "null" }] }
+      },
+      "required": ["Name"]
+    },
+    "DotNetPublishMatrixRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Targets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Runtime": { "type": ["string", "null"] },
+        "Framework": { "type": ["string", "null"] },
+        "Style": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishMatrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
+        "Include": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishMatrixRule" } },
+        "Exclude": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishMatrixRule" } }
+      }
     },
     "DotNetPublishDotNetOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "ProjectRoot": { "type": ["string", "null"] },
+        "AllowOutputOutsideProjectRoot": { "type": "boolean" },
+        "AllowManifestOutsideProjectRoot": { "type": "boolean" },
+        "LockedOutputGuard": { "type": "boolean" },
+        "OnLockedOutput": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
+        "LockedOutputSampleLimit": { "type": "integer", "minimum": 1 },
         "SolutionPath": { "type": ["string", "null"] },
         "Configuration": { "type": "string" },
         "Restore": { "type": "boolean" },
@@ -101,7 +360,9 @@
       "additionalProperties": false,
       "properties": {
         "ManifestJsonPath": { "type": ["string", "null"] },
-        "ManifestTextPath": { "type": ["string", "null"] }
+        "ManifestTextPath": { "type": ["string", "null"] },
+        "ChecksumsPath": { "type": ["string", "null"] },
+        "RunReportPath": { "type": ["string", "null"] }
       }
     }
   }

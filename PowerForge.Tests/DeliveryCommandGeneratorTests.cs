@@ -35,10 +35,12 @@ public sealed class DeliveryCommandGeneratorTests
             var installContent = File.ReadAllText(installPath);
             Assert.Contains("function Install-EFAdminManager", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("function Copy-DeliveryRootFiles", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
             var updateContent = File.ReadAllText(updatePath);
             Assert.Contains("function Update-EFAdminManager", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Install-EFAdminManager", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("{{", updateContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -73,4 +75,3 @@ public sealed class DeliveryCommandGeneratorTests
         }
     }
 }
-

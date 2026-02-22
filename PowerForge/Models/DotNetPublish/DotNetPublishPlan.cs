@@ -8,6 +8,21 @@ public sealed class DotNetPublishPlan
     /// <summary>Project root used for resolving relative paths.</summary>
     public string ProjectRoot { get; set; } = string.Empty;
 
+    /// <summary>When true, output/zip paths may resolve outside <see cref="ProjectRoot"/>.</summary>
+    public bool AllowOutputOutsideProjectRoot { get; set; }
+
+    /// <summary>When true, manifest/checksum paths may resolve outside <see cref="ProjectRoot"/>.</summary>
+    public bool AllowManifestOutsideProjectRoot { get; set; }
+
+    /// <summary>When true, checks output directory for locked files before publish/copy operations.</summary>
+    public bool LockedOutputGuard { get; set; } = true;
+
+    /// <summary>Policy applied when locked output files are detected.</summary>
+    public DotNetPublishPolicyMode OnLockedOutput { get; set; } = DotNetPublishPolicyMode.Fail;
+
+    /// <summary>Maximum number of locked-file samples included in diagnostics.</summary>
+    public int LockedOutputSampleLimit { get; set; } = 5;
+
     /// <summary>Build configuration (Release/Debug).</summary>
     public string Configuration { get; set; } = "Release";
 
@@ -35,6 +50,12 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved targets (paths + publish options).</summary>
     public DotNetPublishTargetPlan[] Targets { get; set; } = Array.Empty<DotNetPublishTargetPlan>();
 
+    /// <summary>Resolved installer definitions.</summary>
+    public DotNetPublishInstallerPlan[] Installers { get; set; } = Array.Empty<DotNetPublishInstallerPlan>();
+
+    /// <summary>Resolved benchmark gates.</summary>
+    public DotNetPublishBenchmarkGatePlan[] BenchmarkGates { get; set; } = Array.Empty<DotNetPublishBenchmarkGatePlan>();
+
     /// <summary>Resolved output settings.</summary>
     public DotNetPublishOutputs Outputs { get; set; } = new();
 
@@ -58,6 +79,135 @@ public sealed class DotNetPublishTargetPlan
 
     /// <summary>Resolved publish options.</summary>
     public DotNetPublishPublishOptions Publish { get; set; } = new();
+
+    /// <summary>Resolved framework/runtime/style publish combinations for this target.</summary>
+    public DotNetPublishTargetCombination[] Combinations { get; set; } = Array.Empty<DotNetPublishTargetCombination>();
+}
+
+/// <summary>
+/// Resolved publish combination (framework + runtime + style) for a target.
+/// </summary>
+public sealed class DotNetPublishTargetCombination
+{
+    /// <summary>Target framework.</summary>
+    public string Framework { get; set; } = string.Empty;
+
+    /// <summary>Runtime identifier.</summary>
+    public string Runtime { get; set; } = string.Empty;
+
+    /// <summary>Publish style.</summary>
+    public DotNetPublishStyle Style { get; set; }
+}
+
+/// <summary>
+/// Resolved installer definition for packaging flows.
+/// </summary>
+public sealed class DotNetPublishInstallerPlan
+{
+    /// <summary>Installer identifier.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Source target used for payload preparation.</summary>
+    public string PrepareFromTarget { get; set; } = string.Empty;
+
+    /// <summary>Optional payload staging path template.</summary>
+    public string? StagingPath { get; set; }
+
+    /// <summary>Optional prepare manifest path template.</summary>
+    public string? ManifestPath { get; set; }
+
+    /// <summary>Optional installer project ID used for project-catalog resolution.</summary>
+    public string? InstallerProjectId { get; set; }
+
+    /// <summary>Optional resolved installer project path (for example wixproj path).</summary>
+    public string? InstallerProjectPath { get; set; }
+
+    /// <summary>Harvest mode for payload tree processing.</summary>
+    public DotNetPublishMsiHarvestMode Harvest { get; set; } = DotNetPublishMsiHarvestMode.None;
+
+    /// <summary>Optional harvest output path template.</summary>
+    public string? HarvestPath { get; set; }
+
+    /// <summary>Optional WiX directory reference ID.</summary>
+    public string? HarvestDirectoryRefId { get; set; }
+
+    /// <summary>Optional WiX component group ID template.</summary>
+    public string? HarvestComponentGroupId { get; set; }
+
+    /// <summary>Optional MSI version policy used by build steps.</summary>
+    public DotNetPublishMsiVersionOptions? Versioning { get; set; }
+
+    /// <summary>Optional MSI signing options used by sign steps.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>Optional client-license injection options used by MSI build steps.</summary>
+    public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+}
+
+/// <summary>
+/// Resolved benchmark gate definition.
+/// </summary>
+public sealed class DotNetPublishBenchmarkGatePlan
+{
+    /// <summary>Gate identifier.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>When false, gate is ignored.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Resolved source input path.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>Resolved baseline file path.</summary>
+    public string BaselinePath { get; set; } = string.Empty;
+
+    /// <summary>Verify or update mode.</summary>
+    public DotNetPublishBaselineMode BaselineMode { get; set; } = DotNetPublishBaselineMode.Verify;
+
+    /// <summary>When true in verify mode, missing baseline entries for extracted metrics fail the gate.</summary>
+    public bool FailOnNew { get; set; } = true;
+
+    /// <summary>Relative tolerance used for allowed-cap calculation.</summary>
+    public double RelativeTolerance { get; set; } = 0.10;
+
+    /// <summary>Absolute tolerance in milliseconds used for allowed-cap calculation.</summary>
+    public double AbsoluteToleranceMs { get; set; }
+
+    /// <summary>Policy applied on regression.</summary>
+    public DotNetPublishPolicyMode OnRegression { get; set; } = DotNetPublishPolicyMode.Fail;
+
+    /// <summary>Policy applied when expected metric is missing in source input.</summary>
+    public DotNetPublishPolicyMode OnMissingMetric { get; set; } = DotNetPublishPolicyMode.Fail;
+
+    /// <summary>Resolved metric extraction rules.</summary>
+    public DotNetPublishBenchmarkMetricPlan[] Metrics { get; set; } = Array.Empty<DotNetPublishBenchmarkMetricPlan>();
+}
+
+/// <summary>
+/// Resolved benchmark metric extraction rule.
+/// </summary>
+public sealed class DotNetPublishBenchmarkMetricPlan
+{
+    /// <summary>Metric identifier.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Extraction source type.</summary>
+    public DotNetPublishBenchmarkMetricSource Source { get; set; } = DotNetPublishBenchmarkMetricSource.JsonPath;
+
+    /// <summary>JSON path used for JsonPath source.</summary>
+    public string? Path { get; set; }
+
+    /// <summary>Regex pattern used for Regex source.</summary>
+    public string? Pattern { get; set; }
+
+    /// <summary>Regex capture group index for Regex source.</summary>
+    public int Group { get; set; } = 1;
+
+    /// <summary>Aggregation for extracted values.</summary>
+    public DotNetPublishBenchmarkMetricAggregation Aggregation { get; set; } = DotNetPublishBenchmarkMetricAggregation.Last;
+
+    /// <summary>Whether missing metric should be treated per OnMissingMetric policy.</summary>
+    public bool Required { get; set; } = true;
 }
 
 /// <summary>
@@ -82,4 +232,31 @@ public sealed class DotNetPublishStep
 
     /// <summary>Optional runtime identifier for publish steps.</summary>       
     public string? Runtime { get; set; }
+
+    /// <summary>Optional publish style for publish steps.</summary>
+    public DotNetPublishStyle? Style { get; set; }
+
+    /// <summary>Optional installer identifier for installer-related steps.</summary>
+    public string? InstallerId { get; set; }
+
+    /// <summary>Optional gate identifier for benchmark-related steps.</summary>
+    public string? GateId { get; set; }
+
+    /// <summary>Optional resolved payload staging path for installer prepare steps.</summary>
+    public string? StagingPath { get; set; }
+
+    /// <summary>Optional resolved prepare manifest path for installer prepare steps.</summary>
+    public string? ManifestPath { get; set; }
+
+    /// <summary>Optional resolved harvest path for installer prepare steps.</summary>
+    public string? HarvestPath { get; set; }
+
+    /// <summary>Optional resolved WiX directory reference ID for harvest output.</summary>
+    public string? HarvestDirectoryRefId { get; set; }
+
+    /// <summary>Optional resolved WiX component group ID for harvest output.</summary>
+    public string? HarvestComponentGroupId { get; set; }
+
+    /// <summary>Optional resolved installer project path for build steps.</summary>
+    public string? InstallerProjectPath { get; set; }
 }

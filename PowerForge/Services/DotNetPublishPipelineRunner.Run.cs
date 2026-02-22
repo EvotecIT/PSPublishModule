@@ -15,15 +15,28 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
+        var runStartedUtc = DateTimeOffset.UtcNow;
+        var runStopwatch = Stopwatch.StartNew();
         var artefacts = new List<DotNetPublishArtefactResult>();
+        var msiPrepares = new List<DotNetPublishMsiPrepareResult>();
+        var msiBuilds = new List<DotNetPublishMsiBuildResult>();
+        var benchmarkGates = new List<DotNetPublishBenchmarkGateResult>();
+        var benchmarkExtracts = new Dictionary<string, DotNetPublishBenchmarkExtractionResult>(StringComparer.OrdinalIgnoreCase);
+        var stepReports = new List<DotNetPublishRunReportStep>();
         string? manifestJson = null;
         string? manifestText = null;
+        string? checksumsPath = null;
+        string? runReportPath = null;
 
         try
         {
             foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
             {
                 progress.StepStarting(step);
+                var stepStartedUtc = DateTimeOffset.UtcNow;
+                var stepStopwatch = Stopwatch.StartNew();
+                string? stepError = null;
+                var stepSucceeded = false;
                 try
                 {
                     switch (step.Kind)
@@ -38,45 +51,108 @@ public sealed partial class DotNetPublishPipelineRunner
                             Build(plan, step.Runtime);
                             break;
                         case DotNetPublishStepKind.Publish:
-                            artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!));
+                            artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!, step.Style));
+                            break;
+                        case DotNetPublishStepKind.ServiceLifecycle:
+                            RunServiceLifecycleStep(plan, artefacts, step);
+                            break;
+                        case DotNetPublishStepKind.MsiPrepare:
+                            msiPrepares.Add(PrepareMsiPackage(plan, artefacts, step));
+                            break;
+                        case DotNetPublishStepKind.MsiBuild:
+                            msiBuilds.Add(BuildMsiPackage(plan, msiPrepares, step));
+                            break;
+                        case DotNetPublishStepKind.MsiSign:
+                            SignMsiPackage(plan, msiBuilds, step);
+                            break;
+                        case DotNetPublishStepKind.BenchmarkExtract:
+                            RunBenchmarkExtractStep(plan, benchmarkExtracts, step);
+                            break;
+                        case DotNetPublishStepKind.BenchmarkGate:
+                            benchmarkGates.Add(RunBenchmarkGateStep(plan, benchmarkExtracts, step));
                             break;
                         case DotNetPublishStepKind.Manifest:
-                            (manifestJson, manifestText) = WriteManifests(plan, artefacts);
+                            (manifestJson, manifestText, checksumsPath) = WriteManifests(plan, artefacts);
                             break;
                     }
 
                     progress.StepCompleted(step);
+                    stepSucceeded = true;
                 }
                 catch (Exception ex)
                 {
+                    stepError = ex.GetBaseException().Message;
                     progress.StepFailed(step, ex);
                     throw new DotNetPublishStepException(step, ex);
                 }
+                finally
+                {
+                    stepStopwatch.Stop();
+                    stepReports.Add(new DotNetPublishRunReportStep
+                    {
+                        Key = step.Key ?? string.Empty,
+                        Kind = step.Kind,
+                        Title = step.Title ?? string.Empty,
+                        StartedUtc = stepStartedUtc,
+                        FinishedUtc = DateTimeOffset.UtcNow,
+                        DurationMs = stepStopwatch.ElapsedMilliseconds,
+                        Succeeded = stepSucceeded,
+                        ErrorMessage = stepError
+                    });
+                }
             }
 
-            return new DotNetPublishResult
+            runStopwatch.Stop();
+            var successResult = new DotNetPublishResult
             {
                 Succeeded = true,
                 Artefacts = artefacts.ToArray(),
+                MsiPrepares = msiPrepares.ToArray(),
+                MsiBuilds = msiBuilds.ToArray(),
+                BenchmarkGates = benchmarkGates.ToArray(),
                 ManifestJsonPath = manifestJson,
-                ManifestTextPath = manifestText
+                ManifestTextPath = manifestText,
+                ChecksumsPath = checksumsPath
             };
+
+            runReportPath = TryWriteRunReport(
+                plan,
+                successResult,
+                stepReports,
+                runStartedUtc,
+                runStopwatch.Elapsed);
+            successResult.RunReportPath = runReportPath;
+            return successResult;
         }
         catch (Exception ex)
         {
+            runStopwatch.Stop();
             var failure = BuildFailure(plan, ex, out var errorMessage);
 
             _logger.Error(errorMessage);
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-            return new DotNetPublishResult
+            var failedResult = new DotNetPublishResult
             {
                 Succeeded = false,
                 ErrorMessage = errorMessage,
                 Failure = failure,
                 Artefacts = artefacts.ToArray(),
+                MsiPrepares = msiPrepares.ToArray(),
+                MsiBuilds = msiBuilds.ToArray(),
+                BenchmarkGates = benchmarkGates.ToArray(),
                 ManifestJsonPath = manifestJson,
-                ManifestTextPath = manifestText
+                ManifestTextPath = manifestText,
+                ChecksumsPath = checksumsPath
             };
+
+            runReportPath = TryWriteRunReport(
+                plan,
+                failedResult,
+                stepReports,
+                runStartedUtc,
+                runStopwatch.Elapsed);
+            failedResult.RunReportPath = runReportPath;
+            return failedResult;
         }
     }
 

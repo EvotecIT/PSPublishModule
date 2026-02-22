@@ -6,12 +6,18 @@ using System.Linq;
 
 internal static partial class Program
 {
+    private const string DotNetPublishUsage =
+        "Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]";
+    private const string DotNetScaffoldUsage =
+        "Usage: powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]";
+
     private static int CommandDotNet(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
         var argv = filteredArgs.Skip(1).ToArray();
         if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
+            Console.WriteLine(DotNetPublishUsage);
+            Console.WriteLine(DotNetScaffoldUsage);
             return 2;
         }
 
@@ -30,6 +36,7 @@ internal static partial class Program
                 var overrideRids = ParseCsvOptionValues(subArgs, "--rid", "--runtime");
                 var overrideFrameworks = ParseCsvOptionValues(subArgs, "--framework");
                 var overrideStyle = TryGetOptionValue(subArgs, "--style");
+                var overrideProfile = TryGetOptionValue(subArgs, "--profile");
                 var skipRestore = subArgs.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase));
                 var skipBuild = subArgs.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase));
 
@@ -60,7 +67,7 @@ internal static partial class Program
                         return 2;
                     }
 
-                    Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
+                    Console.WriteLine(DotNetPublishUsage);
                     return 2;
                 }
 
@@ -74,10 +81,18 @@ internal static partial class Program
                     var loaded = LoadDotNetPublishSpecWithPath(configPath);
                     var spec = loaded.Value;
                     var specPath = loaded.FullPath;
+                    var matrixOverrides = ParseDotNetPublishMatrixOverrides(subArgs);
+                    var effectiveRids = overrideRids.Length > 0 ? overrideRids : matrixOverrides.Runtimes;
+                    var effectiveFrameworks = overrideFrameworks.Length > 0 ? overrideFrameworks : matrixOverrides.Frameworks;
+                    var effectiveStyles = !string.IsNullOrWhiteSpace(overrideStyle)
+                        ? new[] { ParseDotNetPublishStyle(overrideStyle) }
+                        : matrixOverrides.Styles;
 
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
-                    ApplyDotNetPublishOverrides(spec, overrideTargets, overrideRids, overrideFrameworks, overrideStyle);
+                    if (!string.IsNullOrWhiteSpace(overrideProfile))
+                        spec.Profile = overrideProfile.Trim();
                     var plan = runner.Plan(spec, specPath);
+                    ApplyDotNetPublishPlanOverrides(plan, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
 
                     if (validateOnly)
@@ -171,10 +186,31 @@ internal static partial class Program
                     cmdLogger.Success($"Dotnet publish completed ({result.Artefacts.Length} artefact(s)).");
                     if (!string.IsNullOrWhiteSpace(result.ManifestJsonPath))
                         cmdLogger.Info($"Manifest: {result.ManifestJsonPath}");
+                    if (!string.IsNullOrWhiteSpace(result.ChecksumsPath))
+                        cmdLogger.Info($"Checksums: {result.ChecksumsPath}");
+                    if (!string.IsNullOrWhiteSpace(result.RunReportPath))
+                        cmdLogger.Info($"Run report: {result.RunReportPath}");
                     foreach (var a in result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
                     {
                         if (!string.IsNullOrWhiteSpace(a.OutputDir))
                             cmdLogger.Info($" -> {a.Target} {a.Framework} {a.Runtime} {a.Style}: {a.OutputDir}");
+                    }
+                    foreach (var prepared in result.MsiPrepares ?? Array.Empty<DotNetPublishMsiPrepareResult>())
+                    {
+                        cmdLogger.Info(
+                            $" -> msi.prepare {prepared.InstallerId} from {prepared.Target} {prepared.Framework} {prepared.Runtime} {prepared.Style}: {prepared.StagingDir}");
+                    }
+                    foreach (var built in result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
+                    {
+                        var outputs = built.OutputFiles?.Length ?? 0;
+                        var signed = built.SignedFiles?.Length ?? 0;
+                        cmdLogger.Info(
+                            $" -> msi.build {built.InstallerId} from {built.Target} {built.Framework} {built.Runtime} {built.Style}: {outputs} output(s), {signed} signed");
+                    }
+                    foreach (var gate in result.BenchmarkGates ?? Array.Empty<DotNetPublishBenchmarkGateResult>())
+                    {
+                        cmdLogger.Info(
+                            $" -> benchmark.gate {gate.GateId}: {(gate.Passed ? "passed" : "failed")} ({gate.Metrics?.Length ?? 0} metric(s))");
                     }
                     return 0;
                 }
@@ -197,12 +233,108 @@ internal static partial class Program
                     return 1;
                 }
             }
+            case "scaffold":
+            case "init":
+            {
+                var subArgs = argv.Skip(1).ToArray();
+                var outputJson = IsJsonOutput(subArgs);
+                var overwrite = subArgs.Any(a =>
+                    a.Equals("--overwrite", StringComparison.OrdinalIgnoreCase)
+                    || a.Equals("--force", StringComparison.OrdinalIgnoreCase));
+                var includeSchema = !subArgs.Any(a => a.Equals("--no-schema", StringComparison.OrdinalIgnoreCase));
+
+                try
+                {
+                    var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+                    var projectRoot = TryGetProjectRoot(subArgs);
+                    if (!string.IsNullOrWhiteSpace(projectRoot))
+                        projectRoot = Path.GetFullPath(projectRoot.Trim().Trim('"'));
+                    else
+                        projectRoot = Directory.GetCurrentDirectory();
+
+                    var projectPath = TryGetOptionValue(subArgs, "--project")
+                        ?? TryGetOptionValue(subArgs, "--csproj");
+                    var targetName = TryGetOptionValue(subArgs, "--target");
+                    var framework = TryGetOptionValue(subArgs, "--framework");
+                    var configuration = TryGetOptionValue(subArgs, "--configuration");
+                    var runtimes = ParseCsvOptionValues(subArgs, "--rid", "--runtime");
+                    var styleValues = ParseCsvOptionValues(subArgs, "--style");
+                    var styles = styleValues
+                        .Select(ParseDotNetPublishStyle)
+                        .Distinct()
+                        .ToArray();
+                    var outputPath = TryGetOptionValue(subArgs, "--out")
+                        ?? TryGetOptionValue(subArgs, "--config")
+                        ?? TryGetOptionValue(subArgs, "--output-path")
+                        ?? "powerforge.dotnetpublish.json";
+
+                    var options = new DotNetPublishConfigScaffoldOptions
+                    {
+                        ProjectRoot = projectRoot,
+                        ProjectPath = projectPath,
+                        TargetName = targetName,
+                        Framework = framework,
+                        Configuration = string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration.Trim(),
+                        Runtimes = runtimes,
+                        Styles = styles,
+                        OutputPath = outputPath,
+                        Overwrite = overwrite,
+                        IncludeSchema = includeSchema
+                    };
+
+                    var scaffolder = new DotNetPublishConfigScaffolder(cmdLogger);
+                    var generated = RunWithStatus(outputJson, cli, "Scaffolding dotnet publish config", () =>
+                        scaffolder.Generate(options));
+
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.scaffold",
+                            Success = true,
+                            ExitCode = 0,
+                            Config = "dotnetpublish",
+                            ConfigPath = generated.ConfigPath,
+                            Results = CliJson.SerializeToElement(generated, CliJson.Context.DotNetPublishConfigScaffoldResult),
+                            Logs = LogsToJsonElement(logBuffer)
+                        });
+                        return 0;
+                    }
+
+                    cmdLogger.Success($"Generated dotnet publish config: {generated.ConfigPath}");
+                    cmdLogger.Info($"Target: {generated.TargetName}");
+                    cmdLogger.Info($"Project: {generated.ProjectPath}");
+                    cmdLogger.Info($"Framework: {generated.Framework}");
+                    cmdLogger.Info($"Runtimes: {string.Join(", ", generated.Runtimes)}");
+                    cmdLogger.Info($"Styles: {string.Join(", ", generated.Styles.Select(s => s.ToString()))}");
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.scaffold",
+                            Success = false,
+                            ExitCode = 1,
+                            Error = ex.Message
+                        });
+                        return 1;
+                    }
+
+                    logger.Error(ex.Message);
+                    return 1;
+                }
+            }
             default:
             {
-                Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
+                Console.WriteLine(DotNetPublishUsage);
+                Console.WriteLine(DotNetScaffoldUsage);
                 return 2;
             }
         }
     }
 }
-

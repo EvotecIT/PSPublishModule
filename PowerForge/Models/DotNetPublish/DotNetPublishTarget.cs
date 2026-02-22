@@ -8,6 +8,9 @@ public sealed class DotNetPublishTarget
     /// <summary>Friendly name used in output folders and summaries.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Optional project catalog ID. When set, resolves project path from <c>DotNetPublishSpec.Projects</c>.</summary>
+    public string? ProjectId { get; set; }
+
     /// <summary>Path to the project file (*.csproj) to publish.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
@@ -27,6 +30,12 @@ public sealed class DotNetPublishPublishOptions
     /// Publish style (Portable/AOT etc).
     /// </summary>
     public DotNetPublishStyle Style { get; set; } = DotNetPublishStyle.Portable;
+
+    /// <summary>
+    /// Optional publish styles to expand as a matrix dimension.
+    /// When provided and non-empty, this takes precedence over <see cref="Style"/>.
+    /// </summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
 
     /// <summary>
     /// Target framework to publish (e.g. net10.0, net10.0-windows).      
@@ -111,6 +120,17 @@ public sealed class DotNetPublishPublishOptions
     /// Optional signing configuration (Windows only).
     /// </summary>
     public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>
+    /// Optional service package settings (script generation + metadata).
+    /// </summary>
+    public DotNetPublishServicePackageOptions? Service { get; set; }
+
+    /// <summary>
+    /// Optional preserve/restore state rules applied around publish.
+    /// Useful for rebuild scenarios where config/data/log/license files should survive deployment.
+    /// </summary>
+    public DotNetPublishStatePreservationOptions? State { get; set; }
 }
 
 /// <summary>
@@ -123,6 +143,16 @@ public sealed class DotNetPublishSignOptions
 
     /// <summary>Optional path to signtool.exe (defaults to "signtool.exe").</summary>
     public string? ToolPath { get; set; } = "signtool.exe";
+
+    /// <summary>
+    /// Policy applied when signing is enabled but signtool cannot be resolved or current OS cannot sign.
+    /// </summary>
+    public DotNetPublishPolicyMode OnMissingTool { get; set; } = DotNetPublishPolicyMode.Warn;
+
+    /// <summary>
+    /// Policy applied when signing a specific file fails.
+    /// </summary>
+    public DotNetPublishPolicyMode OnSignFailure { get; set; } = DotNetPublishPolicyMode.Warn;
 
     /// <summary>Optional certificate thumbprint (SHA1) used for signing (signtool /sha1).</summary>
     public string? Thumbprint { get; set; }
@@ -144,4 +174,245 @@ public sealed class DotNetPublishSignOptions
 
     /// <summary>Optional key container name (signtool /kc).</summary>
     public string? KeyContainer { get; set; }
+}
+
+/// <summary>
+/// Service package settings for published outputs.
+/// </summary>
+public sealed class DotNetPublishServicePackageOptions
+{
+    /// <summary>
+    /// Optional Windows service name. Defaults to target name when omitted.
+    /// </summary>
+    public string? ServiceName { get; set; }
+
+    /// <summary>
+    /// Optional display name shown in service manager. Defaults to <see cref="ServiceName"/>.
+    /// </summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// Optional service description. Defaults to "&lt;ServiceName&gt; service".
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Optional executable path relative to output folder.
+    /// When omitted, the pipeline attempts to auto-detect the main executable.
+    /// </summary>
+    public string? ExecutablePath { get; set; }
+
+    /// <summary>
+    /// Optional command-line arguments appended to the service executable path.
+    /// </summary>
+    public string? Arguments { get; set; }
+
+    /// <summary>
+    /// When true, generates <c>Install-Service.ps1</c>. Also forced when <see cref="GenerateRunOnceScript"/> is true.
+    /// </summary>
+    public bool GenerateInstallScript { get; set; } = true;
+
+    /// <summary>
+    /// When true, generates <c>Uninstall-Service.ps1</c>.
+    /// </summary>
+    public bool GenerateUninstallScript { get; set; } = true;
+
+    /// <summary>
+    /// When true, generates <c>Run-Once.ps1</c> that invokes the install script and starts the service.
+    /// </summary>
+    public bool GenerateRunOnceScript { get; set; }
+
+    /// <summary>
+    /// Optional service lifecycle execution behavior (stop/delete/install/start/verify).
+    /// </summary>
+    public DotNetPublishServiceLifecycleOptions? Lifecycle { get; set; }
+
+    /// <summary>
+    /// Optional service recovery policy (SC failure actions).
+    /// </summary>
+    public DotNetPublishServiceRecoveryOptions? Recovery { get; set; }
+
+    /// <summary>
+    /// Optional config bootstrap copy rules (example -> runtime config when missing).
+    /// </summary>
+    public DotNetPublishConfigBootstrapRule[] ConfigBootstrap { get; set; } = Array.Empty<DotNetPublishConfigBootstrapRule>();
+}
+
+/// <summary>
+/// Preserve/restore options for stateful files and folders in publish output.
+/// </summary>
+public sealed class DotNetPublishStatePreservationOptions
+{
+    /// <summary>
+    /// Enables state preservation around publish.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Optional storage path template for preserved state.
+    /// Supports tokens: {target}, {rid}, {framework}, {style}, {configuration}.
+    /// Default: <c>Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}</c>.
+    /// </summary>
+    public string? StoragePath { get; set; }
+
+    /// <summary>
+    /// When true, clears the storage path before preserving state.
+    /// </summary>
+    public bool ClearStorage { get; set; } = true;
+
+    /// <summary>
+    /// Policy applied when a configured source path does not exist during preserve.
+    /// </summary>
+    public DotNetPublishPolicyMode OnMissingSource { get; set; } = DotNetPublishPolicyMode.Warn;
+
+    /// <summary>
+    /// Policy applied when restore copy operations fail.
+    /// </summary>
+    public DotNetPublishPolicyMode OnRestoreFailure { get; set; } = DotNetPublishPolicyMode.Warn;
+
+    /// <summary>
+    /// Source/destination rules to preserve and restore.
+    /// </summary>
+    public DotNetPublishStateRule[] Rules { get; set; } = Array.Empty<DotNetPublishStateRule>();
+}
+
+/// <summary>
+/// Single preserve/restore rule for stateful files/folders.
+/// </summary>
+public sealed class DotNetPublishStateRule
+{
+    /// <summary>
+    /// Source path relative to publish output directory to preserve.
+    /// </summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional destination path relative to publish output for restore.
+    /// When omitted, <see cref="SourcePath"/> is used.
+    /// </summary>
+    public string? DestinationPath { get; set; }
+
+    /// <summary>
+    /// When true, restore overwrites existing files in destination.
+    /// </summary>
+    public bool Overwrite { get; set; } = true;
+}
+
+/// <summary>
+/// Service lifecycle execution options.
+/// </summary>
+public sealed class DotNetPublishServiceLifecycleOptions
+{
+    /// <summary>
+    /// Enables service lifecycle execution for this target/runtime combination.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Service lifecycle execution mode.
+    /// Default: <see cref="DotNetPublishServiceLifecycleMode.Step"/>.
+    /// </summary>
+    public DotNetPublishServiceLifecycleMode Mode { get; set; } = DotNetPublishServiceLifecycleMode.Step;
+
+    /// <summary>
+    /// When true, stops an existing service before delete/install.
+    /// </summary>
+    public bool StopIfExists { get; set; } = true;
+
+    /// <summary>
+    /// When true, deletes an existing service before install.
+    /// </summary>
+    public bool DeleteIfExists { get; set; } = true;
+
+    /// <summary>
+    /// When true, creates/recreates service definition from package metadata.
+    /// </summary>
+    public bool Install { get; set; } = true;
+
+    /// <summary>
+    /// When true, starts the service after install.
+    /// </summary>
+    public bool Start { get; set; } = true;
+
+    /// <summary>
+    /// When true, verifies service state after actions complete.
+    /// </summary>
+    public bool Verify { get; set; } = true;
+
+    /// <summary>
+    /// Stop wait timeout in seconds when waiting for service to stop.
+    /// </summary>
+    public int StopTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// When true, logs intended actions without changing local services.
+    /// </summary>
+    public bool WhatIf { get; set; }
+
+    /// <summary>
+    /// Policy used when lifecycle is enabled on non-Windows platforms.
+    /// </summary>
+    public DotNetPublishPolicyMode OnUnsupportedPlatform { get; set; } = DotNetPublishPolicyMode.Warn;
+
+    /// <summary>
+    /// Policy used for lifecycle command failures.
+    /// </summary>
+    public DotNetPublishPolicyMode OnExecutionFailure { get; set; } = DotNetPublishPolicyMode.Fail;
+}
+
+/// <summary>
+/// Service recovery policy options applied after service install.
+/// </summary>
+public sealed class DotNetPublishServiceRecoveryOptions
+{
+    /// <summary>
+    /// Enables applying service recovery policy via <c>sc.exe failure</c>.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Reset period in seconds for failure count.
+    /// </summary>
+    public int ResetPeriodSeconds { get; set; } = 86400;
+
+    /// <summary>
+    /// Delay in seconds before restart actions.
+    /// </summary>
+    public int RestartDelaySeconds { get; set; } = 60;
+
+    /// <summary>
+    /// When true, enables recovery actions for non-crash failures.
+    /// </summary>
+    public bool ApplyToNonCrashFailures { get; set; } = true;
+
+    /// <summary>
+    /// Policy used when recovery configuration command fails.
+    /// </summary>
+    public DotNetPublishPolicyMode OnFailure { get; set; } = DotNetPublishPolicyMode.Warn;
+}
+
+/// <summary>
+/// Config bootstrap rule for copying template/example files into runtime paths.
+/// </summary>
+public sealed class DotNetPublishConfigBootstrapRule
+{
+    /// <summary>
+    /// Source path relative to publish output folder.
+    /// </summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Destination path relative to publish output folder.
+    /// </summary>
+    public string DestinationPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, allows overwriting an existing destination file. Default: false.
+    /// </summary>
+    public bool Overwrite { get; set; }
+
+    /// <summary>
+    /// Policy used when source file is missing.
+    /// </summary>
+    public DotNetPublishPolicyMode OnMissingSource { get; set; } = DotNetPublishPolicyMode.Warn;
 }
