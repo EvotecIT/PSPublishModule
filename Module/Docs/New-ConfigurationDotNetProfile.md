@@ -4,41 +4,30 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ModuleAboutTopic
+# New-ConfigurationDotNetProfile
 ## SYNOPSIS
-Creates an about_*.help.txt template source file for module documentation.
+Creates a named profile for DotNet publish DSL.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ModuleAboutTopic [-TopicName] <string> [-OutputPath <string>] [-ShortDescription <string>] [-Format <AboutTopicTemplateFormat>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-ConfigurationDotNetProfile -Name <string> [-Default] [-Targets <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Style <DotNetPublishStyle>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet to scaffold about topic source files that are later converted by
-Invoke-ModuleBuild documentation generation into markdown pages under Docs\About.
+Creates a named profile for DotNet publish DSL.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
-```
-
-### EXAMPLE 2
-```powershell
-New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force
-```
-
-### EXAMPLE 3
-```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
+New-ConfigurationDotNetProfile -Name 'release' -Default -Targets 'Service','Cli' -Runtimes 'win-x64','win-arm64'
 ```
 
 ## PARAMETERS
 
-### -Force
-Overwrite existing file if it already exists.
+### -Default
+Marks this profile as default.
 
 ```yaml
 Type: SwitchParameter
@@ -53,43 +42,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Format
-Output format for the scaffolded about topic file.
+### -Frameworks
+Optional framework overrides.
 
 ```yaml
-Type: AboutTopicTemplateFormat
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: HelpText, Markdown
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -OutputPath
-Output directory for the source file.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: Path
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PassThru
-Returns the created file path.
-
-```yaml
-Type: SwitchParameter
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -101,24 +58,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ShortDescription
-Optional short description seed for the generated template.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -TopicName
-Topic name. The about_ prefix is added automatically when missing.
+### -Name
+Profile name.
 
 ```yaml
 Type: String
@@ -127,7 +68,55 @@ Aliases: None
 Possible values: 
 
 Required: True
-Position: 0
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Runtimes
+Optional runtime overrides.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Style
+Optional style override.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Targets
+Optional target name filters.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -142,7 +131,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.DotNetPublishProfile`
 
 ## RELATED LINKS
 

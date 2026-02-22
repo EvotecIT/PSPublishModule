@@ -4,44 +4,49 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ModuleAboutTopic
+# New-ConfigurationDotNetBenchmarkMetric
 ## SYNOPSIS
-Creates an about_*.help.txt template source file for module documentation.
+Creates a benchmark metric extraction rule for DotNet publish gates.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ModuleAboutTopic [-TopicName] <string> [-OutputPath <string>] [-ShortDescription <string>] [-Format <AboutTopicTemplateFormat>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-ConfigurationDotNetBenchmarkMetric -Name <string> [-Source <DotNetPublishBenchmarkMetricSource>] [-Path <string>] [-Pattern <string>] [-Group <int>] [-Aggregation <DotNetPublishBenchmarkMetricAggregation>] [-Required <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet to scaffold about topic source files that are later converted by
-Invoke-ModuleBuild documentation generation into markdown pages under Docs\About.
+Creates a benchmark metric extraction rule for DotNet publish gates.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
-```
-
-### EXAMPLE 2
-```powershell
-New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force
-```
-
-### EXAMPLE 3
-```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
+New-ConfigurationDotNetBenchmarkMetric -Name 'dashboard.storage.ms' -Source JsonPath -Path 'results.storageMs'
 ```
 
 ## PARAMETERS
 
-### -Force
-Overwrite existing file if it already exists.
+### -Aggregation
+Aggregation method.
 
 ```yaml
-Type: SwitchParameter
+Type: DotNetPublishBenchmarkMetricAggregation
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: First, Last, Min, Max, Average
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Group
+Regex capture group index.
+
+```yaml
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -53,72 +58,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Format
-Output format for the scaffolded about topic file.
-
-```yaml
-Type: AboutTopicTemplateFormat
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: HelpText, Markdown
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -OutputPath
-Output directory for the source file.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: Path
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PassThru
-Returns the created file path.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ShortDescription
-Optional short description seed for the generated template.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -TopicName
-Topic name. The about_ prefix is added automatically when missing.
+### -Name
+Metric identifier.
 
 ```yaml
 Type: String
@@ -127,7 +68,71 @@ Aliases: None
 Possible values: 
 
 Required: True
-Position: 0
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+JSON path when using JsonPath source.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Pattern
+Regex pattern when using Regex source.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Required
+Marks metric as required.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Source
+Metric source type.
+
+```yaml
+Type: DotNetPublishBenchmarkMetricSource
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: JsonPath, Regex
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -142,7 +147,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.DotNetPublishBenchmarkMetric`
 
 ## RELATED LINKS
 

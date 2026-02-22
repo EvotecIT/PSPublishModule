@@ -18135,6 +18135,342 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>New-DotNetPublishConfig</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>DotNetPublishConfig</command:noun>
+      <maml:description>
+        <maml:para>Scaffolds a starter powerforge.dotnetpublish.json configuration file.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Use this cmdlet for JSON-first onboarding of the DotNet publish engine.&#xD;
+The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-DotNetPublishConfig</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Configuration</maml:name>
+          <maml:description>
+            <maml:para>Build configuration (default: Release).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Overwrite">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite existing config file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Framework</maml:name>
+          <maml:description>
+            <maml:para>Optional framework override (for example net10.0).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoSchema</maml:name>
+          <maml:description>
+            <maml:para>Omits the $schema property from generated JSON.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path,ConfigPath">
+          <maml:name>OutputPath</maml:name>
+          <maml:description>
+            <maml:para>Output config path (default: powerforge.dotnetpublish.json).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Returns detailed scaffold metadata instead of only config path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Project">
+          <maml:name>ProjectPath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a specific project file. When omitted, the first matching .csproj is used.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Project root used to resolve relative paths.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Runtimes</maml:name>
+          <maml:description>
+            <maml:para>Optional runtime identifiers override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Styles</maml:name>
+          <maml:description>
+            <maml:para>Optional publish styles override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TargetName</maml:name>
+          <maml:description>
+            <maml:para>Optional target name override. Defaults to project file name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Configuration</maml:name>
+        <maml:description>
+          <maml:para>Build configuration (default: Release).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Overwrite">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Overwrite existing config file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Framework</maml:name>
+        <maml:description>
+          <maml:para>Optional framework override (for example net10.0).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoSchema</maml:name>
+        <maml:description>
+          <maml:para>Omits the $schema property from generated JSON.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path,ConfigPath">
+        <maml:name>OutputPath</maml:name>
+        <maml:description>
+          <maml:para>Output config path (default: powerforge.dotnetpublish.json).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Returns detailed scaffold metadata instead of only config path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Project">
+        <maml:name>ProjectPath</maml:name>
+        <maml:description>
+          <maml:para>Optional path to a specific project file. When omitted, the first matching .csproj is used.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Project root used to resolve relative paths.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Runtimes</maml:name>
+        <maml:description>
+          <maml:para>Optional runtime identifiers override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Styles</maml:name>
+        <maml:description>
+          <maml:para>Optional publish styles override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishStyle[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TargetName</maml:name>
+        <maml:description>
+          <maml:para>Optional target name override. Defaults to project file name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String&#xD;
+PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Create a starter config from the current repository root</maml:title>
+        <dev:code>New-DotNetPublishConfig -ProjectRoot '.' -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Generate config for a selected project and overwrite existing file</maml:title>
+        <dev:code>New-DotNetPublishConfig -Project '.\src\App\App.csproj' -Runtimes 'win-x64','win-arm64' -Styles PortableCompat,AotSpeed -Force</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>New-ModuleAboutTopic</command:name>
       <command:verb>New</command:verb>
       <command:noun>ModuleAboutTopic</command:noun>
@@ -18157,6 +18493,22 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Format</maml:name>
+          <maml:description>
+            <maml:para>Output format for the scaffolded about topic file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">AboutTopicTemplateFormat</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">HelpText</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Markdown</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>AboutTopicTemplateFormat</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18220,6 +18572,22 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Format</maml:name>
+        <maml:description>
+          <maml:para>Output format for the scaffolded about topic file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">AboutTopicTemplateFormat</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">HelpText</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Markdown</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>AboutTopicTemplateFormat</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -18303,6 +18671,13 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
       <command:example>
         <maml:title>Overwrite an existing topic template</maml:title>
         <dev:code>New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Create markdown about topic source</maml:title>
+        <dev:code>New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

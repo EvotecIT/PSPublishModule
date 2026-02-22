@@ -157,6 +157,9 @@ Configures running Pester tests as part of the build.
 ### [New-ConfigurationValidation](New-ConfigurationValidation.md)
 Creates configuration for module validation checks during build.
 
+### [New-DotNetPublishConfig](New-DotNetPublishConfig.md)
+Scaffolds a starter powerforge.dotnetpublish.json configuration file.
+
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
 

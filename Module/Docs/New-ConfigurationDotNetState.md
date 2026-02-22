@@ -4,41 +4,47 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ModuleAboutTopic
+# New-ConfigurationDotNetState
 ## SYNOPSIS
-Creates an about_*.help.txt template source file for module documentation.
+Creates preserve/restore state options for DotNet publish targets.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ModuleAboutTopic [-TopicName] <string> [-OutputPath <string>] [-ShortDescription <string>] [-Format <AboutTopicTemplateFormat>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-ConfigurationDotNetState [-Enabled] [-StoragePath <string>] [-ClearStorage <bool>] [-OnMissingSource <DotNetPublishPolicyMode>] [-OnRestoreFailure <DotNetPublishPolicyMode>] [-Rules <DotNetPublishStateRule[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet to scaffold about topic source files that are later converted by
-Invoke-ModuleBuild documentation generation into markdown pages under Docs\About.
+Creates preserve/restore state options for DotNet publish targets.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
-```
-
-### EXAMPLE 2
-```powershell
-New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force
-```
-
-### EXAMPLE 3
-```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
+$rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite
+New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}'
 ```
 
 ## PARAMETERS
 
-### -Force
-Overwrite existing file if it already exists.
+### -ClearStorage
+Clears storage before preserving state.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Enabled
+Enables state preservation.
 
 ```yaml
 Type: SwitchParameter
@@ -53,14 +59,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Format
-Output format for the scaffolded about topic file.
+### -OnMissingSource
+Policy for missing source paths.
 
 ```yaml
-Type: AboutTopicTemplateFormat
+Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: HelpText, Markdown
+Possible values: Warn, Fail, Skip
 
 Required: False
 Position: named
@@ -69,30 +75,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -OutputPath
-Output directory for the source file.
+### -OnRestoreFailure
+Policy for restore failures.
 
 ```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: Path
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PassThru
-Returns the created file path.
-
-```yaml
-Type: SwitchParameter
+Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values: Warn, Fail, Skip
 
 Required: False
 Position: named
@@ -101,11 +91,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ShortDescription
-Optional short description seed for the generated template.
+### -Rules
+State rules.
 
 ```yaml
-Type: String
+Type: DotNetPublishStateRule[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -117,8 +107,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -TopicName
-Topic name. The about_ prefix is added automatically when missing.
+### -StoragePath
+Optional storage path template.
 
 ```yaml
 Type: String
@@ -126,8 +116,8 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
 
-Required: True
-Position: 0
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -142,7 +132,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.DotNetPublishStatePreservationOptions`
 
 ## RELATED LINKS
 

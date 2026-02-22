@@ -4,41 +4,46 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ModuleAboutTopic
+# New-ConfigurationDotNetServiceRecovery
 ## SYNOPSIS
-Creates an about_*.help.txt template source file for module documentation.
+Creates service recovery options for DotNet publish service targets.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ModuleAboutTopic [-TopicName] <string> [-OutputPath <string>] [-ShortDescription <string>] [-Format <AboutTopicTemplateFormat>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-ConfigurationDotNetServiceRecovery [-Enabled] [-ResetPeriodSeconds <int>] [-RestartDelaySeconds <int>] [-ApplyToNonCrashFailures <bool>] [-OnFailure <DotNetPublishPolicyMode>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet to scaffold about topic source files that are later converted by
-Invoke-ModuleBuild documentation generation into markdown pages under Docs\About.
+Creates service recovery options for DotNet publish service targets.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
-```
-
-### EXAMPLE 2
-```powershell
-New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force
-```
-
-### EXAMPLE 3
-```powershell
-New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
+New-ConfigurationDotNetServiceRecovery -Enabled -ResetPeriodSeconds 86400 -RestartDelaySeconds 60 -ApplyToNonCrashFailures
 ```
 
 ## PARAMETERS
 
-### -Force
-Overwrite existing file if it already exists.
+### -ApplyToNonCrashFailures
+Applies recovery actions for non-crash failures.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Enabled
+Enables applying recovery policy.
 
 ```yaml
 Type: SwitchParameter
@@ -53,14 +58,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Format
-Output format for the scaffolded about topic file.
+### -OnFailure
+Policy on recovery command failures.
 
 ```yaml
-Type: AboutTopicTemplateFormat
+Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: HelpText, Markdown
+Possible values: Warn, Fail, Skip
 
 Required: False
 Position: named
@@ -69,27 +74,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -OutputPath
-Output directory for the source file.
+### -ResetPeriodSeconds
+Failure reset period in seconds.
 
 ```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: Path
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PassThru
-Returns the created file path.
-
-```yaml
-Type: SwitchParameter
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -101,33 +90,17 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ShortDescription
-Optional short description seed for the generated template.
+### -RestartDelaySeconds
+Restart delay in seconds.
 
 ```yaml
-Type: String
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
 
 Required: False
 Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -TopicName
-Topic name. The about_ prefix is added automatically when missing.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: 0
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -142,7 +115,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.DotNetPublishServiceRecoveryOptions`
 
 ## RELATED LINKS
 
