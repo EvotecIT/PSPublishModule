@@ -1,0 +1,45 @@
+name: DotNetPublish Focused Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+on:
+  pull_request:
+    paths:
+      - PowerForge/**
+      - PowerForge.Cli/**
+      - PowerForge.Tests/**
+      - PSPublishModule/**
+      - Schemas/**
+      - .github/workflows/dotnetpublish-tests.yml
+  workflow_dispatch:
+
+jobs:
+  DotNetPublishTests:
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run DotNetPublish focused tests
+        shell: pwsh
+        run: dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj -c Release --filter 'FullyQualifiedName~DotNetPublish'
