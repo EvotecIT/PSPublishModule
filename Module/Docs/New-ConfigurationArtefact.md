@@ -70,7 +70,7 @@ Accept wildcard characters: True
 ```
 
 ### -CopyDirectories
-Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or ArtefactCopyMapping[]
 
 ```yaml
 Type: ArtefactCopyMapping[]
@@ -102,7 +102,7 @@ Accept wildcard characters: True
 ```
 
 ### -CopyFiles
-Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or ArtefactCopyMapping[]
 
 ```yaml
 Type: ArtefactCopyMapping[]

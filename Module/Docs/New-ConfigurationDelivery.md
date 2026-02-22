@@ -119,7 +119,7 @@ Accept wildcard characters: True
 ```
 
 ### -ImportantLinks
-Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or T:PowerForge.DeliveryImportantLink[].
+Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or DeliveryImportantLink[].
 
 ```yaml
 Type: DeliveryImportantLink[]

@@ -351,7 +351,7 @@ Accept wildcard characters: True
 ```
 
 ### -JsonPath
-Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
+Output path for the generated pipeline JSON file (used with JsonOnly).
 Defaults to powerforge.json in the project root.
 
 ```yaml

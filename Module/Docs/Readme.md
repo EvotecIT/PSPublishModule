@@ -37,6 +37,9 @@ Provides comprehensive analysis of encoding and line ending consistency across a
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
 Retrieves project version information from .csproj, .psd1, and build scripts.
 
+### [Invoke-DotNetPublish](Invoke-DotNetPublish.md)
+Executes DotNet publish engine from DSL settings or an existing JSON config.
+
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 Builds a .NET project in Release configuration and prepares release artefacts.
 
@@ -69,6 +72,54 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 
 ### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
 Enables or disables creation of documentation from the module using PowerForge.
+
+### [New-ConfigurationDotNetBenchmarkGate](New-ConfigurationDotNetBenchmarkGate.md)
+Creates a benchmark gate definition for DotNet publish DSL.
+
+### [New-ConfigurationDotNetBenchmarkMetric](New-ConfigurationDotNetBenchmarkMetric.md)
+Creates a benchmark metric extraction rule for DotNet publish gates.
+
+### [New-ConfigurationDotNetConfigBootstrapRule](New-ConfigurationDotNetConfigBootstrapRule.md)
+Creates config bootstrap copy rules for DotNet publish service packages.
+
+### [New-ConfigurationDotNetInstaller](New-ConfigurationDotNetInstaller.md)
+Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+
+### [New-ConfigurationDotNetMatrix](New-ConfigurationDotNetMatrix.md)
+Creates matrix defaults and include/exclude filters for DotNet publish DSL.
+
+### [New-ConfigurationDotNetMatrixRule](New-ConfigurationDotNetMatrixRule.md)
+Creates a matrix include/exclude rule for DotNet publish DSL.
+
+### [New-ConfigurationDotNetProfile](New-ConfigurationDotNetProfile.md)
+Creates a named profile for DotNet publish DSL.
+
+### [New-ConfigurationDotNetProject](New-ConfigurationDotNetProject.md)
+Creates a project catalog entry for DotNet publish DSL.
+
+### [New-ConfigurationDotNetPublish](New-ConfigurationDotNetPublish.md)
+Creates DotNet publish configuration using DSL objects from a settings script block.
+
+### [New-ConfigurationDotNetService](New-ConfigurationDotNetService.md)
+Creates service packaging options for DotNet publish targets.
+
+### [New-ConfigurationDotNetServiceLifecycle](New-ConfigurationDotNetServiceLifecycle.md)
+Creates service lifecycle execution options for DotNet publish service targets.
+
+### [New-ConfigurationDotNetServiceRecovery](New-ConfigurationDotNetServiceRecovery.md)
+Creates service recovery options for DotNet publish service targets.
+
+### [New-ConfigurationDotNetSign](New-ConfigurationDotNetSign.md)
+Creates signing options for DotNet publish targets and installers.
+
+### [New-ConfigurationDotNetState](New-ConfigurationDotNetState.md)
+Creates preserve/restore state options for DotNet publish targets.
+
+### [New-ConfigurationDotNetStateRule](New-ConfigurationDotNetStateRule.md)
+Creates a preserve/restore rule for DotNet publish state handling.
+
+### [New-ConfigurationDotNetTarget](New-ConfigurationDotNetTarget.md)
+Creates a DotNet publish target entry for DotNet publish DSL.
 
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
 Reserved placeholder for future execution-time configuration.
@@ -105,6 +156,9 @@ Configures running Pester tests as part of the build.
 
 ### [New-ConfigurationValidation](New-ConfigurationValidation.md)
 Creates configuration for module validation checks during build.
+
+### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
+Creates an about_*.help.txt template source file for module documentation.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).

@@ -148,7 +148,7 @@ Accept wildcard characters: True
 ```
 
 ### -IncludeToArray
-Advanced include rules. Accepts legacy hashtable (Key=>Values) or T:PowerForge.IncludeToArrayEntry[].
+Advanced include rules. Accepts legacy hashtable (Key=>Values) or IncludeToArrayEntry[].
 
 ```yaml
 Type: IncludeToArrayEntry[]

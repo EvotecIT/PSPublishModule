@@ -131,8 +131,8 @@ Accept wildcard characters: True
 ```
 
 ### -TestResults
-Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,
-or a precomputed T:PowerForge.ModuleTestFailureAnalysis.
+Pester test results object from Invoke-Pester, a ModuleTestSuiteResult from Invoke-ModuleTestSuite,
+or a precomputed ModuleTestFailureAnalysis.
 
 ```yaml
 Type: Object

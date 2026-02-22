@@ -19,9 +19,9 @@ This cmdlet emits documentation configuration segments that are consumed by Invo
 It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\<ModuleName>-help.xml),
 and whether generated documentation should be synced back to the project root.
 
-About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,
+About topics are supported via about_*.help.txt / about_*.txt / about_*.md / about_*.markdown files present in the module source. When enabled,
 these are converted into markdown pages under Docs\About. Additional source roots can be provided via
-P:PSPublishModule.NewConfigurationDocumentationCommand.AboutTopicsSourcePath.
+AboutTopicsSourcePath.
 
 ## EXAMPLES
 
@@ -43,7 +43,7 @@ New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
 ## PARAMETERS
 
 ### -AboutTopicsSourcePath
-Optional extra source paths for about_* topic files.
+Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).
 Relative paths are resolved from the staging root (for example: 'Help\About').
 
 ```yaml
@@ -204,7 +204,7 @@ Accept wildcard characters: True
 ```
 
 ### -SyncExternalHelpToProjectRoot
-When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced
+When enabled and UpdateWhenNew is set, the generated external help file is also synced
 back to the project root (e.g. en-US\<ModuleName>-help.xml).
 
 ```yaml

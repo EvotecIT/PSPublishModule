@@ -42,7 +42,7 @@ Emits multiple placeholder replacement segments in one call.
 ## PARAMETERS
 
 ### -CustomReplacement
-Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or T:PowerForge.PlaceHolderReplacement[].
+Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or PlaceHolderReplacement[].
 
 ```yaml
 Type: PlaceHolderReplacement[]
