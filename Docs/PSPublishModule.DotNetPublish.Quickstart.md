@@ -91,6 +91,14 @@ Depending on config, the run can emit:
 - benchmark gate results
 - manifests and checksums (for example `SHA256SUMS.txt`)
 
+## Example Templates
+
+Ready-to-adapt templates are available in:
+
+- `Module/Examples/DotNetPublish/Example.ServiceMsi.json`
+- `Module/Examples/DotNetPublish/Example.RebuildState.json`
+- `Module/Examples/DotNetPublish/README.md`
+
 ## Migration Rule of Thumb
 
 For TestimoX/TierBridge/Sectigo-style repos:

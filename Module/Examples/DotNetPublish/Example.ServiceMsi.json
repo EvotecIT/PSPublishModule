@@ -1,0 +1,128 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "Profile": "release",
+  "Profiles": [
+    {
+      "Name": "release",
+      "Default": true
+    },
+    {
+      "Name": "local"
+    }
+  ],
+  "Projects": [
+    {
+      "Id": "service",
+      "Path": "src/My.Service/My.Service.csproj",
+      "Group": "apps"
+    },
+    {
+      "Id": "installer.service",
+      "Path": "Installer/My.Service/My.Service.Installer.wixproj",
+      "Group": "installer"
+    }
+  ],
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true
+  },
+  "Targets": [
+    {
+      "Name": "My.Service",
+      "ProjectId": "service",
+      "Kind": "Service",
+      "Publish": {
+        "Framework": "net10.0-windows",
+        "Runtimes": [
+          "win-x64"
+        ],
+        "Style": "PortableCompat",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "Slim": true,
+        "KeepSymbols": false,
+        "KeepDocs": false,
+        "PruneReferences": true,
+        "Zip": true,
+        "ZipNameTemplate": "{target}-{framework}-{rid}-{style}.zip",
+        "Sign": {
+          "Enabled": true,
+          "OnMissingTool": "Warn",
+          "OnSignFailure": "Fail",
+          "TimestampUrl": "http://timestamp.digicert.com"
+        },
+        "Service": {
+          "ServiceName": "My.Service",
+          "DisplayName": "My Service",
+          "Description": "My Service background worker",
+          "GenerateInstallScript": true,
+          "GenerateUninstallScript": true,
+          "GenerateRunOnceScript": true,
+          "Lifecycle": {
+            "Enabled": false,
+            "Mode": "Step",
+            "StopIfExists": true,
+            "DeleteIfExists": true,
+            "Install": true,
+            "Start": true,
+            "Verify": true,
+            "StopTimeoutSeconds": 30,
+            "WhatIf": false,
+            "OnUnsupportedPlatform": "Warn",
+            "OnExecutionFailure": "Fail"
+          },
+          "Recovery": {
+            "Enabled": true,
+            "ResetPeriodSeconds": 86400,
+            "RestartDelaySeconds": 10,
+            "ApplyToNonCrashFailures": true,
+            "OnFailure": "Warn"
+          },
+          "ConfigBootstrap": [
+            {
+              "SourcePath": "appsettings.example.json",
+              "DestinationPath": "appsettings.json",
+              "Overwrite": false,
+              "OnMissingSource": "Warn"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "Installers": [
+    {
+      "Id": "my.service.msi",
+      "PrepareFromTarget": "My.Service",
+      "InstallerProjectId": "installer.service",
+      "Harvest": "Auto",
+      "Versioning": {
+        "Enabled": true,
+        "Major": 1,
+        "Minor": 0,
+        "FloorDateUtc": "2026-01-01",
+        "Monotonic": true,
+        "StatePath": "Artifacts/DotNetPublish/InstallerState/{installer}.version.json",
+        "PropertyName": "ProductVersion",
+        "PatchCap": 65535
+      },
+      "Sign": {
+        "Enabled": true,
+        "OnMissingTool": "Warn",
+        "OnSignFailure": "Fail",
+        "TimestampUrl": "http://timestamp.digicert.com"
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}

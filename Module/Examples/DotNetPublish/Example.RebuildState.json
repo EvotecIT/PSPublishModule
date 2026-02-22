@@ -1,0 +1,95 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true
+  },
+  "Targets": [
+    {
+      "Name": "My.Service",
+      "ProjectPath": "src/My.Service/My.Service.csproj",
+      "Kind": "Service",
+      "Publish": {
+        "Framework": "net10.0-windows",
+        "Runtimes": [
+          "win-x64"
+        ],
+        "Style": "PortableCompat",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "Slim": true,
+        "PruneReferences": true,
+        "Zip": true,
+        "Service": {
+          "ServiceName": "My.Service",
+          "DisplayName": "My Service",
+          "Description": "My Service rebuild pipeline",
+          "GenerateInstallScript": true,
+          "GenerateUninstallScript": true,
+          "GenerateRunOnceScript": true,
+          "Lifecycle": {
+            "Enabled": true,
+            "Mode": "InlineRebuild",
+            "StopIfExists": true,
+            "DeleteIfExists": true,
+            "Install": true,
+            "Start": true,
+            "Verify": true,
+            "StopTimeoutSeconds": 45,
+            "WhatIf": false,
+            "OnUnsupportedPlatform": "Warn",
+            "OnExecutionFailure": "Fail"
+          },
+          "ConfigBootstrap": [
+            {
+              "SourcePath": "appsettings.example.json",
+              "DestinationPath": "appsettings.json",
+              "Overwrite": false,
+              "OnMissingSource": "Warn"
+            }
+          ]
+        },
+        "State": {
+          "Enabled": true,
+          "StoragePath": "Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}",
+          "ClearStorage": true,
+          "OnMissingSource": "Warn",
+          "OnRestoreFailure": "Fail",
+          "Rules": [
+            {
+              "SourcePath": "appsettings.json",
+              "DestinationPath": "appsettings.json",
+              "Overwrite": true
+            },
+            {
+              "SourcePath": "data",
+              "DestinationPath": "data",
+              "Overwrite": true
+            },
+            {
+              "SourcePath": "logs",
+              "DestinationPath": "logs",
+              "Overwrite": false
+            },
+            {
+              "SourcePath": "license",
+              "DestinationPath": "license",
+              "Overwrite": true
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}
