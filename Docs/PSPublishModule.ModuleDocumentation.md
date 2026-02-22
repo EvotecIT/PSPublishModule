@@ -68,7 +68,7 @@ During docs generation:
 ## Process For Other Modules
 
 1. Add XML docs/comments for cmdlets in the module source.
-2. Add `about_*.help.txt` source files (prefer `Help/About`).
+2. Add about-topic source files (prefer `Help/About`): `about_*.help.txt`, `about_*.txt`, `about_*.md`, or `about_*.markdown`.
 3. Configure `New-ConfigurationDocumentation` with `-Enable`, `-Path`, `-PathReadme`, and optional `-AboutTopicsSourcePath`.
 4. Run `Invoke-ModuleBuild` in normal mode to regenerate docs.
 5. Review generated `Docs` + external help XML and commit intentional updates.
