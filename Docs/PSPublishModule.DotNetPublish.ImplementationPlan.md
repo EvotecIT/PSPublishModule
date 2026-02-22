@@ -6,6 +6,9 @@ Last updated: 2026-02-21
 
 Build the missing engine features in `PSPublishModule`/`PowerForge` first, then replace repo-local scripts with declarative config and helper cmdlets.
 
+Quickstart:
+- `Docs/PSPublishModule.DotNetPublish.Quickstart.md`
+
 Execution rule:
 - Do not replace `TestimoX` / `TierBridge` / `SectigoCertificateManagerService` scripts until required engine parity is complete and validated.
 

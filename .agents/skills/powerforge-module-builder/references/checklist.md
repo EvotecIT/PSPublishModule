@@ -11,6 +11,9 @@
    - required/approved modules
    - install strategy and keep count
    - legacy flat handling and preserved versions.
+4. Confirm documentation source settings:
+   - `New-ConfigurationDocumentation` values (`Path`, `PathReadme`, `AboutTopicsSourcePath`)
+   - about-topic source files under `Help/About/about_*`.
 
 ## Run Order
 
@@ -20,6 +23,9 @@
    - import step
    - compatibility/file consistency/module validation
    - artefacts/install paths.
+4. If documentation changed, verify generated outputs:
+   - `Module/Docs`
+   - `Module/en-US/*-help.xml`.
 
 ## Troubleshooting Pointers
 
@@ -31,3 +37,5 @@
   - classify as environment dependency and respect configured ignore/fail behavior.
 - Encoding/mojibake in summary:
   - verify process output encoding setup and console code page.
+- Docs edits disappeared:
+  - expected when `StartClean`/`UpdateWhenNew` are enabled; edit source comments/about-topic files instead of generated docs.

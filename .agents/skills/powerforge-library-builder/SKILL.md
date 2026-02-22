@@ -30,6 +30,9 @@ Prefer one entrypoint script: `Build/Build-Project.ps1`.
 8. Verify final release state.
    - Confirm release/tag and attached asset set match plan.
 9. Update docs/schema/help for any new config fields.
+10. Keep engine boundaries explicit.
+   - Use `Invoke-ProjectBuild` for package/release pipelines.
+   - Use DotNet publish engine (`Invoke-DotNetPublish`, `New-ConfigurationDotNet*`) for service/app publish packaging.
 
 ## High-Value Commands
 
@@ -64,5 +67,6 @@ dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release
 
 - `references/checklist.md` for quick release-mode and tag-policy decisions.
 - `Docs/PSPublishModule.ProjectBuild.md` for JSON behavior.
+- `Docs/PSPublishModule.DotNetPublish.Quickstart.md` when release work also needs app/service publish flows.
 - `schemas/project.build.schema.json` for allowed fields and enums.
 - `Module/Docs/Invoke-ProjectBuild.md` for cmdlet behavior.

@@ -32,6 +32,9 @@ Use this skill for module build pipeline work, not website work.
    - Run focused tests first, then broader tests.
 10. Document config and migration behavior.
    - Update docs/schema/help when adding parameters.
+11. Respect generated docs boundaries.
+   - `Module/Docs` and `Module/en-US/*-help.xml` are generated.
+   - Author source docs in code comments and about-topic sources (`Help/About/about_*`), not directly in generated files.
 
 ## High-Value Commands
 
@@ -44,6 +47,9 @@ Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -JsonOnly -JsonPath .\powerfor
 
 # Focused tests for pipeline changes
 dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release
+
+# Scaffold about-topic source file
+New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
 ```
 
 ## Decision Rules
@@ -60,3 +66,5 @@ dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release
 - `Module/Docs/Invoke-ModuleBuild.md` for command surface.
 - `Module/Docs/New-ConfigurationBuild.md` for build/install parameters.
 - `Docs/PSPublishModule.ProjectBuild.md` when module build and repo release flow intersect.
+- `Docs/PSPublishModule.ModuleDocumentation.md` for generated-doc workflow and about topics.
+- `Docs/PSPublishModule.DotNetPublish.Quickstart.md` when module work intersects DotNet publish engine usage.

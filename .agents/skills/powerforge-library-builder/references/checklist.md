@@ -7,6 +7,7 @@
    - `Build/Build-Project.ps1`
    - `Build/project.build.json`
    - no stale wrappers (`Build-AllPackages.ps1`, `Publish-*.ps1`, `Update-Version.ps1`).
+   - if repo also builds deployable services/apps, keep that work in DotNetPublish config, not project.build.json.
 3. Inspect `Build/project.build.json`:
    - project discovery filters
    - expected version map
@@ -41,3 +42,5 @@
   - ensure plan/what-if path does not enforce produced-file checks.
 - Mixed-version confusion in single release:
   - set primary project or tag template to date/timestamp.
+- Pipeline purpose confusion (library vs app publish):
+  - `Invoke-ProjectBuild` for NuGet/release; `Invoke-DotNetPublish` for publish/service/MSI/state pipelines.

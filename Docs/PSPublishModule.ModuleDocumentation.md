@@ -2,6 +2,9 @@
 
 This document defines the recommended documentation workflow for PowerForge/PSPublishModule module pipelines.
 
+For DotNet publish usage and command conventions, see:
+- `Docs/PSPublishModule.DotNetPublish.Quickstart.md`
+
 ## Generated vs Source Content
 
 - `Module/Docs` is generated output.
