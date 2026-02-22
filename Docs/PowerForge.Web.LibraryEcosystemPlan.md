@@ -10,7 +10,7 @@ This plan focuses on making PowerForge.Web a first-class docs engine for:
 
 It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into implementation slices with direct value for:
 
-- HtmlForgeX.Website
+- HtmlForgeX Website
 - IntelligenceX Website
 - CodeGlyphX Website
 

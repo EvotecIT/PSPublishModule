@@ -3,7 +3,7 @@
 Last updated: 2026-02-10
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
-Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX.Website**, **IntelligenceX Website**.
+Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX Website**, **IntelligenceX Website**.
 
 Start here:
 - `AGENTS.md` (repo + website paths and working agreements)
@@ -21,7 +21,7 @@ Start here:
 - CodeGlyphX repo (website + library): `C:\Support\GitHub\CodeMatrix` (remote: `EvotecIT/CodeGlyphX`)
   - Website: `C:\Support\GitHub\CodeMatrix\Website`
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
-- HtmlForgeX website repo: `C:\Support\GitHub\HtmlForgeX.Website`
+- HtmlForgeX repo (website path): `C:\Support\GitHub\HtmlForgeX\Website`
 
 ## Recent Changes (2026-02-09)
 
@@ -90,8 +90,8 @@ Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
 
 ### Audit artifacts path bug (fixed upstream)
 
-Symptom (HtmlForgeX.Website):
-`audit: Path must resolve under site root: C:\Support\GitHub\HtmlForgeX.Website\.powerforge\audit.sarif`
+Symptom (HtmlForgeX Website):
+`audit: Path must resolve under site root: C:\Support\GitHub\HtmlForgeX\Website\.powerforge\audit.sarif`
 
 Fix:
 - PSPublishModule PR #89 merged to `origin/main` (commit `60bf13a`).

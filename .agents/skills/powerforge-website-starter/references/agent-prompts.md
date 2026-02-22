@@ -2,7 +2,7 @@
 
 ## Refactor HtmlForgeX to "portable contracts + deterministic gates"
 
-You are working in `C:\\Support\\GitHub\\HtmlForgeX.Website`.
+You are working in `C:\\Support\\GitHub\\HtmlForgeX\\Website`.
 
 Goals:
 - No surprises: deterministic dev vs CI behavior.

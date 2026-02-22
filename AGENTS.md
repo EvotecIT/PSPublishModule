@@ -15,8 +15,8 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
   - PowerShell module: `PSPublishModule\` (+ packaging under `Module\`)
   - Core .NET libs/CLI: `PowerForge\`, `PowerForge.Cli\`
 
-- HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX.Website`
-  - Remote: `https://github.com/EvotecIT/HtmlForgeX.Website.git` (currently `origin`)
+- HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX\Website`
+  - Remote: `https://github.com/EvotecIT/HtmlForgeX.git` (website lives under `Website\`)
 
 - IntelligenceX website: `C:\Support\GitHub\IntelligenceX\Website`
   - Remote: `https://github.com/EvotecIT/IntelligenceX.git`
@@ -30,7 +30,7 @@ If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout 
 
 - Common layout: the repos are siblings under one parent folder:
   - `<root>/PSPublishModule`
-  - `<root>/HtmlForgeX.Website`
+  - `<root>/HtmlForgeX/Website`
   - `<root>/IntelligenceX/Website`
   - `<root>/CodeMatrix/Website`
 
