@@ -116,7 +116,8 @@
         "GenerateFallbackExamples": { "type": "boolean" },
         "GenerateExternalHelp": { "type": "boolean" },
         "ExternalHelpCulture": { "type": "string" },
-        "ExternalHelpFileName": { "type": "string" }
+        "ExternalHelpFileName": { "type": "string" },
+        "AboutTopicsSourcePath": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
 

@@ -11,7 +11,7 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-Tool <DocumentationTool>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [-Tool <DocumentationTool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -20,7 +20,8 @@ It controls markdown generation (in -Path), optional external help generation (M
 and whether generated documentation should be synced back to the project root.
 
 About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,
-these are converted into markdown pages under Docs\About.
+these are converted into markdown pages under Docs\About. Additional source roots can be provided via
+P:PSPublishModule.NewConfigurationDocumentationCommand.AboutTopicsSourcePath.
 
 ## EXAMPLES
 
@@ -34,7 +35,29 @@ New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -
 New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples
 ```
 
+### EXAMPLE 3
+```powershell
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'
+```
+
 ## PARAMETERS
+
+### -AboutTopicsSourcePath
+Optional extra source paths for about_* topic files.
+Relative paths are resolved from the staging root (for example: 'Help\About').
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -Enable
 Enables creation of documentation from the module.

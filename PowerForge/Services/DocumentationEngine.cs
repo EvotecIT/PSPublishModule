@@ -183,7 +183,13 @@ public sealed class DocumentationEngine
                 writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
                 if (buildDocumentation.IncludeAboutTopics)
                 {
-                    try { new AboutTopicWriter().Write(stagingPath, docsPath); }
+                    try
+                    {
+                        new AboutTopicWriter().Write(
+                            stagingPath,
+                            docsPath,
+                            buildDocumentation.AboutTopicsSourcePath);
+                    }
                     catch (Exception ex)
                     {
                         _logger.Warn($"Failed to write about_* topics. Error: {ex.Message}");

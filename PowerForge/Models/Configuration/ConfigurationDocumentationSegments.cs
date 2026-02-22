@@ -85,4 +85,11 @@ public sealed class BuildDocumentationConfiguration
     /// Optional external help file name override. When empty, defaults to <c>&lt;ModuleName&gt;-help.xml</c>.
     /// </summary>
     public string ExternalHelpFileName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional extra source paths for <c>about_*</c> topic files.
+    /// Relative paths are resolved from the staging root (for example: <c>Help\About</c>).
+    /// Absolute paths are also supported.
+    /// </summary>
+    public string[] AboutTopicsSourcePath { get; set; } = System.Array.Empty<string>();
 }

@@ -122,6 +122,7 @@ EXAMPLES
             var writer = new MamlHelpWriter();
             var path = writer.WriteExternalHelpFile(payload, "TestModule", root);
             Assert.True(File.Exists(path));
+            Assert.False(HasIsolatedLf(File.ReadAllText(path)), "External help XML should be normalized to CRLF line endings.");
 
             var doc = XDocument.Load(path);
             XNamespace commandNs = "http://schemas.microsoft.com/maml/dev/command/2004/10";
@@ -149,5 +150,179 @@ EXAMPLES
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void AboutTopicWriter_PrefersHelpTxt_AndGeneratesIndex()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-writer-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "Docs");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "about_Demo.help.txt"), """
+TOPIC
+    about_Demo
+
+SHORT DESCRIPTION
+    Preferred help topic description.
+""");
+
+            File.WriteAllText(Path.Combine(root, "about_Demo.txt"), """
+TOPIC
+    about_Demo
+
+SHORT DESCRIPTION
+    Secondary text topic description.
+""");
+
+            File.WriteAllText(Path.Combine(root, "about_Extra.help.txt"), """
+TOPIC
+    about_Extra
+
+SHORT DESCRIPTION
+    Extra topic description.
+""");
+
+            var result = new AboutTopicWriter().Write(root, docs);
+
+            Assert.Equal(2, result.Topics.Length);
+
+            var demoMd = Path.Combine(docs, "About", "about_Demo.md");
+            Assert.True(File.Exists(demoMd));
+            var demoText = File.ReadAllText(demoMd);
+            Assert.Contains("Preferred help topic description.", demoText);
+            Assert.DoesNotContain("Secondary text topic description.", demoText);
+
+            var aboutReadme = Path.Combine(docs, "About", "README.md");
+            Assert.True(File.Exists(aboutReadme));
+            var index = File.ReadAllText(aboutReadme);
+            Assert.Contains("[about_Demo](about_Demo.md)", index);
+            Assert.Contains("[about_Extra](about_Extra.md)", index);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void AboutTopicTemplateGenerator_WritesCanonicalTemplateFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-template-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var output = AboutTopicTemplateGenerator.WriteTemplateFile(
+                outputDirectory: root,
+                topicName: "Troubleshooting",
+                force: false,
+                shortDescription: "How to troubleshoot common issues.");
+
+            Assert.True(File.Exists(output));
+            Assert.EndsWith("about_Troubleshooting.help.txt", output, StringComparison.OrdinalIgnoreCase);
+
+            var text = File.ReadAllText(output);
+            Assert.Contains("TOPIC", text);
+            Assert.Contains("about_Troubleshooting", text);
+            Assert.Contains("How to troubleshoot common issues.", text);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void AboutTopicWriter_UsesAdditionalSourcePaths_RelativeToStaging()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-extra-paths-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(root, "staging");
+        var extra = Path.Combine(root, "Help", "About");
+        var docs = Path.Combine(root, "Docs");
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(extra);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(extra, "about_Custom.help.txt"), """
+TOPIC
+    about_Custom
+
+SHORT DESCRIPTION
+    Custom path topic.
+""");
+
+            var result = new AboutTopicWriter().Write(staging, docs, new[] { @"..\Help\About" });
+            Assert.Single(result.Topics);
+
+            var customMd = Path.Combine(docs, "About", "about_Custom.md");
+            Assert.True(File.Exists(customMd));
+            Assert.Contains("Custom path topic.", File.ReadAllText(customMd));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void MarkdownHelpWriter_Readme_IgnoresAboutReadmeIndex()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-markdown-readme-about-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "Docs");
+        var about = Path.Combine(docs, "About");
+        Directory.CreateDirectory(about);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(about, "README.md"), "# About Topics");
+            File.WriteAllText(Path.Combine(about, "about_Custom.md"), "# about_Custom");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "DemoModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Get-Demo",
+                        Synopsis = "Gets demo data."
+                    }
+                }
+            };
+
+            var writer = new MarkdownHelpWriter();
+            writer.WriteModuleReadme(
+                payload,
+                moduleName: "DemoModule",
+                readmePath: Path.Combine(docs, "Readme.md"),
+                docsPath: docs);
+
+            var text = File.ReadAllText(Path.Combine(docs, "Readme.md"));
+            Assert.Contains("[about_Custom](About/about_Custom.md)", text);
+            Assert.DoesNotContain("[README](About/README.md)", text, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    private static bool HasIsolatedLf(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '\n') continue;
+            if (i == 0 || text[i - 1] != '\r') return true;
+        }
+        return false;
     }
 }

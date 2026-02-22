@@ -10,7 +10,10 @@ internal sealed class AboutTopicWriter
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-    public AboutTopicWriteResult Write(string stagingPath, string docsPath)
+    public AboutTopicWriteResult Write(
+        string stagingPath,
+        string docsPath,
+        IEnumerable<string>? additionalSourcePaths = null)
     {
         if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
         if (string.IsNullOrWhiteSpace(docsPath)) throw new ArgumentException("DocsPath is required.", nameof(docsPath));
@@ -20,7 +23,9 @@ internal sealed class AboutTopicWriter
 
         if (!Directory.Exists(fullStaging)) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
 
-        var aboutFiles = EnumerateAboutTopicFiles(fullStaging)
+        var roots = ResolveSourceRoots(fullStaging, additionalSourcePaths);
+        var aboutFiles = roots
+            .SelectMany(EnumerateAboutTopicFiles)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -29,7 +34,7 @@ internal sealed class AboutTopicWriter
         var aboutOutDir = Path.Combine(fullDocs, "About");
         Directory.CreateDirectory(aboutOutDir);
 
-        var written = new List<AboutTopicInfo>();
+        var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in aboutFiles)
         {
             string content;
@@ -40,25 +45,119 @@ internal sealed class AboutTopicWriter
             if (string.IsNullOrWhiteSpace(converted.TopicName) || string.IsNullOrWhiteSpace(converted.Markdown))
                 continue;
 
-            var outPath = Path.Combine(aboutOutDir, SanitizeFileName(converted.TopicName) + ".md");
-            File.WriteAllText(outPath, converted.Markdown, Utf8NoBom);
+            var topic = converted.TopicName.Trim();
+            var isHelpFile = IsHelpTopicFile(file);
+            var candidate = new AboutTopicCandidate(
+                topic,
+                converted.Markdown,
+                converted.ShortDescription,
+                file,
+                isHelpFile);
 
-            written.Add(new AboutTopicInfo(converted.TopicName, outPath, converted.ShortDescription));
+            if (!selected.TryGetValue(topic, out var existing))
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            // Prefer .help.txt over .txt when the topic name is duplicated.
+            if (candidate.IsHelpFile && !existing.IsHelpFile)
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            if (!candidate.IsHelpFile && existing.IsHelpFile)
+                continue;
+
+            // Deterministic tie-breaker for same file type.
+            if (string.Compare(candidate.SourcePath, existing.SourcePath, StringComparison.OrdinalIgnoreCase) < 0)
+                selected[topic] = candidate;
         }
 
+        var written = new List<AboutTopicInfo>();
+        foreach (var topic in selected.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        {
+            var candidate = selected[topic];
+            var outPath = Path.Combine(aboutOutDir, SanitizeFileName(candidate.TopicName) + ".md");
+            File.WriteAllText(outPath, candidate.Markdown, Utf8NoBom);
+
+            written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
+        }
+
+        WriteIndexFile(aboutOutDir, written);
         return new AboutTopicWriteResult(written.ToArray());
     }
 
-    private static IEnumerable<string> EnumerateAboutTopicFiles(string stagingPath)
+    private static IEnumerable<string> ResolveSourceRoots(string stagingPath, IEnumerable<string>? additionalSourcePaths)
+    {
+        var roots = new List<string>();
+
+        void AddRoot(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root)) return;
+            var full = Path.GetFullPath(root.Trim().Trim('"'));
+            if (roots.Any(existing => string.Equals(existing, full, StringComparison.OrdinalIgnoreCase)))
+                return;
+            if (!Directory.Exists(full)) return;
+            roots.Add(full);
+        }
+
+        AddRoot(stagingPath);
+        foreach (var source in additionalSourcePaths ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(source)) continue;
+            if (Path.IsPathRooted(source))
+                AddRoot(source);
+            else
+                AddRoot(Path.Combine(stagingPath, source));
+        }
+
+        return roots;
+    }
+
+    private static IEnumerable<string> EnumerateAboutTopicFiles(string root)
     {
         IEnumerable<string> SafeEnum(string pattern)
         {
-            try { return Directory.EnumerateFiles(stagingPath, pattern, SearchOption.AllDirectories); }
+            try { return Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories); }
             catch { return Array.Empty<string>(); }
         }
 
         foreach (var f in SafeEnum("about_*.help.txt")) yield return f;
         foreach (var f in SafeEnum("about_*.txt")) yield return f;
+    }
+
+    private static bool IsHelpTopicFile(string path)
+        => path.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase);
+
+    private static void WriteIndexFile(string aboutOutDir, IReadOnlyCollection<AboutTopicInfo> topics)
+    {
+        if (string.IsNullOrWhiteSpace(aboutOutDir)) return;
+        if (topics is null || topics.Count == 0) return;
+
+        var indexPath = Path.Combine(aboutOutDir, "README.md");
+        var sb = new StringBuilder();
+        sb.AppendLine("---");
+        sb.AppendLine("schema: 1.0.0");
+        sb.AppendLine("generated: true");
+        sb.AppendLine("---");
+        sb.AppendLine("# About Topics");
+        sb.AppendLine();
+        sb.AppendLine("This folder is generated from `about_*.help.txt` and `about_*.txt` source files.");
+        sb.AppendLine();
+
+        foreach (var topic in topics.OrderBy(t => t.TopicName, StringComparer.OrdinalIgnoreCase))
+        {
+            var fileName = SanitizeFileName(topic.TopicName) + ".md";
+            if (string.IsNullOrWhiteSpace(topic.ShortDescription))
+                sb.AppendLine($"- [{topic.TopicName}]({fileName})");
+            else
+                sb.AppendLine($"- [{topic.TopicName}]({fileName}) - {topic.ShortDescription!.Trim()}");
+        }
+
+        sb.AppendLine();
+        File.WriteAllText(indexPath, sb.ToString(), Utf8NoBom);
     }
 
     private static string SanitizeFileName(string name)
@@ -72,6 +171,24 @@ internal sealed class AboutTopicWriter
         }
 
         return n;
+    }
+}
+
+internal sealed class AboutTopicCandidate
+{
+    public string TopicName { get; }
+    public string Markdown { get; }
+    public string? ShortDescription { get; }
+    public string SourcePath { get; }
+    public bool IsHelpFile { get; }
+
+    public AboutTopicCandidate(string topicName, string markdown, string? shortDescription, string sourcePath, bool isHelpFile)
+    {
+        TopicName = topicName ?? string.Empty;
+        Markdown = markdown ?? string.Empty;
+        ShortDescription = shortDescription;
+        SourcePath = sourcePath ?? string.Empty;
+        IsHelpFile = isHelpFile;
     }
 }
 

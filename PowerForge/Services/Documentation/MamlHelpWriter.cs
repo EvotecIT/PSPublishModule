@@ -43,23 +43,25 @@ internal sealed class MamlHelpWriter
             NewLineHandling = NewLineHandling.Entitize
         };
 
-        using var stream = File.Create(path);
-        using var writer = XmlWriter.Create(stream, settings);
-
-        writer.WriteStartDocument();
-        writer.WriteStartElement("helpItems", MshNs);
-        writer.WriteAttributeString("schema", "maml");
-
-        foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
-                     .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
-                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        using (var stream = File.Create(path))
+        using (var writer = XmlWriter.Create(stream, settings))
         {
-            WriteCommand(writer, cmd);
+            writer.WriteStartDocument();
+            writer.WriteStartElement("helpItems", MshNs);
+            writer.WriteAttributeString("schema", "maml");
+
+            foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
+                         .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+                         .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                WriteCommand(writer, cmd);
+            }
+
+            writer.WriteEndElement(); // helpItems
+            writer.WriteEndDocument();
         }
 
-        writer.WriteEndElement(); // helpItems
-        writer.WriteEndDocument();
-
+        NormalizeFileToCrLf(path);
         return path;
     }
 
@@ -405,5 +407,18 @@ internal sealed class MamlHelpWriter
     {
         if (primary is not null && !string.IsNullOrWhiteSpace(primary)) return primary.Trim();
         return secondary?.Trim() ?? string.Empty;
+    }
+
+    private static void NormalizeFileToCrLf(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return;
+
+        var text = File.ReadAllText(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        if (string.Equals(text, normalized, StringComparison.Ordinal))
+            return;
+
+        File.WriteAllText(path, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 }

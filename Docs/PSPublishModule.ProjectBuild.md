@@ -2,6 +2,9 @@
 
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
 
+For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
+see `Docs/PSPublishModule.ModuleDocumentation.md`.
+
 Schema
 - Location: `Schemas/project.build.schema.json`
 

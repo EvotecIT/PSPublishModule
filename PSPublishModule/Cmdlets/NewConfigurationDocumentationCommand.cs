@@ -14,7 +14,8 @@ namespace PSPublishModule;
 /// </para>
 /// <para>
 /// About topics are supported via <c>about_*.help.txt</c> / <c>about_*.txt</c> files present in the module source. When enabled,
-/// these are converted into markdown pages under <c>Docs\About</c>.
+/// these are converted into markdown pages under <c>Docs\About</c>. Additional source roots can be provided via
+/// <see cref="AboutTopicsSourcePath"/>.
 /// </para>
 /// </remarks>
 /// <example>
@@ -24,6 +25,10 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Generate docs but skip about topics conversion and fallback examples</summary>
 /// <code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples</code>
+/// </example>
+/// <example>
+/// <summary>Generate docs and scan custom about topic folders in staging</summary>
+/// <code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'</code>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDocumentation")]
 public sealed class NewConfigurationDocumentationCommand : PSCmdlet
@@ -61,6 +66,12 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Optional file name override for external help (default: &lt;ModuleName&gt;-help.xml).</summary>
     [Parameter] public string ExternalHelpFileName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional extra source paths for about_* topic files.
+    /// Relative paths are resolved from the staging root (for example: 'Help\About').
+    /// </summary>
+    [Parameter] public string[] AboutTopicsSourcePath { get; set; } = System.Array.Empty<string>();
+
     /// <summary>Path to the folder where documentation will be created.</summary>
     [Parameter(Mandatory = true)] public string Path { get; set; } = string.Empty;
 
@@ -91,7 +102,8 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
             SkipAboutTopics.IsPresent ||
             SkipFallbackExamples.IsPresent ||
             MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpCulture)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName));
+            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName)) ||
+            MyInvocation.BoundParameters.ContainsKey(nameof(AboutTopicsSourcePath));
 
         if (emitBuildSegment)
         {
@@ -108,7 +120,8 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
                     GenerateFallbackExamples = !SkipFallbackExamples.IsPresent,
                     GenerateExternalHelp = !SkipExternalHelp.IsPresent,
                     ExternalHelpCulture = ExternalHelpCulture,
-                    ExternalHelpFileName = ExternalHelpFileName
+                    ExternalHelpFileName = ExternalHelpFileName,
+                    AboutTopicsSourcePath = AboutTopicsSourcePath ?? System.Array.Empty<string>()
                 }
             });
         }

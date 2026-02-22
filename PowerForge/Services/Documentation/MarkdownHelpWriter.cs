@@ -81,6 +81,7 @@ internal sealed class MarkdownHelpWriter
             if (Directory.Exists(aboutDir))
             {
                 var aboutFiles = Directory.EnumerateFiles(aboutDir, "*.md", SearchOption.TopDirectoryOnly)
+                    .Where(f => !string.Equals(Path.GetFileName(f), "README.md", StringComparison.OrdinalIgnoreCase))
                     .Select(Path.GetFullPath)
                     .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
