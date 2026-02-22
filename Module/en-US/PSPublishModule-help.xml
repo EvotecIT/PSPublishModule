@@ -2199,6 +2199,18 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Framework">
+          <maml:name>Frameworks</maml:name>
+          <maml:description>
+            <maml:para>Optional framework override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
@@ -2259,6 +2271,18 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Runtime,Rid">
+          <maml:name>Runtimes</maml:name>
+          <maml:description>
+            <maml:para>Optional runtime override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Settings</maml:name>
           <maml:description>
@@ -2267,6 +2291,61 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
           <dev:type>
             <maml:name>ScriptBlock</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipBuild</maml:name>
+          <maml:description>
+            <maml:para>Disables build steps for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipRestore</maml:name>
+          <maml:description>
+            <maml:para>Disables restore steps for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Style">
+          <maml:name>Styles</maml:name>
+          <maml:description>
+            <maml:para>Optional style override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
+          <maml:name>Target</maml:name>
+          <maml:description>
+            <maml:para>Optional target-name filter override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -2310,6 +2389,18 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Framework">
+          <maml:name>Frameworks</maml:name>
+          <maml:description>
+            <maml:para>Optional framework override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
@@ -2370,6 +2461,73 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Runtime,Rid">
+          <maml:name>Runtimes</maml:name>
+          <maml:description>
+            <maml:para>Optional runtime override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipBuild</maml:name>
+          <maml:description>
+            <maml:para>Disables build steps for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipRestore</maml:name>
+          <maml:description>
+            <maml:para>Disables restore steps for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Style">
+          <maml:name>Styles</maml:name>
+          <maml:description>
+            <maml:para>Optional style override for selected targets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
+          <maml:name>Target</maml:name>
+          <maml:description>
+            <maml:para>Optional target-name filter override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Validate</maml:name>
           <maml:description>
@@ -2405,6 +2563,18 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Framework">
+        <maml:name>Frameworks</maml:name>
+        <maml:description>
+          <maml:para>Optional framework override for selected targets.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -2469,6 +2639,18 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Runtime,Rid">
+        <maml:name>Runtimes</maml:name>
+        <maml:description>
+          <maml:para>Optional runtime override for selected targets.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Settings</maml:name>
         <maml:description>
@@ -2477,6 +2659,61 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
         <dev:type>
           <maml:name>ScriptBlock</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipBuild</maml:name>
+        <maml:description>
+          <maml:para>Disables build steps for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipRestore</maml:name>
+        <maml:description>
+          <maml:para>Disables restore steps for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Style">
+        <maml:name>Styles</maml:name>
+        <maml:description>
+          <maml:para>Optional style override for selected targets.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishStyle[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
+        <maml:name>Target</maml:name>
+        <maml:description>
+          <maml:para>Optional target-name filter override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

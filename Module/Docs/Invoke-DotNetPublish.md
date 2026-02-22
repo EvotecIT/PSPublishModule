@@ -11,12 +11,12 @@ Executes DotNet publish engine from DSL settings or an existing JSON config.
 ## SYNTAX
 ### Settings (Default)
 ```powershell
-Invoke-DotNetPublish -Settings <scriptblock> [-Profile <string>] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -Settings <scriptblock> [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-DotNetPublish -ConfigPath <string> [-Profile <string>] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -ConfigPath <string> [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -64,6 +64,22 @@ Sets host exit code: 0 on success, 1 on failure.
 Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Frameworks
+Optional framework override for selected targets.
+
+```yaml
+Type: String[]
+Parameter Sets: Settings, Config
+Aliases: Framework
 Possible values: 
 
 Required: False
@@ -153,6 +169,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Runtimes
+Optional runtime override for selected targets.
+
+```yaml
+Type: String[]
+Parameter Sets: Settings, Config
+Aliases: Runtime, Rid
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Settings
 DSL settings block that emits DotNet publish objects.
 
@@ -163,6 +195,70 @@ Aliases: None
 Possible values: 
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipBuild
+Disables build steps for this run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipRestore
+Disables restore steps for this run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Styles
+Optional style override for selected targets.
+
+```yaml
+Type: DotNetPublishStyle[]
+Parameter Sets: Settings, Config
+Aliases: Style
+Possible values: Portable, PortableCompat, PortableSize, AotSpeed, AotSize
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Target
+Optional target-name filter override.
+
+```yaml
+Type: String[]
+Parameter Sets: Settings, Config
+Aliases: Targets
+Possible values: 
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False

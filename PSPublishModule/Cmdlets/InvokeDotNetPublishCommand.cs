@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using System.Text;
 using System.Text.Json;
@@ -60,6 +62,52 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public string? Profile { get; set; }
 
     /// <summary>
+    /// Optional target-name filter override.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [Alias("Targets")]
+    public string[]? Target { get; set; }
+
+    /// <summary>
+    /// Optional runtime override for selected targets.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [Alias("Runtime", "Rid")]
+    public string[]? Runtimes { get; set; }
+
+    /// <summary>
+    /// Optional framework override for selected targets.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [Alias("Framework")]
+    public string[]? Frameworks { get; set; }
+
+    /// <summary>
+    /// Optional style override for selected targets.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [Alias("Style")]
+    public DotNetPublishStyle[]? Styles { get; set; }
+
+    /// <summary>
+    /// Disables restore steps for this run.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter SkipRestore { get; set; }
+
+    /// <summary>
+    /// Disables build steps for this run.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter SkipBuild { get; set; }
+
+    /// <summary>
     /// Exports JSON config and exits without running the engine.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
@@ -117,6 +165,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
             var spec = LoadSpec(logger, ref sourceLabel);
             if (!string.IsNullOrWhiteSpace(Profile))
                 spec.Profile = Profile!.Trim();
+            ApplyOverrides(spec);
 
             if (JsonOnly.IsPresent)
             {
@@ -240,5 +289,95 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
 
         var json = JsonSerializer.Serialize(spec, options) + Environment.NewLine;
         File.WriteAllText(jsonFullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private void ApplyOverrides(DotNetPublishSpec spec)
+    {
+        if (spec is null) return;
+
+        var overrideTargets = NormalizeStrings(Target);
+        var overrideRuntimes = NormalizeStrings(Runtimes);
+        var overrideFrameworks = NormalizeStrings(Frameworks);
+        var overrideStyles = NormalizeStyles(Styles);
+
+        if (overrideTargets.Length > 0)
+        {
+            var knownTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
+            var selected = new HashSet<string>(overrideTargets, StringComparer.OrdinalIgnoreCase);
+            var missing = selected
+                .Where(name => knownTargets.All(t => !string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (missing.Length > 0)
+                throw new InvalidOperationException($"Unknown target override value(s): {string.Join(", ", missing)}");
+
+            spec.Targets = knownTargets
+                .Where(t => selected.Contains(t.Name))
+                .ToArray();
+
+            if (spec.Installers is { Length: > 0 })
+            {
+                spec.Installers = spec.Installers
+                    .Where(i =>
+                        i is not null
+                        && (string.IsNullOrWhiteSpace(i.PrepareFromTarget)
+                            || selected.Contains(i.PrepareFromTarget)))
+                    .ToArray();
+            }
+        }
+
+        if (overrideRuntimes.Length > 0
+            || overrideFrameworks.Length > 0
+            || overrideStyles.Length > 0)
+        {
+            foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+            {
+                target.Publish ??= new DotNetPublishPublishOptions();
+
+                if (overrideRuntimes.Length > 0)
+                    target.Publish.Runtimes = overrideRuntimes;
+
+                if (overrideFrameworks.Length > 0)
+                {
+                    target.Publish.Framework = overrideFrameworks[0];
+                    target.Publish.Frameworks = overrideFrameworks;
+                }
+
+                if (overrideStyles.Length > 0)
+                {
+                    target.Publish.Style = overrideStyles[0];
+                    target.Publish.Styles = overrideStyles;
+                }
+            }
+        }
+
+        spec.DotNet ??= new DotNetPublishDotNetOptions();
+        if (SkipRestore.IsPresent)
+        {
+            spec.DotNet.Restore = false;
+            spec.DotNet.NoRestoreInPublish = true;
+        }
+
+        if (SkipBuild.IsPresent)
+        {
+            spec.DotNet.Build = false;
+            spec.DotNet.NoBuildInPublish = true;
+        }
+    }
+
+    private static string[] NormalizeStrings(string[]? values)
+    {
+        if (values is null || values.Length == 0) return Array.Empty<string>();
+
+        return values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static DotNetPublishStyle[] NormalizeStyles(DotNetPublishStyle[]? values)
+    {
+        if (values is null || values.Length == 0) return Array.Empty<DotNetPublishStyle>();
+        return values.Distinct().ToArray();
     }
 }
