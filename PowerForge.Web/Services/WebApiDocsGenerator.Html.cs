@@ -634,10 +634,7 @@ $@"<!doctype html>
             var css = JoinHtmlFragments(
                 $"<link rel=\"stylesheet\" href=\"{light}\" media=\"(prefers-color-scheme: light)\" />",
                 $"<link rel=\"stylesheet\" href=\"{dark}\" media=\"(prefers-color-scheme: dark)\" />");
-            var scripts = JoinHtmlFragments(
-                $"<script src=\"{core}\"></script>",
-                $"<script src=\"{autoloader}\"></script>",
-                BuildApiPrismInitScript(languagesPath));
+            var scripts = BuildApiPrismScriptBundle(core, autoloader, languagesPath);
             return (css, scripts);
         }
 
@@ -661,11 +658,25 @@ $@"<!doctype html>
         var cssLinks = JoinHtmlFragments(
             $"<link rel=\"stylesheet\" href=\"{cdnLight}\" media=\"(prefers-color-scheme: light)\" />",
             $"<link rel=\"stylesheet\" href=\"{cdnDark}\" media=\"(prefers-color-scheme: dark)\" />");
-        var scriptsLinks = JoinHtmlFragments(
-            $"<script src=\"{cdn}/components/prism-core.min.js\"></script>",
-            $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
-            BuildApiPrismInitScript($"{cdn}/components/"));
+        var scriptsLinks = BuildApiPrismScriptBundle(
+            $"{cdn}/components/prism-core.min.js",
+            $"{cdn}/plugins/autoloader/prism-autoloader.min.js",
+            $"{cdn}/components/");
         return (cssLinks, scriptsLinks);
+    }
+
+    private static string BuildApiPrismScriptBundle(string coreScript, string autoloaderScript, string languagesPath)
+    {
+        return JoinHtmlFragments(
+            BuildApiPrismManualScript(),
+            $"<script src=\"{coreScript}\"></script>",
+            $"<script src=\"{autoloaderScript}\"></script>",
+            BuildApiPrismInitScript(languagesPath));
+    }
+
+    private static string BuildApiPrismManualScript()
+    {
+        return "<script>(function(){window.Prism=window.Prism||{};window.Prism.manual=true;})();</script>";
     }
 
     private static string ResolveApiPrismThemeHref(
@@ -725,14 +736,23 @@ $@"<!doctype html>
         var safePath = (languagesPath ?? string.Empty).Replace("'", "\\'", StringComparison.Ordinal);
         return
             "<script>(function(){" +
-            "var p=window.Prism;" +
-            "if(!p){return;}" +
-            "if(p.plugins&&p.plugins.autoloader){p.plugins.autoloader.languages_path='" + safePath + "';}" +
+            "var targetPath='" + safePath + "';" +
+            "var attempts=0;" +
+            "var maxAttempts=8;" +
+            "var delayMs=40;" +
+            "var warned=false;" +
+            "var hasCode=function(root){return !!(root&&root.querySelector&&root.querySelector('code[class*=\\\"language-\\\"]'));};" +
+            "var hasTokens=function(root){return !!(root&&root.querySelector&&root.querySelector('code[class*=\\\"language-\\\"] .token'));};" +
             "var run=function(){" +
+            "attempts++;" +
             "var root=document.querySelector('.api-content')||document;" +
-            "if(!root.querySelector('code[class*=\\\"language-\\\"]')){return;}" +
-            "try{if(p.highlightAllUnder){p.highlightAllUnder(root);}else{p.highlightAll();}}" +
-            "catch(e){if(window.console&&console.warn){console.warn('Prism highlighting failed.',e);}}" +
+            "var p=window.Prism;" +
+            "if(!p||!hasCode(root)){return;}" +
+            "if(p.plugins&&p.plugins.autoloader){p.plugins.autoloader.languages_path=targetPath;}" +
+            "if(hasTokens(root)){return;}" +
+            "try{if(p.highlightAllUnder){p.highlightAllUnder(root);}else if(p.highlightAll){p.highlightAll();}}" +
+            "catch(e){if(!warned&&window.console&&console.warn){warned=true;console.warn('Prism highlighting failed.',e);}}" +
+            "if(!hasTokens(root)&&attempts<maxAttempts){setTimeout(run,delayMs);}" +
             "};" +
             "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}" +
             "})();</script>";
