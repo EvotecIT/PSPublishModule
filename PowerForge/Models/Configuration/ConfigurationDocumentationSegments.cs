@@ -61,7 +61,7 @@ public sealed class BuildDocumentationConfiguration
     public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
 
     /// <summary>
-    /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> topic files found in the module
+    /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> / <c>about_*.md</c> / <c>about_*.markdown</c> topic files found in the module
     /// into markdown pages under <c>Docs/About</c>.
     /// </summary>
     public bool IncludeAboutTopics { get; set; } = true;

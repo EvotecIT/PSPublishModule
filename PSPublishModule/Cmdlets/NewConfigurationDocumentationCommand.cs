@@ -13,7 +13,7 @@ namespace PSPublishModule;
 /// and whether generated documentation should be synced back to the project root.
 /// </para>
 /// <para>
-/// About topics are supported via <c>about_*.help.txt</c> / <c>about_*.txt</c> files present in the module source. When enabled,
+/// About topics are supported via <c>about_*.help.txt</c> / <c>about_*.txt</c> / <c>about_*.md</c> / <c>about_*.markdown</c> files present in the module source. When enabled,
 /// these are converted into markdown pages under <c>Docs\About</c>. Additional source roots can be provided via
 /// <see cref="AboutTopicsSourcePath"/>.
 /// </para>
@@ -67,7 +67,7 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     [Parameter] public string ExternalHelpFileName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Optional extra source paths for about_* topic files.
+    /// Optional extra source paths for about_* topic files (<c>.help.txt</c>, <c>.txt</c>, <c>.md</c>, <c>.markdown</c>).
     /// Relative paths are resolved from the staging root (for example: 'Help\About').
     /// </summary>
     [Parameter] public string[] AboutTopicsSourcePath { get; set; } = System.Array.Empty<string>();

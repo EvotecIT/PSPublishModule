@@ -37,22 +37,19 @@ internal sealed class AboutTopicWriter
         var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in aboutFiles)
         {
-            string content;
-            try { content = File.ReadAllText(file); }
+            AboutTopicMarkdownResult converted;
+            try { converted = ConvertSourceFile(file); }
             catch { continue; }
-
-            var converted = AboutTopicMarkdown.Convert(Path.GetFileNameWithoutExtension(file), content);
             if (string.IsNullOrWhiteSpace(converted.TopicName) || string.IsNullOrWhiteSpace(converted.Markdown))
                 continue;
 
             var topic = converted.TopicName.Trim();
-            var isHelpFile = IsHelpTopicFile(file);
             var candidate = new AboutTopicCandidate(
                 topic,
                 converted.Markdown,
                 converted.ShortDescription,
                 file,
-                isHelpFile);
+                GetSourcePriority(file));
 
             if (!selected.TryGetValue(topic, out var existing))
             {
@@ -60,14 +57,14 @@ internal sealed class AboutTopicWriter
                 continue;
             }
 
-            // Prefer .help.txt over .txt when the topic name is duplicated.
-            if (candidate.IsHelpFile && !existing.IsHelpFile)
+            // Prefer higher-priority source types when topic names are duplicated.
+            if (candidate.SourcePriority > existing.SourcePriority)
             {
                 selected[topic] = candidate;
                 continue;
             }
 
-            if (!candidate.IsHelpFile && existing.IsHelpFile)
+            if (candidate.SourcePriority < existing.SourcePriority)
                 continue;
 
             // Deterministic tie-breaker for same file type.
@@ -126,10 +123,9 @@ internal sealed class AboutTopicWriter
 
         foreach (var f in SafeEnum("about_*.help.txt")) yield return f;
         foreach (var f in SafeEnum("about_*.txt")) yield return f;
+        foreach (var f in SafeEnum("about_*.md")) yield return f;
+        foreach (var f in SafeEnum("about_*.markdown")) yield return f;
     }
-
-    private static bool IsHelpTopicFile(string path)
-        => path.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase);
 
     private static void WriteIndexFile(string aboutOutDir, IReadOnlyCollection<AboutTopicInfo> topics)
     {
@@ -172,6 +168,27 @@ internal sealed class AboutTopicWriter
 
         return n;
     }
+
+    private static AboutTopicMarkdownResult ConvertSourceFile(string path)
+    {
+        var content = File.ReadAllText(path);
+        if (path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase))
+        {
+            return AboutTopicMarkdown.ConvertMarkdown(Path.GetFileNameWithoutExtension(path), content);
+        }
+
+        return AboutTopicMarkdown.Convert(Path.GetFileNameWithoutExtension(path), content);
+    }
+
+    private static int GetSourcePriority(string path)
+    {
+        if (path.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase)) return 300;
+        if (path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) return 200;
+        if (path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase)) return 200;
+        if (path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) return 100;
+        return 0;
+    }
 }
 
 internal sealed class AboutTopicCandidate
@@ -180,15 +197,15 @@ internal sealed class AboutTopicCandidate
     public string Markdown { get; }
     public string? ShortDescription { get; }
     public string SourcePath { get; }
-    public bool IsHelpFile { get; }
+    public int SourcePriority { get; }
 
-    public AboutTopicCandidate(string topicName, string markdown, string? shortDescription, string sourcePath, bool isHelpFile)
+    public AboutTopicCandidate(string topicName, string markdown, string? shortDescription, string sourcePath, int sourcePriority)
     {
         TopicName = topicName ?? string.Empty;
         Markdown = markdown ?? string.Empty;
         ShortDescription = shortDescription;
         SourcePath = sourcePath ?? string.Empty;
-        IsHelpFile = isHelpFile;
+        SourcePriority = sourcePriority;
     }
 }
 
@@ -265,6 +282,32 @@ internal static class AboutTopicMarkdown
         }
 
         return new AboutTopicMarkdownResult(topic, sb.ToString(), shortDesc);
+    }
+
+    public static AboutTopicMarkdownResult ConvertMarkdown(string fileStem, string content)
+    {
+        var topic = NormalizeTopicFromStem(fileStem);
+        var markdown = (content ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Trim('\n');
+        if (string.IsNullOrWhiteSpace(markdown))
+            return new AboutTopicMarkdownResult(topic, string.Empty, null);
+
+        var lines = markdown.Split('\n');
+        var shortDescription = lines
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#", StringComparison.Ordinal));
+
+        if (!markdown.StartsWith("---", StringComparison.Ordinal))
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("---");
+            sb.AppendLine($"topic: {topic}");
+            sb.AppendLine("schema: 1.0.0");
+            sb.AppendLine("---");
+            sb.AppendLine(markdown);
+            markdown = sb.ToString().TrimEnd('\r', '\n');
+        }
+
+        return new AboutTopicMarkdownResult(topic, markdown.Replace("\n", Environment.NewLine), shortDescription);
     }
 
     private static string? ExtractTopicName(List<AboutSection> sections)

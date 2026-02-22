@@ -19,7 +19,7 @@ Because `-StartClean` and `-UpdateWhenNew` are enabled, manual edits in `Module/
 ## Authoring Sources
 
 - Cmdlet help pages come from PowerShell help metadata plus XML docs comments on cmdlets.
-- About topics come from `about_*.help.txt` / `about_*.txt` source files.
+- About topics come from `about_*.help.txt` / `about_*.txt` / `about_*.md` / `about_*.markdown` source files.
 
 Recommended source layout in module repos:
 

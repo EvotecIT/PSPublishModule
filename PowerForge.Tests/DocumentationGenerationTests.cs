@@ -272,6 +272,64 @@ SHORT DESCRIPTION
     }
 
     [Fact]
+    public void AboutTopicWriter_SupportsMarkdownSources_AndPriorityRules()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-markdown-" + Guid.NewGuid().ToString("N"));
+        var docs = Path.Combine(root, "Docs");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "about_Priority.txt"), """
+TOPIC
+    about_Priority
+
+SHORT DESCRIPTION
+    Plain text source.
+""");
+
+            File.WriteAllText(Path.Combine(root, "about_Priority.md"), """
+# about_Priority
+
+Markdown source.
+""");
+
+            File.WriteAllText(Path.Combine(root, "about_Priority.help.txt"), """
+TOPIC
+    about_Priority
+
+SHORT DESCRIPTION
+    Help text source.
+""");
+
+            File.WriteAllText(Path.Combine(root, "about_MarkdownOnly.md"), """
+# about_MarkdownOnly
+
+Markdown only topic body.
+""");
+
+            var result = new AboutTopicWriter().Write(root, docs);
+            Assert.Equal(2, result.Topics.Length);
+
+            var priorityPath = Path.Combine(docs, "About", "about_Priority.md");
+            var priorityText = File.ReadAllText(priorityPath);
+            Assert.Contains("Help text source.", priorityText);
+            Assert.DoesNotContain("Markdown source.", priorityText);
+            Assert.DoesNotContain("Plain text source.", priorityText);
+
+            var markdownOnlyPath = Path.Combine(docs, "About", "about_MarkdownOnly.md");
+            var markdownOnlyText = File.ReadAllText(markdownOnlyPath);
+            Assert.Contains("topic: about_MarkdownOnly", markdownOnlyText);
+            Assert.Contains("Markdown only topic body.", markdownOnlyText);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void MarkdownHelpWriter_Readme_IgnoresAboutReadmeIndex()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-markdown-readme-about-" + Guid.NewGuid().ToString("N"));
