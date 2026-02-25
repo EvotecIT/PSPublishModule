@@ -132,16 +132,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.10.2",
-        "contentHash": "vKhZZ5hmeej2fGQI77IxY4dlcfBFKAWi6sAmiQmKmRZqh4XMGnk+NfxGHyWrkhVDr2oerIonrFmHJ83EkJLcmg==",
+        "resolved": "14.10.3",
+        "contentHash": "gi7kRE4x4fBDBwgCFKM3KJbLRBoK332DdeaIu+xDE4syWRYG5oEU+iXqmHM1RihJH0N17F0qL44vZKs9V89bqw==",
         "dependencies": {
-          "Magick.NET.Core": "14.10.2"
+          "Magick.NET.Core": "14.10.3"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.10.2",
-        "contentHash": "22zhy2QO7GrMPFZZEN5X+oAoBi7IWhq8fqH0dQy/d6jzScLeTfZV0a69CRzmf7LbiRPwPSeguHvpfgrNaAGmeQ=="
+        "resolved": "14.10.3",
+        "contentHash": "Shb3KrAMFB49+j7nJ2uVbNBuGg+rEAoOpIDmR2A/sSbQ21l4vrPY8Py90chcndGcjzvhqZWk69SMmb8v5esOjA=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -837,7 +837,7 @@
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
-          "Magick.NET-Q8-AnyCPU": "[14.10.2, )",
+          "Magick.NET-Q8-AnyCPU": "[14.10.3, )",
           "OfficeIMO.Markdown": "[0.5.2, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[5.11.0, )",
