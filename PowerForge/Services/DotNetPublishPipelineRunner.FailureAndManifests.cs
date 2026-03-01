@@ -124,6 +124,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string ResolvePath(string baseDir, string path)
     {
         var p = (path ?? string.Empty).Trim();
+        if (!IsWindows())
+            p = p.Replace('\\', Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(p)) return Path.GetFullPath(baseDir);
         if (Path.IsPathRooted(p)) return Path.GetFullPath(p);
         return Path.GetFullPath(Path.Combine(baseDir, p));
