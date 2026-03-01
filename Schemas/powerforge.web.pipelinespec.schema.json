@@ -90,6 +90,16 @@
         "config": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
+        "language": { "type": "string", "description": "Optional language code to build (for example: en, pl)." },
+        "lang": { "type": "string", "description": "Alias for language." },
+        "languageAsRoot": {
+          "type": "boolean",
+          "description": "When true and language is set, render the selected language without language prefix (domain-style language deployment)."
+        },
+        "language-as-root": {
+          "type": "boolean",
+          "description": "Alias for languageAsRoot."
+        },
         "clean": {
           "type": "boolean",
           "description": "When true, delete existing output contents before writing new build artifacts."
@@ -2116,6 +2126,8 @@
         "config": { "type": "string", "description": "Optional site.json path used to resolve baseUrl when baseUrl is not provided." },
         "siteRoot": { "type": "string" },
         "site-root": { "type": "string" },
+        "language": { "type": "string", "description": "Optional language code used to resolve localization baseUrl when baseUrl is omitted." },
+        "lang": { "type": "string", "description": "Alias for language." },
         "baseUrl": { "type": "string" },
         "base-url": { "type": "string" },
         "apiSitemap": { "type": "string" },

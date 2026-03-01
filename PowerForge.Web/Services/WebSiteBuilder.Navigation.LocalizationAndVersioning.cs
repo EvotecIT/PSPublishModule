@@ -173,6 +173,19 @@ public static partial class WebSiteBuilder
         if (!localization.ByCode.TryGetValue(languageCode, out var languageSpec))
             return route;
 
+        var buildContext = BuildLanguageContextScope.Value;
+        if (buildContext is not null &&
+            buildContext.LanguageAsRoot &&
+            !string.IsNullOrWhiteSpace(buildContext.Language))
+        {
+            var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
+            if (languageCode.Equals(selectedLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                var strippedRoute = StripLanguagePrefix(localization, route);
+                return EnsureTrailingSlash(strippedRoute, spec.TrailingSlash);
+            }
+        }
+
         if (languageSpec.IsDefault && !localization.PrefixDefaultLanguage)
             return route;
 

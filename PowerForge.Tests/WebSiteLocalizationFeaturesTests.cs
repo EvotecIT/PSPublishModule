@@ -104,6 +104,46 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedPages_SupportSingleLanguageDomainStyleBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-single-language-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-features-single-language-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Single-Language Build Test", "localization-features-single-language-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec, language: "pl", languageAsRoot: true);
+            var plRootHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            var plPrefixedHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+
+            Assert.True(File.Exists(plRootHtmlPath));
+            Assert.False(File.Exists(plPrefixedHtmlPath));
+
+            var html = File.ReadAllText(plRootHtmlPath);
+            Assert.Contains("Docs PL", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.xyz/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+
+            var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
+            Assert.True(File.Exists(allSearchPath));
+            var allEntries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
+            Assert.Single(allEntries);
+            Assert.Equal("pl", allEntries[0].GetProperty("language").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Sitemap_Generate_FromEntriesJson_ProducesJsonAndThemedHtmlMap()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-json-" + Guid.NewGuid().ToString("N"));
@@ -449,13 +489,13 @@ public class WebSiteLocalizationFeaturesTests
         }
     }
 
-    private static WebBuildResult BuildSite(string root, SiteSpec spec)
+    private static WebBuildResult BuildSite(string root, SiteSpec spec, string? language = null, bool languageAsRoot = false)
     {
         var configPath = Path.Combine(root, "site.json");
         File.WriteAllText(configPath, "{}");
         var outPath = Path.Combine(root, "_site");
         var plan = WebSitePlanner.Plan(spec, configPath);
-        return WebSiteBuilder.Build(spec, plan, outPath);
+        return WebSiteBuilder.Build(spec, plan, outPath, language: language, languageAsRoot: languageAsRoot);
     }
 
     private static SiteSpec CreateLocalizedDocsSpec(string name, string themeName)

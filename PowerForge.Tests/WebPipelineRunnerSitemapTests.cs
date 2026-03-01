@@ -72,6 +72,69 @@ public class WebPipelineRunnerSitemapTests
     }
 
     [Fact]
+    public void RunPipeline_Sitemap_CanResolveLanguageSpecificBaseUrlFromLocalization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sitemap-language-baseurl-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            Directory.CreateDirectory(siteRoot);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Sitemap Language BaseUrl",
+                  "baseUrl": "https://evotec.xyz",
+                  "localization": {
+                    "enabled": true,
+                    "defaultLanguage": "en",
+                    "languages": [
+                      { "code": "en", "baseUrl": "https://evotec.xyz", "default": true },
+                      { "code": "pl", "baseUrl": "https://evotec.pl" }
+                    ]
+                  }
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "sitemap",
+                      "config": "./site.json",
+                      "siteRoot": "./site",
+                      "language": "pl",
+                      "includeHtmlFiles": false,
+                      "includeTextFiles": false,
+                      "entries": [
+                        { "path": "/blog/test/" }
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+
+            var sitemapPath = Path.Combine(siteRoot, "sitemap.xml");
+            Assert.True(File.Exists(sitemapPath));
+            var content = File.ReadAllText(sitemapPath);
+            Assert.Contains("https://evotec.pl/blog/test/", content, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://evotec.xyz/blog/test/", content, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_Sitemap_CanGenerateNewsAndIndexOutputs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sitemap-news-" + Guid.NewGuid().ToString("N"));

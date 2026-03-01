@@ -27,13 +27,22 @@ public static partial class WebSiteBuilder
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CodeBlockRegex = new("<pre(?<preAttrs>[^>]*)>\\s*<code(?<codeAttrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly AsyncLocal<BuildLanguageContext?> BuildLanguageContextScope = new();
     /// <summary>Builds the site output.</summary>
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="options">Optional JSON serializer options.</param>
+    /// <param name="language">Optional language code filter (for example: en, pl).</param>
+    /// <param name="languageAsRoot">When true and language is set, render selected language routes without language prefix.</param>
     /// <returns>Result payload describing the build output.</returns>
-    public static WebBuildResult Build(SiteSpec spec, WebSitePlan plan, string outputPath, JsonSerializerOptions? options = null)
+    public static WebBuildResult Build(
+        SiteSpec spec,
+        WebSitePlan plan,
+        string outputPath,
+        JsonSerializerOptions? options = null,
+        string? language = null,
+        bool languageAsRoot = false)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -62,7 +71,13 @@ public static partial class WebSiteBuilder
         }
 
         var prevSink = UpdatedSink.Value;
+        var prevBuildLanguageContext = BuildLanguageContextScope.Value;
         UpdatedSink.Value = MarkUpdated;
+        BuildLanguageContextScope.Value = new BuildLanguageContext
+        {
+            Language = language,
+            LanguageAsRoot = languageAsRoot
+        };
         try
         {
             WriteAllTextIfChanged(planPath, JsonSerializer.Serialize(plan, jsonOptions));
@@ -88,24 +103,26 @@ public static partial class WebSiteBuilder
             .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
             .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
         var cacheRoot = ResolveCacheRoot(spec, plan.RootPath);
-        var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
-        items.AddRange(BuildTaxonomyItems(spec, items));
-        items = BuildPaginatedItems(spec, items);
-        AddLegacyAmpRedirects(spec, redirects, items);
-        ResolveXrefs(spec, plan.RootPath, metaDir, items);
-        var menuSpecs = BuildMenuSpecs(spec, items, plan.RootPath);
-        foreach (var item in items)
+        var allItems = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
+        allItems.AddRange(BuildTaxonomyItems(spec, allItems));
+        allItems = BuildPaginatedItems(spec, allItems);
+        var renderItems = FilterItemsForLanguage(spec, allItems, language);
+
+        AddLegacyAmpRedirects(spec, redirects, renderItems);
+        ResolveXrefs(spec, plan.RootPath, metaDir, renderItems);
+        var menuSpecs = BuildMenuSpecs(spec, renderItems, plan.RootPath);
+        foreach (var item in renderItems)
         {
-            WriteContentItem(outDir, spec, plan.RootPath, item, items, data, projectMap, menuSpecs);
+            WriteContentItem(outDir, spec, plan.RootPath, item, allItems, data, projectMap, menuSpecs);
         }
 
         CopyThemeAssets(spec, plan.RootPath, outDir);
         CopyStaticAssets(spec, plan.RootPath, outDir);
         WriteSiteNavData(spec, outDir, menuSpecs);
-        WriteSearchIndex(spec, outDir, items);
-        WriteLinkCheckReport(spec, items, metaDir);
-        WriteSeoPreviewReport(spec, items, metaDir);
-        WriteCrawlPolicyReport(spec, items, metaDir);
+        WriteSearchIndex(spec, outDir, renderItems);
+        WriteLinkCheckReport(spec, renderItems, metaDir);
+        WriteSeoPreviewReport(spec, renderItems, metaDir);
+        WriteCrawlPolicyReport(spec, renderItems, metaDir);
 
         var redirectsPayload = new
         {
@@ -131,7 +148,27 @@ public static partial class WebSiteBuilder
         finally
         {
             UpdatedSink.Value = prevSink;
+            BuildLanguageContextScope.Value = prevBuildLanguageContext;
         }
+    }
+
+    private static List<ContentItem> FilterItemsForLanguage(SiteSpec spec, IReadOnlyList<ContentItem> items, string? language)
+    {
+        if (items.Count == 0 || string.IsNullOrWhiteSpace(language))
+            return items.ToList();
+
+        var localization = ResolveLocalizationConfig(spec);
+        var targetLanguage = ResolveEffectiveLanguageCode(localization, language);
+        return items
+            .Where(item => ResolveEffectiveLanguageCode(localization, item.Language)
+                .Equals(targetLanguage, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private sealed class BuildLanguageContext
+    {
+        public string? Language { get; init; }
+        public bool LanguageAsRoot { get; init; }
     }
 
     private static void EnsureNoJekyllFile(string outputRoot)
