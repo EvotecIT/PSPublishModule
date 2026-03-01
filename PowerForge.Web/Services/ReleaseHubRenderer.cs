@@ -6,6 +6,11 @@ namespace PowerForge.Web;
 internal static class ReleaseHubRenderer
 {
     private const string DefaultDataPath = "release_hub";
+    private static readonly System.Text.RegularExpressions.Regex BareUrlRegex = new(
+        "(?<!\\]\\()(?<!<)(?<![\\\"'])\\bhttps?://[^\\s<>()]+",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant |
+        System.Text.RegularExpressions.RegexOptions.Compiled);
 
     internal static string RenderReleaseButton(
         IReadOnlyDictionary<string, object?> data,
@@ -360,7 +365,7 @@ internal static class ReleaseHubRenderer
             {
                 var bodyMarkdown = ReadString(releaseMap, "body_md", "bodyMarkdown", "body_markdown");
                 if (!string.IsNullOrWhiteSpace(bodyMarkdown))
-                    bodyHtml = MarkdownRenderer.RenderToHtml(bodyMarkdown, markdown);
+                    bodyHtml = MarkdownRenderer.RenderToHtml(LinkifyBareUrlsInMarkdown(bodyMarkdown), markdown);
             }
             release.BodyHtml = bodyHtml ?? string.Empty;
 
@@ -590,6 +595,35 @@ internal static class ReleaseHubRenderer
             parts.Add(FormatBytes(asset.Size.Value));
 
         return string.Join(" · ", parts);
+    }
+
+    private static string LinkifyBareUrlsInMarkdown(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+            return string.Empty;
+
+        return BareUrlRegex.Replace(markdown, static match =>
+        {
+            var url = match.Value;
+            var suffix = string.Empty;
+            while (url.Length > 0)
+            {
+                var last = url[^1];
+                if (last is '.' or ',' or ';' or ':')
+                {
+                    suffix = last + suffix;
+                    url = url[..^1];
+                    continue;
+                }
+
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(url))
+                return match.Value;
+
+            return "<" + url + ">" + suffix;
+        });
     }
 
     private static string FormatBytes(long size)
