@@ -40,6 +40,8 @@ public static partial class WebSiteVerifier
         var collectionRoutes = new Dictionary<string, List<CollectionRoute>>(StringComparer.OrdinalIgnoreCase);
         var taxonomyTermsByLanguage = new Dictionary<string, Dictionary<string, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var usedTaxonomyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var releaseProductReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var releasePlacementReferences = new List<ReleasePlacementReference>();
         var xrefLookup = BuildExternalXrefLookup(spec, plan.RootPath, warnings);
         var xrefReferences = new List<XrefReference>();
         foreach (var collection in spec.Collections)
@@ -62,6 +64,8 @@ public static partial class WebSiteVerifier
 
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
+                CollectReleaseProductReferencesFromMarkdown(body, releaseProductReferences);
+                CollectReleasePlacementReferencesFromMarkdown(body, releasePlacementReferences);
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(body) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(title))
                 {
@@ -130,7 +134,8 @@ public static partial class WebSiteVerifier
         AddSyntheticTaxonomyRoutes(spec, localization, routes, taxonomyTermsByLanguage, warnings);
         ValidateXrefs(spec, xrefLookup, xrefReferences, warnings);
 
-        ValidateDataFiles(spec, plan, warnings);
+        CollectReleaseProductReferencesFromThemeTemplates(spec, plan, releaseProductReferences);
+        ValidateDataFiles(spec, plan, warnings, releaseProductReferences, releasePlacementReferences);
         ValidateThemeAssets(spec, plan, warnings);
         ValidateThemeContract(spec, plan, warnings);
         ValidateThemeFeatureContract(spec, plan, warnings);

@@ -1,6 +1,6 @@
 # PowerForge.Web Agent Handoff (Websites Engine)
 
-Last updated: 2026-02-10
+Last updated: 2026-02-28
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX Website**, **IntelligenceX Website**.
@@ -11,6 +11,7 @@ Start here:
 - `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract pattern)
 - `Docs\PowerForge.Web.WarningCodes.md` (verify/apidocs warning code catalog)
 - `Docs\PowerForge.Web.ReleaseChannels.md` (stable/candidate/nightly rollout + canary model)
+- `Docs\PowerForge.Web.ReleaseHub.md` (downloads/changelog/release asset model + helper contract)
 
 ## Repos / Paths
 

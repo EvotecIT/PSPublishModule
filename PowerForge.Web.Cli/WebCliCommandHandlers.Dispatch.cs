@@ -34,6 +34,7 @@ collection: {{collection}}
             "serve" => HandleServe(subArgs, outputJson, logger),
             "apidocs" => HandleApiDocs(subArgs, outputJson, logger, outputSchemaVersion),
             "changelog" => HandleChangelog(subArgs, outputJson, logger, outputSchemaVersion),
+            "release-hub" => HandleReleaseHub(subArgs, outputJson, logger, outputSchemaVersion),
             "optimize" => HandleOptimize(subArgs, outputJson, logger, outputSchemaVersion),
             "pipeline" => HandlePipeline(subArgs, outputJson, logger, outputSchemaVersion),
             "engine-lock" => HandleEngineLock(subArgs, outputJson, logger, outputSchemaVersion),

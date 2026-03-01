@@ -153,6 +153,10 @@ Notes:
 - `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
 - `suppressWarnings` (array of strings) filters warnings before printing and before policy evaluation (use codes like `PFWEB.NAV.LINT` or `re:...`).
 - Warning code catalog: `Docs/PowerForge.Web.WarningCodes.md`.
+- Release/download checks emitted by verify include:
+  - `PFWEB.RELEASE.NO_MATCH` (referenced product has no release assets / release-hub data missing)
+  - `PFWEB.RELEASE.PRODUCT_MISSING` (asset product exists but products catalog entry is missing)
+  - `PFWEB.RELEASE.ASSET_COLLISION` (duplicate asset entries in release-hub data)
 - Baselines:
   - `baseline`: path to a baseline file (must resolve under the site root)
   - `baselineGenerate`: write a baseline from current warnings
@@ -504,6 +508,32 @@ Template usage (Scriban):
 </article>
 {{ end }}
 ```
+
+#### release-hub
+Generates a normalized `data/release-hub.json` document for changelog + downloads UI.
+```json
+{
+  "task": "release-hub",
+  "source": "github",
+  "repo": "EvotecIT/IntelligenceX",
+  "tokenEnv": "GITHUB_TOKEN",
+  "maxReleases": 200,
+  "pageSize": 100,
+  "maxPages": 3,
+  "assetRules": [
+    { "product": "intelligencex.chat", "match": ["*Chat*.zip"], "kind": "zip" },
+    { "product": "intelligencex.cli", "match": ["*Cli*.zip"], "kind": "zip" }
+  ],
+  "out": "./data/release-hub.json"
+}
+```
+Notes:
+- `source`: `auto` (default), `file`, or `github`.
+- `releasesPath` accepts local JSON (GitHub API array shape or release-hub shape) for deterministic/offline builds.
+- `changelogPath` can be used as a markdown fallback when `source:file`.
+- `tokenEnv` is preferred over inline `token` in CI.
+- `assetRules` classify multi-asset releases into product/channel/platform/kind buckets.
+- Output is page-agnostic and can be rendered on home/docs/changelog/downloads pages from `data.release_hub`.
 
 #### version-hub
 Generates version-switcher metadata for multi-version docs sites.

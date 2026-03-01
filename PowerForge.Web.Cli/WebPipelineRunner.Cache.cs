@@ -354,6 +354,8 @@ internal static partial class WebPipelineRunner
             }
             case "changelog":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "release-hub":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "version-hub":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "compat-matrix":

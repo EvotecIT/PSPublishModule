@@ -48,6 +48,7 @@
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/XrefMergeStep" },
         { "$ref": "#/$defs/ChangelogStep" },
+        { "$ref": "#/$defs/ReleaseHubStep" },
         { "$ref": "#/$defs/VersionHubStep" },
         { "$ref": "#/$defs/PackageHubStep" },
         { "$ref": "#/$defs/LlmsStep" },
@@ -1766,6 +1767,96 @@
         "output": { "type": "string" }
       },
       "required": ["task", "out"]
+    },
+    "ReleaseHubStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "release-hub" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "string", "enum": ["Auto", "File", "GitHub"] },
+        "changelog": { "type": "string" },
+        "changelogPath": { "type": "string" },
+        "releasesPath": { "type": "string" },
+        "releases-path": { "type": "string" },
+        "repo": { "type": "string" },
+        "repoUrl": { "type": "string" },
+        "repo-url": { "type": "string" },
+        "token": { "type": "string" },
+        "tokenEnv": { "type": "string" },
+        "token-env": { "type": "string" },
+        "max": { "type": ["string", "integer"] },
+        "maxReleases": { "type": ["string", "integer"] },
+        "max-releases": { "type": ["string", "integer"] },
+        "pageSize": { "type": ["string", "integer"] },
+        "page-size": { "type": ["string", "integer"] },
+        "maxPages": { "type": ["string", "integer"] },
+        "max-pages": { "type": ["string", "integer"] },
+        "includeAssets": { "type": "boolean" },
+        "include-assets": { "type": "boolean" },
+        "includeDraft": { "type": "boolean" },
+        "include-draft": { "type": "boolean" },
+        "includePrerelease": { "type": "boolean" },
+        "include-prerelease": { "type": "boolean" },
+        "defaultChannel": { "type": "string" },
+        "default-channel": { "type": "string" },
+        "title": { "type": "string" },
+        "products": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReleaseHubProduct" }
+        },
+        "assetRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReleaseHubAssetRule" }
+        },
+        "asset-rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReleaseHubAssetRule" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReleaseHubAssetRule" }
+        },
+        "out": { "type": "string" },
+        "output": { "type": "string" }
+      },
+      "required": ["task", "out"]
+    },
+    "ReleaseHubProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "product": { "type": "string" },
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "order": { "type": "integer" }
+      }
+    },
+    "ReleaseHubAssetRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product": { "type": "string" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "name": { "type": "string" },
+        "match": { "type": "array", "items": { "type": "string" } },
+        "contains": { "type": "array", "items": { "type": "string" } },
+        "regex": { "type": "string" },
+        "channel": { "type": "string" },
+        "platform": { "type": "string" },
+        "arch": { "type": "string" },
+        "kind": { "type": "string" },
+        "priority": { "type": "integer" }
+      }
     },
     "VersionHubStep": {
       "type": "object",

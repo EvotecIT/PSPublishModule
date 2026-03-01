@@ -73,6 +73,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         pf.Import("nav_actions", new Func<string>(helpers.NavActions));
         pf.Add("nav_links", new PfNavLinksFunction(helpers));
         pf.Add("menu_tree", new PfMenuTreeFunction(helpers));
+        pf.Add("release_button", new PfReleaseButtonFunction(helpers));
+        pf.Add("release_buttons", new PfReleaseButtonsFunction(helpers));
+        pf.Add("release_changelog", new PfReleaseChangelogFunction(helpers));
         pf.Add("editorial_cards", new PfEditorialCardsFunction(helpers));
         pf.Add("editorial_pager", new PfEditorialPagerFunction(helpers));
         pf.Add("editorial_post_nav", new PfEditorialPostNavFunction(helpers));
@@ -156,6 +159,143 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var depthArg = arguments.Count > 1 ? arguments[1] : null;
             var depth = ScribanThemeHelpers.ParseInt(depthArg, 3);
             return _helpers.MenuTree(menu, depth);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfReleaseButtonFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfReleaseButtonFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 1;
+        public int ParameterCount => 7;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "product", string.Empty),
+                1 => new ScriptParameterInfo(typeof(string), "channel", string.Empty),
+                2 => new ScriptParameterInfo(typeof(string), "platform", string.Empty),
+                3 => new ScriptParameterInfo(typeof(string), "arch", string.Empty),
+                4 => new ScriptParameterInfo(typeof(string), "kind", string.Empty),
+                5 => new ScriptParameterInfo(typeof(string), "label", string.Empty),
+                6 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
+            var channel = arguments.Count > 1 ? arguments[1]?.ToString() : null;
+            var platform = arguments.Count > 2 ? arguments[2]?.ToString() : null;
+            var arch = arguments.Count > 3 ? arguments[3]?.ToString() : null;
+            var kind = arguments.Count > 4 ? arguments[4]?.ToString() : null;
+            var label = arguments.Count > 5 ? arguments[5]?.ToString() : null;
+            var cssClass = arguments.Count > 6 ? arguments[6]?.ToString() : null;
+            return _helpers.ReleaseButton(product, channel, platform, arch, kind, label, cssClass);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfReleaseButtonsFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfReleaseButtonsFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 1;
+        public int ParameterCount => 8;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "product", string.Empty),
+                1 => new ScriptParameterInfo(typeof(string), "channel", string.Empty),
+                2 => new ScriptParameterInfo(typeof(int), "limit", 0),
+                3 => new ScriptParameterInfo(typeof(string), "group_by", string.Empty),
+                4 => new ScriptParameterInfo(typeof(string), "platform", string.Empty),
+                5 => new ScriptParameterInfo(typeof(string), "arch", string.Empty),
+                6 => new ScriptParameterInfo(typeof(string), "kind", string.Empty),
+                7 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
+            var channel = arguments.Count > 1 ? arguments[1]?.ToString() : null;
+            var limit = arguments.Count > 2 ? ScribanThemeHelpers.ParseInt(arguments[2], 0) : 0;
+            var groupBy = arguments.Count > 3 ? arguments[3]?.ToString() : null;
+            var platform = arguments.Count > 4 ? arguments[4]?.ToString() : null;
+            var arch = arguments.Count > 5 ? arguments[5]?.ToString() : null;
+            var kind = arguments.Count > 6 ? arguments[6]?.ToString() : null;
+            var cssClass = arguments.Count > 7 ? arguments[7]?.ToString() : null;
+            return _helpers.ReleaseButtons(product, channel, limit, groupBy, platform, arch, kind, cssClass);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfReleaseChangelogFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfReleaseChangelogFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 0;
+        public int ParameterCount => 4;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "product", string.Empty),
+                1 => new ScriptParameterInfo(typeof(int), "limit", 20),
+                2 => new ScriptParameterInfo(typeof(bool), "include_preview", true),
+                3 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
+            var limit = arguments.Count > 1 ? ScribanThemeHelpers.ParseInt(arguments[1], 20) : 20;
+            var includePreview = arguments.Count > 2 ? ScribanThemeHelpers.ParseBool(arguments[2], true) : true;
+            var cssClass = arguments.Count > 3 ? arguments[3]?.ToString() : null;
+            return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass);
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
