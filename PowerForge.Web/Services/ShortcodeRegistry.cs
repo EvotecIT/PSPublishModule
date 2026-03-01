@@ -33,6 +33,12 @@ public static class ShortcodeRegistry
         Register("tweet", ShortcodeDefaults.RenderXPost);
         Register("screenshot", ShortcodeDefaults.RenderScreenshot);
         Register("screenshots", ShortcodeDefaults.RenderScreenshots);
+        Register("release-button", ShortcodeDefaults.RenderReleaseButton);
+        Register("release-buttons", ShortcodeDefaults.RenderReleaseButtons);
+        Register("release-changelog", ShortcodeDefaults.RenderReleaseChangelog);
+        Register("release-button-placement", ShortcodeDefaults.RenderReleaseButton);
+        Register("release-buttons-placement", ShortcodeDefaults.RenderReleaseButtons);
+        Register("release-changelog-placement", ShortcodeDefaults.RenderReleaseChangelog);
     }
 
     /// <summary>Registers a shortcode handler.</summary>
