@@ -87,6 +87,27 @@ public class WebReleaseHubRenderingTests
         Assert.Contains("IntelligenceX.Docs-win-x64-v1.2.0.zip", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_RendersReleaseAssetBadgesAndThumbnails()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< release-buttons product="intelligencex.chat" channel="stable" limit="2" >}}
+            {{< release-changelog product="intelligencex.chat" limit="1" includePreview="false" >}}
+            """,
+            setup: WriteReleaseHubData,
+            useScribanTheme: false,
+            scribanLayoutBody: null);
+
+        Assert.Contains("pf-release-button-thumb", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ix-chat-win-thumb.png", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-badge--platform", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-badge--arch", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-badge--kind", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-asset-thumb", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-asset-badge--platform", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(
         string markdown,
         Action<string> setup,
@@ -233,6 +254,7 @@ public class WebReleaseHubRenderingTests
                       "platform": "windows",
                       "arch": "x64",
                       "kind": "zip",
+                      "thumbnailUrl": "https://example.test/images/ix-chat-win-thumb.png",
                       "size": 5242880
                     },
                     {

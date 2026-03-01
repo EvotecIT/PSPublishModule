@@ -153,6 +153,17 @@ internal static class ReleaseHubRenderer
                     .Append(Html(item.Asset.Kind))
                     .Append("\">");
 
+                var thumbnailUrl = ResolveAssetThumbnailUrl(item.Asset);
+                if (!string.IsNullOrWhiteSpace(thumbnailUrl))
+                {
+                    sb.Append("<span class=\"pf-release-button-media\">")
+                        .Append("<img class=\"pf-release-button-thumb\" src=\"")
+                        .Append(Html(thumbnailUrl))
+                        .Append("\" alt=\"\" loading=\"lazy\" decoding=\"async\" />")
+                        .Append("</span>");
+                }
+
+                sb.Append("<span class=\"pf-release-button-content\">");
                 sb.Append("<span class=\"pf-release-button-label\">")
                     .Append(Html(string.IsNullOrWhiteSpace(item.Asset.Name) ? "Download" : item.Asset.Name))
                     .Append("</span>");
@@ -164,6 +175,8 @@ internal static class ReleaseHubRenderer
                         .Append("</span>");
                 }
 
+                AppendAssetBadges(sb, item.Asset, "pf-release-button-badges", "pf-release-badge");
+                sb.Append("</span>");
                 sb.Append("</a>");
             }
             sb.Append("</div>");
@@ -277,6 +290,14 @@ internal static class ReleaseHubRenderer
                 foreach (var asset in assets)
                 {
                     sb.Append("<li class=\"pf-release-asset-item\">");
+                    var thumbnailUrl = ResolveAssetThumbnailUrl(asset);
+                    if (!string.IsNullOrWhiteSpace(thumbnailUrl))
+                    {
+                        sb.Append("<img class=\"pf-release-asset-thumb\" src=\"")
+                            .Append(Html(thumbnailUrl))
+                            .Append("\" alt=\"\" loading=\"lazy\" decoding=\"async\" />");
+                    }
+
                     sb.Append("<a class=\"pf-release-asset-link\" href=\"")
                         .Append(Html(asset.DownloadUrl))
                         .Append("\">")
@@ -291,6 +312,7 @@ internal static class ReleaseHubRenderer
                             .Append("</span>");
                     }
 
+                    AppendAssetBadges(sb, asset, "pf-release-asset-badges", "pf-release-asset-badge");
                     sb.Append("</li>");
                 }
                 sb.Append("</ul>");
@@ -391,6 +413,18 @@ internal static class ReleaseHubRenderer
                         Platform = platform,
                         Arch = arch,
                         Kind = kind,
+                        ThumbnailUrl = ReadString(
+                            assetMap,
+                            "thumbnailUrl",
+                            "thumbnail_url",
+                            "thumbUrl",
+                            "thumb_url",
+                            "imageUrl",
+                            "image_url",
+                            "screenshotUrl",
+                            "screenshot_url",
+                            "iconUrl",
+                            "icon_url"),
                         Size = ReadLong(assetMap, "size")
                     });
                 }
@@ -590,6 +624,84 @@ internal static class ReleaseHubRenderer
             parts.Add(FormatBytes(asset.Size.Value));
 
         return string.Join(" · ", parts);
+    }
+
+    private static string? ResolveAssetThumbnailUrl(ReleaseHubAssetView asset)
+    {
+        if (asset is null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(asset.ThumbnailUrl))
+            return null;
+
+        return asset.ThumbnailUrl.Trim();
+    }
+
+    private static void AppendAssetBadges(
+        StringBuilder sb,
+        ReleaseHubAssetView asset,
+        string containerClass,
+        string badgeClass)
+    {
+        var badges = BuildAssetBadges(asset);
+        if (badges.Count == 0)
+            return;
+
+        sb.Append("<span class=\"")
+            .Append(Html(containerClass))
+            .Append("\">");
+
+        foreach (var badge in badges)
+        {
+            sb.Append("<span class=\"")
+                .Append(Html(badgeClass))
+                .Append(" ")
+                .Append(Html(badgeClass))
+                .Append("--")
+                .Append(Html(badge.Kind))
+                .Append("\">")
+                .Append(Html(badge.Label))
+                .Append("</span>");
+        }
+
+        sb.Append("</span>");
+    }
+
+    private static List<ReleaseAssetBadgeView> BuildAssetBadges(ReleaseHubAssetView asset)
+    {
+        var badges = new List<ReleaseAssetBadgeView>();
+
+        if (!string.IsNullOrWhiteSpace(asset.Platform) &&
+            !string.Equals(asset.Platform, "any", StringComparison.OrdinalIgnoreCase))
+        {
+            badges.Add(new ReleaseAssetBadgeView
+            {
+                Kind = "platform",
+                Label = ToDisplayToken(asset.Platform)
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(asset.Arch) &&
+            !string.Equals(asset.Arch, "any", StringComparison.OrdinalIgnoreCase))
+        {
+            badges.Add(new ReleaseAssetBadgeView
+            {
+                Kind = "arch",
+                Label = ToDisplayToken(asset.Arch)
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(asset.Kind) &&
+            !string.Equals(asset.Kind, "file", StringComparison.OrdinalIgnoreCase))
+        {
+            badges.Add(new ReleaseAssetBadgeView
+            {
+                Kind = "kind",
+                Label = asset.Kind.Trim().ToLowerInvariant()
+            });
+        }
+
+        return badges;
     }
 
     private static string FormatBytes(long size)
@@ -830,6 +942,7 @@ internal static class ReleaseHubRenderer
         public string Platform { get; init; } = "any";
         public string Arch { get; init; } = "any";
         public string Kind { get; init; } = "file";
+        public string? ThumbnailUrl { get; init; }
         public long? Size { get; init; }
     }
 
@@ -844,5 +957,11 @@ internal static class ReleaseHubRenderer
     {
         public string Key { get; init; } = "all";
         public List<ReleaseHubAssetMatch> Items { get; init; } = new();
+    }
+
+    private sealed class ReleaseAssetBadgeView
+    {
+        public string Kind { get; init; } = string.Empty;
+        public string Label { get; init; } = string.Empty;
     }
 }
