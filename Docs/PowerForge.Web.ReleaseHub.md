@@ -121,6 +121,7 @@ Keep `changelog` for simple sites. Add `release-hub` for productized downloads.
           "platform": "any",
           "arch": "any",
           "kind": "zip",
+          "thumbnailUrl": "https://github.com/.../OfficeIMO.Word-v1.2.0-thumb.png",
           "sha256": null
         }
       ]
@@ -172,6 +173,8 @@ Expected behavior:
 - return empty string when no match (never throw in template)
 - choose newest matching asset by default
 - `release-buttons` supports `product="*"` to render buttons across all products
+- release buttons/changelog include `platform`/`arch`/`kind` badge markup when available
+- optional thumbnail fields (`thumbnailUrl`/`imageUrl`/`screenshotUrl`) are rendered in matrices/changelog assets
 - optional `strict` mode can emit verify warnings when nothing matches
 
 ## Markdown shortcode API
