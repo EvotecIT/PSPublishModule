@@ -1106,12 +1106,13 @@ internal static partial class WebPipelineRunner
     {
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+        var language = GetString(step, "language") ?? GetString(step, "lang");
         var configPath = ResolvePath(baseDir, GetString(step, "config"));
         if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
         {
             var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
             if (string.IsNullOrWhiteSpace(baseUrl))
-                baseUrl = spec.BaseUrl;
+                baseUrl = ResolveSitemapBaseUrl(spec, language);
         }
 
         if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
@@ -1253,6 +1254,46 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(res.IndexOutputPath))
             details.Add("index");
         stepResult.Message = $"Sitemap {string.Join(", ", details)}";
+    }
+
+    private static string ResolveSitemapBaseUrl(SiteSpec spec, string? language)
+    {
+        if (spec is null)
+            return string.Empty;
+
+        if (spec.Localization?.Enabled == true &&
+            spec.Localization.Languages is { Length: > 0 } &&
+            !string.IsNullOrWhiteSpace(language))
+        {
+            var targetLanguage = NormalizeLanguageKey(language);
+            foreach (var languageSpec in spec.Localization.Languages)
+            {
+                if (languageSpec is null || languageSpec.Disabled || string.IsNullOrWhiteSpace(languageSpec.Code))
+                    continue;
+
+                var code = NormalizeLanguageKey(languageSpec.Code);
+                var prefix = string.IsNullOrWhiteSpace(languageSpec.Prefix)
+                    ? code
+                    : NormalizeLanguageKey(languageSpec.Prefix);
+                if (code.Equals(targetLanguage, StringComparison.OrdinalIgnoreCase) ||
+                    prefix.Equals(targetLanguage, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrWhiteSpace(languageSpec.BaseUrl))
+                        return languageSpec.BaseUrl!;
+                    break;
+                }
+            }
+        }
+
+        return spec.BaseUrl;
+    }
+
+    private static string NormalizeLanguageKey(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
 
     private static WebSitemapNewsOptions? GetSitemapNewsMetadata(JsonElement step)

@@ -19,6 +19,8 @@ internal static partial class WebPipelineRunner
     {
         var config = ResolvePath(baseDir, GetString(step, "config"));
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        var language = GetString(step, "language") ?? GetString(step, "lang");
+        var languageAsRoot = GetBool(step, "languageAsRoot") ?? GetBool(step, "language-as-root") ?? false;
         var cleanOutput = GetBool(step, "clean") ?? false;
         if (string.IsNullOrWhiteSpace(config) || string.IsNullOrWhiteSpace(outPath))
             throw new InvalidOperationException("build requires config and out.");
@@ -28,12 +30,14 @@ internal static partial class WebPipelineRunner
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 
-        var build = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+        var build = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options, language, languageAsRoot);
         lastBuildOutPath = Path.GetFullPath(build.OutputPath);
         lastBuildUpdatedFiles = build.UpdatedFiles ?? Array.Empty<string>();
 
         stepResult.Success = true;
-        stepResult.Message = $"Built {build.OutputPath}";
+        stepResult.Message = string.IsNullOrWhiteSpace(language)
+            ? $"Built {build.OutputPath}"
+            : $"Built {build.OutputPath} (language={language}, as-root={languageAsRoot.ToString().ToLowerInvariant()})";
     }
 
     private static void ExecuteVerify(JsonElement step, string baseDir, bool fast, string effectiveMode, WebPipelineStepResult stepResult)

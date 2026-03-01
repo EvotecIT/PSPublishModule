@@ -18,7 +18,7 @@ internal static class WebCliHelpers
         Console.WriteLine("PowerForge.Web CLI");
         Console.WriteLine("Usage:");
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
-        Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
+        Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--language <code>] [--language-as-root] [--output json]");
         Console.WriteLine("                     [--sync-sources]");
         Console.WriteLine("  powerforge-web nav-export --config <site.json> [--out <file>] [--overwrite] [--output json]");
         Console.WriteLine("  powerforge-web git-sync (--repo <repo> --destination <dir> | --spec <file.json>) [--output json]");

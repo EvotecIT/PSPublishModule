@@ -59,6 +59,10 @@ internal static partial class WebCliCommandHandlers
         var outPath = TryGetOptionValue(subArgs, "--out") ??
                       TryGetOptionValue(subArgs, "--out-path") ??
                       TryGetOptionValue(subArgs, "--output-path");
+        var language = TryGetOptionValue(subArgs, "--language") ??
+                       TryGetOptionValue(subArgs, "--lang");
+        var languageAsRoot = HasOption(subArgs, "--language-as-root") ||
+                             HasOption(subArgs, "--lang-as-root");
         var cleanOutput = HasOption(subArgs, "--clean") || HasOption(subArgs, "--clean-out");
         var syncSources = HasOption(subArgs, "--sync-sources") || HasOption(subArgs, "--syncSources");
 
@@ -126,7 +130,7 @@ internal static partial class WebCliCommandHandlers
 
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
-        var result = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+        var result = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options, language, languageAsRoot);
 
         if (outputJson)
         {
@@ -146,6 +150,8 @@ internal static partial class WebCliCommandHandlers
         }
 
         logger.Success($"Web build output: {result.OutputPath}");
+        if (!string.IsNullOrWhiteSpace(language))
+            logger.Info($"Language build: {language} (as-root={languageAsRoot.ToString().ToLowerInvariant()})");
         logger.Info($"Plan: {result.PlanPath}");
         logger.Info($"Spec: {result.SpecPath}");
         logger.Info($"Redirects: {result.RedirectsPath}");
