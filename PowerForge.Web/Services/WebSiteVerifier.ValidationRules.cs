@@ -3,13 +3,37 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 /// <summary>Data file and taxonomy verification rules.</summary>
 public static partial class WebSiteVerifier
 {
-    private static void ValidateDataFiles(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    private static readonly Regex ReleaseShortcodeProductRegex = new(
+        @"\{\{<\s*release-(?:button|buttons|changelog)(?:-placement)?\b[^>]*\bproduct\s*=\s*""(?<product>[^""]+)""[^>]*>\}\}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
+    private static readonly Regex ReleaseShortcodeAttrsRegex = new(
+        @"\{\{<\s*release-(?:button|buttons|changelog)(?:-placement)?\b(?<attrs>[^>]*)>\}\}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
+    private static readonly Regex ShortcodeAttributeRegex = new(
+        @"(?<key>[A-Za-z0-9_]+)\s*=\s*""(?<value>[^""]*)""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex ReleaseHelperLiteralRegex = new(
+        @"pf\.release_(?:button|buttons|changelog)\s+(?:""(?<product_dq>[^""]+)""|'(?<product_sq>[^']+)')",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
+    private const string DefaultReleasePlacementsDataPath = "release_placements";
+
+    private static void ValidateDataFiles(
+        SiteSpec spec,
+        WebSitePlan plan,
+        List<string> warnings,
+        HashSet<string> releaseProductReferences,
+        List<ReleasePlacementReference> releasePlacementReferences)
     {
         if (spec is null || plan is null) return;
 
@@ -32,6 +56,10 @@ public static partial class WebSiteVerifier
             ValidateKnownDataFile(projectDataRoot, "pricing.json", $"projects/{project.Slug}/data/pricing.json", ValidatePricingJson, warnings);
             ValidateKnownDataFile(projectDataRoot, "benchmarks.json", $"projects/{project.Slug}/data/benchmarks.json", ValidateBenchmarksJson, warnings);
         }
+
+        CollectReleaseProductReferencesFromData(basePath, releaseProductReferences);
+        ValidateReleaseHubData(basePath, releaseProductReferences, warnings);
+        ValidateReleasePlacementData(basePath, releasePlacementReferences, warnings);
     }
 
     private static void ValidateKnownDataFile(
@@ -57,6 +85,428 @@ public static partial class WebSiteVerifier
         {
             warnings.Add($"Data file '{label}' could not be read: {ex.Message}");
         }
+    }
+
+    private static void CollectReleaseProductReferencesFromMarkdown(string markdown, HashSet<string> references)
+    {
+        if (string.IsNullOrWhiteSpace(markdown) || references is null)
+            return;
+
+        foreach (Match match in ReleaseShortcodeProductRegex.Matches(markdown))
+        {
+            var product = NormalizeReleaseProductReference(match.Groups["product"].Value);
+            if (!string.IsNullOrWhiteSpace(product))
+                references.Add(product);
+        }
+    }
+
+    private static void CollectReleasePlacementReferencesFromMarkdown(string markdown, List<ReleasePlacementReference> references)
+    {
+        if (string.IsNullOrWhiteSpace(markdown) || references is null)
+            return;
+
+        foreach (Match shortcodeMatch in ReleaseShortcodeAttrsRegex.Matches(markdown))
+        {
+            var attrs = shortcodeMatch.Groups["attrs"].Value;
+            if (string.IsNullOrWhiteSpace(attrs))
+                continue;
+
+            string? placement = null;
+            string? placementsRoot = null;
+            foreach (Match attrMatch in ShortcodeAttributeRegex.Matches(attrs))
+            {
+                var key = attrMatch.Groups["key"].Value;
+                var value = attrMatch.Groups["value"].Value.Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                if (key.Equals("placement", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("slot", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("preset", StringComparison.OrdinalIgnoreCase))
+                {
+                    placement ??= value;
+                    continue;
+                }
+
+                if (key.Equals("placementsData", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("placements_data", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("placementsPath", StringComparison.OrdinalIgnoreCase) ||
+                    key.Equals("placements_path", StringComparison.OrdinalIgnoreCase))
+                {
+                    placementsRoot ??= value;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(placement))
+            {
+                references.Add(new ReleasePlacementReference(
+                    placement.Trim(),
+                    string.IsNullOrWhiteSpace(placementsRoot) ? null : placementsRoot.Trim()));
+            }
+        }
+    }
+
+    private static void CollectReleaseProductReferencesFromThemeTemplates(SiteSpec spec, WebSitePlan plan, HashSet<string> references)
+    {
+        if (spec is null || plan is null || references is null)
+            return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot) || !Directory.Exists(themeRoot))
+            return;
+
+        var extensions = new[] { ".html", ".scriban", ".sbn", ".txt" };
+        foreach (var file in Directory.EnumerateFiles(themeRoot, "*.*", SearchOption.AllDirectories))
+        {
+            var extension = Path.GetExtension(file);
+            if (!extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            string content;
+            try
+            {
+                content = File.ReadAllText(file);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (Match match in ReleaseHelperLiteralRegex.Matches(content))
+            {
+                var product = match.Groups["product_dq"].Success
+                    ? match.Groups["product_dq"].Value.Trim()
+                    : match.Groups["product_sq"].Value.Trim();
+                product = NormalizeReleaseProductReference(product);
+                if (!string.IsNullOrWhiteSpace(product))
+                    references.Add(product);
+            }
+        }
+    }
+
+    private static void CollectReleaseProductReferencesFromData(string dataRootPath, HashSet<string> references)
+    {
+        if (string.IsNullOrWhiteSpace(dataRootPath) || references is null || !Directory.Exists(dataRootPath))
+            return;
+
+        var files = Directory.EnumerateFiles(dataRootPath, "*.json", SearchOption.AllDirectories)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        foreach (var file in files)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                CollectReleaseProductReferencesFromJson(doc.RootElement, references);
+            }
+            catch
+            {
+                // Ignore parse failures here - known data files are validated separately.
+            }
+        }
+    }
+
+    private static void CollectReleaseProductReferencesFromJson(JsonElement element, HashSet<string> references)
+    {
+        if (references is null)
+            return;
+
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.NameEquals("releaseProduct") ||
+                        property.NameEquals("release_product") ||
+                        property.NameEquals("releaseProductId") ||
+                        property.NameEquals("release_product_id"))
+                    {
+                        if (property.Value.ValueKind == JsonValueKind.String)
+                        {
+                            var product = NormalizeReleaseProductReference(property.Value.GetString());
+                            if (!string.IsNullOrWhiteSpace(product))
+                                references.Add(product);
+                        }
+                    }
+
+                    CollectReleaseProductReferencesFromJson(property.Value, references);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                    CollectReleaseProductReferencesFromJson(item, references);
+                break;
+        }
+    }
+
+    private static void ValidateReleaseHubData(string dataRootPath, HashSet<string> releaseProductReferences, List<string> warnings)
+    {
+        var releaseHubPath = ResolveReleaseHubDataPath(dataRootPath);
+        if (string.IsNullOrWhiteSpace(releaseHubPath))
+        {
+            if (releaseProductReferences.Count > 0)
+            {
+                var sample = string.Join(", ", releaseProductReferences.OrderBy(static p => p, StringComparer.OrdinalIgnoreCase).Take(5));
+                warnings.Add($"[PFWEB.RELEASE.NO_MATCH] Release lint: release selectors reference products ({sample}) but 'data/release-hub.json' was not found.");
+            }
+
+            return;
+        }
+
+        var catalogProducts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var assetProducts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var duplicateAssetKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var assetKeySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(releaseHubPath));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                warnings.Add("[PFWEB.RELEASE.DATA] Release lint: release-hub data root should be an object.");
+                return;
+            }
+
+            if (doc.RootElement.TryGetProperty("products", out var productsEl) && productsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var productEl in productsEl.EnumerateArray())
+                {
+                    if (productEl.ValueKind != JsonValueKind.Object)
+                        continue;
+                    var productId = ReadJsonString(productEl, "id", "product");
+                    if (!string.IsNullOrWhiteSpace(productId))
+                        catalogProducts.Add(productId);
+                }
+            }
+
+            var releasesEl = default(JsonElement);
+            var hasReleases = doc.RootElement.TryGetProperty("releases", out releasesEl) && releasesEl.ValueKind == JsonValueKind.Array;
+            if (!hasReleases)
+                hasReleases = doc.RootElement.TryGetProperty("items", out releasesEl) && releasesEl.ValueKind == JsonValueKind.Array;
+
+            if (hasReleases)
+            {
+                foreach (var releaseEl in releasesEl.EnumerateArray())
+                {
+                    if (releaseEl.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    var releaseTag = ReadJsonString(releaseEl, "tag", "tag_name", "title", "name") ?? "release";
+                    if (!releaseEl.TryGetProperty("assets", out var assetsEl) || assetsEl.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var assetEl in assetsEl.EnumerateArray())
+                    {
+                        if (assetEl.ValueKind != JsonValueKind.Object)
+                            continue;
+
+                        var product = ReadJsonString(assetEl, "product", "id");
+                        if (!string.IsNullOrWhiteSpace(product))
+                            assetProducts.Add(product);
+
+                        var assetName = ReadJsonString(assetEl, "name") ?? string.Empty;
+                        var downloadUrl = ReadJsonString(assetEl, "downloadUrl", "download_url", "browser_download_url", "url") ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(assetName) && string.IsNullOrWhiteSpace(downloadUrl))
+                            continue;
+
+                        var assetKey = $"{releaseTag}|{assetName}|{downloadUrl}";
+                        if (!assetKeySet.Add(assetKey))
+                            duplicateAssetKeys.Add(assetKey);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"[PFWEB.RELEASE.DATA] Release lint: failed to parse release-hub data: {ex.Message}");
+            return;
+        }
+
+        foreach (var product in releaseProductReferences.OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!assetProducts.Contains(product))
+                warnings.Add($"[PFWEB.RELEASE.NO_MATCH] Release lint: referenced product '{product}' has no matching assets in release-hub data.");
+        }
+
+        foreach (var product in assetProducts.Where(static p => !string.Equals(p, "unknown", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!catalogProducts.Contains(product))
+                warnings.Add($"[PFWEB.RELEASE.PRODUCT_MISSING] Release lint: release-hub assets reference product '{product}' but products catalog does not define it.");
+        }
+
+        foreach (var collision in duplicateAssetKeys.OrderBy(static c => c, StringComparer.OrdinalIgnoreCase).Take(20))
+        {
+            warnings.Add($"[PFWEB.RELEASE.ASSET_COLLISION] Release lint: duplicate asset entry '{collision}' detected in release-hub data.");
+        }
+    }
+
+    private static void ValidateReleasePlacementData(string dataRootPath, List<ReleasePlacementReference> releasePlacementReferences, List<string> warnings)
+    {
+        if (releasePlacementReferences is null || releasePlacementReferences.Count == 0)
+            return;
+
+        using var doc = TryLoadReleasePlacementsDocument(dataRootPath, out var releasePlacementsPath, out var loadError);
+        if (doc is null)
+        {
+            var sample = string.Join(", ", releasePlacementReferences
+                .Select(static item => item.Placement)
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                .Take(5));
+
+            if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                warnings.Add($"[PFWEB.RELEASE.PLACEMENT_MISSING] Release lint: release placement selectors reference ({sample}) but placement data could not be read ({loadError}).");
+            }
+            else
+            {
+                warnings.Add($"[PFWEB.RELEASE.PLACEMENT_MISSING] Release lint: release placement selectors reference ({sample}) but 'data/release_placements.json' was not found.");
+            }
+
+            return;
+        }
+
+        if (doc.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            warnings.Add("[PFWEB.RELEASE.DATA] Release lint: release placement data root should be an object.");
+            return;
+        }
+
+        var uniqueReferences = releasePlacementReferences
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Placement))
+            .Distinct()
+            .OrderBy(static item => item.Placement, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var reference in uniqueReferences)
+        {
+            var rootPath = string.IsNullOrWhiteSpace(reference.PlacementsRoot)
+                ? DefaultReleasePlacementsDataPath
+                : reference.PlacementsRoot.Trim();
+
+            if (!rootPath.Equals(DefaultReleasePlacementsDataPath, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!IsPlacementDefined(doc.RootElement, reference.Placement))
+            {
+                var source = string.IsNullOrWhiteSpace(releasePlacementsPath)
+                    ? "data/release_placements.json"
+                    : Path.GetRelativePath(dataRootPath, releasePlacementsPath).Replace('\\', '/');
+                warnings.Add($"[PFWEB.RELEASE.PLACEMENT_MISSING] Release lint: placement '{reference.Placement}' was not found in '{source}'.");
+            }
+        }
+    }
+
+    private static JsonDocument? TryLoadReleasePlacementsDocument(string dataRootPath, out string? path, out string? error)
+    {
+        path = ResolveReleasePlacementsDataPath(dataRootPath);
+        error = null;
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            return JsonDocument.Parse(File.ReadAllText(path));
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+    }
+
+    private static bool IsPlacementDefined(JsonElement root, string placementPath)
+    {
+        if (string.IsNullOrWhiteSpace(placementPath))
+            return false;
+
+        JsonElement current = root;
+        foreach (var part in placementPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (current.ValueKind != JsonValueKind.Object)
+                return false;
+            if (!TryGetObjectPropertyCaseInsensitive(current, part, out current))
+                return false;
+        }
+
+        return current.ValueKind == JsonValueKind.Object;
+    }
+
+    private static bool TryGetObjectPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
+    {
+        value = default;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? ResolveReleaseHubDataPath(string dataRootPath)
+    {
+        if (string.IsNullOrWhiteSpace(dataRootPath))
+            return null;
+
+        var candidates = new[]
+        {
+            Path.Combine(dataRootPath, "release-hub.json"),
+            Path.Combine(dataRootPath, "release_hub.json")
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static string? ResolveReleasePlacementsDataPath(string dataRootPath)
+    {
+        if (string.IsNullOrWhiteSpace(dataRootPath))
+            return null;
+
+        var candidates = new[]
+        {
+            Path.Combine(dataRootPath, "release_placements.json"),
+            Path.Combine(dataRootPath, "release-placements.json"),
+            Path.Combine(dataRootPath, "releasePlacements.json")
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static string? NormalizeReleaseProductReference(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        if (trimmed.Equals("*", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("any", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("all", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return trimmed;
+    }
+
+    private static string? ReadJsonString(JsonElement element, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (!element.TryGetProperty(key, out var value))
+                continue;
+            if (value.ValueKind != JsonValueKind.String)
+                continue;
+            var text = value.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+                return text;
+        }
+
+        return null;
     }
 
     private static void CollectTaxonomyTerms(
@@ -378,6 +828,8 @@ public static partial class WebSiteVerifier
         public string? BaseUrl { get; init; }
         public bool IsDefault { get; set; }
     }
+
+    private sealed record ReleasePlacementReference(string Placement, string? PlacementsRoot);
 
     private sealed record CollectionRoute(string Route, string File, bool Draft, string Language, string TranslationKey);
 }

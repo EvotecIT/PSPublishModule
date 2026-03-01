@@ -143,6 +143,65 @@ internal sealed class ScribanThemeHelpers
         return sb.ToString();
     }
 
+    public string ReleaseButton(
+        string? product,
+        string? channel = null,
+        string? platform = null,
+        string? arch = null,
+        string? kind = null,
+        string? label = null,
+        string? cssClass = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseButton(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            channel,
+            platform,
+            arch,
+            kind,
+            label,
+            cssClass);
+    }
+
+    public string ReleaseButtons(
+        string? product,
+        string? channel = null,
+        int limit = 0,
+        string? groupBy = null,
+        string? platform = null,
+        string? arch = null,
+        string? kind = null,
+        string? cssClass = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseButtons(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            channel,
+            limit,
+            groupBy,
+            platform,
+            arch,
+            kind,
+            cssClass);
+    }
+
+    public string ReleaseChangelog(
+        string? product = null,
+        int limit = 20,
+        bool includePreview = true,
+        string? cssClass = null)
+    {
+        return ReleaseHubRenderer.RenderReleaseChangelog(
+            _context.Data,
+            _context.Site.Markdown,
+            product,
+            limit,
+            includePreview,
+            cssClass);
+    }
+
     public string EditorialCards(
         int maxItems = 0,
         int excerptLength = 160,

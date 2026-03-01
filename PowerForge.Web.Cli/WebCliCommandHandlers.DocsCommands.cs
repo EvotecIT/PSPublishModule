@@ -304,6 +304,80 @@ internal static partial class WebCliCommandHandlers
         return 0;
     }
 
+    private static int HandleReleaseHub(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        var sourceText = TryGetOptionValue(subArgs, "--source");
+        var changelogPath = TryGetOptionValue(subArgs, "--changelog") ?? TryGetOptionValue(subArgs, "--changelog-path");
+        var releasesPath = TryGetOptionValue(subArgs, "--releases-path") ?? TryGetOptionValue(subArgs, "--releasesPath");
+        var outPath = TryGetOptionValue(subArgs, "--out") ??
+                      TryGetOptionValue(subArgs, "--out-path") ??
+                      TryGetOptionValue(subArgs, "--output-path");
+        var repo = TryGetOptionValue(subArgs, "--repo");
+        var repoUrl = TryGetOptionValue(subArgs, "--repo-url");
+        var token = TryGetOptionValue(subArgs, "--token");
+        var tokenEnv = TryGetOptionValue(subArgs, "--token-env") ?? TryGetOptionValue(subArgs, "--tokenEnv");
+        if (string.IsNullOrWhiteSpace(token) && !string.IsNullOrWhiteSpace(tokenEnv))
+            token = Environment.GetEnvironmentVariable(tokenEnv);
+
+        var maxText = TryGetOptionValue(subArgs, "--max") ?? TryGetOptionValue(subArgs, "--max-releases");
+        var pageSizeText = TryGetOptionValue(subArgs, "--page-size") ?? TryGetOptionValue(subArgs, "--pageSize");
+        var maxPagesText = TryGetOptionValue(subArgs, "--max-pages") ?? TryGetOptionValue(subArgs, "--maxPages");
+        var title = TryGetOptionValue(subArgs, "--title");
+
+        if (string.IsNullOrWhiteSpace(outPath))
+            return Fail("Missing required --out.", outputJson, logger, "web.release_hub");
+
+        var source = WebChangelogSource.Auto;
+        if (!string.IsNullOrWhiteSpace(sourceText) &&
+            Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+            source = parsedSource;
+
+        var max = ParseIntOption(maxText, 0);
+        var pageSize = ParseIntOption(pageSizeText, 100);
+        var maxPages = ParseIntOption(maxPagesText, 5);
+        var options = new WebReleaseHubOptions
+        {
+            Source = source,
+            ChangelogPath = changelogPath,
+            ReleasesPath = releasesPath,
+            OutputPath = outPath,
+            BaseDirectory = Directory.GetCurrentDirectory(),
+            Repo = repo,
+            RepoUrl = repoUrl,
+            Token = token,
+            Title = title,
+            MaxReleases = max <= 0 ? null : max,
+            PageSize = pageSize <= 0 ? 100 : pageSize,
+            MaxPages = maxPages <= 0 ? 5 : maxPages
+        };
+
+        var result = WebReleaseHubGenerator.Generate(options);
+
+        if (!outputJson && result.Warnings.Length > 0)
+        {
+            foreach (var warning in result.Warnings)
+                logger.Warn(warning);
+        }
+
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = "web.release_hub",
+                Success = true,
+                ExitCode = 0,
+                Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebReleaseHubResult)
+            });
+            return 0;
+        }
+
+        logger.Success($"Release hub generated: {result.OutputPath}");
+        logger.Info($"Releases: {result.ReleaseCount}");
+        logger.Info($"Assets: {result.AssetCount}");
+        return 0;
+    }
+
     private static int HandleLlms(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         var siteRoot = TryGetOptionValue(subArgs, "--site-root") ??

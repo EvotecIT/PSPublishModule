@@ -859,6 +859,137 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"Changelog {res.ReleaseCount} releases{note}";
     }
 
+    private static void ExecuteReleaseHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("release-hub requires out.");
+
+        var sourceText = GetString(step, "source");
+        var source = WebChangelogSource.Auto;
+        if (!string.IsNullOrWhiteSpace(sourceText) &&
+            Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+            source = parsedSource;
+
+        var token = GetString(step, "token");
+        var tokenEnv = GetString(step, "tokenEnv") ?? GetString(step, "token-env");
+        if (string.IsNullOrWhiteSpace(token) && !string.IsNullOrWhiteSpace(tokenEnv))
+            token = Environment.GetEnvironmentVariable(tokenEnv);
+
+        var maxReleases = GetInt(step, "maxReleases") ?? GetInt(step, "max-releases") ?? GetInt(step, "max");
+        var pageSize = GetInt(step, "pageSize") ?? GetInt(step, "page-size");
+        var maxPages = GetInt(step, "maxPages") ?? GetInt(step, "max-pages");
+        var products = ParseReleaseHubProducts(step);
+        var rules = ParseReleaseHubAssetRules(step);
+        var options = new WebReleaseHubOptions
+        {
+            Source = source,
+            ChangelogPath = ResolvePath(baseDir, GetString(step, "changelog") ?? GetString(step, "changelogPath") ?? GetString(step, "changelog-path")),
+            ReleasesPath = ResolvePath(baseDir, GetString(step, "releasesPath") ?? GetString(step, "releases-path")),
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Repo = GetString(step, "repo"),
+            RepoUrl = GetString(step, "repoUrl") ?? GetString(step, "repo-url"),
+            Token = token,
+            Title = GetString(step, "title"),
+            DefaultChannel = GetString(step, "defaultChannel") ?? GetString(step, "default-channel"),
+            IncludeAssets = GetBool(step, "includeAssets") ?? GetBool(step, "include-assets") ?? true,
+            IncludeDraft = GetBool(step, "includeDraft") ?? GetBool(step, "include-draft") ?? false,
+            IncludePrerelease = GetBool(step, "includePrerelease") ?? GetBool(step, "include-prerelease") ?? true,
+            MaxReleases = maxReleases is > 0 ? maxReleases : null,
+            PageSize = pageSize is > 0 ? pageSize.Value : 100,
+            MaxPages = maxPages is > 0 ? maxPages.Value : 5
+        };
+        options.Products.AddRange(products);
+        options.AssetRules.AddRange(rules);
+
+        var result = WebReleaseHubGenerator.Generate(options);
+        var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
+        if (result.Warnings.Length > 0)
+            note += $" ({result.Warnings.Length} warnings)";
+        stepResult.Success = true;
+        stepResult.Message = $"Release hub {result.ReleaseCount} releases, {result.AssetCount} assets{note}";
+    }
+
+    private static List<WebReleaseHubProductInput> ParseReleaseHubProducts(JsonElement step)
+    {
+        var parsed = new List<WebReleaseHubProductInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "products"),
+            GetArrayOfObjects(step, "releaseProducts"),
+            GetArrayOfObjects(step, "release-products")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var id = GetString(item, "id") ?? GetString(item, "product");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+                parsed.Add(new WebReleaseHubProductInput
+                {
+                    Id = id,
+                    Name = GetString(item, "name") ?? GetString(item, "label"),
+                    Order = GetInt(item, "order")
+                });
+            }
+        }
+
+        return parsed;
+    }
+
+    private static List<WebReleaseHubAssetRuleInput> ParseReleaseHubAssetRules(JsonElement step)
+    {
+        var parsed = new List<WebReleaseHubAssetRuleInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "assetRules"),
+            GetArrayOfObjects(step, "asset-rules"),
+            GetArrayOfObjects(step, "rules")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var product = GetString(item, "product") ?? GetString(item, "id");
+                if (string.IsNullOrWhiteSpace(product))
+                    continue;
+
+                var rule = new WebReleaseHubAssetRuleInput
+                {
+                    Product = product,
+                    Label = GetString(item, "label") ?? GetString(item, "name"),
+                    Regex = GetString(item, "regex"),
+                    Channel = GetString(item, "channel"),
+                    Platform = GetString(item, "platform"),
+                    Arch = GetString(item, "arch"),
+                    Kind = GetString(item, "kind"),
+                    Priority = GetInt(item, "priority")
+                };
+
+                var match = GetArrayOfStrings(item, "match");
+                if (match is { Length: > 0 })
+                    rule.Match.AddRange(match.Where(static value => !string.IsNullOrWhiteSpace(value)));
+                var contains = GetArrayOfStrings(item, "contains");
+                if (contains is { Length: > 0 })
+                    rule.Contains.AddRange(contains.Where(static value => !string.IsNullOrWhiteSpace(value)));
+
+                parsed.Add(rule);
+            }
+        }
+
+        return parsed;
+    }
+
     private static void ExecuteVersionHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));

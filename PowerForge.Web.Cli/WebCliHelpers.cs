@@ -87,6 +87,9 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--quickstart-types <type[,type]>] [--display-name-mode short|namespace-suffix|full]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
         Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
+        Console.WriteLine("  powerforge-web release-hub --out <file> [--source auto|file|github] [--repo <owner/name>] [--repo-url <url>]");
+        Console.WriteLine("                     [--releases-path <file>] [--changelog <file>] [--token <token>] [--token-env <name>]");
+        Console.WriteLine("                     [--max <n>] [--page-size <n>] [--max-pages <n>] [--title <text>]");
         Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
         Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
         Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");

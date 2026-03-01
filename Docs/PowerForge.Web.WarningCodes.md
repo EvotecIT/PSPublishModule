@@ -22,6 +22,10 @@ Notes:
 | `PFWEB.MD.HYGIENE` | Markdown hygiene warnings (raw HTML/media tag hygiene). |
 | `PFWEB.XREF` | Xref resolution warnings. |
 | `PFWEB.DATA.VALIDATION` | Known data-shape validation warnings. |
+| `PFWEB.RELEASE.NO_MATCH` | Release/download selectors reference products with no matching assets (or missing release-hub data file). |
+| `PFWEB.RELEASE.PRODUCT_MISSING` | Release-hub assets reference product ids missing from release-hub `products` catalog. |
+| `PFWEB.RELEASE.ASSET_COLLISION` | Duplicate release-hub asset entries detected (same release/name/url tuple). |
+| `PFWEB.RELEASE.PLACEMENT_MISSING` | Release shortcode placement references are missing from `data/release_placements.json` (or placement file is unavailable). |
 | `PFWEB.COLLECTION` | Collection-level warnings (missing files, etc.). |
 | `PFWEB.LOCALIZATION` | Localization mapping/translation configuration warnings. |
 | `PFWEB.SEO.DATE` | Editorial post missing date metadata. |

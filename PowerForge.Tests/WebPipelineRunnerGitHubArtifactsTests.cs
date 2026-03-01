@@ -158,7 +158,7 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
             };
             (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: null);
 
-            Environment.SetEnvironmentVariable("GITHUB_REPOSITORY", "EvotecIT/HtmlForgeX.Website");
+            Environment.SetEnvironmentVariable("GITHUB_REPOSITORY", "EvotecIT/HtmlForgeX");
             Environment.SetEnvironmentVariable("GITHUB_TOKEN", "test-token");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");

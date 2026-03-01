@@ -37,6 +37,9 @@ internal static partial class WebPipelineRunner
             case "changelog":
                 ExecuteChangelog(step, baseDir, stepResult);
                 break;
+            case "release-hub":
+                ExecuteReleaseHub(step, baseDir, stepResult);
+                break;
             case "version-hub":
                 ExecuteVersionHub(step, baseDir, stepResult);
                 break;
