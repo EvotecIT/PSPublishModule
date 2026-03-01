@@ -1,6 +1,6 @@
 # Agent Guide (PSPublishModule / PowerForge.Web + Websites)
 
-Last updated: 2026-02-10
+Last updated: 2026-03-01
 
 This file is the "start here" context for any agent working on the PowerForge.Web engine and the three websites that use it.
 
@@ -17,6 +17,7 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
 
 - HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX\Website`
   - Remote: `https://github.com/EvotecIT/HtmlForgeX.git` (website lives under `Website\`)
+  - Canonical location. Do not use legacy `HtmlForgeX.Website` repo/path (archived/read-only).
 
 - IntelligenceX website: `C:\Support\GitHub\IntelligenceX\Website`
   - Remote: `https://github.com/EvotecIT/IntelligenceX.git`

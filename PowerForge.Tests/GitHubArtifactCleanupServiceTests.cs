@@ -96,7 +96,7 @@ public sealed class GitHubArtifactCleanupServiceTests
 
         var result = service.Prune(new GitHubArtifactCleanupSpec
         {
-            Repository = "EvotecIT/HtmlForgeX.Website",
+            Repository = "EvotecIT/HtmlForgeX",
             Token = "test-token",
             ExcludeNames = new[] { "github-pages" },
             KeepLatestPerName = 0,

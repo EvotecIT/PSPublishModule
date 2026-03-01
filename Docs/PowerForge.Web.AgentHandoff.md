@@ -1,6 +1,6 @@
 # PowerForge.Web Agent Handoff (Websites Engine)
 
-Last updated: 2026-02-28
+Last updated: 2026-03-01
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX Website**, **IntelligenceX Website**.
@@ -23,6 +23,7 @@ Start here:
   - Website: `C:\Support\GitHub\CodeMatrix\Website`
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
 - HtmlForgeX repo (website path): `C:\Support\GitHub\HtmlForgeX\Website`
+  - Canonical location; legacy `HtmlForgeX.Website` repo is archived/read-only.
 
 ## Recent Changes (2026-02-09)
 
