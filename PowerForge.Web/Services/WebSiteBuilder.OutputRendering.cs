@@ -67,7 +67,11 @@ public static partial class WebSiteBuilder
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
         var preloads = RenderPreloads(assetRegistry);
         var criticalCss = RenderCriticalCss(assetRegistry, rootPath);
-        var canonical = !string.IsNullOrWhiteSpace(item.Canonical) ? $"<link rel=\"canonical\" href=\"{item.Canonical}\" />" : string.Empty;
+        var canonicalRoute = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var canonicalUrl = ResolveAbsoluteUrl(spec.BaseUrl, canonicalRoute);
+        var canonical = string.IsNullOrWhiteSpace(canonicalUrl)
+            ? string.Empty
+            : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer></script>"));
