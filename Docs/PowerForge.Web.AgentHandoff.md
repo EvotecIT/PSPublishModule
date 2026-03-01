@@ -23,7 +23,7 @@ Start here:
   - Website: `C:\Support\GitHub\CodeMatrix\Website`
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
 - HtmlForgeX repo (website path): `C:\Support\GitHub\HtmlForgeX\Website`
-  - Canonical location; legacy `HtmlForgeX.Website` repo is archived/read-only.
+  - Use this location for all HtmlForgeX website work.
 
 ## Recent Changes (2026-02-09)
 

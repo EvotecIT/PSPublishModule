@@ -17,7 +17,7 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
 
 - HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX\Website`
   - Remote: `https://github.com/EvotecIT/HtmlForgeX.git` (website lives under `Website\`)
-  - Canonical location. Do not use legacy `HtmlForgeX.Website` repo/path (archived/read-only).
+  - Use this location for all HtmlForgeX website work.
 
 - IntelligenceX website: `C:\Support\GitHub\IntelligenceX\Website`
   - Remote: `https://github.com/EvotecIT/IntelligenceX.git`
