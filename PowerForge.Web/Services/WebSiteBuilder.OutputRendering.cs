@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -11,19 +10,6 @@ namespace PowerForge.Web;
 /// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
 public static partial class WebSiteBuilder
 {
-    private static readonly Regex LinkTagRegex = new(
-        "<link\\b[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex AssetTagRegex = new(
-        "<(script|img|source)\\b[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex HeadCloseRegex = new(
-        "</head>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex AttributeRegex = new(
-        "\\b(?<name>[a-zA-Z_:][\\w:.-]*)\\s*=\\s*(?:\"(?<dq>[^\"]*)\"|'(?<sq>[^']*)'|(?<bare>[^\\s\"'`=<>]+))",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
     private static void WriteContentItem(
         string outputRoot,
         SiteSpec spec,
@@ -417,181 +403,6 @@ public static partial class WebSiteBuilder
         };
     }
 
-    private static string OptimizeNetworkHints(string html)
-    {
-        if (string.IsNullOrWhiteSpace(html))
-            return html;
-        if (html.IndexOf("<head", StringComparison.OrdinalIgnoreCase) < 0 ||
-            html.IndexOf("<link", StringComparison.OrdinalIgnoreCase) < 0)
-            return html;
-
-        var requiredOrigins = CollectRequiredNetworkOrigins(html);
-        var hintedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var rewritten = LinkTagRegex.Replace(html, match =>
-        {
-            var tag = match.Value;
-            var attributes = ParseTagAttributes(tag);
-            if (!attributes.TryGetValue("rel", out var relValue))
-                return tag;
-            if (!ContainsRelToken(relValue, "preconnect") && !ContainsRelToken(relValue, "dns-prefetch"))
-                return tag;
-            if (!attributes.TryGetValue("href", out var href) || !TryGetExternalOrigin(href, out var origin))
-                return tag;
-
-            if (requiredOrigins.Contains(origin))
-            {
-                hintedOrigins.Add(origin);
-                return tag;
-            }
-
-            return string.Empty;
-        });
-
-        if (requiredOrigins.Count == 0)
-            return rewritten;
-
-        var missingOrigins = requiredOrigins
-            .Where(origin => !hintedOrigins.Contains(origin))
-            .OrderBy(origin => origin, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var availableSlots = Math.Max(0, 4 - hintedOrigins.Count);
-        if (availableSlots == 0 || missingOrigins.Count == 0)
-            return rewritten;
-
-        var injected = string.Concat(
-            missingOrigins
-                .Take(availableSlots)
-                .Select(origin =>
-                    $"<link rel=\"preconnect\" href=\"{System.Web.HttpUtility.HtmlEncode(origin)}\" crossorigin=\"anonymous\" />"));
-        if (string.IsNullOrWhiteSpace(injected))
-            return rewritten;
-
-        var closeMatch = HeadCloseRegex.Match(rewritten);
-        if (!closeMatch.Success)
-            return rewritten;
-
-        return rewritten.Insert(closeMatch.Index, injected);
-    }
-
-    private static HashSet<string> CollectRequiredNetworkOrigins(string html)
-    {
-        var required = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (Match match in LinkTagRegex.Matches(html))
-        {
-            var attributes = ParseTagAttributes(match.Value);
-            if (!attributes.TryGetValue("href", out var href) || string.IsNullOrWhiteSpace(href))
-                continue;
-
-            if (attributes.TryGetValue("rel", out var relValue) &&
-                (ContainsRelToken(relValue, "preconnect") || ContainsRelToken(relValue, "dns-prefetch")))
-            {
-                continue;
-            }
-
-            if (TryGetExternalOrigin(href, out var origin))
-                required.Add(origin);
-        }
-
-        foreach (Match match in AssetTagRegex.Matches(html))
-        {
-            var attributes = ParseTagAttributes(match.Value);
-            if (attributes.TryGetValue("src", out var src) && TryGetExternalOrigin(src, out var srcOrigin))
-                required.Add(srcOrigin);
-
-            if (attributes.TryGetValue("srcset", out var srcset))
-            {
-                foreach (var candidate in ParseSrcSet(srcset))
-                {
-                    if (TryGetExternalOrigin(candidate, out var srcsetOrigin))
-                        required.Add(srcsetOrigin);
-                }
-            }
-        }
-
-        if (required.Contains("https://fonts.googleapis.com"))
-            required.Add("https://fonts.gstatic.com");
-
-        return required;
-    }
-
-    private static Dictionary<string, string> ParseTagAttributes(string tag)
-    {
-        var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(tag))
-            return attributes;
-
-        foreach (Match match in AttributeRegex.Matches(tag))
-        {
-            if (!match.Success)
-                continue;
-
-            var name = match.Groups["name"].Value;
-            if (string.IsNullOrWhiteSpace(name))
-                continue;
-
-            var value = match.Groups["dq"].Success
-                ? match.Groups["dq"].Value
-                : match.Groups["sq"].Success
-                    ? match.Groups["sq"].Value
-                    : match.Groups["bare"].Value;
-            attributes[name] = value;
-        }
-
-        return attributes;
-    }
-
-    private static bool ContainsRelToken(string? relValue, string token)
-    {
-        if (string.IsNullOrWhiteSpace(relValue) || string.IsNullOrWhiteSpace(token))
-            return false;
-
-        var parts = relValue.Split(new[] { ' ', '\t', '\r', '\n', ',' }, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Any(part => part.Equals(token, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static IEnumerable<string> ParseSrcSet(string srcset)
-    {
-        if (string.IsNullOrWhiteSpace(srcset))
-            yield break;
-
-        var parts = srcset.Split(',');
-        foreach (var part in parts)
-        {
-            var trimmed = part.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed))
-                continue;
-            var spaceIndex = trimmed.IndexOf(' ');
-            if (spaceIndex > 0)
-                trimmed = trimmed[..spaceIndex];
-            if (!string.IsNullOrWhiteSpace(trimmed))
-                yield return trimmed;
-        }
-    }
-
-    private static bool TryGetExternalOrigin(string? value, out string origin)
-    {
-        origin = string.Empty;
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        var candidate = value.Trim();
-        if (candidate.StartsWith("//", StringComparison.Ordinal))
-            candidate = "https:" + candidate;
-
-        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
-            return false;
-        if (string.IsNullOrWhiteSpace(uri.Host))
-            return false;
-        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        origin = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
-        return !string.IsNullOrWhiteSpace(origin);
-    }
-
     private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
         var listItems = ResolveListItems(spec, item, items);
@@ -811,43 +622,6 @@ public static partial class WebSiteBuilder
             orderedItems = orderedItems.Take(maxItems);
 
         return orderedItems;
-    }
-
-    private static string ResolveMetaDescriptionDefault(SiteSpec spec, ContentItem item)
-    {
-        if (!string.IsNullOrWhiteSpace(item.Description))
-            return item.Description.Trim();
-
-        var socialDescription = GetMetaString(item.Meta, "social_description");
-        if (!string.IsNullOrWhiteSpace(socialDescription))
-            return socialDescription.Trim();
-
-        var snippet = BuildSnippet(item.HtmlContent, 180);
-        if (!string.IsNullOrWhiteSpace(snippet))
-            return snippet.Trim();
-
-        return string.IsNullOrWhiteSpace(spec.Name)
-            ? "Documentation and reference."
-            : $"{spec.Name} documentation and reference.";
-    }
-
-    private static IEnumerable<string> ResolveRssCategories(ContentItem item)
-    {
-        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var tag in item.Tags ?? Array.Empty<string>())
-        {
-            if (!string.IsNullOrWhiteSpace(tag))
-                categories.Add(tag.Trim());
-        }
-
-        foreach (var value in GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }))
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-                categories.Add(value.Trim());
-        }
-
-        return categories.OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
     }
 
     private static void CopyPageResources(ContentItem item, string targetDir)
