@@ -379,10 +379,60 @@ public static partial class WebSiteBuilder
             };
             if (!string.IsNullOrWhiteSpace(baseUrl))
                 organizationModel["url"] = baseUrl;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationLegalName))
+                organizationModel["legalName"] = spec.StructuredData.OrganizationLegalName;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationDescription))
+                organizationModel["description"] = spec.StructuredData.OrganizationDescription;
 
-            var logo = ResolveAbsoluteUrl(spec.BaseUrl, spec.Social?.Image);
+            var logoSource = string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationLogo)
+                ? spec.Social?.Image
+                : spec.StructuredData.OrganizationLogo;
+            var logo = ResolveAbsoluteUrl(spec.BaseUrl, logoSource);
             if (!string.IsNullOrWhiteSpace(logo))
                 organizationModel["logo"] = logo;
+
+            if (spec.StructuredData.OrganizationSameAs is { Length: > 0 })
+            {
+                var sameAs = spec.StructuredData.OrganizationSameAs
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Select(link => ResolveAbsoluteUrl(spec.BaseUrl, link))
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (sameAs.Length > 0)
+                    organizationModel["sameAs"] = sameAs;
+            }
+
+            var contactPoint = new Dictionary<string, object?>
+            {
+                ["@type"] = "ContactPoint"
+            };
+            var hasContactData = false;
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationEmail))
+            {
+                contactPoint["email"] = spec.StructuredData.OrganizationEmail;
+                hasContactData = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(spec.StructuredData.OrganizationTelephone))
+            {
+                contactPoint["telephone"] = spec.StructuredData.OrganizationTelephone;
+                hasContactData = true;
+            }
+
+            var contactUrl = ResolveAbsoluteUrl(spec.BaseUrl, spec.StructuredData.OrganizationContactUrl);
+            if (!string.IsNullOrWhiteSpace(contactUrl))
+            {
+                contactPoint["url"] = contactUrl;
+                hasContactData = true;
+            }
+
+            if (hasContactData)
+            {
+                contactPoint["contactType"] = "customer support";
+                organizationModel["contactPoint"] = new[] { contactPoint };
+            }
 
             scripts.Add(BuildJsonLdScript(organizationModel));
         }

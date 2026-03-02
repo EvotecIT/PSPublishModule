@@ -11,6 +11,20 @@ public sealed class StructuredDataSpec
     public bool Website { get; set; } = true;
     /// <summary>When true, emit Organization JSON-LD on home pages.</summary>
     public bool Organization { get; set; } = true;
+    /// <summary>Optional legal business name for Organization JSON-LD.</summary>
+    public string? OrganizationLegalName { get; set; }
+    /// <summary>Optional organization description for Organization JSON-LD.</summary>
+    public string? OrganizationDescription { get; set; }
+    /// <summary>Optional logo URL/path override for Organization JSON-LD.</summary>
+    public string? OrganizationLogo { get; set; }
+    /// <summary>Optional sameAs links for Organization JSON-LD.</summary>
+    public string[] OrganizationSameAs { get; set; } = Array.Empty<string>();
+    /// <summary>Optional support email for Organization contact point JSON-LD.</summary>
+    public string? OrganizationEmail { get; set; }
+    /// <summary>Optional support phone for Organization contact point JSON-LD.</summary>
+    public string? OrganizationTelephone { get; set; }
+    /// <summary>Optional support page URL/path for Organization contact point JSON-LD.</summary>
+    public string? OrganizationContactUrl { get; set; }
     /// <summary>When true, emit Article JSON-LD for article-like pages.</summary>
     public bool Article { get; set; } = true;
     /// <summary>When true, emit FAQPage JSON-LD when FAQ metadata is present.</summary>

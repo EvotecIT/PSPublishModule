@@ -396,6 +396,65 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_EmitsExtendedOrganizationStructuredData_WhenConfigured()
+    {
+        var root = CreateTempRoot("pf-web-structured-org-extended-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                Image = "/assets/social/default.png"
+            };
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = false,
+                Website = false,
+                Organization = true,
+                OrganizationLegalName = "Evotec Services sp. z o.o.",
+                OrganizationDescription = "AI-powered developer tooling.",
+                OrganizationLogo = "/assets/brand/logo.png",
+                OrganizationSameAs = new[]
+                {
+                    "https://github.com/EvotecIT/IntelligenceX",
+                    "https://x.com/evotecit"
+                },
+                OrganizationEmail = "support@example.test",
+                OrganizationTelephone = "+1-555-0100",
+                OrganizationContactUrl = "/contact/"
+            };
+
+            var html = BuildAndRead(root, spec, "index.html");
+            Assert.Contains("\"@type\":\"Organization\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"legalName\":\"Evotec Services sp. z o.o.\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"description\":\"AI-powered developer tooling.\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"logo\":\"https://example.test/assets/brand/logo.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"sameAs\":[\"https://github.com/EvotecIT/IntelligenceX\",\"https://x.com/evotecit\"]", html, StringComparison.Ordinal);
+            Assert.Contains("\"contactPoint\":[{\"@type\":\"ContactPoint\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"email\":\"support@example.test\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"telephone\":\"\\u002B1-555-0100\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"url\":\"https://example.test/contact/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"contactType\":\"customer support\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_DoesNotEmitStructuredData_WhenPageOptsOut()
     {
         var root = CreateTempRoot("pf-web-structured-optout-");
