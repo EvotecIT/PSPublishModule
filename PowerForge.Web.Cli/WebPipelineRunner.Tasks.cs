@@ -20,7 +20,7 @@ internal static partial class WebPipelineRunner
         switch (task)
         {
             case "build":
-                ExecuteBuild(step, baseDir, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
+                ExecuteBuild(step, baseDir, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
                 break;
             case "nav-export":
                 ExecuteNavExport(step, baseDir, stepResult);
