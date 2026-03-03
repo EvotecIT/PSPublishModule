@@ -175,33 +175,31 @@ public sealed class WebEcosystemStatsGeneratorTests
                       <updated>2026-03-03T10:00:00Z</updated>
                       <entry>
                         <id>https://www.powershellgallery.com/api/v2/Packages(Id='PSWriteHTML',Version='1.0.0')</id>
-                        <content type="application/xml">
-                          <m:properties>
-                            <d:Id>PSWriteHTML</d:Id>
-                            <d:Version>1.0.0</d:Version>
-                            <d:Authors>Przemyslaw Klys</d:Authors>
-                            <d:Owners>Przemyslaw.Klys</d:Owners>
-                            <d:DownloadCount m:type="Edm.Int64">1000</d:DownloadCount>
-                            <d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/PSWriteHTML/1.0.0</d:GalleryDetailsUrl>
-                            <d:ProjectUrl>https://github.com/EvotecIT/PSWriteHTML</d:ProjectUrl>
-                            <d:Description>HTML reports</d:Description>
-                          </m:properties>
-                        </content>
+                        <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/PSWriteHTML/1.0.0" />
+                        <m:properties>
+                          <d:Id>PSWriteHTML</d:Id>
+                          <d:Version>1.0.0</d:Version>
+                          <d:Authors>Przemyslaw Klys</d:Authors>
+                          <d:Owners>Przemyslaw.Klys</d:Owners>
+                          <d:DownloadCount m:type="Edm.Int64">1000</d:DownloadCount>
+                          <d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/PSWriteHTML/1.0.0</d:GalleryDetailsUrl>
+                          <d:ProjectUrl>https://github.com/EvotecIT/PSWriteHTML</d:ProjectUrl>
+                          <d:Description>HTML reports</d:Description>
+                        </m:properties>
                       </entry>
                       <entry>
                         <id>https://www.powershellgallery.com/api/v2/Packages(Id='ADEssentials',Version='0.9.0')</id>
-                        <content type="application/xml">
-                          <m:properties>
-                            <d:Id>ADEssentials</d:Id>
-                            <d:Version>0.9.0</d:Version>
-                            <d:Authors>Przemyslaw Klys</d:Authors>
-                            <d:Owners>Przemyslaw.Klys</d:Owners>
-                            <d:DownloadCount m:type="Edm.Int64">500</d:DownloadCount>
-                            <d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/ADEssentials/0.9.0</d:GalleryDetailsUrl>
-                            <d:ProjectUrl>https://github.com/EvotecIT/ADEssentials</d:ProjectUrl>
-                            <d:Description>Active Directory helpers</d:Description>
-                          </m:properties>
-                        </content>
+                        <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/ADEssentials/0.9.0" />
+                        <m:properties>
+                          <d:Id>ADEssentials</d:Id>
+                          <d:Version>0.9.0</d:Version>
+                          <d:Authors>Przemyslaw Klys</d:Authors>
+                          <d:Owners>Przemyslaw.Klys</d:Owners>
+                          <d:DownloadCount m:type="Edm.Int64">500</d:DownloadCount>
+                          <d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/ADEssentials/0.9.0</d:GalleryDetailsUrl>
+                          <d:ProjectUrl>https://github.com/EvotecIT/ADEssentials</d:ProjectUrl>
+                          <d:Description>Active Directory helpers</d:Description>
+                        </m:properties>
                       </entry>
                     </feed>
                     """;

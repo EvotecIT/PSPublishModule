@@ -406,7 +406,8 @@ public static class WebEcosystemStatsGenerator
 
         foreach (var entry in document.Root?.Elements(atomNs + "entry") ?? Enumerable.Empty<XElement>())
         {
-            var properties = entry.Element(atomNs + "content")?.Element(metadataNs + "properties");
+            var properties = entry.Element(metadataNs + "properties") ??
+                             entry.Element(atomNs + "content")?.Element(metadataNs + "properties");
             if (properties is null)
                 continue;
 
