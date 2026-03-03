@@ -65,6 +65,10 @@ public static partial class WebSiteBuilder
     {
         if (string.IsNullOrWhiteSpace(projectSlug))
             return data;
+
+        var buildCache = BuildProjectDataCacheScope.Value;
+        if (buildCache is not null && buildCache.TryGetValue(projectSlug, out var cached))
+            return cached;
         if (!data.TryGetValue("projects", out var projectsObj) || projectsObj is not IReadOnlyDictionary<string, object?> projects)
             return data;
         if (!projects.TryGetValue(projectSlug, out var projectData))
@@ -74,6 +78,8 @@ public static partial class WebSiteBuilder
         foreach (var kvp in data)
             merged[kvp.Key] = kvp.Value;
         merged["project"] = projectData;
+        if (buildCache is not null)
+            buildCache[projectSlug] = merged;
         return merged;
     }
 

@@ -24,7 +24,7 @@ public static partial class WebSiteBuilder
         }));
     }
 
-    private static string RenderCriticalCss(AssetRegistrySpec? assets, string rootPath)
+    private static string RenderCriticalCss(AssetRegistrySpec? assets, string rootPath, BuildRenderCache? renderCache = null)
     {
         if (assets?.CriticalCss is null || assets.CriticalCss.Length == 0)
             return string.Empty;
@@ -37,8 +37,11 @@ public static partial class WebSiteBuilder
                 ? css.Path
                 : Path.Combine(rootPath, css.Path);
             if (!File.Exists(fullPath)) continue;
+            var cssText = renderCache is null
+                ? File.ReadAllText(fullPath)
+                : renderCache.CriticalCssCache.GetOrAdd(fullPath, static path => File.ReadAllText(path));
             sb.Append("<style>");
-            sb.Append(File.ReadAllText(fullPath));
+            sb.Append(cssText);
             sb.AppendLine("</style>");
         }
         return sb.ToString();

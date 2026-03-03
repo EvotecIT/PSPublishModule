@@ -28,6 +28,9 @@ public static partial class WebSiteBuilder
     private static readonly Regex CodeBlockRegex = new("<pre(?<preAttrs>[^>]*)>\\s*<code(?<codeAttrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly AsyncLocal<BuildLanguageContext?> BuildLanguageContextScope = new();
+    private static readonly AsyncLocal<BuildRenderCache?> BuildRenderCacheScope = new();
+    private static readonly AsyncLocal<Action<string>?> BuildProgressSink = new();
+    private static readonly AsyncLocal<Dictionary<string, IReadOnlyDictionary<string, object?>>?> BuildProjectDataCacheScope = new();
     /// <summary>Builds the site output.</summary>
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
@@ -89,12 +92,18 @@ public static partial class WebSiteBuilder
 
         var prevSink = UpdatedSink.Value;
         var prevBuildLanguageContext = BuildLanguageContextScope.Value;
+        var prevBuildRenderCache = BuildRenderCacheScope.Value;
+        var prevBuildProgressSink = BuildProgressSink.Value;
+        var prevBuildProjectDataCache = BuildProjectDataCacheScope.Value;
         UpdatedSink.Value = MarkUpdated;
         BuildLanguageContextScope.Value = new BuildLanguageContext
         {
             Language = language,
             LanguageAsRoot = languageAsRoot
         };
+        BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
+        BuildProgressSink.Value = ReportProgress;
+        BuildProjectDataCacheScope.Value = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
         try
         {
             ReportProgress($"build start (output={outDir})");
@@ -141,22 +150,48 @@ public static partial class WebSiteBuilder
             var renderInterval = totalRenderItems switch
             {
                 >= 5000 => 250,
-                >= 2000 => 100,
+                >= 2000 => 50,
                 >= 1000 => 50,
                 >= 500 => 25,
                 >= 100 => 10,
-                _ => 5
+                _ => 2
             };
             var rendered = 0;
+            var lastProgressReportAt = buildStopwatch.Elapsed;
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
+                var currentIndex = rendered + 1;
+                var currentRoute = string.IsNullOrWhiteSpace(item.OutputPath) ? "/" : item.OutputPath;
+                if (currentIndex <= 3 || currentIndex == totalRenderItems || (currentIndex % renderInterval == 0))
+                {
+                    ReportProgress($"render start: {currentIndex}/{totalRenderItems} route={currentRoute}");
+                }
+
+                var itemStopwatch = Stopwatch.StartNew();
+                using var itemHeartbeat = progress is null
+                    ? null
+                    : new Timer(_ =>
+                    {
+                        ReportProgress(
+                            $"render working: {currentIndex}/{totalRenderItems} route={currentRoute} elapsed={itemStopwatch.Elapsed:mm\\:ss}");
+                    }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
                 WriteContentItem(outDir, spec, plan.RootPath, item, allItems, data, projectMap, menuSpecs);
+                itemHeartbeat?.Dispose();
                 rendered++;
-                if (rendered == 1 || rendered == totalRenderItems || (rendered % renderInterval == 0))
+                var itemElapsed = itemStopwatch.Elapsed;
+                if (itemElapsed >= TimeSpan.FromSeconds(3))
+                    ReportProgress(
+                        $"render slow-item: {currentIndex}/{totalRenderItems} route={currentRoute} took {itemElapsed.TotalSeconds:F1}s");
+                var nowElapsed = buildStopwatch.Elapsed;
+                var shouldReportByIndex = rendered <= 3 || rendered == totalRenderItems || (rendered % renderInterval == 0);
+                var shouldReportByTime = nowElapsed - lastProgressReportAt >= TimeSpan.FromSeconds(5);
+                if (shouldReportByIndex || shouldReportByTime)
                 {
                     var percent = totalRenderItems <= 0 ? 100 : (int)Math.Round((double)rendered * 100 / totalRenderItems);
                     ReportProgress($"render progress: {rendered}/{totalRenderItems} ({percent}%)");
+                    lastProgressReportAt = nowElapsed;
                 }
             }
 
@@ -197,6 +232,28 @@ public static partial class WebSiteBuilder
         {
             UpdatedSink.Value = prevSink;
             BuildLanguageContextScope.Value = prevBuildLanguageContext;
+            BuildRenderCacheScope.Value = prevBuildRenderCache;
+            BuildProgressSink.Value = prevBuildProgressSink;
+            BuildProjectDataCacheScope.Value = prevBuildProjectDataCache;
+        }
+    }
+
+    private static void ReportBuildProgress(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        var sink = BuildProgressSink.Value;
+        if (sink is null)
+            return;
+
+        try
+        {
+            sink(message);
+        }
+        catch
+        {
+            // Build diagnostics must not break rendering.
         }
     }
 
