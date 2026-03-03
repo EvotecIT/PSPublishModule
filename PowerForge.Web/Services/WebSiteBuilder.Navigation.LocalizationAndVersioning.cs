@@ -67,6 +67,9 @@ public static partial class WebSiteBuilder
         string targetLanguage,
         string currentLanguage)
     {
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        var resolvedCurrentLanguage = ResolveEffectiveLanguageCode(localization, currentLanguage);
+
         if (allItems.Count > 0 && !string.IsNullOrWhiteSpace(page.TranslationKey))
         {
             var translated = allItems
@@ -75,19 +78,37 @@ public static partial class WebSiteBuilder
                 .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
                 .FirstOrDefault(i =>
                     i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
-                    ResolveEffectiveLanguageCode(localization, i.Language).Equals(targetLanguage, StringComparison.OrdinalIgnoreCase));
+                    ResolveEffectiveLanguageCode(localization, i.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase));
             if (translated is not null)
                 return translated.OutputPath;
+
+            if (localization.FallbackToDefaultLanguage &&
+                !resolvedTargetLanguage.Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                var fallback = allItems
+                    .Where(i => !i.Draft)
+                    .Where(i => string.Equals(i.ProjectSlug ?? string.Empty, page.ProjectSlug ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                    .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
+                    .FirstOrDefault(i =>
+                        i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
+                        ResolveEffectiveLanguageCode(localization, i.Language).Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase));
+                if (fallback is not null)
+                    return fallback.OutputPath;
+            }
         }
 
         var baseRoute = StripLanguagePrefix(localization, page.OutputPath);
         if (string.IsNullOrWhiteSpace(baseRoute))
             baseRoute = "/";
 
-        if (!ResolveEffectiveLanguageCode(localization, targetLanguage).Equals(currentLanguage, StringComparison.OrdinalIgnoreCase))
-            return ApplyLanguagePrefixToRoute(spec, baseRoute, targetLanguage);
+        if (!resolvedTargetLanguage.Equals(resolvedCurrentLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            if (localization.FallbackToDefaultLanguage)
+                return ApplyLanguagePrefixToRoute(spec, baseRoute, localization.DefaultLanguage);
+            return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
+        }
 
-        return ApplyLanguagePrefixToRoute(spec, baseRoute, currentLanguage);
+        return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedCurrentLanguage);
     }
 
     private static string ResolveItemLanguage(
@@ -316,6 +337,7 @@ public static partial class WebSiteBuilder
             Enabled = localizationSpec?.Enabled == true && byCode.Count > 0,
             DetectFromPath = localizationSpec?.DetectFromPath ?? true,
             PrefixDefaultLanguage = localizationSpec?.PrefixDefaultLanguage == true,
+            FallbackToDefaultLanguage = localizationSpec?.FallbackToDefaultLanguage == true,
             DefaultLanguage = explicitDefault.Code,
             Languages = entries.ToArray(),
             ByCode = byCode,
@@ -395,6 +417,7 @@ public static partial class WebSiteBuilder
         public bool Enabled { get; init; }
         public bool DetectFromPath { get; init; }
         public bool PrefixDefaultLanguage { get; init; }
+        public bool FallbackToDefaultLanguage { get; init; }
         public string DefaultLanguage { get; init; } = "en";
         public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
         public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);

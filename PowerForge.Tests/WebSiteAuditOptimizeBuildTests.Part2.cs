@@ -111,6 +111,188 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_LocalizationSwitcher_FallsBackToDefaultLanguage_WhenTranslationMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-fallback-enabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            Directory.CreateDirectory(docsEnPath);
+            File.WriteAllText(Path.Combine(docsEnPath, "index.md"),
+                """
+                ---
+                title: Documentation
+                translation_key: docs:index
+                ---
+
+                # Docs
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "localization-fallback-enabled-theme");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "docs.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  {{ for lang in languages }}<a class="lang" data-code="{{ lang.code }}" href="{{ lang.url }}">{{ lang.label }}</a>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "localization-fallback-enabled-theme",
+                  "engine": "scriban",
+                  "defaultLayout": "docs"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Fallback Enabled Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "localization-fallback-enabled-theme",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "English", Default = true },
+                        new LanguageSpec { Code = "pl", Label = "Polski" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs",
+                        DefaultLayout = "docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var englishOutput = File.ReadAllText(Path.Combine(result.OutputPath, "docs", "index.html"));
+            Assert.Contains("data-code=\"en\" href=\"/docs/\"", englishOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("data-code=\"pl\" href=\"/docs/\"", englishOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizationSwitcher_KeepsTargetLanguageRoute_WhenFallbackDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-fallback-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            Directory.CreateDirectory(docsEnPath);
+            File.WriteAllText(Path.Combine(docsEnPath, "index.md"),
+                """
+                ---
+                title: Documentation
+                translation_key: docs:index
+                ---
+
+                # Docs
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "localization-fallback-disabled-theme");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "docs.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  {{ for lang in languages }}<a class="lang" data-code="{{ lang.code }}" href="{{ lang.url }}">{{ lang.label }}</a>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "localization-fallback-disabled-theme",
+                  "engine": "scriban",
+                  "defaultLayout": "docs"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Fallback Disabled Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "localization-fallback-disabled-theme",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = false,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "English", Default = true },
+                        new LanguageSpec { Code = "pl", Label = "Polski" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs",
+                        DefaultLayout = "docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var englishOutput = File.ReadAllText(Path.Combine(result.OutputPath, "docs", "index.html"));
+            Assert.Contains("data-code=\"en\" href=\"/docs/\"", englishOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("data-code=\"pl\" href=\"/pl/docs/\"", englishOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizationSwitcher_DoesNotCrossProjectForSameTranslationKey()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-project-scope-" + Guid.NewGuid().ToString("N"));

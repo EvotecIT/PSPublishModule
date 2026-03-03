@@ -240,6 +240,7 @@ Enable multi-language URLs in `site.json`:
     "DefaultLanguage": "en",
     "PrefixDefaultLanguage": false,
     "DetectFromPath": true,
+    "FallbackToDefaultLanguage": true,
     "Languages": [
       { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://evotec.xyz" },
       { "Code": "pl", "Label": "Polski", "BaseUrl": "https://evotec.pl" }
@@ -254,6 +255,9 @@ When `DetectFromPath` is enabled, a leading language folder in content paths is 
 
 Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
 This is the recommended way to keep one logical page mapped across translated slugs.
+
+When `FallbackToDefaultLanguage` is enabled and a translated page is missing,
+language switcher links resolve to the default-language route instead of a non-existent target-language URL.
 
 Use language-level `BaseUrl` when localized variants live on different domains.
 When set, `hreflang` head links and sitemap alternates use the language domain instead of the site `BaseUrl`.
