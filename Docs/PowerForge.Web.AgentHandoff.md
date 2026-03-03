@@ -12,6 +12,7 @@ Start here:
 - `Docs\PowerForge.Web.WarningCodes.md` (verify/apidocs warning code catalog)
 - `Docs\PowerForge.Web.ReleaseChannels.md` (stable/candidate/nightly rollout + canary model)
 - `Docs\PowerForge.Web.ReleaseHub.md` (downloads/changelog/release asset model + helper contract)
+- `C:\Support\GitHub\Website\Docs\AgentHandoff.md` (Evotec website implementation status and next steps)
 
 ## Repos / Paths
 
@@ -24,6 +25,7 @@ Start here:
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
 - HtmlForgeX repo (website path): `C:\Support\GitHub\HtmlForgeX\Website`
   - Use this location for all HtmlForgeX website work.
+- Evotec main website repo: `C:\Support\GitHub\Website` (remote: `EvotecIT/Website`)
 
 ## Recent Changes (2026-02-09)
 
