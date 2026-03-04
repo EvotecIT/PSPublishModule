@@ -484,7 +484,7 @@ public static partial class WebSiteBuilder
             "rss" => RenderRssOutput(spec, item, allItems),
             "atom" => RenderAtomOutput(spec, item, allItems),
             "jsonfeed" => RenderJsonFeedOutput(spec, item, allItems),
-            _ => RenderHtmlPage(outputRoot, spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml)
+            _ => OptimizeNetworkHints(RenderHtmlPage(outputRoot, spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml))
         };
     }
 
