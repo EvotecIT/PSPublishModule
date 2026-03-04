@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -548,6 +549,22 @@ public static class WebEcosystemStatsGenerator
         try
         {
             var response = http.SendAsync(request).GetAwaiter().GetResult();
+            if (ShouldRetryGitHubWithoutAuthorization(request, response))
+            {
+                response.Dispose();
+                using var retryRequest = CloneRequestWithoutAuthorization(request);
+                var retryResponse = http.SendAsync(retryRequest).GetAwaiter().GetResult();
+                if (retryResponse.IsSuccessStatusCode)
+                {
+                    warnings.Add($"{sourceName} authenticated request returned 403; retried anonymously for public endpoint: {request.RequestUri}");
+                    return retryResponse;
+                }
+
+                warnings.Add($"{sourceName} request failed ({(int)retryResponse.StatusCode} {retryResponse.ReasonPhrase}): {request.RequestUri}");
+                retryResponse.Dispose();
+                return null;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 warnings.Add($"{sourceName} request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {request.RequestUri}");
@@ -562,6 +579,35 @@ public static class WebEcosystemStatsGenerator
             warnings.Add($"{sourceName} request failed: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    private static bool ShouldRetryGitHubWithoutAuthorization(HttpRequestMessage request, HttpResponseMessage response)
+    {
+        if (response.StatusCode != HttpStatusCode.Forbidden)
+            return false;
+        if (request.Headers.Authorization is null)
+            return false;
+
+        var uri = request.RequestUri;
+        if (uri is null)
+            return false;
+        if (!uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
+    private static HttpRequestMessage CloneRequestWithoutAuthorization(HttpRequestMessage request)
+    {
+        var clone = new HttpRequestMessage(request.Method, request.RequestUri);
+        foreach (var header in request.Headers)
+        {
+            if (header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+                continue;
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        return clone;
     }
 
     private static HttpClient CreateHttpClient(int timeoutSeconds)
