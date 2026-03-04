@@ -34,6 +34,12 @@ public static partial class WebSiteBuilder
                 categories.Add(tag.Trim());
         }
 
+        foreach (var category in item.Categories ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(category))
+                categories.Add(category.Trim());
+        }
+
         foreach (var value in GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }))
         {
             if (!string.IsNullOrWhiteSpace(value))
