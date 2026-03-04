@@ -11,6 +11,10 @@ public static partial class WebSiteVerifier
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex MarkdownFenceRegex = new("```[\\s\\S]*?```", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex MarkdownFenceLineRegex = new(
+        "^\\s*```[^\\r\\n]*\\s*$",
+        RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
     private static readonly Regex MarkdownRawHtmlRegex = new("<\\s*(b|i|strong|em|u|h[1-6]|p|ul|ol|li|br)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex MarkdownMultilineMediaHtmlRegex = new(
         "<\\s*(img|iframe|video|source|picture)\\b(?=[^>]*\\r?\\n)[\\s\\S]*?>",

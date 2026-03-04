@@ -28,7 +28,8 @@ public static partial class WebSiteBuilder
             item.Collection,
             item.Kind.ToString(),
             item.ProjectSlug ?? string.Empty,
-            string.Join(" ", item.Tags ?? Array.Empty<string>())
+            string.Join(" ", item.Tags ?? Array.Empty<string>()),
+            string.Join(" ", item.Categories ?? Array.Empty<string>())
         };
         if (item.Meta.Count > 0)
         {

@@ -1,16 +1,21 @@
 using Scriban;
 using Scriban.Runtime;
 using Scriban.Parsing;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 namespace PowerForge.Web;
 
 internal sealed class ScribanTemplateEngine : ITemplateEngine
 {
+    private static readonly ConcurrentDictionary<string, Template> ParsedTemplateCache = new(StringComparer.Ordinal);
+    private static readonly ConditionalWeakTable<IReadOnlyDictionary<string, object?>, object> DataScriptCache = new();
+
     public string Render(string template, ThemeRenderContext context, Func<string, string?> partialResolver)
     {
         if (string.IsNullOrEmpty(template)) return string.Empty;
 
-        var parsed = Template.Parse(template);
+        var parsed = ParsedTemplateCache.GetOrAdd(template, static text => Template.Parse(text));
         if (parsed.HasErrors)
         {
             var messages = string.Join(Environment.NewLine, parsed.Messages.Select(m => m.Message));
@@ -56,7 +61,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("extra_scripts_html", context.ExtraScriptsHtml);
         globals.Add("body_class", context.BodyClass);
         globals.Add("edit_url", context.Page.EditUrl ?? string.Empty);
-        globals.Add("data", ToScriptValue(context.Data));
+        globals.Add("data", ToScriptData(context.Data));
         globals.Add("canonical_html", context.CanonicalHtml);
         globals.Add("description_meta_html", context.DescriptionMetaHtml);
         globals.Add("site_name", context.Site.Name ?? string.Empty);
@@ -494,6 +499,16 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         return value;
+    }
+
+    private static object ToScriptData(IReadOnlyDictionary<string, object?> data)
+    {
+        if (DataScriptCache.TryGetValue(data, out var cached))
+            return cached;
+
+        var converted = ToScriptValue(data) ?? new ScriptObject();
+        DataScriptCache.Add(data, converted);
+        return converted;
     }
 
     private static ScriptObject ToPaginationScript(PaginationRuntime pagination)

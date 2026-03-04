@@ -13,6 +13,7 @@ internal static partial class WebPipelineRunner
     private static void ExecuteBuild(
         JsonElement step,
         string baseDir,
+        WebConsoleLogger? logger,
         ref string lastBuildOutPath,
         ref string[] lastBuildUpdatedFiles,
         WebPipelineStepResult stepResult)
@@ -30,7 +31,14 @@ internal static partial class WebPipelineRunner
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 
-        var build = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options, language, languageAsRoot);
+        var build = WebSiteBuilder.Build(
+            spec,
+            plan,
+            outPath,
+            WebCliJson.Options,
+            language,
+            languageAsRoot,
+            progress: logger is null ? null : message => logger.Info($"build: {message}"));
         lastBuildOutPath = Path.GetFullPath(build.OutputPath);
         lastBuildUpdatedFiles = build.UpdatedFiles ?? Array.Empty<string>();
 

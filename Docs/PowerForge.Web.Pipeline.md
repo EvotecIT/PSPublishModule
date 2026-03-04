@@ -1207,6 +1207,37 @@ Notes:
   - In CI: use `lockMode: verify` with a committed lock file.
   - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
 
+#### project-docs-sync
+Synchronizes project documentation (and optionally API artifacts) from source repositories listed in your project catalog.
+
+```json
+{
+  "task": "project-docs-sync",
+  "catalog": "./data/projects/catalog.json",
+  "sourcesRoot": "./projects-sources",
+  "contentRoot": "./content/docs",
+  "sourceDocsPaths": ["Website/content/docs", "Docs"],
+  "syncApi": true,
+  "apiRoot": "./data/apidocs",
+  "sourceApiPaths": ["Website/data/apidocs", "data/apidocs"],
+  "generateToc": true,
+  "summaryPath": "./Build/sync-project-docs-last-run.json"
+}
+```
+
+Notes:
+- Uses `catalog.projects[].surfaces` to decide what to sync:
+  - docs: `surfaces.docs`
+  - api: `surfaces.apiDotNet` or `surfaces.apiPowerShell` (when `syncApi: true`)
+- Supports path candidates:
+  - docs: `sourceDocsPaths` (array) or `sourceDocsPath` (string)
+  - api: `sourceApiPaths` (array) or `sourceApiPath` (string)
+- Path candidates are checked in order for each project (`<sourcesRoot>/<slug>/<candidate>`).
+- `cleanTarget` clears docs target folder before copy.
+- `cleanApiTarget` clears API target folder before copy (defaults to `cleanTarget`).
+- `failOnMissingSource` and `failOnMissingApiSource` allow strict CI enforcement.
+- Writes machine-readable summary JSON with synced/skipped counts and missing source paths.
+
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
 ```json

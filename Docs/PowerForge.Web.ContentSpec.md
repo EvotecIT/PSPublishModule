@@ -90,7 +90,12 @@ Supported fields:
 - `slug`, `order`, `draft`
 - `language` / `lang` (page language code when localization is enabled)
 - `translation_key` (shared key used to map the same page across languages)
-  - aliases: `translation.key`, `i18n.key`
+  - aliases: `translation.key`, `translationKey`, `i18n.key`, `i18n.translation_key`, `i18n.translationKey`, `i18n.group`
+- `i18n.routes.<lang>` / `i18n.route.<lang>` (explicit per-language route override for language switch/hreflang)
+  - aliases: `i18n.urls.<lang>`, `i18n.url.<lang>`, `translations.<lang>.route`, `translations.<lang>.url`, `translations.<lang>.path`
+- `i18n.aliases.<lang>` (per-language legacy aliases that generate redirects)
+  - aliases: `aliases.<lang>`, `translations.<lang>.aliases`, `translations.<lang>.alias`
+  - optional shared aliases: `i18n.aliases.default`, `i18n.aliases.all`, `aliases.default`, `aliases.all`
 - `layout`, `template`, `collection`
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
@@ -240,6 +245,7 @@ Enable multi-language URLs in `site.json`:
     "DefaultLanguage": "en",
     "PrefixDefaultLanguage": false,
     "DetectFromPath": true,
+    "FallbackToDefaultLanguage": true,
     "Languages": [
       { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://evotec.xyz" },
       { "Code": "pl", "Label": "Polski", "BaseUrl": "https://evotec.pl" }
@@ -254,6 +260,19 @@ When `DetectFromPath` is enabled, a leading language folder in content paths is 
 
 Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
 This is the recommended way to keep one logical page mapped across translated slugs.
+
+If you need strict/manual mapping, add explicit route overrides in front matter:
+- `i18n.routes.en: /docs/faq-english/`
+- `i18n.routes.pl: /pl/docs/faq-polski/`
+
+Nested front matter blocks are supported natively as well (recommended for readability):
+- `i18n:` -> `group`, `language`, `aliases.<lang>`
+- `translations:` -> `<lang>.route|url|path`, `<lang>.aliases`
+
+This is useful when language variants have different slugs and do not share the same source ID history.
+
+When `FallbackToDefaultLanguage` is enabled and a translated page is missing,
+language switcher links resolve to the default-language route instead of a non-existent target-language URL.
 
 Use language-level `BaseUrl` when localized variants live on different domains.
 When set, `hreflang` head links and sitemap alternates use the language domain instead of the site `BaseUrl`.

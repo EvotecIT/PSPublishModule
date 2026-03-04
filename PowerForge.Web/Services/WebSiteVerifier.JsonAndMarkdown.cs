@@ -172,8 +172,15 @@ public static partial class WebSiteVerifier
         if (markdownHygieneWarnings >= 10)
             return;
 
-        var withoutCodeBlocks = MarkdownFenceRegex.Replace(body, string.Empty);
         var relative = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+        var fenceLineCount = MarkdownFenceLineRegex.Matches(body).Count;
+        if (fenceLineCount % 2 != 0)
+        {
+            warnings.Add(
+                $"Markdown hygiene: '{relative}' contains unbalanced fenced code block markers (```), which can break rendering.");
+        }
+
+        var withoutCodeBlocks = MarkdownFenceRegex.Replace(body, string.Empty);
 
         var multilineMediaMatches = MarkdownMultilineMediaHtmlRegex.Matches(withoutCodeBlocks);
         if (multilineMediaMatches.Count > 0)

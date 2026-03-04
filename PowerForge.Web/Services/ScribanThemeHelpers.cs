@@ -375,12 +375,16 @@ internal sealed class ScribanThemeHelpers
         var sourceItems = _context.AllItems.Count > 0
             ? _context.AllItems
             : _context.Items;
+        var localizationEnabled = _context.Site?.Localization?.Enabled == true;
+        var currentLanguage = ResolveEffectiveLanguageCode(_context.Page?.Language);
         var posts = sourceItems
             .Where(item =>
                 item is not null &&
                 !item.Draft &&
                 string.Equals(item.Collection, page.Collection, StringComparison.OrdinalIgnoreCase) &&
                 item.Kind == PageKind.Page &&
+                (!localizationEnabled ||
+                 ResolveEffectiveLanguageCode(item.Language).Equals(currentLanguage, StringComparison.OrdinalIgnoreCase)) &&
                 !string.IsNullOrWhiteSpace(item.OutputPath))
             .OrderByDescending(item => item.Date ?? DateTime.MinValue)
             .ThenBy(item => item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -686,14 +690,18 @@ internal sealed class ScribanThemeHelpers
 
     private string ResolveCollectionHref(CollectionSpec? collection, string? collectionName)
     {
+        string route;
         if (collection is not null && !string.IsNullOrWhiteSpace(collection.Output))
-            return EnsureTrailingSlash(collection.Output);
-
-        if (string.IsNullOrWhiteSpace(collectionName))
+            route = collection.Output;
+        else if (string.IsNullOrWhiteSpace(collectionName))
             return string.Empty;
+        else
+        {
+            var normalized = collectionName.Trim();
+            route = "/" + normalized.Trim('/');
+        }
 
-        var normalized = collectionName.Trim();
-        return EnsureTrailingSlash("/" + normalized.Trim('/'));
+        return ApplyCurrentLanguageToRoute(route, ensureTrailingSlash: true);
     }
 
     private void AppendTaxonomyChip(
@@ -732,6 +740,12 @@ internal sealed class ScribanThemeHelpers
 
         if (string.Equals(taxonomyName, "tags", StringComparison.OrdinalIgnoreCase))
             return item.Tags ?? Array.Empty<string>();
+
+        if (string.Equals(taxonomyName, "categories", StringComparison.OrdinalIgnoreCase) &&
+            item.Categories is { Length: > 0 })
+        {
+            return item.Categories;
+        }
 
         if (item.Meta is null || item.Meta.Count == 0)
             return Array.Empty<string>();
@@ -783,6 +797,7 @@ internal sealed class ScribanThemeHelpers
         if (string.IsNullOrWhiteSpace(taxonomyName))
             return string.Empty;
 
+        string basePath;
         var configured = _context.Site?.Taxonomies?
             .FirstOrDefault(taxonomy =>
                 taxonomy is not null &&
@@ -790,13 +805,179 @@ internal sealed class ScribanThemeHelpers
                 taxonomy.Name.Equals(taxonomyName, StringComparison.OrdinalIgnoreCase));
 
         if (!string.IsNullOrWhiteSpace(configured?.BasePath))
-            return EnsureLeadingSlash(configured.BasePath);
+            basePath = EnsureLeadingSlash(configured.BasePath);
+        else if (taxonomyName.Equals("tags", StringComparison.OrdinalIgnoreCase))
+            basePath = "/tags";
+        else if (taxonomyName.Equals("categories", StringComparison.OrdinalIgnoreCase))
+            basePath = "/categories";
+        else
+            basePath = "/" + taxonomyName.Trim().Trim('/');
 
-        if (taxonomyName.Equals("tags", StringComparison.OrdinalIgnoreCase))
-            return "/tags";
-        if (taxonomyName.Equals("categories", StringComparison.OrdinalIgnoreCase))
-            return "/categories";
-        return "/" + taxonomyName.Trim().Trim('/');
+        return ApplyCurrentLanguageToRoute(basePath, ensureTrailingSlash: false);
+    }
+
+    private string ApplyCurrentLanguageToRoute(string route, bool ensureTrailingSlash)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return ensureTrailingSlash ? "/" : string.Empty;
+        if (IsAbsoluteOrProtocolUrl(route))
+            return route;
+
+        var normalized = EnsureLeadingSlash(route).Trim();
+        var stripped = StripKnownLanguagePrefix(normalized);
+
+        var currentLanguage = ResolveCurrentLanguage();
+        var localization = _context.Site?.Localization;
+        if (currentLanguage is null || localization?.Enabled != true)
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        if (ShouldRenderLanguageAtRoot(currentLanguage, localization))
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        if (currentLanguage.IsDefault && !localization.PrefixDefaultLanguage)
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        var prefix = NormalizeLanguageToken(currentLanguage.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return ensureTrailingSlash ? EnsureTrailingSlash(stripped) : stripped;
+
+        var withoutLeadingSlash = stripped.TrimStart('/');
+        var prefixed = string.IsNullOrWhiteSpace(withoutLeadingSlash)
+            ? "/" + prefix
+            : "/" + prefix + "/" + withoutLeadingSlash;
+
+        return ensureTrailingSlash ? EnsureTrailingSlash(prefixed) : prefixed;
+    }
+
+    private string ResolveEffectiveLanguageCode(string? language)
+    {
+        var runtimeDefault = (_context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>())
+            .FirstOrDefault(static language => language is not null && language.IsDefault);
+        var defaultCode = NormalizeLanguageToken(runtimeDefault?.Code);
+        if (string.IsNullOrWhiteSpace(defaultCode))
+            defaultCode = NormalizeLanguageToken(_context.Site?.Localization?.DefaultLanguage);
+        if (string.IsNullOrWhiteSpace(defaultCode))
+            defaultCode = "en";
+
+        var token = NormalizeLanguageToken(language);
+        if (string.IsNullOrWhiteSpace(token))
+            return defaultCode;
+
+        foreach (var candidate in _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>())
+        {
+            if (candidate is null)
+                continue;
+
+            var code = NormalizeLanguageToken(candidate.Code);
+            if (token.Equals(code, StringComparison.OrdinalIgnoreCase))
+                return string.IsNullOrWhiteSpace(code) ? defaultCode : code;
+
+            var prefix = NormalizeLanguageToken(candidate.Prefix);
+            if (!string.IsNullOrWhiteSpace(prefix) && token.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+                return string.IsNullOrWhiteSpace(code) ? defaultCode : code;
+        }
+
+        return token;
+    }
+
+    private LocalizationLanguageRuntime? ResolveCurrentLanguage()
+    {
+        var token = NormalizeLanguageToken(_context.Localization.Current?.Code);
+        if (string.IsNullOrWhiteSpace(token))
+            token = NormalizeLanguageToken(_context.Page?.Language);
+
+        if (string.IsNullOrWhiteSpace(token))
+            return _context.Localization.Languages?.FirstOrDefault();
+
+        var languages = _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>();
+        foreach (var language in languages)
+        {
+            if (language is null)
+                continue;
+
+            var code = NormalizeLanguageToken(language.Code);
+            if (token.Equals(code, StringComparison.OrdinalIgnoreCase))
+                return language;
+
+            var prefix = NormalizeLanguageToken(language.Prefix);
+            if (!string.IsNullOrWhiteSpace(prefix) && token.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+                return language;
+        }
+
+        return _context.Localization.Current;
+    }
+
+    private string StripKnownLanguagePrefix(string route)
+    {
+        var normalized = EnsureLeadingSlash(route);
+        var languages = _context.Localization.Languages ?? Array.Empty<LocalizationLanguageRuntime>();
+        if (languages.Length == 0)
+            return normalized;
+
+        foreach (var language in languages)
+        {
+            if (language is null)
+                continue;
+
+            var prefix = NormalizeLanguageToken(language.Prefix);
+            if (string.IsNullOrWhiteSpace(prefix))
+                continue;
+
+            var segment = "/" + prefix;
+            if (normalized.Equals(segment, StringComparison.OrdinalIgnoreCase))
+                return "/";
+            if (normalized.StartsWith(segment + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                var remainder = normalized.Substring(segment.Length);
+                return string.IsNullOrWhiteSpace(remainder) ? "/" : EnsureLeadingSlash(remainder);
+            }
+        }
+
+        return normalized;
+    }
+
+    private bool ShouldRenderLanguageAtRoot(LocalizationLanguageRuntime currentLanguage, LocalizationSpec localization)
+    {
+        if (currentLanguage is null || localization is null)
+            return false;
+
+        var currentPath = EnsureLeadingSlash(!string.IsNullOrWhiteSpace(_context.Page?.OutputPath)
+            ? _context.Page.OutputPath
+            : _context.CurrentPath);
+        var prefix = NormalizeLanguageToken(currentLanguage.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return true;
+
+        if (currentPath.Equals("/", StringComparison.Ordinal))
+        {
+            if (currentLanguage.IsDefault && !localization.PrefixDefaultLanguage)
+                return true;
+        }
+
+        var prefixedRoot = "/" + prefix;
+        if (currentPath.Equals(prefixedRoot, StringComparison.OrdinalIgnoreCase) ||
+            currentPath.StartsWith(prefixedRoot + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAbsoluteOrProtocolUrl(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+        if (route.StartsWith("//", StringComparison.Ordinal))
+            return true;
+        return Uri.TryCreate(route, UriKind.Absolute, out _);
+    }
+
+    private static string NormalizeLanguageToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
 
     private static string EnsureLeadingSlash(string path)

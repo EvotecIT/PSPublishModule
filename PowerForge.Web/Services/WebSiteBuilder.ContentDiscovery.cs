@@ -51,6 +51,7 @@ public static partial class WebSiteBuilder
         if (spec.Collections is null || spec.Collections.Length == 0)
             return items;
 
+        var localization = ResolveLocalizationConfig(spec);
         var contentRoots = BuildContentRoots(plan);
 
         foreach (var collection in spec.Collections)
@@ -138,6 +139,7 @@ public static partial class WebSiteBuilder
                 var description = matter?.Description ?? string.Empty;
                 var relativePath = ResolveRelativePath(collectionRoot, file);
                 var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var resolvedAliases = ResolveAliasesForLanguage(matter, resolvedLanguage, localization);
                 var relativeDir = localizedRelativeDir;
                 var isSectionIndex = IsSectionIndex(file);
                 var isBundleIndex = IsLeafBundleIndex(file);
@@ -156,10 +158,10 @@ public static partial class WebSiteBuilder
                         : resolvedCollection.DefaultLayout;
                 }
 
-                if (matter?.Aliases is { Length: > 0 })
+                if (resolvedAliases.Length > 0)
                 {
                     var seenAliasSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var alias in matter.Aliases)
+                    foreach (var alias in resolvedAliases)
                     {
                         if (string.IsNullOrWhiteSpace(alias)) continue;
                         foreach (var aliasSource in ExpandAliasRedirectSources(alias))
@@ -215,7 +217,8 @@ public static partial class WebSiteBuilder
                     Order = matter?.Order,
                     Slug = slugPath,
                     Tags = matter?.Tags ?? Array.Empty<string>(),
-                    Aliases = matter?.Aliases ?? Array.Empty<string>(),
+                    Categories = ResolveCategoriesFromFrontMatter(matter),
+                    Aliases = resolvedAliases,
                     Draft = matter?.Draft ?? false,
                     Canonical = matter?.Canonical,
                     EditPath = matter?.EditPath,
@@ -240,6 +243,148 @@ public static partial class WebSiteBuilder
         }
 
         return items;
+    }
+
+    private static List<ContentItem> MaterializeLocalizedFallbackPages(SiteSpec spec, IReadOnlyList<ContentItem> items)
+    {
+        if (spec is null || items is null || items.Count == 0)
+            return items?.ToList() ?? new List<ContentItem>();
+
+        var localization = ResolveLocalizationConfig(spec);
+        if (!localization.Enabled ||
+            !localization.FallbackToDefaultLanguage ||
+            !localization.MaterializeFallbackPages ||
+            localization.Languages.Length <= 1)
+        {
+            return items.ToList();
+        }
+
+        var output = items.ToList();
+        var defaultLanguageBaseUrl = ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage);
+        var existingRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var existingTranslations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items.Where(static value => value is not null && !value.Draft))
+        {
+            existingRoutes.Add(NormalizeRouteForMatch(item.OutputPath));
+            if (!string.IsNullOrWhiteSpace(item.TranslationKey))
+                existingTranslations.Add(BuildTranslationLanguageKey(item.TranslationKey!, ResolveEffectiveLanguageCode(localization, item.Language)));
+        }
+
+        var defaultLanguageItems = items
+            .Where(static item => item is not null && !item.Draft)
+            .Where(item => ResolveEffectiveLanguageCode(localization, item.Language)
+                .Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+            .Where(static item => item.Kind is PageKind.Page or PageKind.Home or PageKind.Section)
+            .ToList();
+
+        foreach (var source in defaultLanguageItems)
+        {
+            var strippedRoute = StripLanguagePrefix(localization, source.OutputPath);
+            if (string.IsNullOrWhiteSpace(strippedRoute))
+                strippedRoute = "/";
+
+            foreach (var language in localization.Languages)
+            {
+                if (language.IsDefault)
+                    continue;
+
+                var targetLanguage = ResolveEffectiveLanguageCode(localization, language.Code);
+                if (!string.IsNullOrWhiteSpace(source.TranslationKey))
+                {
+                    var translationKey = BuildTranslationLanguageKey(source.TranslationKey!, targetLanguage);
+                    if (existingTranslations.Contains(translationKey))
+                        continue;
+                }
+
+                var fallbackRoute = ApplyLanguagePrefixToRoute(spec, strippedRoute, targetLanguage);
+                var normalizedFallbackRoute = NormalizeRouteForMatch(fallbackRoute);
+                if (existingRoutes.Contains(normalizedFallbackRoute))
+                    continue;
+
+                var fallback = CloneFallbackItem(
+                    source,
+                    fallbackRoute,
+                    targetLanguage,
+                    localization.DefaultLanguage,
+                    defaultLanguageBaseUrl);
+                output.Add(fallback);
+                existingRoutes.Add(normalizedFallbackRoute);
+                if (!string.IsNullOrWhiteSpace(fallback.TranslationKey))
+                    existingTranslations.Add(BuildTranslationLanguageKey(fallback.TranslationKey!, targetLanguage));
+            }
+        }
+
+        return output;
+    }
+
+    private static string BuildTranslationLanguageKey(string translationKey, string language)
+    {
+        var key = string.IsNullOrWhiteSpace(translationKey) ? string.Empty : translationKey.Trim().ToLowerInvariant();
+        var lang = string.IsNullOrWhiteSpace(language) ? string.Empty : language.Trim().ToLowerInvariant();
+        return key + "|" + lang;
+    }
+
+    private static ContentItem CloneFallbackItem(
+        ContentItem source,
+        string outputPath,
+        string targetLanguage,
+        string defaultLanguage,
+        string? defaultLanguageBaseUrl)
+    {
+        var fallbackCanonical = string.IsNullOrWhiteSpace(source.Canonical)
+            ? ResolveAbsoluteUrl(defaultLanguageBaseUrl, source.OutputPath)
+            : source.Canonical;
+        return new ContentItem
+        {
+            SourcePath = source.SourcePath,
+            Collection = source.Collection,
+            OutputPath = outputPath,
+            Language = targetLanguage,
+            TranslationKey = source.TranslationKey,
+            Title = source.Title,
+            Description = source.Description,
+            Date = source.Date,
+            Order = source.Order,
+            Slug = source.Slug,
+            Tags = source.Tags?.ToArray() ?? Array.Empty<string>(),
+            Categories = source.Categories?.ToArray() ?? Array.Empty<string>(),
+            Aliases = Array.Empty<string>(),
+            Draft = false,
+            Canonical = fallbackCanonical,
+            EditPath = source.EditPath,
+            EditUrl = source.EditUrl,
+            Layout = source.Layout,
+            Template = source.Template,
+            Kind = source.Kind,
+            HtmlContent = source.HtmlContent,
+            TocHtml = source.TocHtml,
+            Resources = source.Resources?.Select(static resource => new PageResource
+            {
+                SourcePath = resource.SourcePath,
+                Name = resource.Name,
+                RelativePath = resource.RelativePath,
+                MediaType = resource.MediaType
+            }).ToArray() ?? Array.Empty<PageResource>(),
+            ProjectSlug = source.ProjectSlug,
+            Meta = CloneFallbackMeta(source.Meta, defaultLanguage, targetLanguage),
+            Outputs = source.Outputs?.ToArray() ?? Array.Empty<string>()
+        };
+    }
+
+    private static Dictionary<string, object?> CloneFallbackMeta(
+        IReadOnlyDictionary<string, object?>? source,
+        string defaultLanguage,
+        string targetLanguage)
+    {
+        var clone = source is null
+            ? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            : source.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        clone["i18n.fallback_copy"] = true;
+        clone["i18n.fallback_source_language"] = defaultLanguage;
+        clone["i18n.requested_language"] = targetLanguage;
+        return clone;
     }
 
     private static void AddAutoGeneratedSectionIndexes(
@@ -306,8 +451,8 @@ public static partial class WebSiteBuilder
                     OutputPath = expectedRoute,
                     Language = language,
                     TranslationKey = string.IsNullOrWhiteSpace(projectSlug)
-                        ? $"collection:{collection.Name}:index"
-                        : $"collection:{collection.Name}:{projectSlug}:index",
+                        ? $"{collection.Name}:_index"
+                        : $"{collection.Name}:{projectSlug}/_index",
                     Title = generatedTitle,
                     Description = generatedDescription,
                     Slug = "index",
@@ -422,6 +567,12 @@ public static partial class WebSiteBuilder
         if (taxonomy.Name.Equals("tags", StringComparison.OrdinalIgnoreCase))
             return item.Tags ?? Array.Empty<string>();
 
+        if (taxonomy.Name.Equals("categories", StringComparison.OrdinalIgnoreCase) &&
+            item.Categories is { Length: > 0 })
+        {
+            return item.Categories;
+        }
+
         if (item.Meta is not null && TryGetMetaValue(item.Meta, taxonomy.Name, out var value))
         {
             if (value is IEnumerable<object?> list)
@@ -434,6 +585,57 @@ public static partial class WebSiteBuilder
         }
 
         return Array.Empty<string>();
+    }
+
+    private static string[] ResolveCategoriesFromFrontMatter(FrontMatter? matter)
+    {
+        if (matter is null)
+            return Array.Empty<string>();
+
+        if (matter.Categories is { Length: > 0 })
+        {
+            return matter.Categories
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        if (matter.Meta is null || matter.Meta.Count == 0)
+            return Array.Empty<string>();
+
+        if (!TryGetMetaValue(matter.Meta, "categories", out var value) || value is null)
+            return Array.Empty<string>();
+
+        if (value is string single)
+        {
+            if (string.IsNullOrWhiteSpace(single))
+                return Array.Empty<string>();
+
+            if (single.Contains(',', StringComparison.Ordinal))
+            {
+                return single.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(static token => !string.IsNullOrWhiteSpace(token))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
+            return new[] { single.Trim() };
+        }
+
+        if (value is IEnumerable<object?> list)
+        {
+            return list.Select(static entry => entry?.ToString() ?? string.Empty)
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+                .Select(static entry => entry.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text)
+            ? Array.Empty<string>()
+            : new[] { text.Trim() };
     }
 
     private static HashSet<string> BuildLeafBundleRoots(IReadOnlyList<string> markdownFiles)
@@ -651,6 +853,96 @@ public static partial class WebSiteBuilder
             ".ico" => "image/x-icon",
             _ => null
         };
+    }
+
+    private static string[] ResolveAliasesForLanguage(
+        FrontMatter? matter,
+        string resolvedLanguage,
+        ResolvedLocalizationConfig localization)
+    {
+        var values = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddAlias(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            var trimmed = value.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+                return;
+
+            if (seen.Add(trimmed))
+                values.Add(trimmed);
+        }
+
+        void AddAliases(IEnumerable<string> aliases)
+        {
+            foreach (var alias in aliases)
+                AddAlias(alias);
+        }
+
+        if (matter?.Aliases is { Length: > 0 })
+            AddAliases(matter.Aliases);
+
+        if (matter?.Meta is null || matter.Meta.Count == 0)
+            return values.ToArray();
+
+        var language = ResolveEffectiveLanguageCode(localization, resolvedLanguage);
+        foreach (var key in BuildLocalizedAliasMetaKeys(language))
+            AddAliases(ReadMetaAliases(matter.Meta, key));
+
+        return values.ToArray();
+    }
+
+    private static IEnumerable<string> BuildLocalizedAliasMetaKeys(string languageCode)
+    {
+        var normalized = NormalizeLanguageToken(languageCode);
+        if (string.IsNullOrWhiteSpace(normalized))
+            yield break;
+
+        var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { normalized };
+        if (normalized.Contains('-', StringComparison.Ordinal))
+            variants.Add(normalized.Replace('-', '_'));
+        if (normalized.Contains('_', StringComparison.Ordinal))
+            variants.Add(normalized.Replace('_', '-'));
+
+        yield return "i18n.aliases.default";
+        yield return "i18n.aliases.all";
+        yield return "aliases.default";
+        yield return "aliases.all";
+        foreach (var variant in variants)
+        {
+            yield return $"i18n.aliases.{variant}";
+            yield return $"aliases.{variant}";
+            yield return $"translations.{variant}.aliases";
+            yield return $"translations.{variant}.alias";
+        }
+    }
+
+    private static IEnumerable<string> ReadMetaAliases(Dictionary<string, object?> meta, string key)
+    {
+        if (meta is null || string.IsNullOrWhiteSpace(key))
+            return Array.Empty<string>();
+        if (!TryGetMetaValue(meta, key, out var value) || value is null)
+            return Array.Empty<string>();
+
+        if (value is string single)
+            return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single };
+
+        if (value is IReadOnlyDictionary<string, object?>)
+            return Array.Empty<string>();
+
+        if (value is IEnumerable<object?> list)
+        {
+            return list
+                .Select(v => v?.ToString() ?? string.Empty)
+                .Where(static v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+        }
+
+        var fallback = value.ToString();
+        return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
     }
 
     private static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)

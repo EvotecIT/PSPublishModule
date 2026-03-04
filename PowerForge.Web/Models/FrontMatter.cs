@@ -11,8 +11,14 @@ public sealed class FrontMatter
     public DateTime? Date { get; set; }
     /// <summary>Tag list.</summary>
     public string[] Tags { get; set; } = Array.Empty<string>();
+    /// <summary>Category list.</summary>
+    public string[] Categories { get; set; } = Array.Empty<string>();
     /// <summary>URL slug override.</summary>
     public string? Slug { get; set; }
+    /// <summary>Resolved language code for this page (for example en/pl).</summary>
+    public string? Language { get; set; }
+    /// <summary>Optional translation key used to map same page across languages.</summary>
+    public string? TranslationKey { get; set; }
     /// <summary>Ordering hint within a collection.</summary>
     public int? Order { get; set; }
     /// <summary>Marks the page as draft.</summary>
@@ -60,6 +66,8 @@ public sealed class ContentItem
     public string Slug { get; set; } = string.Empty;
     /// <summary>Tag list.</summary>
     public string[] Tags { get; set; } = Array.Empty<string>();
+    /// <summary>Category list.</summary>
+    public string[] Categories { get; set; } = Array.Empty<string>();
     /// <summary>Legacy aliases for redirects.</summary>
     public string[] Aliases { get; set; } = Array.Empty<string>();
     /// <summary>Marks the page as draft.</summary>

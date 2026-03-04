@@ -162,6 +162,9 @@ public static partial class WebSiteVerifier
 
     private static string ResolveLanguageFromFrontMatter(FrontMatter? matter)
     {
+        if (!string.IsNullOrWhiteSpace(matter?.Language))
+            return NormalizeLanguageToken(matter.Language);
+
         if (matter?.Meta is null || matter.Meta.Count == 0)
             return string.Empty;
 
@@ -179,13 +182,24 @@ public static partial class WebSiteVerifier
 
     private static string ResolveTranslationKey(FrontMatter? matter, string? collectionName, string localizedRelativePath)
     {
+        if (!string.IsNullOrWhiteSpace(matter?.TranslationKey))
+            return matter.TranslationKey.Trim();
+
         if (matter?.Meta is not null)
         {
             if (TryGetMetaString(matter.Meta, "translation_key", out var translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "translationKey", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
             if (TryGetMetaString(matter.Meta, "translation.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
             if (TryGetMetaString(matter.Meta, "i18n.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.translation_key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.translationKey", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.group", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
         }
 
