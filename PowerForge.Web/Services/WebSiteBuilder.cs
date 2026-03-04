@@ -136,6 +136,8 @@ public static partial class WebSiteBuilder
             ReportProgress("building content items");
             var allItems = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
             ReportProgress($"content items: {allItems.Count}");
+            allItems = MaterializeLocalizedFallbackPages(spec, allItems);
+            ReportProgress($"with localized fallback pages: {allItems.Count}");
             allItems.AddRange(BuildTaxonomyItems(spec, allItems));
             ReportProgress($"with taxonomy items: {allItems.Count}");
             allItems = BuildPaginatedItems(spec, allItems);

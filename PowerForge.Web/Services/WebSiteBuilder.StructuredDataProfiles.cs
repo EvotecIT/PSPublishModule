@@ -70,7 +70,9 @@ public static partial class WebSiteBuilder
 
         var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image");
         var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, imageOverride);
-        var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        var image = ResolveAbsoluteUrl(languageBaseUrl, imagePath);
         if (!string.IsNullOrWhiteSpace(image))
             articleModel["image"] = image;
 
@@ -264,14 +266,16 @@ public static partial class WebSiteBuilder
             appModel["softwareVersion"] = version;
 
         var downloadUrl = ReadMetaString(item.Meta, "software.download_url", "software.downloadUrl", "softwareapplication.downloadUrl");
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
         if (!string.IsNullOrWhiteSpace(downloadUrl))
-            appModel["downloadUrl"] = ResolveAbsoluteUrl(spec.BaseUrl, downloadUrl);
+            appModel["downloadUrl"] = ResolveAbsoluteUrl(languageBaseUrl, downloadUrl);
 
         var appImage = ReadMetaString(item.Meta, "software.image", "softwareapplication.image");
         if (string.IsNullOrWhiteSpace(appImage))
             appImage = ReadMetaString(item.Meta, "social_image");
         if (!string.IsNullOrWhiteSpace(appImage))
-            appModel["image"] = ResolveAbsoluteUrl(spec.BaseUrl, appImage);
+            appModel["image"] = ResolveAbsoluteUrl(languageBaseUrl, appImage);
 
         var offer = BuildOfferModel(item.Meta, "software");
         if (offer is not null)
@@ -314,10 +318,12 @@ public static partial class WebSiteBuilder
             productModel["description"] = description;
 
         var image = ReadMetaString(item.Meta, "product.image");
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
         if (string.IsNullOrWhiteSpace(image))
             image = ReadMetaString(item.Meta, "social_image");
         if (!string.IsNullOrWhiteSpace(image))
-            productModel["image"] = ResolveAbsoluteUrl(spec.BaseUrl, image);
+            productModel["image"] = ResolveAbsoluteUrl(languageBaseUrl, image);
 
         var sku = ReadMetaString(item.Meta, "product.sku");
         if (!string.IsNullOrWhiteSpace(sku))

@@ -237,6 +237,8 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(item.Meta, "social", out var enabled) && !enabled)
             return string.Empty;
 
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
         var title = GetMetaString(item.Meta, "social_title");
         if (string.IsNullOrWhiteSpace(title))
             title = ResolveSeoTitle(spec, item);
@@ -246,11 +248,11 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(description))
             description = ResolveMetaDescription(spec, item);
         var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
-        var url = ResolveAbsoluteUrl(spec.BaseUrl, canonicalOrOutput);
+        var url = ResolveAbsoluteUrl(languageBaseUrl, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
         var imageOverride = ResolveSocialImageOverride(item);
         var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
-        var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
+        var image = ResolveAbsoluteUrl(languageBaseUrl, imagePath);
         var (imageWidth, imageHeight) = ResolveSocialImageDimensions(spec, item, imagePath);
         var twitterCard = string.IsNullOrWhiteSpace(spec.Social.TwitterCard) ? "summary" : spec.Social.TwitterCard;
         var twitterSite = NormalizeTwitterHandle(GetMetaString(item.Meta, "social_twitter_site"));
@@ -321,7 +323,9 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(item.Meta, "structured_data", out var enabled) && !enabled)
             return string.Empty;
 
-        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        var baseUrl = languageBaseUrl?.TrimEnd('/') ?? string.Empty;
         var scripts = new List<string>();
 
         if (spec.StructuredData.Breadcrumbs && breadcrumbs.Length > 0)
@@ -344,7 +348,7 @@ public static partial class WebSiteBuilder
             }));
         }
 
-        var pageUrl = ResolveAbsoluteUrl(spec.BaseUrl, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        var pageUrl = ResolveAbsoluteUrl(languageBaseUrl, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
         if (spec.StructuredData.Website && item.Kind == PageKind.Home)
         {
             var webSiteModel = new Dictionary<string, object?>
@@ -357,7 +361,7 @@ public static partial class WebSiteBuilder
 
             if (spec.Features?.Any(feature => feature.Equals("search", StringComparison.OrdinalIgnoreCase)) == true)
             {
-                var searchUrl = ResolveAbsoluteUrl(spec.BaseUrl, "/search/?q={search_term_string}");
+                var searchUrl = ResolveAbsoluteUrl(languageBaseUrl, "/search/?q={search_term_string}");
                 if (!string.IsNullOrWhiteSpace(searchUrl))
                 {
                     webSiteModel["potentialAction"] = new Dictionary<string, object?>
@@ -383,7 +387,7 @@ public static partial class WebSiteBuilder
             if (!string.IsNullOrWhiteSpace(baseUrl))
                 organizationModel["url"] = baseUrl;
 
-            var logo = ResolveAbsoluteUrl(spec.BaseUrl, spec.Social?.Image);
+            var logo = ResolveAbsoluteUrl(languageBaseUrl, spec.Social?.Image);
             if (!string.IsNullOrWhiteSpace(logo))
                 organizationModel["logo"] = logo;
 

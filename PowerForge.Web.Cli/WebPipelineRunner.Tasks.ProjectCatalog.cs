@@ -680,21 +680,38 @@ internal static partial class WebPipelineRunner
             }
 
             var docsEnabled = surfaces.TryGetValue("docs", out var docsSurface) && docsSurface;
+            var legacyDocsRoute = $"/projects/{slug}/docs/";
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(TryGetDictionaryValue(links, "docs"), legacyDocsRoute, StringComparison.OrdinalIgnoreCase))
+            {
+                links["docs"] = $"/docs/{slug}/";
+            }
             if (docsEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "docs")))
             {
                 if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
-                    links["docs"] = $"/projects/{slug}/docs/";
+                    links["docs"] = $"/docs/{slug}/";
                 else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     links["docs"] = project.ExternalUrl.Trim();
             }
 
             var apiPowerShellEnabled = surfaces.TryGetValue("apiPowerShell", out var apiPowerShellSurface) && apiPowerShellSurface;
+            var legacyApiRoute = $"/projects/{slug}/api/";
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(TryGetDictionaryValue(links, "apiPowerShell"), legacyApiRoute, StringComparison.OrdinalIgnoreCase))
+            {
+                links["apiPowerShell"] = $"/api/{slug}/";
+            }
             if (apiPowerShellEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "apiPowerShell")) && mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
-                links["apiPowerShell"] = $"/projects/{slug}/api/";
+                links["apiPowerShell"] = $"/api/{slug}/";
 
             var apiDotNetEnabled = surfaces.TryGetValue("apiDotNet", out var apiDotNetSurface) && apiDotNetSurface;
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(TryGetDictionaryValue(links, "apiDotNet"), legacyApiRoute, StringComparison.OrdinalIgnoreCase))
+            {
+                links["apiDotNet"] = $"/api/{slug}/";
+            }
             if (apiDotNetEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "apiDotNet")) && mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
-                links["apiDotNet"] = $"/projects/{slug}/api/";
+                links["apiDotNet"] = $"/api/{slug}/";
         }
     }
 
@@ -1096,10 +1113,19 @@ internal static partial class WebPipelineRunner
             }
             else
             {
+                var docsLink = TryGetProjectDictionaryValue(project.Links, "docs");
+                var apiLink = TryGetProjectDictionaryValue(project.Links, "apiPowerShell");
+                if (string.IsNullOrWhiteSpace(apiLink))
+                    apiLink = TryGetProjectDictionaryValue(project.Links, "apiDotNet");
+                if (string.IsNullOrWhiteSpace(docsLink))
+                    docsLink = $"/docs/{slug}/";
+                if (string.IsNullOrWhiteSpace(apiLink))
+                    apiLink = $"/api/{slug}/";
+
                 lines.Add("This project is hosted as part of the main hub website.");
                 lines.Add(string.Empty);
-                lines.Add($"- Docs: /projects/{slug}/docs/");
-                lines.Add($"- API: /projects/{slug}/api/");
+                lines.Add($"- Docs: {docsLink}");
+                lines.Add($"- API: {apiLink}");
                 if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     lines.Add($"- External website: [{project.ExternalUrl}]({project.ExternalUrl})");
                 lines.Add(string.Empty);
@@ -1241,7 +1267,21 @@ internal static partial class WebPipelineRunner
 
                 if (section.Equals("docs", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (project.Links is not null && project.Links.TryGetValue("docs", out var docsLink) && !string.IsNullOrWhiteSpace(docsLink))
+                    var docsLink = string.Empty;
+                    var apiLink = string.Empty;
+                    if (project.Links is not null)
+                    {
+                        project.Links.TryGetValue("docs", out docsLink);
+                        project.Links.TryGetValue("apiPowerShell", out apiLink);
+                        if (string.IsNullOrWhiteSpace(apiLink))
+                            project.Links.TryGetValue("apiDotNet", out apiLink);
+                    }
+                    if (string.IsNullOrWhiteSpace(docsLink))
+                        docsLink = $"/docs/{slug}/";
+                    if (string.IsNullOrWhiteSpace(apiLink))
+                        apiLink = $"/api/{slug}/";
+
+                    if (!string.IsNullOrWhiteSpace(docsLink))
                         lines.Add($"Documentation is available at [{docsLink}]({docsLink}).");
                     else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                         lines.Add("This project is hosted externally. Documentation is published on the project website.");
@@ -1249,10 +1289,16 @@ internal static partial class WebPipelineRunner
                         lines.Add("Documentation for this project is being prepared.");
                     lines.Add(string.Empty);
                     lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
-                    lines.Add($"- API: [/projects/{slug}/api/](/projects/{slug}/api/)");
+                    lines.Add($"- API: [{apiLink}]({apiLink})");
                 }
                 else
                 {
+                    var docsLink = string.Empty;
+                    if (project.Links is not null)
+                        project.Links.TryGetValue("docs", out docsLink);
+                    if (string.IsNullOrWhiteSpace(docsLink))
+                        docsLink = $"/docs/{slug}/";
+
                     var hasApi = false;
                     if (project.Links is not null && project.Links.TryGetValue("apiPowerShell", out var psApi) && !string.IsNullOrWhiteSpace(psApi))
                     {
@@ -1273,7 +1319,7 @@ internal static partial class WebPipelineRunner
                     }
                     lines.Add(string.Empty);
                     lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
-                    lines.Add($"- Docs: [/projects/{slug}/docs/](/projects/{slug}/docs/)");
+                    lines.Add($"- Docs: [{docsLink}]({docsLink})");
                 }
 
                 if (!string.IsNullOrWhiteSpace(project.GitHubRepo))

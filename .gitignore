@@ -390,3 +390,4 @@ FodyWeavers.xsd
 /.idea/
 CLAUDE.md
 .claude/*
+_temp/

@@ -117,6 +117,48 @@ internal static partial class WebPipelineRunner
             case "sources-sync":
                 ExecuteSourcesSync(step, baseDir, logger, stepResult);
                 break;
+            case "ecosystem-stats":
+            case "ecosystemstats":
+                ExecuteEcosystemStats(step, baseDir, stepResult);
+                break;
+            case "search-index-export":
+            case "search-index":
+            case "search-export":
+                ExecuteSearchIndexExport(step, baseDir, stepResult);
+                break;
+            case "project-docs-sync":
+            case "sync-project-docs":
+            case "project-docs":
+                ExecuteProjectDocsSync(step, baseDir, stepResult);
+                break;
+            case "project-catalog":
+            case "projectcatalog":
+                ExecuteProjectCatalog(step, baseDir, stepResult);
+                break;
+            case "apache-redirects":
+            case "apache-redirect":
+                ExecuteApacheRedirects(step, baseDir, stepResult);
+                break;
+            case "wordpress-normalize":
+            case "wordpress-normalize-content":
+            case "normalize-wordpress-content":
+                ExecuteWordPressNormalize(step, baseDir, stepResult);
+                break;
+            case "wordpress-media-sync":
+            case "wordpress-sync-media":
+            case "sync-wordpress-media":
+                ExecuteWordPressMediaSync(step, baseDir, stepResult);
+                break;
+            case "wordpress-import-snapshot":
+            case "wordpress-snapshot-import":
+            case "import-wordpress-snapshot":
+                ExecuteWordPressImportSnapshot(step, baseDir, stepResult);
+                break;
+            case "wordpress-export-snapshot":
+            case "wordpress-snapshot-export":
+            case "export-wordpress-snapshot":
+                ExecuteWordPressExportSnapshot(step, baseDir, stepResult);
+                break;
             default:
                 stepResult.Success = false;
                 stepResult.Message = "Unknown task";

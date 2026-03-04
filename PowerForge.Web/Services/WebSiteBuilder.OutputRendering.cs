@@ -72,8 +72,10 @@ public static partial class WebSiteBuilder
         var criticalCss = RenderCriticalCss(assetRegistry, rootPath, renderCache);
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
+        var localizationConfig = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localizationConfig, item.Language);
         var canonicalRoute = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
-        var canonicalUrl = ResolveAbsoluteUrl(spec.BaseUrl, canonicalRoute);
+        var canonicalUrl = ResolveAbsoluteUrl(languageBaseUrl, canonicalRoute);
         var canonical = string.IsNullOrWhiteSpace(canonicalUrl)
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
@@ -383,6 +385,8 @@ public static partial class WebSiteBuilder
         if (formats.Count == 0)
             return Array.Empty<OutputRuntime>();
 
+        var localization = ResolveLocalizationConfig(spec);
+        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
         var outputs = formats
             .Where(format => format is not null && !string.IsNullOrWhiteSpace(format.Name))
             .Select(format =>
@@ -391,7 +395,7 @@ public static partial class WebSiteBuilder
                 var route = ResolveOutputRoute(item.OutputPath, format);
                 var url = string.IsNullOrWhiteSpace(route)
                     ? string.Empty
-                    : (string.IsNullOrWhiteSpace(spec.BaseUrl) ? route : CombineAbsoluteUrl(spec.BaseUrl, route));
+                    : (string.IsNullOrWhiteSpace(languageBaseUrl) ? route : CombineAbsoluteUrl(languageBaseUrl, route));
                 return new OutputRuntime
                 {
                     Name = name.ToLowerInvariant(),
@@ -495,6 +499,7 @@ public static partial class WebSiteBuilder
             ["kind"] = item.Kind.ToString().ToLowerInvariant(),
             ["collection"] = item.Collection,
             ["tags"] = item.Tags,
+            ["categories"] = ResolveRssCategories(item).ToArray(),
             ["date"] = item.Date?.ToString("O"),
             ["content"] = item.HtmlContent,
             ["items"] = listItems.Select(i => new Dictionary<string, object?>
@@ -503,7 +508,8 @@ public static partial class WebSiteBuilder
                 ["url"] = i.OutputPath,
                 ["description"] = i.Description,
                 ["date"] = i.Date?.ToString("O"),
-                ["tags"] = i.Tags
+                ["tags"] = i.Tags,
+                ["categories"] = ResolveRssCategories(i).ToArray()
             }).ToList()
         };
 
@@ -516,7 +522,8 @@ public static partial class WebSiteBuilder
         var maxItems = feedSpec?.MaxItems ?? 0;
         var includeContent = feedSpec?.IncludeContent == true;
         var includeCategories = feedSpec?.IncludeCategories != false;
-        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
         var channelTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
         var channelLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
         var channelDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
@@ -578,7 +585,8 @@ public static partial class WebSiteBuilder
         var maxItems = feedSpec?.MaxItems ?? 0;
         var includeContent = feedSpec?.IncludeContent == true;
         var includeCategories = feedSpec?.IncludeCategories != false;
-        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
         var feedTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
         var feedDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "atom", Suffix = "atom.xml" });
@@ -646,7 +654,8 @@ public static partial class WebSiteBuilder
         var maxItems = feedSpec?.MaxItems ?? 0;
         var includeContent = feedSpec?.IncludeContent == true;
         var includeCategories = feedSpec?.IncludeCategories != false;
-        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var localization = ResolveLocalizationConfig(spec);
+        var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "jsonfeed", Suffix = "feed.json" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
         var homePageUrl = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
@@ -733,6 +742,12 @@ public static partial class WebSiteBuilder
                 categories.Add(tag.Trim());
         }
 
+        foreach (var category in item.Categories ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(category))
+                categories.Add(category.Trim());
+        }
+
         foreach (var value in GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }))
         {
             if (!string.IsNullOrWhiteSpace(value))
@@ -765,6 +780,9 @@ public static partial class WebSiteBuilder
 
     private static IReadOnlyList<ContentItem> ResolveListItems(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
+        var localization = ResolveLocalizationConfig(spec);
+        var itemLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+
         if (item.Kind == PageKind.Section)
         {
             var sectionRoot = item.OutputPath;
@@ -799,6 +817,8 @@ public static partial class WebSiteBuilder
             return items
                 .Where(i => i.Kind == PageKind.Term)
                 .Where(i => string.Equals(GetMetaString(i.Meta, "taxonomy"), taxonomy, StringComparison.OrdinalIgnoreCase))
+                .Where(i => ResolveEffectiveLanguageCode(localization, i.Language)
+                    .Equals(itemLanguage, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -813,6 +833,8 @@ public static partial class WebSiteBuilder
             var termItems = items
                 .Where(i => !i.Draft)
                 .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+                .Where(i => ResolveEffectiveLanguageCode(localization, i.Language)
+                    .Equals(itemLanguage, StringComparison.OrdinalIgnoreCase))
                 .Where(i => GetTaxonomyValues(i, new TaxonomySpec { Name = taxonomy }).Any(t =>
                     string.Equals(t, term, StringComparison.OrdinalIgnoreCase)))
                 .ToList();

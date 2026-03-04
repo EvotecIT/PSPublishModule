@@ -144,6 +144,61 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedFallbackPages_KeepLocalizedRoutesAndCanonicalizeToDefaultLanguage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateDefaultLanguageOnlyDocsContent(root);
+            CreateSimpleTheme(root, "localization-fallback-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Fallback Build Test", "localization-fallback-theme");
+            spec.Localization!.FallbackToDefaultLanguage = true;
+            spec.Localization.MaterializeFallbackPages = true;
+            spec.Localization.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec);
+
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+            Assert.True(File.Exists(plHtmlPath));
+
+            var enHtml = File.ReadAllText(enHtmlPath);
+            var plHtml = File.ReadAllText(plHtmlPath);
+
+            Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs", enHtml, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs", plHtml, StringComparison.OrdinalIgnoreCase);
+
+            var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
+            Assert.True(File.Exists(allSearchPath));
+            var entries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
+            Assert.Contains(entries, entry =>
+                string.Equals(entry.GetProperty("url").GetString()?.TrimEnd('/'), "/docs", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.GetProperty("language").GetString(), "en", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(entries, entry =>
+                string.Equals(entry.GetProperty("url").GetString()?.TrimEnd('/'), "/pl/docs", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.GetProperty("language").GetString(), "pl", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(entries, entry =>
+                string.Equals(entry.GetProperty("url").GetString()?.TrimEnd('/'), "/pl/docs", StringComparison.OrdinalIgnoreCase) &&
+                entry.TryGetProperty("meta", out var meta) &&
+                meta.TryGetProperty("i18n.fallback_copy", out var fallbackFlag) &&
+                fallbackFlag.ValueKind == JsonValueKind.True);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Sitemap_Generate_FromEntriesJson_ProducesJsonAndThemedHtmlMap()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-json-" + Guid.NewGuid().ToString("N"));
@@ -321,6 +376,198 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains(alternates, alt =>
                 string.Equals(alt.HrefLang, "x-default", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(alt.Href, "https://evotec.xyz/docs/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedPages_RespectExplicitI18nRoutes_WhenTranslationKeysDiffer()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-explicit-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsEnPath);
+            Directory.CreateDirectory(docsPlPath);
+
+            File.WriteAllText(Path.Combine(docsEnPath, "faq.md"),
+                """
+                ---
+                title: FAQ EN
+                slug: faq-english
+                translation_key: docs:faq-en
+                i18n.routes.pl: /pl/docs/faq-polski/
+                ---
+
+                # FAQ EN
+                """);
+
+            File.WriteAllText(Path.Combine(docsPlPath, "faq.md"),
+                """
+                ---
+                title: FAQ PL
+                slug: faq-polski
+                translation_key: docs:faq-pl
+                i18n.routes.en: /docs/faq-english/
+                ---
+
+                # FAQ PL
+                """);
+
+            CreateSimpleTheme(root, "localization-explicit-routes-theme", "docs");
+            var spec = CreateLocalizedDocsSpec("Localization Explicit Route Test", "localization-explicit-routes-theme");
+            var result = BuildSite(root, spec);
+
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "faq-english", "index.html");
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "faq-polski", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+            Assert.True(File.Exists(plHtmlPath));
+
+            var enHtml = File.ReadAllText(enHtmlPath);
+            var plHtml = File.ReadAllText(plHtmlPath);
+            Assert.Contains("hreflang=\"pl\" href=\"https://example.test/pl/docs/faq-polski/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"en\" href=\"https://example.test/docs/faq-english/\"", plHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedPages_ApplyPerLanguageAliases_ToRedirects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-language-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsEnPath);
+            Directory.CreateDirectory(docsPlPath);
+
+            File.WriteAllText(Path.Combine(docsEnPath, "index.md"),
+                """
+                ---
+                title: Docs EN
+                ---
+
+                # Docs EN
+                """);
+
+            File.WriteAllText(Path.Combine(docsPlPath, "faq.md"),
+                """
+                ---
+                title: FAQ PL
+                slug: faq-polski
+                aliases:
+                  - /legacy/shared-faq/
+                i18n.aliases.pl:
+                  - /pl/legacy/faq/
+                i18n.aliases.en:
+                  - /docs/legacy-faq-en/
+                ---
+
+                # FAQ PL
+                """);
+
+            CreateSimpleTheme(root, "localization-language-aliases-theme", "docs");
+            var spec = CreateLocalizedDocsSpec("Localization Language Alias Test", "localization-language-aliases-theme");
+            var result = BuildSite(root, spec);
+
+            Assert.True(File.Exists(result.RedirectsPath));
+            using var redirectsDoc = JsonDocument.Parse(File.ReadAllText(result.RedirectsPath));
+            var redirects = redirectsDoc.RootElement.GetProperty("redirects").EnumerateArray().ToArray();
+
+            static bool HasRedirect(JsonElement[] rows, string from, string to) =>
+                rows.Any(row =>
+                    string.Equals(row.GetProperty("from").GetString(), from, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(row.GetProperty("to").GetString(), to, StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(HasRedirect(redirects, "/legacy/shared-faq", "/pl/docs/faq-polski/"));
+            Assert.True(HasRedirect(redirects, "/pl/legacy/faq", "/pl/docs/faq-polski/"));
+            Assert.False(HasRedirect(redirects, "/docs/legacy-faq-en", "/pl/docs/faq-polski/"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedPages_SupportNestedLocalizationBlocks_ForRoutesAndAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-nested-blocks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsEnPath);
+            Directory.CreateDirectory(docsPlPath);
+
+            File.WriteAllText(Path.Combine(docsEnPath, "faq.md"),
+                """
+                ---
+                title: FAQ EN
+                slug: faq-english
+                i18n:
+                  group: docs:faq-en
+                translations:
+                  pl:
+                    route: /pl/docs/faq-polski/
+                  en:
+                    aliases:
+                      - /docs/stare-faq/
+                ---
+
+                # FAQ EN
+                """);
+
+            File.WriteAllText(Path.Combine(docsPlPath, "faq.md"),
+                """
+                ---
+                title: FAQ PL
+                slug: faq-polski
+                i18n:
+                  group: docs:faq-pl
+                translations:
+                  en:
+                    route: /docs/faq-english/
+                ---
+
+                # FAQ PL
+                """);
+
+            CreateSimpleTheme(root, "localization-nested-blocks-theme", "docs");
+            var spec = CreateLocalizedDocsSpec("Localization Nested Blocks Test", "localization-nested-blocks-theme");
+            var result = BuildSite(root, spec);
+
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "faq-english", "index.html");
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "faq-polski", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+            Assert.True(File.Exists(plHtmlPath));
+
+            var enHtml = File.ReadAllText(enHtmlPath);
+            Assert.Contains("hreflang=\"pl\" href=\"https://example.test/pl/docs/faq-polski/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+
+            Assert.True(File.Exists(result.RedirectsPath));
+            using var redirectsDoc = JsonDocument.Parse(File.ReadAllText(result.RedirectsPath));
+            var redirects = redirectsDoc.RootElement.GetProperty("redirects").EnumerateArray().ToArray();
+            Assert.Contains(redirects, row =>
+                string.Equals(row.GetProperty("from").GetString(), "/docs/stare-faq", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(row.GetProperty("to").GetString(), "/docs/faq-english/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -579,6 +826,20 @@ public class WebSiteLocalizationFeaturesTests
             ---
 
             # Docs PL
+            """);
+    }
+
+    private static void CreateDefaultLanguageOnlyDocsContent(string root)
+    {
+        var docsEnPath = Path.Combine(root, "content", "docs", "en");
+        Directory.CreateDirectory(docsEnPath);
+        File.WriteAllText(Path.Combine(docsEnPath, "index.md"),
+            """
+            ---
+            title: Docs EN
+            ---
+
+            # Docs EN
             """);
     }
 }

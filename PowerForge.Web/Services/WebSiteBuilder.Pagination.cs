@@ -279,6 +279,7 @@ public static partial class WebSiteBuilder
             Order = item.Order,
             Slug = item.Slug,
             Tags = item.Tags,
+            Categories = item.Categories,
             Aliases = item.Aliases,
             Draft = item.Draft,
             Canonical = item.Canonical,

@@ -40,6 +40,24 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("git-sync", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("wordpress-media-sync", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("wordpress-sync-media", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("sync-wordpress-media", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("wordpress-import-snapshot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("wordpress-snapshot-import", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("import-wordpress-snapshot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("wordpress-export-snapshot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("wordpress-snapshot-export", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("export-wordpress-snapshot", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         return true;
     }
@@ -668,6 +686,223 @@ internal static partial class WebPipelineRunner
                         outputs.AddRange(ResolveOutputCandidates(baseDir, sarifPath));
                     }
                 }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "ecosystem-stats":
+            case "ecosystemstats":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    "./data/ecosystem/stats.json"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "publishPath") ??
+                    GetString(step, "publish-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "search-index-export":
+            case "search-index":
+            case "search-export":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    "./_site/search-index.json"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/generate-search-index-last-run.json"));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "project-docs-sync":
+            case "sync-project-docs":
+            case "project-docs":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "contentRoot") ??
+                    GetString(step, "content-root") ??
+                    "./content/docs"));
+                var syncApi = GetBool(step, "syncApi") ?? GetBool(step, "sync-api") ?? false;
+                if (syncApi)
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir,
+                        GetString(step, "apiRoot") ??
+                        GetString(step, "api-root") ??
+                        "./data/apidocs"));
+                }
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/sync-project-docs-last-run.json"));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "project-catalog":
+            case "projectcatalog":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "catalog") ??
+                    GetString(step, "catalogPath") ??
+                    GetString(step, "catalog-path") ??
+                    "./data/projects/catalog.json"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "publishPath") ??
+                    GetString(step, "publish-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+
+                var generatePages = GetBool(step, "generatePages") ?? GetBool(step, "generate-pages") ?? true;
+                var generateSections = GetBool(step, "generateSections") ?? GetBool(step, "generate-sections") ?? true;
+                if (generatePages || generateSections)
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir,
+                        GetString(step, "contentRoot") ??
+                        GetString(step, "content-root") ??
+                        "./content/projects"));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "apache-redirects":
+            case "apache-redirect":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "destination") ??
+                    GetString(step, "dest") ??
+                    "./deploy/apache/wordpress-redirects.conf"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "wordpress-normalize":
+            case "wordpress-normalize-content":
+            case "normalize-wordpress-content":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/normalize-wordpress-last-run.json"));
+
+                var targets = GetArrayOfStrings(step, "targets") ??
+                              GetArrayOfStrings(step, "paths");
+                if (targets is { Length: > 0 })
+                {
+                    foreach (var target in targets.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, target));
+                }
+                else
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/blog"));
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/pages"));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "wordpress-media-sync":
+            case "wordpress-sync-media":
+            case "sync-wordpress-media":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/sync-wordpress-media-last-run.json"));
+
+                var targets = GetArrayOfStrings(step, "targets") ??
+                              GetArrayOfStrings(step, "paths");
+                if (targets is { Length: > 0 })
+                {
+                    foreach (var target in targets.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, target));
+                }
+                else
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/blog"));
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/pages"));
+                }
+
+                outputs.AddRange(ResolveOutputCandidates(baseDir, "./static/wp-content/uploads"));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "wordpress-import-snapshot":
+            case "wordpress-snapshot-import":
+            case "import-wordpress-snapshot":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/import-wordpress-last-run.json"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "redirectCsvPath") ??
+                    GetString(step, "redirect-csv-path") ??
+                    "./data/redirects/legacy-wordpress-generated.csv"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/blog"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, "./content/pages"));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "wordpress-export-snapshot":
+            case "wordpress-snapshot-export":
+            case "export-wordpress-snapshot":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "destination") ??
+                    GetString(step, "dest") ??
+                    GetString(step, "path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "manifestPath") ??
+                    GetString(step, "manifest-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)
