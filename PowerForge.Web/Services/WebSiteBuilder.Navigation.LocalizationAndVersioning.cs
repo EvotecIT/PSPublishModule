@@ -67,6 +67,12 @@ public static partial class WebSiteBuilder
         string targetLanguage,
         string currentLanguage)
     {
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        var resolvedCurrentLanguage = ResolveEffectiveLanguageCode(localization, currentLanguage);
+
+        if (TryResolveExplicitLocalizedRoute(spec, localization, page, resolvedTargetLanguage, out var explicitRoute))
+            return explicitRoute;
+
         if (allItems.Count > 0 && !string.IsNullOrWhiteSpace(page.TranslationKey))
         {
             var translated = allItems
@@ -75,19 +81,109 @@ public static partial class WebSiteBuilder
                 .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
                 .FirstOrDefault(i =>
                     i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
-                    ResolveEffectiveLanguageCode(localization, i.Language).Equals(targetLanguage, StringComparison.OrdinalIgnoreCase));
+                    ResolveEffectiveLanguageCode(localization, i.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase));
             if (translated is not null)
                 return translated.OutputPath;
+
+            if (localization.FallbackToDefaultLanguage &&
+                !resolvedTargetLanguage.Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                var fallback = allItems
+                    .Where(i => !i.Draft)
+                    .Where(i => string.Equals(i.ProjectSlug ?? string.Empty, page.ProjectSlug ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                    .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
+                    .FirstOrDefault(i =>
+                        i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
+                        ResolveEffectiveLanguageCode(localization, i.Language).Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase));
+                if (fallback is not null)
+                {
+                    if (localization.MaterializeFallbackPages)
+                    {
+                        var fallbackBaseRoute = StripLanguagePrefix(localization, fallback.OutputPath);
+                        return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
+                    }
+                    return fallback.OutputPath;
+                }
+            }
         }
 
         var baseRoute = StripLanguagePrefix(localization, page.OutputPath);
         if (string.IsNullOrWhiteSpace(baseRoute))
             baseRoute = "/";
 
-        if (!ResolveEffectiveLanguageCode(localization, targetLanguage).Equals(currentLanguage, StringComparison.OrdinalIgnoreCase))
-            return ApplyLanguagePrefixToRoute(spec, baseRoute, targetLanguage);
+        if (!resolvedTargetLanguage.Equals(resolvedCurrentLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            if (localization.FallbackToDefaultLanguage)
+            {
+                // When fallback pages are materialized, keep the requested language route
+                // (for example /pl/projects/) while canonical points to default-language source.
+                if (localization.MaterializeFallbackPages)
+                    return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
 
-        return ApplyLanguagePrefixToRoute(spec, baseRoute, currentLanguage);
+                return ApplyLanguagePrefixToRoute(spec, baseRoute, localization.DefaultLanguage);
+            }
+            return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
+        }
+
+        return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedCurrentLanguage);
+    }
+
+    private static bool TryResolveExplicitLocalizedRoute(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        string targetLanguage,
+        out string route)
+    {
+        route = string.Empty;
+        if (page.Meta is null || page.Meta.Count == 0 || string.IsNullOrWhiteSpace(targetLanguage))
+            return false;
+
+        foreach (var key in BuildLocalizedRouteMetaKeys(targetLanguage))
+        {
+            if (!TryGetMetaString(page.Meta, key, out var raw) || string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var trimmed = raw.Trim();
+            if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                route = trimmed;
+                return true;
+            }
+
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+                trimmed = "/" + trimmed.TrimStart('/');
+
+            route = EnsureTrailingSlash(trimmed, spec.TrailingSlash);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> BuildLocalizedRouteMetaKeys(string languageCode)
+    {
+        var normalized = NormalizeLanguageToken(languageCode);
+        if (string.IsNullOrWhiteSpace(normalized))
+            yield break;
+
+        var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { normalized };
+        if (normalized.Contains('-', StringComparison.Ordinal))
+            variants.Add(normalized.Replace('-', '_'));
+        if (normalized.Contains('_', StringComparison.Ordinal))
+            variants.Add(normalized.Replace('_', '-'));
+
+        foreach (var variant in variants)
+        {
+            yield return $"i18n.routes.{variant}";
+            yield return $"i18n.route.{variant}";
+            yield return $"i18n.urls.{variant}";
+            yield return $"i18n.url.{variant}";
+            yield return $"translations.{variant}.route";
+            yield return $"translations.{variant}.url";
+            yield return $"translations.{variant}.path";
+        }
     }
 
     private static string ResolveItemLanguage(
@@ -127,6 +223,9 @@ public static partial class WebSiteBuilder
 
     private static string ResolveLanguageFromFrontMatter(FrontMatter? matter)
     {
+        if (!string.IsNullOrWhiteSpace(matter?.Language))
+            return NormalizeLanguageToken(matter.Language);
+
         if (matter?.Meta is null || matter.Meta.Count == 0)
             return string.Empty;
 
@@ -144,13 +243,24 @@ public static partial class WebSiteBuilder
 
     private static string ResolveTranslationKey(FrontMatter? matter, string? collectionName, string localizedRelativePath)
     {
+        if (!string.IsNullOrWhiteSpace(matter?.TranslationKey))
+            return matter.TranslationKey.Trim();
+
         if (matter?.Meta is not null)
         {
             if (TryGetMetaString(matter.Meta, "translation_key", out var translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "translationKey", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
             if (TryGetMetaString(matter.Meta, "translation.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
             if (TryGetMetaString(matter.Meta, "i18n.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.translation_key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.translationKey", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.group", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
                 return translationKey.Trim();
         }
 
@@ -316,6 +426,8 @@ public static partial class WebSiteBuilder
             Enabled = localizationSpec?.Enabled == true && byCode.Count > 0,
             DetectFromPath = localizationSpec?.DetectFromPath ?? true,
             PrefixDefaultLanguage = localizationSpec?.PrefixDefaultLanguage == true,
+            FallbackToDefaultLanguage = localizationSpec?.FallbackToDefaultLanguage == true,
+            MaterializeFallbackPages = localizationSpec?.MaterializeFallbackPages == true,
             DefaultLanguage = explicitDefault.Code,
             Languages = entries.ToArray(),
             ByCode = byCode,
@@ -395,6 +507,8 @@ public static partial class WebSiteBuilder
         public bool Enabled { get; init; }
         public bool DetectFromPath { get; init; }
         public bool PrefixDefaultLanguage { get; init; }
+        public bool FallbackToDefaultLanguage { get; init; }
+        public bool MaterializeFallbackPages { get; init; }
         public string DefaultLanguage { get; init; } = "en";
         public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
         public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);

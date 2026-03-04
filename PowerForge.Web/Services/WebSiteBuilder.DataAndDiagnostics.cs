@@ -65,6 +65,10 @@ public static partial class WebSiteBuilder
     {
         if (string.IsNullOrWhiteSpace(projectSlug))
             return data;
+
+        var buildCache = BuildProjectDataCacheScope.Value;
+        if (buildCache is not null && buildCache.TryGetValue(projectSlug, out var cached))
+            return cached;
         if (!data.TryGetValue("projects", out var projectsObj) || projectsObj is not IReadOnlyDictionary<string, object?> projects)
             return data;
         if (!projects.TryGetValue(projectSlug, out var projectData))
@@ -74,6 +78,8 @@ public static partial class WebSiteBuilder
         foreach (var kvp in data)
             merged[kvp.Key] = kvp.Value;
         merged["project"] = projectData;
+        if (buildCache is not null)
+            buildCache[projectSlug] = merged;
         return merged;
     }
 
@@ -645,6 +651,7 @@ public static partial class WebSiteBuilder
 
             var snippet = BuildSnippet(item.HtmlContent, 240);
             var normalizedLanguage = NormalizeLanguageToken(item.Language);
+            var categories = ResolveSearchCategories(item);
             entries.Add(new SearchIndexEntry
             {
                 Title = item.Title,
@@ -656,6 +663,7 @@ public static partial class WebSiteBuilder
                 Weight = ResolveSearchWeight(item.Kind, item.Collection),
                 SearchText = BuildSearchText(item, snippet),
                 Tags = item.Tags,
+                Categories = categories,
                 Project = item.ProjectSlug,
                 Language = normalizedLanguage,
                 TranslationKey = item.TranslationKey,
@@ -742,6 +750,49 @@ public static partial class WebSiteBuilder
 
         if (HasFeature(spec.Features, "search"))
             EnsureSearchPage(outputRoot, entries);
+    }
+
+    private static string[] ResolveSearchCategories(ContentItem item)
+    {
+        if (item is null)
+            return Array.Empty<string>();
+
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (item.Categories is { Length: > 0 })
+        {
+            foreach (var category in item.Categories)
+            {
+                if (!string.IsNullOrWhiteSpace(category))
+                    categories.Add(category.Trim());
+            }
+        }
+
+        if (item.Meta is not null &&
+            TryGetMetaValue(item.Meta, "categories", out var metaCategories) &&
+            metaCategories is not null)
+        {
+            if (metaCategories is string singleCategory)
+            {
+                foreach (var token in singleCategory.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!string.IsNullOrWhiteSpace(token))
+                        categories.Add(token.Trim());
+                }
+            }
+            else if (metaCategories is IEnumerable<object?> list)
+            {
+                foreach (var entry in list)
+                {
+                    var token = entry?.ToString();
+                    if (!string.IsNullOrWhiteSpace(token))
+                        categories.Add(token.Trim());
+                }
+            }
+        }
+
+        return categories
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static void WriteLinkCheckReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)

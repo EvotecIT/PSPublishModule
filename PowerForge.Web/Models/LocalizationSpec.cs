@@ -15,6 +15,19 @@ public sealed class LocalizationSpec
     /// <summary>When true, engine can infer language from first folder segment.</summary>
     public bool DetectFromPath { get; set; } = true;
 
+    /// <summary>
+    /// When true, language switcher routes fall back to the default-language page
+    /// when the requested translation does not exist.
+    /// </summary>
+    public bool FallbackToDefaultLanguage { get; set; }
+
+    /// <summary>
+    /// When true and <see cref="FallbackToDefaultLanguage"/> is enabled, the engine materializes
+    /// fallback pages under each configured language route (for example <c>/pl/projects/...</c>)
+    /// using default-language content until native translations are added.
+    /// </summary>
+    public bool MaterializeFallbackPages { get; set; }
+
     /// <summary>Configured languages.</summary>
     public LanguageSpec[] Languages { get; set; } = Array.Empty<LanguageSpec>();
 }

@@ -90,6 +90,8 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web release-hub --out <file> [--source auto|file|github] [--repo <owner/name>] [--repo-url <url>]");
         Console.WriteLine("                     [--releases-path <file>] [--changelog <file>] [--token <token>] [--token-env <name>]");
         Console.WriteLine("                     [--max <n>] [--page-size <n>] [--max-pages <n>] [--title <text>]");
+        Console.WriteLine("  powerforge-web ecosystem-stats --out <file> [--github-org <org>] [--github-token <token>] [--github-token-env <name>]");
+        Console.WriteLine("                     [--nuget-owner <name>] [--psgallery-owner <name>] [--psgallery-author <name>] [--max-items <n>] [--timeout-seconds <n>] [--title <text>] [--output json]");
         Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
         Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
         Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");

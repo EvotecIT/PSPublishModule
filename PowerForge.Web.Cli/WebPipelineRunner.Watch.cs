@@ -289,8 +289,14 @@ internal static partial class WebPipelineRunner
         HashSet<string>? onlyTasks,
         HashSet<string>? skipTasks)
     {
-        if (!ShouldExecuteTask(task, onlyTasks, skipTasks))
-            return skipTasks is not null && skipTasks.Contains(task) ? "skip" : "only";
+        var id = GetString(step, "id");
+        if (!ShouldExecuteTask(task, id, onlyTasks, skipTasks))
+        {
+            var skipped = skipTasks is not null &&
+                          (skipTasks.Contains(task) ||
+                           (!string.IsNullOrWhiteSpace(id) && skipTasks.Contains(id)));
+            return skipped ? "skip" : "only";
+        }
 
         if (!ShouldExecuteStepMode(step, effectiveMode))
             return $"mode={effectiveMode}";
@@ -298,13 +304,18 @@ internal static partial class WebPipelineRunner
         return null;
     }
 
-    private static bool ShouldExecuteTask(string task, HashSet<string>? onlyTasks, HashSet<string>? skipTasks)
+    private static bool ShouldExecuteTask(string task, string? id, HashSet<string>? onlyTasks, HashSet<string>? skipTasks)
     {
-        if (skipTasks is not null && skipTasks.Contains(task))
+        var hasId = !string.IsNullOrWhiteSpace(id);
+        if (skipTasks is not null &&
+            (skipTasks.Contains(task) || (hasId && skipTasks.Contains(id!))))
+        {
             return false;
+        }
+
         if (onlyTasks is null || onlyTasks.Count == 0)
             return true;
-        return onlyTasks.Contains(task);
+        return onlyTasks.Contains(task) || (hasId && onlyTasks.Contains(id!));
     }
 
     private static bool ShouldExecuteStepMode(JsonElement step, string effectiveMode)

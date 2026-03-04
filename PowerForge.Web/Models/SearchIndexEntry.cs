@@ -21,6 +21,8 @@ public sealed class SearchIndexEntry
     public string SearchText { get; set; } = string.Empty;
     /// <summary>Tag list used for filtering.</summary>
     public string[] Tags { get; set; } = Array.Empty<string>();
+    /// <summary>Category list used for filtering.</summary>
+    public string[] Categories { get; set; } = Array.Empty<string>();
     /// <summary>Optional project slug.</summary>
     public string? Project { get; set; }
     /// <summary>Resolved page language (for example en/pl).</summary>

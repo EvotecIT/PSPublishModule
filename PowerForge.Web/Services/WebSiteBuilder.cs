@@ -28,6 +28,9 @@ public static partial class WebSiteBuilder
     private static readonly Regex CodeBlockRegex = new("<pre(?<preAttrs>[^>]*)>\\s*<code(?<codeAttrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly AsyncLocal<BuildLanguageContext?> BuildLanguageContextScope = new();
+    private static readonly AsyncLocal<BuildRenderCache?> BuildRenderCacheScope = new();
+    private static readonly AsyncLocal<Action<string>?> BuildProgressSink = new();
+    private static readonly AsyncLocal<Dictionary<string, IReadOnlyDictionary<string, object?>>?> BuildProjectDataCacheScope = new();
     /// <summary>Builds the site output.</summary>
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
@@ -35,6 +38,7 @@ public static partial class WebSiteBuilder
     /// <param name="options">Optional JSON serializer options.</param>
     /// <param name="language">Optional language code filter (for example: en, pl).</param>
     /// <param name="languageAsRoot">When true and language is set, render selected language routes without language prefix.</param>
+    /// <param name="progress">Optional progress sink for long-running build phases.</param>
     /// <returns>Result payload describing the build output.</returns>
     public static WebBuildResult Build(
         SiteSpec spec,
@@ -42,7 +46,8 @@ public static partial class WebSiteBuilder
         string outputPath,
         JsonSerializerOptions? options = null,
         string? language = null,
-        bool languageAsRoot = false)
+        bool languageAsRoot = false,
+        Action<string>? progress = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -61,6 +66,21 @@ public static partial class WebSiteBuilder
 
         var updated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var normalizedOut = NormalizeRootPathForSink(outDir);
+        var buildStopwatch = Stopwatch.StartNew();
+        void ReportProgress(string message)
+        {
+            if (progress is null || string.IsNullOrWhiteSpace(message))
+                return;
+
+            try
+            {
+                progress($"[{buildStopwatch.Elapsed:mm\\:ss}] {message}");
+            }
+            catch
+            {
+                // Progress reporting must never break the build flow.
+            }
+        }
         void MarkUpdated(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
@@ -72,66 +92,131 @@ public static partial class WebSiteBuilder
 
         var prevSink = UpdatedSink.Value;
         var prevBuildLanguageContext = BuildLanguageContextScope.Value;
+        var prevBuildRenderCache = BuildRenderCacheScope.Value;
+        var prevBuildProgressSink = BuildProgressSink.Value;
+        var prevBuildProjectDataCache = BuildProjectDataCacheScope.Value;
         UpdatedSink.Value = MarkUpdated;
         BuildLanguageContextScope.Value = new BuildLanguageContext
         {
             Language = language,
             LanguageAsRoot = languageAsRoot
         };
+        BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
+        BuildProgressSink.Value = ReportProgress;
+        BuildProjectDataCacheScope.Value = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
         try
         {
+            ReportProgress($"build start (output={outDir})");
             WriteAllTextIfChanged(planPath, JsonSerializer.Serialize(plan, jsonOptions));
             WriteAllTextIfChanged(specPath, JsonSerializer.Serialize(spec, jsonOptions));
 
-        var redirects = new List<RedirectSpec>();
-        if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
-        if (spec.Redirects is { Length: > 0 }) redirects.AddRange(spec.Redirects);
+            var redirects = new List<RedirectSpec>();
+            if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
+            if (spec.Redirects is { Length: > 0 }) redirects.AddRange(spec.Redirects);
 
-        var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, options ?? WebJson.Options).ToList();
-        foreach (var project in projectSpecs)
-        {
-            if (project.Redirects is { Length: > 0 })
-                redirects.AddRange(project.Redirects);
-        }
-        AddVersioningAliasRedirects(spec, redirects);
+            ReportProgress("loading project specs");
+            var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, options ?? WebJson.Options).ToList();
+            foreach (var project in projectSpecs)
+            {
+                if (project.Redirects is { Length: > 0 })
+                    redirects.AddRange(project.Redirects);
+            }
+            AddVersioningAliasRedirects(spec, redirects);
 
-        var data = LoadData(spec, plan, projectSpecs);
-        var projectMap = projectSpecs
-            .Where(p => !string.IsNullOrWhiteSpace(p.Slug))
-            .ToDictionary(p => p.Slug, StringComparer.OrdinalIgnoreCase);
-        var projectContentMap = projectSpecs
-            .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
-            .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
-        var cacheRoot = ResolveCacheRoot(spec, plan.RootPath);
-        var allItems = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
-        allItems.AddRange(BuildTaxonomyItems(spec, allItems));
-        allItems = BuildPaginatedItems(spec, allItems);
-        var renderItems = FilterItemsForLanguage(spec, allItems, language);
+            ReportProgress($"loaded project specs: {projectSpecs.Count}");
+            ReportProgress("loading data sources");
+            var data = LoadData(spec, plan, projectSpecs);
+            var projectMap = projectSpecs
+                .Where(p => !string.IsNullOrWhiteSpace(p.Slug))
+                .ToDictionary(p => p.Slug, StringComparer.OrdinalIgnoreCase);
+            var projectContentMap = projectSpecs
+                .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
+                .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
+            var cacheRoot = ResolveCacheRoot(spec, plan.RootPath);
+            ReportProgress("building content items");
+            var allItems = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
+            ReportProgress($"content items: {allItems.Count}");
+            allItems = MaterializeLocalizedFallbackPages(spec, allItems);
+            ReportProgress($"with localized fallback pages: {allItems.Count}");
+            allItems.AddRange(BuildTaxonomyItems(spec, allItems));
+            ReportProgress($"with taxonomy items: {allItems.Count}");
+            allItems = BuildPaginatedItems(spec, allItems);
+            ReportProgress($"with pagination items: {allItems.Count}");
+            var renderItems = FilterItemsForLanguage(spec, allItems, language);
+            ReportProgress($"render queue size: {renderItems.Count}");
 
-        AddLegacyAmpRedirects(spec, redirects, renderItems);
-        ResolveXrefs(spec, plan.RootPath, metaDir, renderItems);
-        var menuSpecs = BuildMenuSpecs(spec, renderItems, plan.RootPath);
-        foreach (var item in renderItems)
-        {
-            WriteContentItem(outDir, spec, plan.RootPath, item, allItems, data, projectMap, menuSpecs);
-        }
+            AddLegacyAmpRedirects(spec, redirects, renderItems);
+            ResolveXrefs(spec, plan.RootPath, metaDir, renderItems);
+            var menuSpecs = BuildMenuSpecs(spec, renderItems, plan.RootPath);
+            var totalRenderItems = renderItems.Count;
+            var renderInterval = totalRenderItems switch
+            {
+                >= 5000 => 250,
+                >= 2000 => 50,
+                >= 1000 => 50,
+                >= 500 => 25,
+                >= 100 => 10,
+                _ => 2
+            };
+            var rendered = 0;
+            var lastProgressReportAt = buildStopwatch.Elapsed;
+            ReportProgress("rendering content");
+            foreach (var item in renderItems)
+            {
+                var currentIndex = rendered + 1;
+                var currentRoute = string.IsNullOrWhiteSpace(item.OutputPath) ? "/" : item.OutputPath;
+                if (currentIndex <= 3 || currentIndex == totalRenderItems || (currentIndex % renderInterval == 0))
+                {
+                    ReportProgress($"render start: {currentIndex}/{totalRenderItems} route={currentRoute}");
+                }
 
-        CopyThemeAssets(spec, plan.RootPath, outDir);
-        CopyStaticAssets(spec, plan.RootPath, outDir);
-        WriteSiteNavData(spec, outDir, menuSpecs);
-        WriteSearchIndex(spec, outDir, renderItems);
-        WriteLinkCheckReport(spec, renderItems, metaDir);
-        WriteSeoPreviewReport(spec, renderItems, metaDir);
-        WriteCrawlPolicyReport(spec, renderItems, metaDir);
+                var itemStopwatch = Stopwatch.StartNew();
+                using var itemHeartbeat = progress is null
+                    ? null
+                    : new Timer(_ =>
+                    {
+                        ReportProgress(
+                            $"render working: {currentIndex}/{totalRenderItems} route={currentRoute} elapsed={itemStopwatch.Elapsed:mm\\:ss}");
+                    }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
-        var redirectsPayload = new
-        {
-            routeOverrides = spec.RouteOverrides,
-            redirects = redirects
-        };
+                WriteContentItem(outDir, spec, plan.RootPath, item, allItems, data, projectMap, menuSpecs);
+                itemHeartbeat?.Dispose();
+                rendered++;
+                var itemElapsed = itemStopwatch.Elapsed;
+                if (itemElapsed >= TimeSpan.FromSeconds(3))
+                    ReportProgress(
+                        $"render slow-item: {currentIndex}/{totalRenderItems} route={currentRoute} took {itemElapsed.TotalSeconds:F1}s");
+                var nowElapsed = buildStopwatch.Elapsed;
+                var shouldReportByIndex = rendered <= 3 || rendered == totalRenderItems || (rendered % renderInterval == 0);
+                var shouldReportByTime = nowElapsed - lastProgressReportAt >= TimeSpan.FromSeconds(5);
+                if (shouldReportByIndex || shouldReportByTime)
+                {
+                    var percent = totalRenderItems <= 0 ? 100 : (int)Math.Round((double)rendered * 100 / totalRenderItems);
+                    ReportProgress($"render progress: {rendered}/{totalRenderItems} ({percent}%)");
+                    lastProgressReportAt = nowElapsed;
+                }
+            }
+
+            ReportProgress("copying theme assets");
+            CopyThemeAssets(spec, plan.RootPath, outDir);
+            ReportProgress("copying static assets");
+            CopyStaticAssets(spec, plan.RootPath, outDir);
+            ReportProgress("writing navigation/search/diagnostic outputs");
+            WriteSiteNavData(spec, outDir, menuSpecs);
+            WriteSearchIndex(spec, outDir, renderItems);
+            WriteLinkCheckReport(spec, renderItems, metaDir);
+            WriteSeoPreviewReport(spec, renderItems, metaDir);
+            WriteCrawlPolicyReport(spec, renderItems, metaDir);
+
+            var redirectsPayload = new
+            {
+                routeOverrides = spec.RouteOverrides,
+                redirects = redirects
+            };
             WriteAllTextIfChanged(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
             WriteRedirectOutputs(outDir, redirects);
             EnsureNoJekyllFile(outDir);
+            ReportProgress($"build complete: updated files {updated.Count}");
 
             return new WebBuildResult
             {
@@ -149,6 +234,28 @@ public static partial class WebSiteBuilder
         {
             UpdatedSink.Value = prevSink;
             BuildLanguageContextScope.Value = prevBuildLanguageContext;
+            BuildRenderCacheScope.Value = prevBuildRenderCache;
+            BuildProgressSink.Value = prevBuildProgressSink;
+            BuildProjectDataCacheScope.Value = prevBuildProjectDataCache;
+        }
+    }
+
+    private static void ReportBuildProgress(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        var sink = BuildProgressSink.Value;
+        if (sink is null)
+            return;
+
+        try
+        {
+            sink(message);
+        }
+        catch
+        {
+            // Build diagnostics must not break rendering.
         }
     }
 
