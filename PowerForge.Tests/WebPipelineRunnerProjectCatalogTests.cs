@@ -224,8 +224,8 @@ public class WebPipelineRunnerProjectCatalogTests
 
             var catalogText = File.ReadAllText(catalogPath);
             Assert.Contains("\"hubPath\": \"/projects/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"docs\": \"/projects/pswritehtml/docs/\"", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"apiPowerShell\": \"/projects/pswritehtml/api/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"docs\": \"/docs/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"apiPowerShell\": \"/api/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"source\": \"https://github.com/EvotecIT/PSWriteHTML\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"powerShellGallery\": \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", catalogText, StringComparison.OrdinalIgnoreCase);
 
