@@ -2,7 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -20,6 +24,13 @@ internal static partial class WebPipelineRunner
         var syncApi = GetBool(step, "syncApi") ?? GetBool(step, "sync-api") ?? false;
         var failOnMissingApiSource = GetBool(step, "failOnMissingApiSource") ?? GetBool(step, "fail-on-missing-api-source") ?? false;
         var cleanApiTarget = GetBool(step, "cleanApiTarget") ?? GetBool(step, "clean-api-target") ?? cleanTarget;
+        var syncExamples = GetBool(step, "syncExamples") ?? GetBool(step, "sync-examples") ?? true;
+        var failOnMissingExamplesSource = GetBool(step, "failOnMissingExamplesSource") ?? GetBool(step, "fail-on-missing-examples-source") ?? false;
+        var cleanExamplesTarget = GetBool(step, "cleanExamplesTarget") ?? GetBool(step, "clean-examples-target") ?? cleanTarget;
+        var hydrateFromArtifacts = GetBool(step, "hydrateFromArtifacts") ?? GetBool(step, "hydrate-from-artifacts") ?? true;
+        var artifactTimeoutSeconds = GetInt(step, "artifactTimeoutSeconds") ?? GetInt(step, "artifact-timeout-seconds") ?? 60;
+        if (artifactTimeoutSeconds < 5)
+            artifactTimeoutSeconds = 5;
 
         var catalogPath = ResolvePath(baseDir,
             GetString(step, "catalog") ??
@@ -58,6 +69,12 @@ internal static partial class WebPipelineRunner
             scalarKeys: new[] { "sourceApiPath", "source-api-path", "sourceApiFolder", "source-api-folder" },
             defaults: new[] { "Website/data/apidocs", "data/apidocs" });
 
+        var examplesSourceCandidates = ResolvePathCandidates(
+            step,
+            arrayKeys: new[] { "sourceExamplesPaths", "source-examples-paths" },
+            scalarKeys: new[] { "sourceExamplesPath", "source-examples-path", "sourceExamplesFolder", "source-examples-folder" },
+            defaults: new[] { "Website/content/examples", "Examples", "content/examples" });
+
         var apiRoot = ResolvePath(baseDir,
             GetString(step, "apiRoot") ??
             GetString(step, "api-root") ??
@@ -65,6 +82,27 @@ internal static partial class WebPipelineRunner
         if (syncApi && string.IsNullOrWhiteSpace(apiRoot))
             throw new InvalidOperationException("project-docs-sync requires apiRoot when syncApi is enabled.");
         apiRoot = string.IsNullOrWhiteSpace(apiRoot) ? string.Empty : Path.GetFullPath(apiRoot);
+
+        var examplesRoot = ResolvePath(baseDir,
+            GetString(step, "examplesRoot") ??
+            GetString(step, "examples-root") ??
+            "./content/examples");
+        if (syncExamples && string.IsNullOrWhiteSpace(examplesRoot))
+            throw new InvalidOperationException("project-docs-sync requires examplesRoot when syncExamples is enabled.");
+        examplesRoot = string.IsNullOrWhiteSpace(examplesRoot) ? string.Empty : Path.GetFullPath(examplesRoot);
+
+        var artifactWorkRoot = ResolvePath(baseDir,
+            GetString(step, "artifactWorkRoot") ??
+            GetString(step, "artifact-work-root") ??
+            "./_temp/project-artifacts");
+        artifactWorkRoot = string.IsNullOrWhiteSpace(artifactWorkRoot)
+            ? Path.Combine(Path.GetTempPath(), "powerforge-web-artifacts")
+            : Path.GetFullPath(artifactWorkRoot);
+
+        var artifactToken = GetString(step, "artifactToken") ?? GetString(step, "artifact-token") ?? GetString(step, "token");
+        var artifactTokenEnv = GetString(step, "artifactTokenEnv") ?? GetString(step, "artifact-token-env") ?? "GITHUB_TOKEN";
+        if (string.IsNullOrWhiteSpace(artifactToken) && !string.IsNullOrWhiteSpace(artifactTokenEnv))
+            artifactToken = Environment.GetEnvironmentVariable(artifactTokenEnv);
 
         var summaryPath = ResolvePath(baseDir,
             GetString(step, "summaryPath") ??
@@ -84,8 +122,10 @@ internal static partial class WebPipelineRunner
                     sourcesRoot,
                     contentRoot,
                     apiRoot,
+                    examplesRoot,
                     docsSourceCandidates,
                     apiSourceCandidates,
+                    examplesSourceCandidates,
                     0,
                     0,
                     0,
@@ -98,6 +138,18 @@ internal static partial class WebPipelineRunner
                     0,
                     0,
                     Array.Empty<string>(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    Array.Empty<string>(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    artifactWorkRoot,
                     status: "skipped");
             }
 
@@ -106,7 +158,15 @@ internal static partial class WebPipelineRunner
             return;
         }
 
-        if (!Directory.Exists(sourcesRoot))
+        var projects = ReadProjectDocsCatalog(catalogPath, onlyLocalLinks);
+        var docsProjects = projects.Where(static p => p.HasDocsSurface).ToList();
+        var apiProjects = projects.Where(static p => p.HasApiSurface).ToList();
+        var examplesProjects = projects.Where(static p => p.HasExamplesSurface).ToList();
+        var artifactStats = new ProjectArtifactHydrationStats();
+        var artifactCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var sourcesRootExists = Directory.Exists(sourcesRoot);
+
+        if (!sourcesRootExists && !hydrateFromArtifacts)
         {
             if (strict)
                 throw new InvalidOperationException($"project-docs-sync sources root not found: {sourcesRoot}");
@@ -119,20 +179,34 @@ internal static partial class WebPipelineRunner
                     sourcesRoot,
                     contentRoot,
                     apiRoot,
+                    examplesRoot,
                     docsSourceCandidates,
                     apiSourceCandidates,
+                    examplesSourceCandidates,
+                    projects.Count,
+                    docsProjects.Count,
+                    0,
+                    docsProjects.Count,
                     0,
                     0,
+                    Array.Empty<string>(),
+                    apiProjects.Count,
                     0,
+                    apiProjects.Count,
                     0,
+                    Array.Empty<string>(),
+                    examplesProjects.Count,
                     0,
+                    examplesProjects.Count,
                     0,
                     Array.Empty<string>(),
                     0,
                     0,
                     0,
                     0,
-                    Array.Empty<string>(),
+                    0,
+                    0,
+                    artifactWorkRoot,
                     status: "skipped");
             }
 
@@ -141,9 +215,26 @@ internal static partial class WebPipelineRunner
             return;
         }
 
-        var projects = ReadProjectDocsCatalog(catalogPath, onlyLocalLinks);
-        var docsProjects = projects.Where(static p => p.HasDocsSurface).ToList();
-        var apiProjects = projects.Where(static p => p.HasApiSurface).ToList();
+        if (!sourcesRootExists)
+            Directory.CreateDirectory(sourcesRoot);
+
+        if (hydrateFromArtifacts)
+        {
+            HydrateProjectArtifactSources(
+                projects,
+                sourcesRoot,
+                docsSourceCandidates,
+                apiSourceCandidates,
+                examplesSourceCandidates,
+                syncApi,
+                syncExamples,
+                artifactWorkRoot,
+                artifactTimeoutSeconds,
+                artifactToken,
+                artifactCache,
+                artifactStats);
+        }
+
         var synced = 0;
         var skipped = 0;
         var copiedFiles = 0;
@@ -153,10 +244,16 @@ internal static partial class WebPipelineRunner
         var skippedApi = 0;
         var copiedApiFiles = 0;
         var missingApiSources = new List<string>();
+        var syncedExamples = 0;
+        var skippedExamples = 0;
+        var copiedExampleFiles = 0;
+        var missingExampleSources = new List<string>();
 
         Directory.CreateDirectory(contentRoot);
         if (syncApi)
             Directory.CreateDirectory(apiRoot);
+        if (syncExamples)
+            Directory.CreateDirectory(examplesRoot);
 
         foreach (var project in docsProjects)
         {
@@ -268,6 +365,50 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        if (syncExamples)
+        {
+            foreach (var project in examplesProjects)
+            {
+                if (string.IsNullOrWhiteSpace(project.Slug))
+                    continue;
+
+                var slug = project.Slug.Trim().ToLowerInvariant();
+                var sourceExamplesRoot = ResolveExistingProjectSourcePath(sourcesRoot, slug, examplesSourceCandidates);
+                if (!Directory.Exists(sourceExamplesRoot))
+                {
+                    skippedExamples++;
+                    missingExampleSources.Add(GetExpectedProjectSourcePath(sourcesRoot, slug, examplesSourceCandidates));
+                    if (failOnMissingExamplesSource)
+                        throw new InvalidOperationException($"project-docs-sync source examples path not found for '{slug}': {GetExpectedProjectSourcePath(sourcesRoot, slug, examplesSourceCandidates)}");
+                    continue;
+                }
+
+                var targetExamplesRoot = Path.Combine(examplesRoot, slug);
+                if (cleanExamplesTarget && Directory.Exists(targetExamplesRoot))
+                    Directory.Delete(targetExamplesRoot, recursive: true);
+                Directory.CreateDirectory(targetExamplesRoot);
+
+                var exampleFiles = Directory
+                    .EnumerateFiles(sourceExamplesRoot, "*", SearchOption.AllDirectories)
+                    .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var sourceFile in exampleFiles)
+                {
+                    var relativePath = Path.GetRelativePath(sourceExamplesRoot, sourceFile);
+                    var targetFile = Path.Combine(targetExamplesRoot, relativePath);
+                    var targetDirectory = Path.GetDirectoryName(targetFile);
+                    if (!string.IsNullOrWhiteSpace(targetDirectory))
+                        Directory.CreateDirectory(targetDirectory);
+
+                    File.Copy(sourceFile, targetFile, overwrite: true);
+                    copiedExampleFiles++;
+                }
+
+                syncedExamples++;
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
             WriteProjectDocsSummary(
@@ -276,8 +417,10 @@ internal static partial class WebPipelineRunner
                 sourcesRoot,
                 contentRoot,
                 apiRoot,
+                examplesRoot,
                 docsSourceCandidates,
                 apiSourceCandidates,
+                examplesSourceCandidates,
                 projects.Count,
                 docsProjects.Count,
                 synced,
@@ -290,18 +433,23 @@ internal static partial class WebPipelineRunner
                 skippedApi,
                 copiedApiFiles,
                 missingApiSources,
+                examplesProjects.Count,
+                syncedExamples,
+                skippedExamples,
+                copiedExampleFiles,
+                missingExampleSources,
+                artifactStats.DocsHydrated,
+                artifactStats.ApiHydrated,
+                artifactStats.ExamplesHydrated,
+                artifactStats.Downloads,
+                artifactStats.CacheHits,
+                artifactStats.Failures,
+                artifactWorkRoot,
                 status: "updated");
         }
 
         stepResult.Success = true;
-        if (syncApi)
-        {
-            stepResult.Message = $"project-docs-sync ok: docs={synced}/{docsProjects.Count}; docsSkipped={skipped}; docsFiles={copiedFiles}; toc={tocFiles}; api={syncedApi}/{apiProjects.Count}; apiSkipped={skippedApi}; apiFiles={copiedApiFiles}";
-        }
-        else
-        {
-            stepResult.Message = $"project-docs-sync ok: synced={synced}/{docsProjects.Count}; skipped={skipped}; files={copiedFiles}; toc={tocFiles}";
-        }
+        stepResult.Message = $"project-docs-sync ok: docs={synced}/{docsProjects.Count}; docsSkipped={skipped}; docsFiles={copiedFiles}; toc={tocFiles}; api={syncedApi}/{apiProjects.Count}; apiSkipped={skippedApi}; apiFiles={copiedApiFiles}; examples={syncedExamples}/{examplesProjects.Count}; examplesSkipped={skippedExamples}; examplesFiles={copiedExampleFiles}; artifacts(hydrated/downloads/hits/failures)={(artifactStats.DocsHydrated + artifactStats.ApiHydrated + artifactStats.ExamplesHydrated)}/{artifactStats.Downloads}/{artifactStats.CacheHits}/{artifactStats.Failures}";
     }
 
     private static void WriteProjectDocsSummary(
@@ -310,8 +458,10 @@ internal static partial class WebPipelineRunner
         string sourcesRoot,
         string contentRoot,
         string apiRoot,
+        string examplesRoot,
         IReadOnlyList<string> docsSourceCandidates,
         IReadOnlyList<string> apiSourceCandidates,
+        IReadOnlyList<string> examplesSourceCandidates,
         int totalProjects,
         int docsProjects,
         int synced,
@@ -324,6 +474,18 @@ internal static partial class WebPipelineRunner
         int skippedApi,
         int copiedApiFiles,
         IReadOnlyList<string> missingApiSources,
+        int examplesProjects,
+        int syncedExamples,
+        int skippedExamples,
+        int copiedExampleFiles,
+        IReadOnlyList<string> missingExampleSources,
+        int docsHydrated,
+        int apiHydrated,
+        int examplesHydrated,
+        int artifactDownloads,
+        int artifactCacheHits,
+        int artifactFailures,
+        string artifactWorkRoot,
         string status)
     {
         var summaryDirectory = Path.GetDirectoryName(summaryPath);
@@ -338,8 +500,11 @@ internal static partial class WebPipelineRunner
             sourcesRoot = Path.GetFullPath(sourcesRoot),
             contentRoot = Path.GetFullPath(contentRoot),
             apiRoot = string.IsNullOrWhiteSpace(apiRoot) ? null : Path.GetFullPath(apiRoot),
+            examplesRoot = string.IsNullOrWhiteSpace(examplesRoot) ? null : Path.GetFullPath(examplesRoot),
+            artifactWorkRoot = string.IsNullOrWhiteSpace(artifactWorkRoot) ? null : Path.GetFullPath(artifactWorkRoot),
             sourceDocsPaths = docsSourceCandidates.ToArray(),
             sourceApiPaths = apiSourceCandidates.ToArray(),
+            sourceExamplesPaths = examplesSourceCandidates.ToArray(),
             totalProjects,
             docsProjects,
             synced,
@@ -351,7 +516,18 @@ internal static partial class WebPipelineRunner
             syncedApi,
             skippedApi,
             copiedApiFiles,
-            missingApiSources = missingApiSources.ToArray()
+            missingApiSources = missingApiSources.ToArray(),
+            examplesProjects,
+            syncedExamples,
+            skippedExamples,
+            copiedExampleFiles,
+            missingExampleSources = missingExampleSources.ToArray(),
+            docsHydrated,
+            apiHydrated,
+            examplesHydrated,
+            artifactDownloads,
+            artifactCacheHits,
+            artifactFailures
         };
         File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -366,12 +542,19 @@ internal static partial class WebPipelineRunner
         foreach (var projectElement in projectsElement.EnumerateArray())
         {
             var slug = GetString(projectElement, "slug");
+            var mode = GetString(projectElement, "mode");
+            var contentMode = GetString(projectElement, "contentMode");
             var hasDocsSurface = false;
             var hasApiDotNetSurface = false;
             var hasApiPowerShellSurface = false;
+            var hasExamplesSurface = false;
             string? docsLink = null;
             string? apiDotNetLink = null;
             string? apiPowerShellLink = null;
+            string? examplesLink = null;
+            string? artifactDocs = null;
+            string? artifactApi = null;
+            string? artifactExamples = null;
 
             if (projectElement.TryGetProperty("surfaces", out var surfacesElement) &&
                 surfacesElement.ValueKind == JsonValueKind.Object)
@@ -379,6 +562,7 @@ internal static partial class WebPipelineRunner
                 hasDocsSurface = GetBool(surfacesElement, "docs") ?? false;
                 hasApiDotNetSurface = GetBool(surfacesElement, "apiDotNet") ?? false;
                 hasApiPowerShellSurface = GetBool(surfacesElement, "apiPowerShell") ?? false;
+                hasExamplesSurface = GetBool(surfacesElement, "examples") ?? false;
             }
 
             if (projectElement.TryGetProperty("links", out var linksElement) &&
@@ -387,26 +571,56 @@ internal static partial class WebPipelineRunner
                 docsLink = GetString(linksElement, "docs");
                 apiDotNetLink = GetString(linksElement, "apiDotNet");
                 apiPowerShellLink = GetString(linksElement, "apiPowerShell");
+                examplesLink = GetString(linksElement, "examples");
+            }
+
+            if (projectElement.TryGetProperty("artifacts", out var artifactsElement) &&
+                artifactsElement.ValueKind == JsonValueKind.Object)
+            {
+                artifactDocs = GetString(artifactsElement, "docs");
+                artifactApi = GetString(artifactsElement, "api");
+                artifactExamples = GetString(artifactsElement, "examples");
+            }
+
+            var normalizedContentMode = NormalizeCatalogContentMode(contentMode, mode);
+            if (normalizedContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))
+            {
+                hasDocsSurface = false;
+                hasApiDotNetSurface = false;
+                hasApiPowerShellSurface = false;
+                hasExamplesSurface = false;
             }
 
             if (onlyLocalLinks)
             {
-                if (hasDocsSurface && !IsLocalSurfaceLink(docsLink))
+                if (hasDocsSurface && !IsLocalSurfaceLink(docsLink) && !IsZipArtifactSource(artifactDocs))
                     hasDocsSurface = false;
 
-                if (hasApiDotNetSurface && !IsLocalSurfaceLink(apiDotNetLink))
+                if (hasApiDotNetSurface && !IsLocalSurfaceLink(apiDotNetLink) && !IsZipArtifactSource(artifactApi))
                     hasApiDotNetSurface = false;
 
-                if (hasApiPowerShellSurface && !IsLocalSurfaceLink(apiPowerShellLink))
+                if (hasApiPowerShellSurface && !IsLocalSurfaceLink(apiPowerShellLink) && !IsZipArtifactSource(artifactApi))
                     hasApiPowerShellSurface = false;
+
+                if (hasExamplesSurface && !IsLocalSurfaceLink(examplesLink) && !IsZipArtifactSource(artifactExamples))
+                    hasExamplesSurface = false;
             }
 
             projects.Add(new ProjectDocsCatalogItem
             {
                 Slug = slug ?? string.Empty,
+                ContentMode = normalizedContentMode,
                 HasDocsSurface = hasDocsSurface,
                 HasApiDotNetSurface = hasApiDotNetSurface,
-                HasApiPowerShellSurface = hasApiPowerShellSurface
+                HasApiPowerShellSurface = hasApiPowerShellSurface,
+                HasExamplesSurface = hasExamplesSurface,
+                DocsLink = docsLink,
+                ApiDotNetLink = apiDotNetLink,
+                ApiPowerShellLink = apiPowerShellLink,
+                ExamplesLink = examplesLink,
+                ArtifactDocs = artifactDocs,
+                ArtifactApi = artifactApi,
+                ArtifactExamples = artifactExamples
             });
         }
 
@@ -426,6 +640,321 @@ internal static partial class WebPipelineRunner
             return false;
 
         return true;
+    }
+
+    private static string NormalizeCatalogContentMode(string? contentMode, string? mode)
+    {
+        if (!string.IsNullOrWhiteSpace(contentMode))
+            return contentMode.Trim().ToLowerInvariant();
+
+        if (!string.IsNullOrWhiteSpace(mode) &&
+            mode.Trim().Equals("dedicated-external", StringComparison.OrdinalIgnoreCase))
+        {
+            return "external";
+        }
+
+        return "hybrid";
+    }
+
+    private static void HydrateProjectArtifactSources(
+        IReadOnlyList<ProjectDocsCatalogItem> projects,
+        string sourcesRoot,
+        IReadOnlyList<string> docsSourceCandidates,
+        IReadOnlyList<string> apiSourceCandidates,
+        IReadOnlyList<string> examplesSourceCandidates,
+        bool syncApi,
+        bool syncExamples,
+        string artifactWorkRoot,
+        int timeoutSeconds,
+        string? artifactToken,
+        Dictionary<string, string> artifactCache,
+        ProjectArtifactHydrationStats stats)
+    {
+        Directory.CreateDirectory(sourcesRoot);
+        Directory.CreateDirectory(artifactWorkRoot);
+
+        foreach (var project in projects)
+        {
+            if (string.IsNullOrWhiteSpace(project.Slug))
+                continue;
+
+            var slug = project.Slug.Trim().ToLowerInvariant();
+            if (project.HasDocsSurface)
+            {
+                HydrateProjectArtifactSurface(
+                    project,
+                    ProjectDocsSurfaceType.Docs,
+                    slug,
+                    sourcesRoot,
+                    docsSourceCandidates,
+                    artifactWorkRoot,
+                    timeoutSeconds,
+                    artifactToken,
+                    artifactCache,
+                    stats);
+            }
+
+            if (syncApi && project.HasApiSurface)
+            {
+                HydrateProjectArtifactSurface(
+                    project,
+                    ProjectDocsSurfaceType.Api,
+                    slug,
+                    sourcesRoot,
+                    apiSourceCandidates,
+                    artifactWorkRoot,
+                    timeoutSeconds,
+                    artifactToken,
+                    artifactCache,
+                    stats);
+            }
+
+            if (syncExamples && project.HasExamplesSurface)
+            {
+                HydrateProjectArtifactSurface(
+                    project,
+                    ProjectDocsSurfaceType.Examples,
+                    slug,
+                    sourcesRoot,
+                    examplesSourceCandidates,
+                    artifactWorkRoot,
+                    timeoutSeconds,
+                    artifactToken,
+                    artifactCache,
+                    stats);
+            }
+        }
+    }
+
+    private static void HydrateProjectArtifactSurface(
+        ProjectDocsCatalogItem project,
+        ProjectDocsSurfaceType surface,
+        string slug,
+        string sourcesRoot,
+        IReadOnlyList<string> sourceCandidates,
+        string artifactWorkRoot,
+        int timeoutSeconds,
+        string? artifactToken,
+        Dictionary<string, string> artifactCache,
+        ProjectArtifactHydrationStats stats)
+    {
+        var artifactSource = TryGetProjectArtifactSource(project, surface);
+        if (!IsZipArtifactSource(artifactSource))
+            return;
+
+        if (!TryExtractArtifactZip(
+                artifactSource!,
+                artifactWorkRoot,
+                timeoutSeconds,
+                artifactToken,
+                artifactCache,
+                stats,
+                out var extractedRoot))
+        {
+            return;
+        }
+
+        var extractedSurfaceRoot = ResolveExistingPathUnderExtractedArtifact(extractedRoot!, slug, sourceCandidates);
+        if (string.IsNullOrWhiteSpace(extractedSurfaceRoot))
+        {
+            stats.Failures++;
+            return;
+        }
+
+        var candidateTarget = sourceCandidates.Count > 0 ? sourceCandidates[0] : "Docs";
+        var targetRoot = BuildProjectSourcePath(sourcesRoot, slug, candidateTarget);
+        if (Directory.Exists(targetRoot))
+            Directory.Delete(targetRoot, recursive: true);
+        CopyDirectory(extractedSurfaceRoot, targetRoot);
+
+        if (surface == ProjectDocsSurfaceType.Docs)
+            stats.DocsHydrated++;
+        else if (surface == ProjectDocsSurfaceType.Api)
+            stats.ApiHydrated++;
+        else
+            stats.ExamplesHydrated++;
+    }
+
+    private static string? TryGetProjectArtifactSource(ProjectDocsCatalogItem project, ProjectDocsSurfaceType surface)
+    {
+        string? directArtifact = surface switch
+        {
+            ProjectDocsSurfaceType.Docs => project.ArtifactDocs,
+            ProjectDocsSurfaceType.Api => project.ArtifactApi,
+            ProjectDocsSurfaceType.Examples => project.ArtifactExamples,
+            _ => null
+        };
+
+        if (IsZipArtifactSource(directArtifact))
+            return directArtifact;
+
+        return surface switch
+        {
+            ProjectDocsSurfaceType.Docs => project.DocsLink,
+            ProjectDocsSurfaceType.Api => !string.IsNullOrWhiteSpace(project.ApiPowerShellLink) ? project.ApiPowerShellLink : project.ApiDotNetLink,
+            ProjectDocsSurfaceType.Examples => project.ExamplesLink,
+            _ => null
+        };
+    }
+
+    private static bool IsZipArtifactSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        var value = source.Trim();
+        if (value.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Contains(".zip", StringComparison.OrdinalIgnoreCase) ||
+                   value.Contains("/zip/", StringComparison.OrdinalIgnoreCase) ||
+                   value.Contains("archive", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return value.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryExtractArtifactZip(
+        string source,
+        string artifactWorkRoot,
+        int timeoutSeconds,
+        string? artifactToken,
+        Dictionary<string, string> artifactCache,
+        ProjectArtifactHydrationStats stats,
+        out string? extractedRoot)
+    {
+        extractedRoot = null;
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        var normalizedSource = source.Trim();
+        if (normalizedSource.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Uri.TryCreate(normalizedSource, UriKind.Absolute, out var fileUri))
+                normalizedSource = fileUri.LocalPath;
+        }
+
+        if (!normalizedSource.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !normalizedSource.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedSource = Path.GetFullPath(normalizedSource);
+            if (!File.Exists(normalizedSource))
+                return false;
+        }
+
+        if (artifactCache.TryGetValue(normalizedSource, out var cachedExtractRoot) && Directory.Exists(cachedExtractRoot))
+        {
+            extractedRoot = cachedExtractRoot;
+            stats.CacheHits++;
+            return true;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedSource))).ToLowerInvariant();
+        var downloadsRoot = Path.Combine(artifactWorkRoot, "downloads");
+        var extractedBase = Path.Combine(artifactWorkRoot, "extracted");
+        Directory.CreateDirectory(downloadsRoot);
+        Directory.CreateDirectory(extractedBase);
+
+        var zipPath = Path.Combine(downloadsRoot, hash + ".zip");
+        var extractPath = Path.Combine(extractedBase, hash);
+        var markerPath = Path.Combine(extractPath, ".extracted.ok");
+
+        if (Directory.Exists(extractPath) && File.Exists(markerPath))
+        {
+            artifactCache[normalizedSource] = extractPath;
+            extractedRoot = extractPath;
+            stats.CacheHits++;
+            return true;
+        }
+
+        try
+        {
+            if (normalizedSource.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                normalizedSource.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web.Cli/project-docs-sync");
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
+                if (!string.IsNullOrWhiteSpace(artifactToken))
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", artifactToken);
+
+                using var response = client.GetAsync(normalizedSource).GetAwaiter().GetResult();
+                if (!response.IsSuccessStatusCode)
+                {
+                    stats.Failures++;
+                    return false;
+                }
+
+                using var responseStream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                using var output = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                responseStream.CopyTo(output);
+                stats.Downloads++;
+            }
+            else
+            {
+                File.Copy(normalizedSource, zipPath, overwrite: true);
+            }
+
+            if (Directory.Exists(extractPath))
+                Directory.Delete(extractPath, recursive: true);
+            Directory.CreateDirectory(extractPath);
+            ZipFile.ExtractToDirectory(zipPath, extractPath);
+            File.WriteAllText(markerPath, DateTimeOffset.UtcNow.ToString("O"));
+
+            artifactCache[normalizedSource] = extractPath;
+            extractedRoot = extractPath;
+            return true;
+        }
+        catch
+        {
+            stats.Failures++;
+            return false;
+        }
+    }
+
+    private static string? ResolveExistingPathUnderExtractedArtifact(string extractedRoot, string slug, IReadOnlyList<string> candidates)
+    {
+        if (string.IsNullOrWhiteSpace(extractedRoot) || !Directory.Exists(extractedRoot))
+            return null;
+
+        var roots = new List<string> { extractedRoot };
+        var topDirectories = Directory.GetDirectories(extractedRoot);
+        if (topDirectories.Length == 1)
+            roots.Add(topDirectories[0]);
+
+        foreach (var candidate in candidates)
+        {
+            var normalized = candidate.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            foreach (var root in roots)
+            {
+                var direct = Path.GetFullPath(Path.Combine(root, normalized));
+                if (Directory.Exists(direct))
+                    return direct;
+
+                var withSlug = Path.GetFullPath(Path.Combine(root, slug, normalized));
+                if (Directory.Exists(withSlug))
+                    return withSlug;
+            }
+        }
+
+        return null;
+    }
+
+    private static void CopyDirectory(string sourceRoot, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var filePath in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceRoot, filePath);
+            var destination = Path.Combine(destinationRoot, relative);
+            var destinationDirectory = Path.GetDirectoryName(destination);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                Directory.CreateDirectory(destinationDirectory);
+            File.Copy(filePath, destination, overwrite: true);
+        }
     }
 
     private static string ResolveExistingProjectSourcePath(string sourcesRoot, string slug, IReadOnlyList<string> candidates)
@@ -515,9 +1044,35 @@ internal static partial class WebPipelineRunner
     private sealed class ProjectDocsCatalogItem
     {
         public string Slug { get; init; } = string.Empty;
+        public string ContentMode { get; init; } = "hybrid";
         public bool HasDocsSurface { get; init; }
         public bool HasApiDotNetSurface { get; init; }
         public bool HasApiPowerShellSurface { get; init; }
+        public bool HasExamplesSurface { get; init; }
         public bool HasApiSurface => HasApiDotNetSurface || HasApiPowerShellSurface;
+        public string? DocsLink { get; init; }
+        public string? ApiDotNetLink { get; init; }
+        public string? ApiPowerShellLink { get; init; }
+        public string? ExamplesLink { get; init; }
+        public string? ArtifactDocs { get; init; }
+        public string? ArtifactApi { get; init; }
+        public string? ArtifactExamples { get; init; }
+    }
+
+    private enum ProjectDocsSurfaceType
+    {
+        Docs,
+        Api,
+        Examples
+    }
+
+    private sealed class ProjectArtifactHydrationStats
+    {
+        public int DocsHydrated { get; set; }
+        public int ApiHydrated { get; set; }
+        public int ExamplesHydrated { get; set; }
+        public int Downloads { get; set; }
+        public int CacheHits { get; set; }
+        public int Failures { get; set; }
     }
 }

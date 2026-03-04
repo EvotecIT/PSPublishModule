@@ -6,7 +6,7 @@ using Xunit;
 public class WebPipelineRunnerProjectCatalogTests
 {
     [Fact]
-    public void RunPipeline_ProjectCatalog_FailsOnDedicatedExternalSurfaceWarningsWhenFailOnWarningsEnabled()
+    public void RunPipeline_ProjectCatalog_AllowsDedicatedExternalSurfaceWhenExternalUrlCanBackfillLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-surface-warn-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -61,10 +61,10 @@ public class WebPipelineRunnerProjectCatalogTests
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
-            Assert.False(result.Success);
+            Assert.True(result.Success);
             Assert.Single(result.Steps);
-            Assert.False(result.Steps[0].Success);
-            Assert.Contains("warnings detected", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("project-catalog ok", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -235,6 +235,186 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("meta.project_link_psgallery: \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_github_last_pushed_at_display: \"2026-02-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_release_latest_published_at_display: \"2025-12-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_ImportsHybridContentModeExamplesAndArtifacts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-hybrid-artifacts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": []
+                }
+                """);
+
+            var sourceManifestPath = Path.Combine(root, "projects-sources", "alpha", "WebsiteArtifacts");
+            Directory.CreateDirectory(sourceManifestPath);
+            File.WriteAllText(Path.Combine(sourceManifestPath, "project-manifest.json"),
+                """
+                {
+                  "slug": "alpha",
+                  "name": "Alpha",
+                  "mode": "hub-full",
+                  "contentMode": "hybrid",
+                  "description": "Alpha project",
+                  "surfaces": {
+                    "docs": true,
+                    "apiPowerShell": true,
+                    "examples": true
+                  },
+                  "links": {
+                    "docs": "/docs/alpha/",
+                    "apiPowerShell": "/api/alpha/",
+                    "examples": "/examples/alpha/",
+                    "source": "https://github.com/EvotecIT/Alpha"
+                  },
+                  "artifacts": {
+                    "docs": "https://example.invalid/alpha-docs.zip",
+                    "api": "https://example.invalid/alpha-api.zip",
+                    "examples": "https://example.invalid/alpha-examples.zip"
+                  }
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/projects",
+                      "summaryPath": "./summary.json",
+                      "importManifests": true,
+                      "allowCreateProjects": true,
+                      "applyCuration": false,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": true,
+                      "generateSections": true,
+                      "validate": true,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            var catalogText = File.ReadAllText(catalogPath);
+            Assert.Contains("\"contentMode\": \"hybrid\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"examples\": true", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"examples\": \"/examples/alpha/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"artifacts\":", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"docs\": \"https://example.invalid/alpha-docs.zip\"", catalogText, StringComparison.OrdinalIgnoreCase);
+
+            var overviewPath = Path.Combine(root, "content", "projects", "alpha.md");
+            var examplesSectionPath = Path.Combine(root, "content", "projects", "alpha.examples.md");
+            Assert.True(File.Exists(overviewPath));
+            Assert.True(File.Exists(examplesSectionPath));
+
+            var overview = File.ReadAllText(overviewPath);
+            Assert.Contains("meta.project_content_mode: \"hybrid\"", overview, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("meta.project_surface_examples: true", overview, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("meta.project_artifact_examples: \"https://example.invalid/alpha-examples.zip\"", overview, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_RemovesStaleGeneratedSectionPages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-stale-sections-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "alpha",
+                      "name": "Alpha",
+                      "mode": "hub-full",
+                      "githubRepo": "EvotecIT/Alpha",
+                      "surfaces": {
+                        "docs": true,
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var contentRoot = Path.Combine(root, "content", "projects");
+            Directory.CreateDirectory(contentRoot);
+            var staleExamplesPath = Path.Combine(contentRoot, "alpha.examples.md");
+            File.WriteAllText(staleExamplesPath,
+                """
+                ---
+                title: "Alpha Examples"
+                meta.generated_by: powerforge.project-catalog
+                ---
+
+                stale
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "contentRoot": "./content/projects",
+                      "summaryPath": "./summary.json",
+                      "importManifests": false,
+                      "applyCuration": false,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": false,
+                      "generateSections": true,
+                      "validate": true,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.False(File.Exists(staleExamplesPath));
+            Assert.True(File.Exists(Path.Combine(contentRoot, "alpha.docs.md")));
+            Assert.True(File.Exists(Path.Combine(contentRoot, "alpha.api.md")));
+            Assert.Contains("staleSectionsDeleted=1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

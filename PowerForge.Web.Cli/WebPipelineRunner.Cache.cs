@@ -749,6 +749,14 @@ internal static partial class WebPipelineRunner
                         GetString(step, "api-root") ??
                         "./data/apidocs"));
                 }
+                var syncExamples = GetBool(step, "syncExamples") ?? GetBool(step, "sync-examples") ?? true;
+                if (syncExamples)
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir,
+                        GetString(step, "examplesRoot") ??
+                        GetString(step, "examples-root") ??
+                        "./content/examples"));
+                }
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
                     GetString(step, "summary-path") ??
