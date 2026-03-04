@@ -23,7 +23,7 @@ internal static partial class WebPipelineRunner
     private static readonly string[] AllowedProjectModes = { "hub-full", "dedicated-external" };
     private static readonly string[] AllowedProjectStatuses = { "active", "archived", "deprecated", "experimental" };
     private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "changelog", "releases" };
-    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "changelog", "releases", "source", "website", "nuget", "powerShellGallery" };
+    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "changelog", "releases", "source", "website", "nuget", "powerShellGallery", "blog" };
 
     private static void ExecuteProjectCatalog(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
@@ -1737,6 +1737,7 @@ internal static partial class WebPipelineRunner
         if (project.Links is { Count: > 0 })
         {
             WriteMetaString(lines, "meta.project_link_docs", TryGetDictionaryValue(project.Links, "docs"));
+            WriteMetaString(lines, "meta.project_link_blog", TryGetDictionaryValue(project.Links, "blog"));
             WriteMetaString(lines, "meta.project_link_api_dotnet", TryGetDictionaryValue(project.Links, "apiDotNet"));
             WriteMetaString(lines, "meta.project_link_api_powershell", TryGetDictionaryValue(project.Links, "apiPowerShell"));
             WriteMetaString(lines, "meta.project_link_changelog", TryGetDictionaryValue(project.Links, "changelog"));

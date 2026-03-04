@@ -16,6 +16,7 @@ internal static partial class WebPipelineRunner
         var generateToc = GetBool(step, "generateToc") ?? GetBool(step, "generate-toc") ?? true;
         var failOnMissingSource = GetBool(step, "failOnMissingSource") ?? GetBool(step, "fail-on-missing-source") ?? false;
         var cleanTarget = GetBool(step, "cleanTarget") ?? GetBool(step, "clean-target") ?? false;
+        var onlyLocalLinks = GetBool(step, "onlyLocalLinks") ?? GetBool(step, "only-local-links") ?? false;
         var syncApi = GetBool(step, "syncApi") ?? GetBool(step, "sync-api") ?? false;
         var failOnMissingApiSource = GetBool(step, "failOnMissingApiSource") ?? GetBool(step, "fail-on-missing-api-source") ?? false;
         var cleanApiTarget = GetBool(step, "cleanApiTarget") ?? GetBool(step, "clean-api-target") ?? cleanTarget;
@@ -140,7 +141,7 @@ internal static partial class WebPipelineRunner
             return;
         }
 
-        var projects = ReadProjectDocsCatalog(catalogPath);
+        var projects = ReadProjectDocsCatalog(catalogPath, onlyLocalLinks);
         var docsProjects = projects.Where(static p => p.HasDocsSurface).ToList();
         var apiProjects = projects.Where(static p => p.HasApiSurface).ToList();
         var synced = 0;
@@ -355,7 +356,7 @@ internal static partial class WebPipelineRunner
         File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static List<ProjectDocsCatalogItem> ReadProjectDocsCatalog(string catalogPath)
+    private static List<ProjectDocsCatalogItem> ReadProjectDocsCatalog(string catalogPath, bool onlyLocalLinks)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
         if (!document.RootElement.TryGetProperty("projects", out var projectsElement) || projectsElement.ValueKind != JsonValueKind.Array)
@@ -368,12 +369,36 @@ internal static partial class WebPipelineRunner
             var hasDocsSurface = false;
             var hasApiDotNetSurface = false;
             var hasApiPowerShellSurface = false;
+            string? docsLink = null;
+            string? apiDotNetLink = null;
+            string? apiPowerShellLink = null;
+
             if (projectElement.TryGetProperty("surfaces", out var surfacesElement) &&
                 surfacesElement.ValueKind == JsonValueKind.Object)
             {
                 hasDocsSurface = GetBool(surfacesElement, "docs") ?? false;
                 hasApiDotNetSurface = GetBool(surfacesElement, "apiDotNet") ?? false;
                 hasApiPowerShellSurface = GetBool(surfacesElement, "apiPowerShell") ?? false;
+            }
+
+            if (projectElement.TryGetProperty("links", out var linksElement) &&
+                linksElement.ValueKind == JsonValueKind.Object)
+            {
+                docsLink = GetString(linksElement, "docs");
+                apiDotNetLink = GetString(linksElement, "apiDotNet");
+                apiPowerShellLink = GetString(linksElement, "apiPowerShell");
+            }
+
+            if (onlyLocalLinks)
+            {
+                if (hasDocsSurface && !IsLocalSurfaceLink(docsLink))
+                    hasDocsSurface = false;
+
+                if (hasApiDotNetSurface && !IsLocalSurfaceLink(apiDotNetLink))
+                    hasApiDotNetSurface = false;
+
+                if (hasApiPowerShellSurface && !IsLocalSurfaceLink(apiPowerShellLink))
+                    hasApiPowerShellSurface = false;
             }
 
             projects.Add(new ProjectDocsCatalogItem
@@ -386,6 +411,21 @@ internal static partial class WebPipelineRunner
         }
 
         return projects;
+    }
+
+    private static bool IsLocalSurfaceLink(string? link)
+    {
+        if (string.IsNullOrWhiteSpace(link))
+            return true;
+
+        var trimmed = link.Trim();
+        if (trimmed.StartsWith("//", StringComparison.Ordinal))
+            return false;
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+            return false;
+
+        return true;
     }
 
     private static string ResolveExistingProjectSourcePath(string sourcesRoot, string slug, IReadOnlyList<string> candidates)
