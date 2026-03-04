@@ -910,6 +910,16 @@ themes/nova/assets/app.css
     "Breadcrumbs": true,
     "Website": true,
     "Organization": true,
+    "OrganizationLegalName": "Evotec Services sp. z o.o.",
+    "OrganizationDescription": "AI-powered developer tooling.",
+    "OrganizationLogo": "/assets/brand/logo.png",
+    "OrganizationSameAs": [
+      "https://github.com/EvotecIT/IntelligenceX",
+      "https://x.com/evotecit"
+    ],
+    "OrganizationEmail": "support@evotec.xyz",
+    "OrganizationTelephone": "+1-555-0100",
+    "OrganizationContactUrl": "/contact/",
     "Article": true,
     "FaqPage": true,
     "HowTo": true,
