@@ -399,7 +399,34 @@ internal static partial class WebPipelineRunner
         var slugIndex = Array.FindIndex(header, h => h.Equals("slug", StringComparison.OrdinalIgnoreCase));
         var statusIndex = Array.FindIndex(header, h => h.Equals("status", StringComparison.OrdinalIgnoreCase));
         var listedIndex = Array.FindIndex(header, h => h.Equals("listed", StringComparison.OrdinalIgnoreCase));
-        if (slugIndex < 0 || (statusIndex < 0 && listedIndex < 0))
+        var modeIndex = FindCsvColumnIndex(header, "mode", "projectMode", "project_mode");
+        var externalUrlIndex = FindCsvColumnIndex(header, "externalUrl", "external_url", "external-url", "url");
+
+        var linkColumns = BuildCsvPrefixedColumnMap(header, "links.");
+        foreach (var pair in BuildCsvPrefixedColumnMap(header, "link."))
+            linkColumns.TryAdd(pair.Key, pair.Value);
+
+        AddCsvAliasColumn(linkColumns, header, "website", "website", "websiteUrl", "website_url");
+        AddCsvAliasColumn(linkColumns, header, "docs", "docs", "docsUrl", "docs_url");
+        AddCsvAliasColumn(linkColumns, header, "apiPowerShell", "apiPowerShell", "api_powershell", "powershellApi");
+        AddCsvAliasColumn(linkColumns, header, "apiDotNet", "apiDotNet", "api_dotnet", "dotnetApi");
+        AddCsvAliasColumn(linkColumns, header, "examples", "examples", "examplesUrl", "examples_url");
+        AddCsvAliasColumn(linkColumns, header, "source", "source", "sourceUrl", "source_url");
+        AddCsvAliasColumn(linkColumns, header, "releases", "releases", "releasesUrl", "releases_url");
+        AddCsvAliasColumn(linkColumns, header, "changelog", "changelog", "changelogUrl", "changelog_url");
+        AddCsvAliasColumn(linkColumns, header, "downloads", "downloads", "downloadsUrl", "downloads_url");
+
+        var surfaceColumns = BuildCsvPrefixedColumnMap(header, "surfaces.");
+        foreach (var pair in BuildCsvPrefixedColumnMap(header, "surface."))
+            surfaceColumns.TryAdd(pair.Key, pair.Value);
+
+        var hasAnyOverrideColumn = statusIndex >= 0 ||
+            listedIndex >= 0 ||
+            modeIndex >= 0 ||
+            externalUrlIndex >= 0 ||
+            linkColumns.Count > 0 ||
+            surfaceColumns.Count > 0;
+        if (slugIndex < 0 || !hasAnyOverrideColumn)
             return 0;
 
         var updates = 0;
@@ -421,14 +448,111 @@ internal static partial class WebPipelineRunner
                 project.Status = parts[statusIndex].Trim();
                 updates++;
             }
+            if (modeIndex >= 0 && modeIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[modeIndex]))
+            {
+                project.Mode = NormalizeProjectMode(parts[modeIndex].Trim(), "hub-full");
+                updates++;
+            }
             if (listedIndex >= 0 && listedIndex < parts.Length && TryParseBoolean(parts[listedIndex], out var listed))
             {
                 project.Listed = listed;
                 updates++;
             }
+            if (externalUrlIndex >= 0 && externalUrlIndex < parts.Length && !string.IsNullOrWhiteSpace(parts[externalUrlIndex]))
+            {
+                project.ExternalUrl = parts[externalUrlIndex].Trim();
+                updates++;
+            }
+
+            foreach (var pair in linkColumns)
+            {
+                var rawValue = TryGetCsvCell(parts, pair.Value);
+                if (string.IsNullOrWhiteSpace(rawValue))
+                    continue;
+
+                project.Links ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                project.Links[pair.Key] = rawValue.Trim();
+                updates++;
+            }
+
+            foreach (var pair in surfaceColumns)
+            {
+                var rawValue = TryGetCsvCell(parts, pair.Value);
+                if (string.IsNullOrWhiteSpace(rawValue) || !TryParseBoolean(rawValue, out var surfaceEnabled))
+                    continue;
+
+                project.Surfaces ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                project.Surfaces[pair.Key] = surfaceEnabled;
+                updates++;
+            }
         }
 
         return updates;
+    }
+
+    private static int FindCsvColumnIndex(string[] header, params string[] names)
+    {
+        if (header is null || header.Length == 0 || names is null || names.Length == 0)
+            return -1;
+
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var index = Array.FindIndex(header, h => h.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+                return index;
+        }
+
+        return -1;
+    }
+
+    private static Dictionary<string, int> BuildCsvPrefixedColumnMap(string[] header, string prefix)
+    {
+        var values = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (header is null || header.Length == 0 || string.IsNullOrWhiteSpace(prefix))
+            return values;
+
+        for (var i = 0; i < header.Length; i++)
+        {
+            var name = header[i]?.Trim();
+            if (string.IsNullOrWhiteSpace(name) ||
+                !name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                name.Length <= prefix.Length)
+            {
+                continue;
+            }
+
+            var key = name[prefix.Length..].Trim();
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            values.TryAdd(key, i);
+        }
+
+        return values;
+    }
+
+    private static void AddCsvAliasColumn(
+        IDictionary<string, int> values,
+        string[] header,
+        string key,
+        params string[] aliases)
+    {
+        if (values.ContainsKey(key))
+            return;
+
+        var index = FindCsvColumnIndex(header, aliases);
+        if (index >= 0)
+            values[key] = index;
+    }
+
+    private static string? TryGetCsvCell(string[] parts, int index)
+    {
+        if (parts is null || index < 0 || index >= parts.Length)
+            return null;
+        return parts[index];
     }
 
     private static string[] SplitCsvLine(string line)

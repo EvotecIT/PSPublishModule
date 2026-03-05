@@ -27,6 +27,7 @@ internal static partial class WebPipelineRunner
         var syncExamples = GetBool(step, "syncExamples") ?? GetBool(step, "sync-examples") ?? true;
         var failOnMissingExamplesSource = GetBool(step, "failOnMissingExamplesSource") ?? GetBool(step, "fail-on-missing-examples-source") ?? false;
         var cleanExamplesTarget = GetBool(step, "cleanExamplesTarget") ?? GetBool(step, "clean-examples-target") ?? cleanTarget;
+        var includeDedicatedExternal = GetBool(step, "includeDedicatedExternal") ?? GetBool(step, "include-dedicated-external") ?? false;
         var hydrateFromArtifacts = GetBool(step, "hydrateFromArtifacts") ?? GetBool(step, "hydrate-from-artifacts") ?? true;
         var artifactTimeoutSeconds = GetInt(step, "artifactTimeoutSeconds") ?? GetInt(step, "artifact-timeout-seconds") ?? 60;
         if (artifactTimeoutSeconds < 5)
@@ -173,9 +174,15 @@ internal static partial class WebPipelineRunner
         }
 
         var projects = ReadProjectDocsCatalog(catalogPath, onlyLocalLinks);
-        var docsProjects = projects.Where(static p => p.HasDocsSurface).ToList();
-        var apiProjects = projects.Where(static p => p.HasApiSurface).ToList();
-        var examplesProjects = projects.Where(static p => p.HasExamplesSurface).ToList();
+        var docsProjects = syncDocs
+            ? projects.Where(p => p.HasDocsSurface && (includeDedicatedExternal || !p.ContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))).ToList()
+            : new List<ProjectDocsCatalogItem>();
+        var apiProjects = syncApi
+            ? projects.Where(p => p.HasApiSurface && (includeDedicatedExternal || !p.ContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))).ToList()
+            : new List<ProjectDocsCatalogItem>();
+        var examplesProjects = syncExamples
+            ? projects.Where(p => p.HasExamplesSurface && (includeDedicatedExternal || !p.ContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))).ToList()
+            : new List<ProjectDocsCatalogItem>();
         var artifactStats = new ProjectArtifactHydrationStats();
         var artifactCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var sourcesRootExists = Directory.Exists(sourcesRoot);
@@ -248,7 +255,6 @@ internal static partial class WebPipelineRunner
                 artifactCache,
                 artifactStats);
         }
-
         var synced = 0;
         var skipped = 0;
         var copiedFiles = 0;
