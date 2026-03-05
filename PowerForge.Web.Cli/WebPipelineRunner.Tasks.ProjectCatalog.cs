@@ -52,6 +52,11 @@ internal static partial class WebPipelineRunner
         var includeUnlistedInIndex = GetBool(step, "includeUnlistedInIndex") ?? GetBool(step, "include-unlisted-in-index") ?? false;
         var mergeTelemetry = GetBool(step, "mergeTelemetry") ?? GetBool(step, "merge-telemetry") ?? true;
         var mergeReleaseTelemetry = GetBool(step, "mergeReleaseTelemetry") ?? GetBool(step, "merge-release-telemetry") ?? false;
+        var hubSectionLinkTarget = NormalizeHubSectionLinkTarget(
+            GetString(step, "hubSectionLinkTarget") ??
+            GetString(step, "hub-section-link-target") ??
+            GetString(step, "sectionLinkTarget") ??
+            GetString(step, "section-link-target"));
         var bootstrapFromStats = GetBool(step, "bootstrapFromStats") ?? GetBool(step, "bootstrap-from-stats") ?? false;
         var bootstrapTop = GetInt(step, "bootstrapTop") ?? GetInt(step, "bootstrap-top") ?? 0;
         var bootstrapMinimumStars = GetInt(step, "bootstrapMinimumStars") ?? GetInt(step, "bootstrap-minimum-stars") ?? 0;
@@ -185,7 +190,7 @@ internal static partial class WebPipelineRunner
         if (mergeReleaseTelemetry)
             releaseTelemetryMerged = MergeProjectReleaseTelemetry(catalog.Projects, githubToken, githubApiBaseUrl, releaseTimeoutSeconds);
 
-        NormalizeProjectCatalogContracts(catalog.Projects);
+        NormalizeProjectCatalogContracts(catalog.Projects, hubSectionLinkTarget);
 
         catalog.GeneratedOn = DateTimeOffset.UtcNow.ToString("O");
         catalog.Projects = catalog.Projects
@@ -254,6 +259,7 @@ internal static partial class WebPipelineRunner
                 telemetryMerged,
                 mergeReleaseTelemetry,
                 releaseTelemetryMerged,
+                hubSectionLinkTarget,
                 pagesWritten,
                 pagesSkipped,
                 sectionsWritten,
@@ -625,7 +631,33 @@ internal static partial class WebPipelineRunner
         };
     }
 
-    private static void NormalizeProjectCatalogContracts(IList<ProjectCatalogEntry> projects)
+    private static string NormalizeHubSectionLinkTarget(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized is "collection" ? "collection" : "project";
+    }
+
+    private static string GetHubSectionRoute(string slug, string section, string hubSectionLinkTarget)
+    {
+        var normalizedSection = section?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(slug) || string.IsNullOrWhiteSpace(normalizedSection))
+            return "/";
+
+        return hubSectionLinkTarget.Equals("collection", StringComparison.OrdinalIgnoreCase)
+            ? $"/{normalizedSection}/{slug}/"
+            : $"/projects/{slug}/{normalizedSection}/";
+    }
+
+    private static bool IsKnownHubSectionRoute(string? route, string projectRoute, string collectionRoute)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+
+        return string.Equals(route, projectRoute, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(route, collectionRoute, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void NormalizeProjectCatalogContracts(IList<ProjectCatalogEntry> projects, string hubSectionLinkTarget)
     {
         if (projects is null || projects.Count == 0)
             return;
@@ -709,60 +741,66 @@ internal static partial class WebPipelineRunner
             }
 
             var docsEnabled = surfaces.TryGetValue("docs", out var docsSurface) && docsSurface;
-            var legacyDocsRoute = $"/projects/{slug}/docs/";
-            if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(TryGetDictionaryValue(links, "docs"), legacyDocsRoute, StringComparison.OrdinalIgnoreCase))
+            var docsProjectRoute = $"/projects/{slug}/docs/";
+            var docsCollectionRoute = $"/docs/{slug}/";
+            var docsHubRoute = GetHubSectionRoute(slug, "docs", hubSectionLinkTarget);
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                IsKnownHubSectionRoute(TryGetDictionaryValue(links, "docs"), docsProjectRoute, docsCollectionRoute))
             {
-                links["docs"] = $"/docs/{slug}/";
+                links["docs"] = docsHubRoute;
             }
             if (docsEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "docs")))
             {
-                if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
-                    links["docs"] = $"/docs/{slug}/";
+                if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
+                    links["docs"] = docsHubRoute;
                 else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     links["docs"] = project.ExternalUrl.Trim();
             }
 
             var apiPowerShellEnabled = surfaces.TryGetValue("apiPowerShell", out var apiPowerShellSurface) && apiPowerShellSurface;
-            var legacyApiRoute = $"/projects/{slug}/api/";
-            if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(TryGetDictionaryValue(links, "apiPowerShell"), legacyApiRoute, StringComparison.OrdinalIgnoreCase))
+            var apiProjectRoute = $"/projects/{slug}/api/";
+            var apiCollectionRoute = $"/api/{slug}/";
+            var apiHubRoute = GetHubSectionRoute(slug, "api", hubSectionLinkTarget);
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                IsKnownHubSectionRoute(TryGetDictionaryValue(links, "apiPowerShell"), apiProjectRoute, apiCollectionRoute))
             {
-                links["apiPowerShell"] = $"/api/{slug}/";
+                links["apiPowerShell"] = apiHubRoute;
             }
             if (apiPowerShellEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "apiPowerShell")))
             {
-                if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
-                    links["apiPowerShell"] = $"/api/{slug}/";
+                if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
+                    links["apiPowerShell"] = apiHubRoute;
                 else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     links["apiPowerShell"] = project.ExternalUrl.Trim();
             }
 
             var apiDotNetEnabled = surfaces.TryGetValue("apiDotNet", out var apiDotNetSurface) && apiDotNetSurface;
-            if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(TryGetDictionaryValue(links, "apiDotNet"), legacyApiRoute, StringComparison.OrdinalIgnoreCase))
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                IsKnownHubSectionRoute(TryGetDictionaryValue(links, "apiDotNet"), apiProjectRoute, apiCollectionRoute))
             {
-                links["apiDotNet"] = $"/api/{slug}/";
+                links["apiDotNet"] = apiHubRoute;
             }
             if (apiDotNetEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "apiDotNet")))
             {
-                if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
-                    links["apiDotNet"] = $"/api/{slug}/";
+                if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
+                    links["apiDotNet"] = apiHubRoute;
                 else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     links["apiDotNet"] = project.ExternalUrl.Trim();
             }
 
             var examplesEnabled = surfaces.TryGetValue("examples", out var examplesSurface) && examplesSurface;
-            var legacyExamplesRoute = $"/projects/{slug}/examples/";
-            if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(TryGetDictionaryValue(links, "examples"), legacyExamplesRoute, StringComparison.OrdinalIgnoreCase))
+            var examplesProjectRoute = $"/projects/{slug}/examples/";
+            var examplesCollectionRoute = $"/examples/{slug}/";
+            var examplesHubRoute = GetHubSectionRoute(slug, "examples", hubSectionLinkTarget);
+            if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase) &&
+                IsKnownHubSectionRoute(TryGetDictionaryValue(links, "examples"), examplesProjectRoute, examplesCollectionRoute))
             {
-                links["examples"] = $"/examples/{slug}/";
+                links["examples"] = examplesHubRoute;
             }
             if (examplesEnabled && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "examples")))
             {
-                if (contentMode.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
-                    links["examples"] = $"/examples/{slug}/";
+                if (mode.Equals("hub-full", StringComparison.OrdinalIgnoreCase))
+                    links["examples"] = examplesHubRoute;
                 else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     links["examples"] = project.ExternalUrl.Trim();
             }
@@ -1343,16 +1381,20 @@ internal static partial class WebPipelineRunner
                     continue;
                 }
 
-                var sectionTitle = section.Equals("docs", StringComparison.OrdinalIgnoreCase)
-                    ? $"{name} Docs"
-                    : section.Equals("api", StringComparison.OrdinalIgnoreCase)
-                        ? $"{name} API"
-                        : $"{name} Examples";
-                var sectionDescription = section.Equals("docs", StringComparison.OrdinalIgnoreCase)
-                    ? $"Documentation routes and references for {name}."
-                    : section.Equals("api", StringComparison.OrdinalIgnoreCase)
-                        ? $"API routes and references for {name}."
-                        : $"Examples and usage guides for {name}.";
+                var sectionTitle = section switch
+                {
+                    "docs" => $"{name} Docs",
+                    "api" => $"{name} API",
+                    "examples" => $"{name} Examples",
+                    _ => $"{name} {section}"
+                };
+                var sectionDescription = section switch
+                {
+                    "docs" => $"Documentation routes and references for {name}.",
+                    "api" => $"API routes and references for {name}.",
+                    "examples" => $"Examples and usage guides for {name}.",
+                    _ => $"{name} project section."
+                };
 
                 var lines = new List<string>
                 {
@@ -1394,11 +1436,11 @@ internal static partial class WebPipelineRunner
                         project.Links.TryGetValue("examples", out examplesLink);
                     }
                     if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/docs/{slug}/";
+                        docsLink = $"/projects/{slug}/docs/";
                     if (string.IsNullOrWhiteSpace(apiLink))
-                        apiLink = $"/api/{slug}/";
+                        apiLink = $"/projects/{slug}/api/";
                     if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/examples/{slug}/";
+                        examplesLink = $"/projects/{slug}/examples/";
 
                     if (!string.IsNullOrWhiteSpace(docsLink))
                         lines.Add($"Documentation is available at [{docsLink}]({docsLink}).");
@@ -1421,9 +1463,9 @@ internal static partial class WebPipelineRunner
                         project.Links.TryGetValue("examples", out examplesLink);
                     }
                     if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/docs/{slug}/";
+                        docsLink = $"/projects/{slug}/docs/";
                     if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/examples/{slug}/";
+                        examplesLink = $"/projects/{slug}/examples/";
 
                     var hasApi = false;
                     if (project.Links is not null && project.Links.TryGetValue("apiPowerShell", out var psApi) && !string.IsNullOrWhiteSpace(psApi))
@@ -1462,16 +1504,16 @@ internal static partial class WebPipelineRunner
                         project.Links.TryGetValue("examples", out examplesLink);
                     }
                     if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/docs/{slug}/";
+                        docsLink = $"/projects/{slug}/docs/";
                     if (string.IsNullOrWhiteSpace(apiLink))
-                        apiLink = $"/api/{slug}/";
+                        apiLink = $"/projects/{slug}/api/";
                     if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/examples/{slug}/";
+                        examplesLink = $"/projects/{slug}/examples/";
 
                     if (!string.IsNullOrWhiteSpace(examplesLink))
                         lines.Add($"Examples are available at [{examplesLink}]({examplesLink}).");
                     else if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
-                        lines.Add("Examples for this project are hosted on the dedicated external website.");
+                        lines.Add("Examples are provided on the dedicated external website.");
                     else
                         lines.Add("Examples for this project are being prepared.");
                     lines.Add(string.Empty);
