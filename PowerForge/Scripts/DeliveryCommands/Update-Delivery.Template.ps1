@@ -20,7 +20,20 @@ function {{UpdateCommandName}} {
 
         [switch] $Force,
         [switch] $ListOnly,
-        [switch] $Unblock
+        [switch] $Unblock,
+
+        [string[]] $PreservePaths,
+        [string[]] $OverwritePaths,
+
+        [switch] $Bootstrap,
+        [string] $Version,
+        [string] $Repository,
+        [switch] $AllowPrerelease,
+        [string] $RepositoryCredentialUserName,
+        [string] $RepositoryCredentialSecret,
+        [string] $RepositoryCredentialSecretFilePath,
+
+        [switch] $__DeliveryNoBootstrap
     )
 
     if (-not (Get-Command -Name '{{InstallCommandName}}' -ErrorAction SilentlyContinue)) {

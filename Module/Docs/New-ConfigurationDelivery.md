@@ -11,7 +11,7 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
+New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-PreservePaths <string[]>] [-OverwritePaths <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -254,6 +254,38 @@ Type: DeliveryBundleDestination
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Internals, Root, Both, None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OverwritePaths
+Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs. Example: Artefacts/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreservePaths
+Optional wildcard patterns (relative to Internals) that should be preserved during merge installs. Example: Config/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

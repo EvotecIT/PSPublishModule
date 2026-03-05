@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -83,6 +84,18 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     [Parameter] public string[]? DocumentationOrder { get; set; }
 
     /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge installs.
+    /// Example: <c>Config/**</c>.
+    /// </summary>
+    [Parameter] public string[]? PreservePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs.
+    /// Example: <c>Artefacts/**</c>.
+    /// </summary>
+    [Parameter] public string[]? OverwritePaths { get; set; }
+
+    /// <summary>
     /// When set, generates a public Install-&lt;ModuleName&gt; helper function during build that copies Internals to a destination folder.
     /// </summary>
     [Parameter] public SwitchParameter GenerateInstallCommand { get; set; }
@@ -125,6 +138,8 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             RepositoryPaths = RepositoryPaths,
             RepositoryBranch = RepositoryBranch,
             DocumentationOrder = DocumentationOrder,
+            PreservePaths = NormalizeStringArray(PreservePaths),
+            OverwritePaths = NormalizeStringArray(OverwritePaths),
             GenerateInstallCommand = GenerateInstallCommand.IsPresent || !string.IsNullOrWhiteSpace(InstallCommandName),
             GenerateUpdateCommand = GenerateUpdateCommand.IsPresent || !string.IsNullOrWhiteSpace(UpdateCommandName),
             InstallCommandName = string.IsNullOrWhiteSpace(InstallCommandName) ? null : InstallCommandName!.Trim(),
@@ -156,5 +171,18 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
         }
 
         return output.Count == 0 ? null : output.ToArray();
+    }
+
+    private static string[]? NormalizeStringArray(string[]? values)
+    {
+        if (values is null || values.Length == 0) return null;
+
+        var output = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return output.Length == 0 ? null : output;
     }
 }

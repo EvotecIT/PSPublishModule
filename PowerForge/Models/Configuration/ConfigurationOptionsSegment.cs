@@ -120,6 +120,18 @@ public sealed class DeliveryOptionsConfiguration
     public string[]? DocumentationOrder { get; set; }
 
     /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be preserved during merge installs.
+    /// Example: <c>Config/**</c>.
+    /// </summary>
+    public string[]? PreservePaths { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs.
+    /// Example: <c>Artefacts/**</c>.
+    /// </summary>
+    public string[]? OverwritePaths { get; set; }
+
+    /// <summary>
     /// When true, generates a public <c>Install-&lt;ModuleName&gt;</c> helper function during build that copies Internals
     /// to a destination folder (script-package workflow).
     /// </summary>
