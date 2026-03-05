@@ -21,6 +21,7 @@ internal static partial class WebPipelineRunner
         var failOnMissingSource = GetBool(step, "failOnMissingSource") ?? GetBool(step, "fail-on-missing-source") ?? false;
         var cleanTarget = GetBool(step, "cleanTarget") ?? GetBool(step, "clean-target") ?? false;
         var onlyLocalLinks = GetBool(step, "onlyLocalLinks") ?? GetBool(step, "only-local-links") ?? false;
+        var syncDocs = GetBool(step, "syncDocs") ?? GetBool(step, "sync-docs") ?? true;
         var syncApi = GetBool(step, "syncApi") ?? GetBool(step, "sync-api") ?? false;
         var failOnMissingApiSource = GetBool(step, "failOnMissingApiSource") ?? GetBool(step, "fail-on-missing-api-source") ?? false;
         var cleanApiTarget = GetBool(step, "cleanApiTarget") ?? GetBool(step, "clean-api-target") ?? cleanTarget;
