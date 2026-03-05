@@ -82,6 +82,7 @@ function {{CommandName}} {
         [string] $RepositoryCredentialSecret,
         [string] $RepositoryCredentialSecretFilePath,
 
+        [Parameter(DontShow)]
         [switch] $__DeliveryNoBootstrap
     )
 
