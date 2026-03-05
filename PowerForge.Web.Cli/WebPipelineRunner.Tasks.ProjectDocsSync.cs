@@ -103,6 +103,17 @@ internal static partial class WebPipelineRunner
         var artifactTokenEnv = GetString(step, "artifactTokenEnv") ?? GetString(step, "artifact-token-env") ?? "GITHUB_TOKEN";
         if (string.IsNullOrWhiteSpace(artifactToken) && !string.IsNullOrWhiteSpace(artifactTokenEnv))
             artifactToken = Environment.GetEnvironmentVariable(artifactTokenEnv);
+        var projectsContentRoot = ResolvePath(baseDir,
+            GetString(step, "projectsContentRoot") ??
+            GetString(step, "projects-content-root"));
+        if (string.IsNullOrWhiteSpace(projectsContentRoot))
+        {
+            var contentParent = Directory.GetParent(contentRoot)?.FullName;
+            projectsContentRoot = string.IsNullOrWhiteSpace(contentParent)
+                ? string.Empty
+                : Path.Combine(contentParent, "projects");
+        }
+        projectsContentRoot = string.IsNullOrWhiteSpace(projectsContentRoot) ? string.Empty : Path.GetFullPath(projectsContentRoot);
 
         var summaryPath = ResolvePath(baseDir,
             GetString(step, "summaryPath") ??
@@ -409,6 +420,13 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        UpdateProjectSurfaceAvailabilityMetadata(
+            projects,
+            projectsContentRoot,
+            contentRoot,
+            apiRoot,
+            examplesRoot);
+
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
             WriteProjectDocsSummary(
@@ -450,6 +468,136 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"project-docs-sync ok: docs={synced}/{docsProjects.Count}; docsSkipped={skipped}; docsFiles={copiedFiles}; toc={tocFiles}; api={syncedApi}/{apiProjects.Count}; apiSkipped={skippedApi}; apiFiles={copiedApiFiles}; examples={syncedExamples}/{examplesProjects.Count}; examplesSkipped={skippedExamples}; examplesFiles={copiedExampleFiles}; artifacts(hydrated/downloads/hits/failures)={(artifactStats.DocsHydrated + artifactStats.ApiHydrated + artifactStats.ExamplesHydrated)}/{artifactStats.Downloads}/{artifactStats.CacheHits}/{artifactStats.Failures}";
+    }
+
+    private static void UpdateProjectSurfaceAvailabilityMetadata(
+        IReadOnlyList<ProjectDocsCatalogItem> projects,
+        string projectsContentRoot,
+        string docsRoot,
+        string apiRoot,
+        string examplesRoot)
+    {
+        if (projects is null || projects.Count == 0)
+            return;
+        if (string.IsNullOrWhiteSpace(projectsContentRoot) || !Directory.Exists(projectsContentRoot))
+            return;
+
+        foreach (var project in projects)
+        {
+            if (string.IsNullOrWhiteSpace(project.Slug))
+                continue;
+
+            var slug = project.Slug.Trim().ToLowerInvariant();
+            var docsAvailable = HasProjectSurfaceContent(docsRoot, slug);
+            var apiAvailable = HasProjectSurfaceContent(apiRoot, slug);
+            var examplesAvailable = HasProjectSurfaceContent(examplesRoot, slug);
+
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".docs.md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".api.md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".examples.md"), docsAvailable, apiAvailable, examplesAvailable);
+
+            var nestedSectionsRoot = Path.Combine(projectsContentRoot, slug);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "docs.md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "api.md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "examples.md"), docsAvailable, apiAvailable, examplesAvailable);
+        }
+    }
+
+    private static bool HasProjectSurfaceContent(string root, string slug)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(slug))
+            return false;
+        if (!Directory.Exists(root))
+            return false;
+
+        var projectRoot = Path.Combine(root, slug);
+        if (!Directory.Exists(projectRoot))
+            return false;
+
+        return Directory.EnumerateFiles(projectRoot, "*.md", SearchOption.AllDirectories).Any();
+    }
+
+    private static void UpdateProjectLocalSurfaceFlags(
+        string markdownPath,
+        bool docsAvailable,
+        bool apiAvailable,
+        bool examplesAvailable)
+    {
+        if (string.IsNullOrWhiteSpace(markdownPath) || !File.Exists(markdownPath))
+            return;
+
+        var content = File.ReadAllText(markdownPath);
+        if (!TryGetFrontMatterLines(content, out var allLines))
+            return;
+
+        var closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+        if (closingIndex <= 0)
+            return;
+
+        var changed = false;
+        changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_local_docs_available", docsAvailable);
+        closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+        changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_local_api_available", apiAvailable);
+        closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+        changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_local_examples_available", examplesAvailable);
+
+        if (!changed)
+            return;
+
+        var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        File.WriteAllText(markdownPath, string.Join(newline, allLines), Encoding.UTF8);
+    }
+
+    private static bool UpsertFrontMatterBoolean(List<string> allLines, int closingMarkerIndex, string key, bool value)
+    {
+        if (allLines is null || allLines.Count == 0 || closingMarkerIndex <= 0)
+            return false;
+
+        var expected = $"{key}: {(value ? "true" : "false")}";
+        for (var i = 1; i < closingMarkerIndex; i++)
+        {
+            var currentLine = allLines[i];
+            if (!currentLine.TrimStart().StartsWith(key + ":", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.Equals(currentLine.Trim(), expected, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            allLines[i] = expected;
+            return true;
+        }
+
+        allLines.Insert(closingMarkerIndex, expected);
+        return true;
+    }
+
+    private static int FindFrontMatterClosingMarkerIndex(IReadOnlyList<string> lines)
+    {
+        if (lines is null || lines.Count < 3)
+            return -1;
+
+        if (!string.Equals(lines[0].Trim(), "---", StringComparison.Ordinal))
+            return -1;
+
+        for (var i = 1; i < lines.Count; i++)
+        {
+            if (lines[i].Trim() == "---")
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static bool TryGetFrontMatterLines(string content, out List<string> allLines)
+    {
+        allLines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
+        if (allLines.Count < 3)
+            return false;
+        if (!string.Equals(allLines[0].Trim(), "---", StringComparison.Ordinal))
+            return false;
+
+        return FindFrontMatterClosingMarkerIndex(allLines) > 0;
     }
 
     private static void WriteProjectDocsSummary(
