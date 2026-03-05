@@ -31,6 +31,9 @@ internal static partial class WebPipelineRunner
         var artifactTimeoutSeconds = GetInt(step, "artifactTimeoutSeconds") ?? GetInt(step, "artifact-timeout-seconds") ?? 60;
         if (artifactTimeoutSeconds < 5)
             artifactTimeoutSeconds = 5;
+        var docsSectionFolder = NormalizeRelativePathSegment(GetString(step, "docsSectionFolder") ?? GetString(step, "docs-section-folder"));
+        var apiSectionFolder = NormalizeRelativePathSegment(GetString(step, "apiSectionFolder") ?? GetString(step, "api-section-folder"));
+        var examplesSectionFolder = NormalizeRelativePathSegment(GetString(step, "examplesSectionFolder") ?? GetString(step, "examples-section-folder"));
 
         var catalogPath = ResolvePath(baseDir,
             GetString(step, "catalog") ??
@@ -282,9 +285,12 @@ internal static partial class WebPipelineRunner
                 continue;
             }
 
-            var targetDocsRoot = Path.Combine(contentRoot, slug);
-            if (cleanTarget && Directory.Exists(targetDocsRoot))
-                Directory.Delete(targetDocsRoot, recursive: true);
+            var targetDocsProjectRoot = Path.Combine(contentRoot, slug);
+            var targetDocsRoot = string.IsNullOrWhiteSpace(docsSectionFolder)
+                ? targetDocsProjectRoot
+                : Path.Combine(targetDocsProjectRoot, docsSectionFolder);
+            if (cleanTarget && Directory.Exists(targetDocsProjectRoot))
+                Directory.Delete(targetDocsProjectRoot, recursive: true);
             Directory.CreateDirectory(targetDocsRoot);
 
             var markdownFiles = Directory
@@ -350,9 +356,12 @@ internal static partial class WebPipelineRunner
                     continue;
                 }
 
-                var targetApiRoot = Path.Combine(apiRoot, slug);
-                if (cleanApiTarget && Directory.Exists(targetApiRoot))
-                    Directory.Delete(targetApiRoot, recursive: true);
+                var targetApiProjectRoot = Path.Combine(apiRoot, slug);
+                var targetApiRoot = string.IsNullOrWhiteSpace(apiSectionFolder)
+                    ? targetApiProjectRoot
+                    : Path.Combine(targetApiProjectRoot, apiSectionFolder);
+                if (cleanApiTarget && Directory.Exists(targetApiProjectRoot))
+                    Directory.Delete(targetApiProjectRoot, recursive: true);
                 Directory.CreateDirectory(targetApiRoot);
 
                 var apiFiles = Directory
@@ -394,9 +403,12 @@ internal static partial class WebPipelineRunner
                     continue;
                 }
 
-                var targetExamplesRoot = Path.Combine(examplesRoot, slug);
-                if (cleanExamplesTarget && Directory.Exists(targetExamplesRoot))
-                    Directory.Delete(targetExamplesRoot, recursive: true);
+                var targetExamplesProjectRoot = Path.Combine(examplesRoot, slug);
+                var targetExamplesRoot = string.IsNullOrWhiteSpace(examplesSectionFolder)
+                    ? targetExamplesProjectRoot
+                    : Path.Combine(targetExamplesProjectRoot, examplesSectionFolder);
+                if (cleanExamplesTarget && Directory.Exists(targetExamplesProjectRoot))
+                    Directory.Delete(targetExamplesProjectRoot, recursive: true);
                 Directory.CreateDirectory(targetExamplesRoot);
 
                 var exampleFiles = Directory
@@ -1182,6 +1194,24 @@ internal static partial class WebPipelineRunner
             return;
 
         values.Add(normalized);
+    }
+
+    private static string NormalizeRelativePathSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = value.Trim()
+            .Replace('\\', '/')
+            .Trim('/');
+        if (normalized.Length == 0)
+            return string.Empty;
+        if (normalized.Contains("..", StringComparison.Ordinal))
+            throw new InvalidOperationException($"project-docs-sync section folder cannot contain '..': {value}");
+        if (Path.IsPathRooted(normalized))
+            throw new InvalidOperationException($"project-docs-sync section folder must be relative: {value}");
+
+        return normalized.Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static string EscapeYamlString(string value)
