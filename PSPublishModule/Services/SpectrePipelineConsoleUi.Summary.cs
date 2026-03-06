@@ -380,6 +380,18 @@ internal static partial class SpectrePipelineConsoleUi
         maxLength = Math.Max(40, maxLength);
 
         var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
+        var lines = msg.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.Trim())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+
+        var importHeader = lines.FirstOrDefault(static line => line.StartsWith("Import-Module failed", StringComparison.OrdinalIgnoreCase));
+        var cause = lines.FirstOrDefault(static line => line.StartsWith("Cause:", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(importHeader) && !string.IsNullOrWhiteSpace(cause))
+            msg = importHeader + " " + cause;
+        else
+            msg = string.Join(" ", lines);
+
         msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
         if (msg.Length <= maxLength) return msg;
         return msg.Substring(0, maxLength - 1) + "…";
@@ -393,6 +405,11 @@ internal static partial class SpectrePipelineConsoleUi
             message.IndexOf("No match was found for the specified search criteria", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return "Verify a repository is registered and reachable (Get-PSRepository). If PSGallery is missing, run Register-PSRepository -Default.";
+        }
+
+        if (message.IndexOf("manifest contains one or more members that are not valid", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return "The module manifest contains an unsupported top-level key. Move prerelease/package metadata under PrivateData.PSData.";
         }
 
         return string.Empty;

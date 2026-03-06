@@ -190,21 +190,7 @@ public sealed partial class ModulePipelineRunner
         var script = BuildImportModulesScript();
         var result = RunScript(runner, script, args, TimeSpan.FromMinutes(5));
         if (result.ExitCode != 0)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"Import-Module failed (exit {result.ExitCode}).");
-            if (!string.IsNullOrWhiteSpace(result.StdOut))
-            {
-                sb.AppendLine("StdOut:");
-                sb.AppendLine(result.StdOut.TrimEnd());
-            }
-            if (!string.IsNullOrWhiteSpace(result.StdErr))
-            {
-                sb.AppendLine("StdErr:");
-                sb.AppendLine(result.StdErr.TrimEnd());
-            }
-            throw new InvalidOperationException(sb.ToString().TrimEnd());
-        }
+            throw new InvalidOperationException(ModuleImportFailureFormatter.BuildFailureMessage(result, buildResult.ManifestPath));
     }
 
     private void RunTestsAfterMerge(
