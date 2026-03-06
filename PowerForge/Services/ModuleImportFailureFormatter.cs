@@ -128,10 +128,26 @@ internal static class ModuleImportFailureFormatter
     private static bool StringEqualsNormalized(string? left, string? right)
         => string.Equals(Normalize(left), Normalize(right), StringComparison.OrdinalIgnoreCase);
 
-    private sealed record ImportFailureDiagnostics(
-        string? PowerShellVersion,
-        string? PSEdition,
-        string? ImportError,
-        string? StderrSummary,
-        string? StdoutSummary);
+    private sealed class ImportFailureDiagnostics
+    {
+        internal string? PowerShellVersion { get; }
+        internal string? PSEdition { get; }
+        internal string? ImportError { get; }
+        internal string? StderrSummary { get; }
+        internal string? StdoutSummary { get; }
+
+        internal ImportFailureDiagnostics(
+            string? powerShellVersion,
+            string? psEdition,
+            string? importError,
+            string? stderrSummary,
+            string? stdoutSummary)
+        {
+            PowerShellVersion = powerShellVersion;
+            PSEdition = psEdition;
+            ImportError = importError;
+            StderrSummary = stderrSummary;
+            StdoutSummary = stdoutSummary;
+        }
+    }
 }
