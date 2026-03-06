@@ -28,7 +28,7 @@ public sealed partial class ModulePipelineRunner
             SetOrRemoveTopLevelString(manifestPath, "Description", manifest.Description, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "PowerShellVersion", manifest.PowerShellVersion, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "DotNetFrameworkVersion", manifest.DotNetFrameworkVersion, removeWhenEmpty: true);
-            SetOrRemoveTopLevelString(manifestPath, "Prerelease", manifest.Prerelease, removeWhenEmpty: true);
+            SetOrRemovePsDataString(manifestPath, "Prerelease", manifest.Prerelease, removeWhenEmpty: true);
 
             if (manifest.CompatiblePSEditions is not null)
                 ManifestEditor.TrySetTopLevelStringArray(manifestPath, "CompatiblePSEditions", NormalizeStringArray(manifest.CompatiblePSEditions));
@@ -75,9 +75,11 @@ public sealed partial class ModulePipelineRunner
             SetOrRemovePsDataString(manifestPath, "IconUri", plan.BuildSpec.IconUri, removeWhenEmpty: false);
             SetOrRemovePsDataString(manifestPath, "ProjectUri", plan.BuildSpec.ProjectUri, removeWhenEmpty: false);
 
-            if (!string.IsNullOrWhiteSpace(plan.PreRelease))
-                ManifestEditor.TrySetTopLevelString(manifestPath, "Prerelease", plan.PreRelease!);
+            SetOrRemovePsDataString(manifestPath, "Prerelease", plan.PreRelease, removeWhenEmpty: true);
         }
+
+        // Prerelease belongs under PrivateData.PSData. Remove any stale top-level key left by older builds.
+        ManifestEditor.TryRemoveTopLevelKey(manifestPath, "Prerelease");
 
         // Keep dependency fields deterministic and avoid stale values from source PSD1.
         ManifestEditor.TrySetRequiredModules(manifestPath, manifestRequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>());
