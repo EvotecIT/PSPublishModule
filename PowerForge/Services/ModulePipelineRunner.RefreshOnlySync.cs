@@ -6,33 +6,54 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private void SyncRefreshOnlyOutputsToProjectRoot(
+    private void SyncBuildControlledOutputsToProjectRoot(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         FormatterResult[] formattingStagingResults)
     {
-        if (!plan.BuildSpec.RefreshManifestOnly)
-            return;
-
         var stagingRoot = Path.GetFullPath(buildResult.StagingPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var projectRoot = Path.GetFullPath(plan.ProjectRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         var modulePsd1 = Path.Combine(stagingRoot, $"{plan.ModuleName}.psd1");
-        var modulePsm1 = Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1");
-
         var filesToSync = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            modulePsd1,
-            modulePsm1
+            modulePsd1
         };
 
-        foreach (var result in formattingStagingResults ?? Array.Empty<FormatterResult>())
+        if (plan.BuildSpec.RefreshManifestOnly)
         {
-            if (result is null || !result.Changed) continue;
-            if (!IsPowerShellSource(result.Path)) continue;
-            filesToSync.Add(Path.GetFullPath(result.Path));
+            var projectPsd1 = Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
+            var staleGeneratedRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            filesToSync.Add(Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1"));
+
+            foreach (var relativePath in GetManifestControlledRelativePaths(projectPsd1))
+                staleGeneratedRelativePaths.Add(relativePath);
+            foreach (var relativePath in GetManifestControlledRelativePaths(modulePsd1))
+            {
+                filesToSync.Add(Path.Combine(stagingRoot, relativePath));
+                staleGeneratedRelativePaths.Remove(relativePath);
+            }
+
+            foreach (var result in formattingStagingResults ?? Array.Empty<FormatterResult>())
+            {
+                if (result is null || !result.Changed) continue;
+                if (!IsPowerShellSource(result.Path)) continue;
+                filesToSync.Add(Path.GetFullPath(result.Path));
+            }
+
+            foreach (var relativePath in staleGeneratedRelativePaths)
+            {
+                if (string.IsNullOrWhiteSpace(relativePath)) continue;
+                if (File.Exists(Path.Combine(stagingRoot, relativePath))) continue;
+
+                var destinationPath = Path.Combine(projectRoot, relativePath);
+                if (!File.Exists(destinationPath)) continue;
+
+                File.Delete(destinationPath);
+            }
         }
 
         var sourcePrefix = stagingRoot + Path.DirectorySeparatorChar;
@@ -56,7 +77,38 @@ public sealed partial class ModulePipelineRunner
             synced++;
         }
 
-        _logger.Info($"RefreshPSD1Only: synchronized {synced} file(s) from staging back to project root.");
+        _logger.Info($"Project sync: synchronized {synced} build-controlled file(s) from staging back to project root.");
+
+        static string[] GetManifestControlledRelativePaths(string manifestPath)
+        {
+            if (!File.Exists(manifestPath))
+                return Array.Empty<string>();
+
+            if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "ScriptsToProcess", out var scripts) &&
+                scripts is not null)
+            {
+                return NormalizeRelativePaths(scripts);
+            }
+
+            if (ManifestEditor.TryGetTopLevelString(manifestPath, "ScriptsToProcess", out var singleScript) &&
+                !string.IsNullOrWhiteSpace(singleScript))
+            {
+                return NormalizeRelativePaths(new[] { singleScript!.Trim() });
+            }
+
+            return Array.Empty<string>();
+        }
+
+        static string[] NormalizeRelativePaths(IEnumerable<string> relativePaths)
+        {
+            return (relativePaths ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path.Trim())
+                .Where(path => !Path.IsPathRooted(path))
+                .Select(path => path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
 
         static bool IsPowerShellSource(string? path)
         {

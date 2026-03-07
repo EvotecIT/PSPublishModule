@@ -1,15 +1,15 @@
 ﻿@{
-    AliasesToExport        = @('New-PrepareModule', 'Build-Module', 'Invoke-ModuleBuilder')
+    AliasesToExport        = @('Build-Module', 'Invoke-ModuleBuilder', 'New-PrepareModule')
     Author                 = 'Przemyslaw Klys'
-    CmdletsToExport        = @('*')
+    CmdletsToExport        = @('Convert-ProjectConsistency', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectVersion', 'Invoke-DotNetPublish', 'Invoke-DotNetReleaseBuild', 'Invoke-DotNetRepositoryRelease', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'Invoke-ProjectBuild', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDelivery', 'New-ConfigurationDocumentation', 'New-ConfigurationDotNetBenchmarkGate', 'New-ConfigurationDotNetBenchmarkMetric', 'New-ConfigurationDotNetConfigBootstrapRule', 'New-ConfigurationDotNetInstaller', 'New-ConfigurationDotNetMatrix', 'New-ConfigurationDotNetMatrixRule', 'New-ConfigurationDotNetProfile', 'New-ConfigurationDotNetProject', 'New-ConfigurationDotNetPublish', 'New-ConfigurationDotNetService', 'New-ConfigurationDotNetServiceLifecycle', 'New-ConfigurationDotNetServiceRecovery', 'New-ConfigurationDotNetSign', 'New-ConfigurationDotNetState', 'New-ConfigurationDotNetStateRule', 'New-ConfigurationDotNetTarget', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'New-ConfigurationValidation', 'New-DotNetPublishConfig', 'New-ModuleAboutTopic', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion', 'Step-Version')
     CompanyName            = 'Evotec'
     CompatiblePSEditions   = @('Desktop', 'Core')
-    Copyright              = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
+    Copyright              = '(c) 2011 - 2026 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.27'
+    ModuleVersion          = '3.0.0'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
@@ -21,22 +21,23 @@
         }
     }
     RequiredModules        = @(@{
-            Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
-            ModuleName    = 'powershellget'
-            ModuleVersion = '2.2.5'
+            Guid            = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
+            ModuleName      = 'powershellget'
+            ModuleVersion   = '2.2.5'
         }, @{
-            Guid          = 'd6245802-193d-4068-a631-8863a4342a18'
-            ModuleName    = 'PSScriptAnalyzer'
-            ModuleVersion = '1.24.0'
+            Guid            = 'd6245802-193d-4068-a631-8863a4342a18'
+            ModuleName      = 'PSScriptAnalyzer'
+            ModuleVersion   = '1.24.0'
         }, @{
-            Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
-            ModuleName    = 'Pester'
-            ModuleVersion = '5.7.1'
+            Guid            = 'a699dea5-2c73-4616-a270-1f7abb777e71'
+            ModuleName      = 'Pester'
+            ModuleVersion   = '5.7.1'
         }, @{
-            Guid          = 'e4e0bda1-0703-44a5-b70d-8fe704cd0643'
-            ModuleName    = 'Microsoft.PowerShell.PSResourceGet'
-            ModuleVersion = '1.1.1'
+            Guid            = 'e4e0bda1-0703-44a5-b70d-8fe704cd0643'
+            ModuleName      = 'Microsoft.PowerShell.PSResourceGet'
+            ModuleVersion   = '1.1.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
     NestedModules          = @()
+    ScriptsToProcess       = @()
 }

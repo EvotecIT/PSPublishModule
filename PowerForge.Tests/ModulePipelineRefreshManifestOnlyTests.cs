@@ -168,6 +168,62 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
         }
     }
 
+    [Fact]
+    public void Run_NormalBuild_UpdatesProjectRootManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var libDefault = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Default"));
+            File.WriteAllText(Path.Combine(libDefault.FullName, moduleName + ".dll"), "placeholder");
+
+            var projectManifest = Path.Combine(root.FullName, moduleName + ".psd1");
+            Assert.True(ManifestEditor.TrySetTopLevelString(projectManifest, "Author", "OldAuthor"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            ModuleVersion = "2.0.0",
+                            Author = "NewAuthor"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.NotNull(result.BuildResult);
+            Assert.True(File.Exists(projectManifest));
+
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "ModuleVersion", out var projectVersion));
+            Assert.Equal("2.0.0", projectVersion);
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "Author", out var projectAuthor));
+            Assert.Equal("NewAuthor", projectAuthor);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string rootPath, string moduleName, string moduleVersion)
     {
         File.WriteAllText(Path.Combine(rootPath, moduleName + ".psm1"), "function Test-Example { 'ok' }");
