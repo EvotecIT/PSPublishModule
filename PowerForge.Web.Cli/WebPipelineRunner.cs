@@ -33,6 +33,7 @@ internal static partial class WebPipelineRunner
         "out", "output", "source", "destination", "dest",
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
         "xml", "help", "helpPath", "assembly",
+        "siteOut", "site-out", "outRoot", "out-root", "projectsOut", "projects-out",
         "changelog", "changelogPath", "releasesPath", "releases-path",
         "discoverRoot", "discover-root",
         "apiIndex", "apiSitemap", "criticalCss", "hashManifest", "reportPath", "report-path",

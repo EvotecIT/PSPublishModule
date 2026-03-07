@@ -795,6 +795,15 @@ internal static partial class WebPipelineRunner
             if (string.IsNullOrWhiteSpace(slug))
                 continue;
 
+            project.Name = NormalizeOptionalString(project.Name);
+            project.Description = NormalizeOptionalString(project.Description);
+            project.ExternalUrl = NormalizeOptionalString(project.ExternalUrl);
+            project.GitHubRepo = NormalizeOptionalString(project.GitHubRepo);
+            project.ManifestGeneratedAt = NormalizeOptionalString(project.ManifestGeneratedAt);
+            project.ManifestCommit = NormalizeOptionalString(project.ManifestCommit);
+            project.ManifestPath = NormalizeOptionalString(project.ManifestPath);
+            project.Version = NormalizeOptionalString(project.Version);
+
             var mode = NormalizeProjectMode(project.Mode, "hub-full");
             project.Mode = mode;
             var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
@@ -944,7 +953,7 @@ internal static partial class WebPipelineRunner
             {
                 if (string.IsNullOrWhiteSpace(pair.Key))
                     continue;
-                normalized[pair.Key.Trim()] = string.IsNullOrWhiteSpace(pair.Value) ? null : pair.Value.Trim();
+                normalized[pair.Key.Trim()] = NormalizeOptionalString(pair.Value);
             }
         }
 
@@ -1208,9 +1217,7 @@ internal static partial class WebPipelineRunner
         {
             if (!pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (string.IsNullOrWhiteSpace(pair.Value))
-                return null;
-            return pair.Value.Trim();
+            return NormalizeOptionalString(pair.Value);
         }
 
         return null;
@@ -2198,7 +2205,7 @@ internal static partial class WebPipelineRunner
     private static string? TryGetDictionaryValue(Dictionary<string, string?> dictionary, string key)
     {
         if (dictionary.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
-            return value.Trim();
+            return NormalizeOptionalString(value);
         return null;
     }
 
@@ -2211,6 +2218,7 @@ internal static partial class WebPipelineRunner
 
     private static void WriteMetaString(List<string> lines, string key, string? value)
     {
+        value = NormalizeOptionalString(value);
         if (string.IsNullOrWhiteSpace(value))
             return;
         lines.Add($"{key}: {YamlQuote(value)}");
@@ -2267,15 +2275,17 @@ internal static partial class WebPipelineRunner
 
     private static string NormalizeProjectMode(string? value, string fallback)
     {
+        value = NormalizeOptionalString(value);
         if (string.IsNullOrWhiteSpace(value))
             return fallback;
-        return value.Trim().ToLowerInvariant();
+        return value.ToLowerInvariant();
     }
 
     private static string NormalizeProjectContentMode(string? value, string? modeFallback)
     {
+        value = NormalizeOptionalString(value);
         if (!string.IsNullOrWhiteSpace(value))
-            return value.Trim().ToLowerInvariant();
+            return value.ToLowerInvariant();
 
         var mode = NormalizeProjectMode(modeFallback, "hub-full");
         return mode.Equals("dedicated-external", StringComparison.OrdinalIgnoreCase)
@@ -2287,14 +2297,24 @@ internal static partial class WebPipelineRunner
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        return value.Trim();
+
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+            return null;
+
+        var withoutQuotes = trimmed.Trim('"', '\'').Trim();
+        if (withoutQuotes.Length == 0)
+            return null;
+
+        return trimmed;
     }
 
     private static string NormalizeProjectStatus(string? value, string fallback)
     {
+        value = NormalizeOptionalString(value);
         if (string.IsNullOrWhiteSpace(value))
             return fallback;
-        return value.Trim().ToLowerInvariant();
+        return value.ToLowerInvariant();
     }
 
     private static string YamlQuote(string? value)

@@ -583,8 +583,11 @@ $@"<!doctype html>
 
     private static string BuildCssBlockWithFallback(string fallbackCss, string cssLinks, string extraCssLinks = "")
     {
+        if (!string.IsNullOrWhiteSpace(cssLinks))
+            return JoinHtmlFragments(cssLinks, extraCssLinks);
+
         var fallbackBlock = WrapStyle(fallbackCss);
-        return JoinHtmlFragments(fallbackBlock, cssLinks, extraCssLinks);
+        return JoinHtmlFragments(fallbackBlock, extraCssLinks);
     }
 
     private static string JoinHtmlFragments(params string?[] fragments)
