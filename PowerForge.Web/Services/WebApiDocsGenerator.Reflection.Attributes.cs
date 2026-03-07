@@ -14,6 +14,10 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
+    private static readonly object ApiDocsAssemblyLoadSync = new();
+    private static readonly Dictionary<string, Assembly> ApiDocsLoadedAssemblies = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ApiDocsAssemblyLoadContext> ApiDocsAssemblyLoadContexts = new(StringComparer.OrdinalIgnoreCase);
+
     private static List<string> GetAttributeList(MemberInfo member)
     {
         var list = new List<string>();
@@ -271,23 +275,186 @@ public static partial class WebApiDocsGenerator
 
     private static Assembly? TryLoadAssembly(string assemblyPath, List<string> warnings)
     {
+        var fullPath = Path.GetFullPath(assemblyPath);
         try
         {
-            return AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
+            return LoadAssemblyWithDependencies(fullPath);
         }
         catch (Exception ex)
         {
             try
             {
-                var bytes = File.ReadAllBytes(assemblyPath);
+                var bytes = File.ReadAllBytes(fullPath);
                 return Assembly.Load(bytes);
             }
             catch (Exception ex2)
             {
-                warnings.Add($"Assembly load failed: {Path.GetFileName(assemblyPath)} ({ex2.GetType().Name}: {ex2.Message})");
+                warnings.Add($"Assembly load failed: {Path.GetFileName(fullPath)} ({ex2.GetType().Name}: {ex2.Message})");
                 warnings.Add($"Primary load error: {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
+        }
+    }
+
+    private static Assembly LoadAssemblyWithDependencies(string assemblyPath)
+    {
+        lock (ApiDocsAssemblyLoadSync)
+        {
+            if (ApiDocsLoadedAssemblies.TryGetValue(assemblyPath, out var cachedAssembly))
+                return cachedAssembly;
+
+            var loadContext = new ApiDocsAssemblyLoadContext(assemblyPath);
+            var assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
+            ApiDocsLoadedAssemblies[assemblyPath] = assembly;
+            ApiDocsAssemblyLoadContexts[assemblyPath] = loadContext;
+            return assembly;
+        }
+    }
+
+    private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver _resolver;
+        private readonly IReadOnlyDictionary<string, string> _dependencyPaths;
+
+        internal ApiDocsAssemblyLoadContext(string assemblyPath)
+            : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPath)}", isCollectible: false)
+        {
+            _resolver = new AssemblyDependencyResolver(assemblyPath);
+            _dependencyPaths = BuildDependencyPathMap(assemblyPath);
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            var dependencyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            if (!string.IsNullOrWhiteSpace(dependencyPath))
+                return LoadFromAssemblyPath(dependencyPath);
+
+            if (!string.IsNullOrWhiteSpace(assemblyName.Name) &&
+                _dependencyPaths.TryGetValue(assemblyName.Name, out var mappedPath) &&
+                File.Exists(mappedPath))
+                return LoadFromAssemblyPath(mappedPath);
+
+            var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(existing => AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
+            if (alreadyLoaded is not null)
+                return alreadyLoaded;
+
+            return null;
+        }
+
+        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+        {
+            var unmanagedDllPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            if (!string.IsNullOrWhiteSpace(unmanagedDllPath))
+                return LoadUnmanagedDllFromPath(unmanagedDllPath);
+
+            return IntPtr.Zero;
+        }
+
+        private static IReadOnlyDictionary<string, string> BuildDependencyPathMap(string assemblyPath)
+        {
+            var depsPath = Path.ChangeExtension(assemblyPath, ".deps.json");
+            if (!File.Exists(depsPath))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var packageRoot = GetNuGetPackageRoot();
+            if (string.IsNullOrWhiteSpace(packageRoot) || !Directory.Exists(packageRoot))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            using var stream = File.OpenRead(depsPath);
+            using var document = JsonDocument.Parse(stream);
+
+            if (!document.RootElement.TryGetProperty("libraries", out var librariesElement) ||
+                librariesElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("targets", out var targetsElement) ||
+                targetsElement.ValueKind != JsonValueKind.Object)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var packagePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var library in librariesElement.EnumerateObject())
+            {
+                if (library.Value.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                if (!library.Value.TryGetProperty("type", out var typeElement) ||
+                    !string.Equals(typeElement.GetString(), "package", StringComparison.OrdinalIgnoreCase) ||
+                    !library.Value.TryGetProperty("path", out var pathElement))
+                {
+                    continue;
+                }
+
+                var relativePackagePath = pathElement.GetString();
+                if (!string.IsNullOrWhiteSpace(relativePackagePath))
+                    packagePaths[library.Name] = relativePackagePath.Replace('/', Path.DirectorySeparatorChar);
+            }
+
+            var dependencyPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var target in targetsElement.EnumerateObject())
+            {
+                if (target.Value.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (var library in target.Value.EnumerateObject())
+                {
+                    if (!packagePaths.TryGetValue(library.Name, out var relativePackagePath) ||
+                        library.Value.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    AddDependencyPaths(library.Value, relativePackagePath, packageRoot, dependencyPaths);
+                }
+            }
+
+            return dependencyPaths;
+        }
+
+        private static void AddDependencyPaths(
+            JsonElement libraryElement,
+            string relativePackagePath,
+            string packageRoot,
+            Dictionary<string, string> dependencyPaths)
+        {
+            AddDependencyPathsFromSection("runtime");
+            AddDependencyPathsFromSection("runtimeTargets");
+
+            void AddDependencyPathsFromSection(string sectionName)
+            {
+                if (!libraryElement.TryGetProperty(sectionName, out var runtimeElement) ||
+                    runtimeElement.ValueKind != JsonValueKind.Object)
+                {
+                    return;
+                }
+
+                foreach (var runtimeAsset in runtimeElement.EnumerateObject())
+                {
+                    if (!runtimeAsset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var fullPath = Path.Combine(packageRoot, relativePackagePath, runtimeAsset.Name.Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(fullPath))
+                        continue;
+
+                    var assemblyName = Path.GetFileNameWithoutExtension(runtimeAsset.Name);
+                    if (!dependencyPaths.ContainsKey(assemblyName))
+                        dependencyPaths[assemblyName] = fullPath;
+                }
+            }
+        }
+
+        private static string GetNuGetPackageRoot()
+        {
+            var configured = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+            if (!string.IsNullOrWhiteSpace(configured))
+                return Path.GetFullPath(configured);
+
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrWhiteSpace(userProfile))
+                return string.Empty;
+
+            return Path.Combine(userProfile, ".nuget", "packages");
         }
     }
 

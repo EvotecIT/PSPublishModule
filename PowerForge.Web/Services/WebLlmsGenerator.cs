@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Net;
 
 namespace PowerForge.Web;
 
@@ -68,7 +69,7 @@ public static class WebLlmsGenerator
         var llmsFullPath = Path.Combine(siteRoot, "llms-full.txt");
 
         var quickstart = ResolveQuickstart(options.QuickstartPath, name);
-        var overview = options.Overview ?? $"{name} is a zero-dependency library for generating and decoding QR codes, barcodes, and 2D matrix codes.";
+        var overview = ResolveOverview(options, projectInfo, siteRoot, name);
         var apiBase = string.IsNullOrWhiteSpace(options.ApiBase) ? "/api" : options.ApiBase;
 
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, typeCount, apiBase, quickstart);
@@ -101,8 +102,23 @@ public static class WebLlmsGenerator
         {
             Name = NormalizeEmpty(MatchValue(content, "AssemblyName")) ?? NormalizeEmpty(MatchValue(content, "RootNamespace")),
             PackageId = NormalizeEmpty(MatchValue(content, "PackageId")),
-            Version = NormalizeEmpty(MatchValue(content, "Version")) ?? NormalizeEmpty(MatchValue(content, "VersionPrefix"))
+            Version = NormalizeEmpty(MatchValue(content, "Version")) ?? NormalizeEmpty(MatchValue(content, "VersionPrefix")),
+            Description = NormalizeEmpty(MatchValue(content, "Description"))
         };
+    }
+
+    private static string ResolveOverview(WebLlmsOptions options, ProjectInfo projectInfo, string siteRoot, string name)
+    {
+        if (!string.IsNullOrWhiteSpace(options.Overview))
+            return options.Overview.Trim();
+
+        if (!string.IsNullOrWhiteSpace(projectInfo.Description))
+            return projectInfo.Description!;
+
+        if (TryReadOverviewFromHomepage(siteRoot, out var homepageOverview))
+            return homepageOverview;
+
+        return $"{name} documentation site and API reference.";
     }
 
     private static int? ReadApiTypeCount(string? apiIndexPath)
@@ -134,6 +150,81 @@ public static class WebLlmsGenerator
     private static string? NormalizeEmpty(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static bool TryReadOverviewFromHomepage(string siteRoot, out string overview)
+    {
+        overview = string.Empty;
+
+        var indexPath = Path.Combine(siteRoot, "index.html");
+        if (!File.Exists(indexPath))
+            return false;
+
+        string html;
+        try
+        {
+            html = File.ReadAllText(indexPath);
+        }
+        catch
+        {
+            return false;
+        }
+
+        var description =
+            TryMatchMetaContent(html, "name", "description") ??
+            TryMatchMetaContent(html, "property", "og:description") ??
+            TryMatchMetaContent(html, "name", "twitter:description");
+        if (!string.IsNullOrWhiteSpace(description))
+        {
+            overview = description;
+            return true;
+        }
+
+        var heading = TryMatchTagContent(html, "h1");
+        if (!string.IsNullOrWhiteSpace(heading))
+        {
+            overview = heading;
+            return true;
+        }
+
+        var title = TryMatchTagContent(html, "title");
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            overview = title;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? TryMatchMetaContent(string html, string attributeName, string attributeValue)
+    {
+        var pattern = $@"<meta\b[^>]*\b{attributeName}\s*=\s*[""']{Regex.Escape(attributeValue)}[""'][^>]*\bcontent\s*=\s*[""'](?<content>.*?)[""'][^>]*>";
+        var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (!match.Success)
+            return null;
+
+        return NormalizeHtmlSnippet(match.Groups["content"].Value);
+    }
+
+    private static string? TryMatchTagContent(string html, string tagName)
+    {
+        var pattern = $@"<{tagName}\b[^>]*>(?<content>.*?)</{tagName}>";
+        var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (!match.Success)
+            return null;
+
+        return NormalizeHtmlSnippet(match.Groups["content"].Value);
+    }
+
+    private static string NormalizeHtmlSnippet(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var withoutTags = Regex.Replace(value, "<.*?>", " ", RegexOptions.Singleline);
+        var decoded = WebUtility.HtmlDecode(withoutTags);
+        return Regex.Replace(decoded, @"\s+", " ").Trim();
     }
 
     private static string[] ResolveQuickstart(string? quickstartPath, string name)
@@ -448,5 +539,6 @@ public static class WebLlmsGenerator
         public string? Name { get; set; }
         public string? PackageId { get; set; }
         public string? Version { get; set; }
+        public string? Description { get; set; }
     }
 }
