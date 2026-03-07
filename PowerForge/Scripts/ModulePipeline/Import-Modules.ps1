@@ -17,7 +17,72 @@ function DecodeModules([string]$b64) {
   try { return $json | ConvertFrom-Json } catch { return @() }
 }
 
+function Write-LoaderDiagnostics([System.Exception]$Exception) {
+  if ($null -eq $Exception) { return }
+
+  if ($Exception -is [System.Reflection.ReflectionTypeLoadException]) {
+    $messages = @(
+      foreach ($loaderException in @($Exception.LoaderExceptions)) {
+        if ($null -eq $loaderException) { continue }
+        $message = [string]$loaderException.Message
+        if ([string]::IsNullOrWhiteSpace($message)) { continue }
+        $message.Trim()
+      }
+    ) | Select-Object -Unique
+
+    foreach ($message in $messages) {
+      Write-Output ('PFIMPORT::LOADERERROR::' + $message)
+    }
+  }
+
+  if ($Exception.InnerException) {
+    Write-LoaderDiagnostics -Exception $Exception.InnerException
+  }
+}
+
+function Reset-PSModulePathForEdition {
+  $runningOnWindows = $false
+  try {
+    $runningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+  } catch {
+    $runningOnWindows = ($env:OS -eq 'Windows_NT')
+  }
+
+  if (-not $runningOnWindows) { return }
+
+  $documents = [Environment]::GetFolderPath('MyDocuments')
+  if ([string]::IsNullOrWhiteSpace($documents)) {
+    $documents = [Environment]::GetFolderPath('UserProfile')
+  }
+
+  $userModules = if ($PSVersionTable.PSEdition -eq 'Core') {
+    Join-Path $documents 'PowerShell\Modules'
+  } else {
+    Join-Path $documents 'WindowsPowerShell\Modules'
+  }
+
+  $programFiles = $env:ProgramFiles
+  $sharedModules = if ($PSVersionTable.PSEdition -eq 'Core') {
+    Join-Path $programFiles 'PowerShell\Modules'
+  } else {
+    Join-Path $programFiles 'WindowsPowerShell\Modules'
+  }
+
+  $psHomeModules = Join-Path $PSHOME 'Modules'
+  $paths = @(
+    $userModules
+    $sharedModules
+    $psHomeModules
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+  if ($paths.Count -gt 0) {
+    $env:PSModulePath = ($paths -join [IO.Path]::PathSeparator)
+  }
+}
+
 try {
+  Reset-PSModulePathForEdition
+
   if ($ImportRequired -eq '1') {
     $modules = DecodeModules $ModulesB64
     foreach ($m in $modules) {
@@ -46,6 +111,8 @@ try {
   try { Write-Output ('PFIMPORT::PSVERSION::' + [string]$PSVersionTable.PSVersion) } catch { }
   try { Write-Output ('PFIMPORT::PSEDITION::' + [string]$PSVersionTable.PSEdition) } catch { }
   try { Write-Output 'PFIMPORT::PSMODULEPATH::BEGIN'; Write-Output ([string]$env:PSModulePath); Write-Output 'PFIMPORT::PSMODULEPATH::END' } catch { }
+  try { Write-Output ('PFIMPORT::ERRORTYPE::' + [string]$_.Exception.GetType().FullName) } catch { }
   try { Write-Output ('PFIMPORT::ERROR::' + [string]$_.Exception.Message) } catch { }
+  try { Write-LoaderDiagnostics -Exception $_.Exception } catch { }
   throw
 }

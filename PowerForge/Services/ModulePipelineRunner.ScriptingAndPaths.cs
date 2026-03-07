@@ -10,7 +10,7 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private static PowerShellRunResult RunScript(IPowerShellRunner runner, string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
+    private static PowerShellRunResult RunScript(IPowerShellRunner runner, string scriptText, IReadOnlyList<string> args, TimeSpan timeout, bool preferPwsh = true)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
         Directory.CreateDirectory(tempDir);
@@ -18,7 +18,7 @@ public sealed partial class ModulePipelineRunner
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            return runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh));
         }
         finally
         {

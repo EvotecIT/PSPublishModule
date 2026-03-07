@@ -186,11 +186,48 @@ public sealed partial class ModulePipelineRunner
             cfg.Verbose == true ? "1" : "0"
         };
 
-        var runner = new PowerShellRunner();
         var script = BuildImportModulesScript();
-        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(5));
-        if (result.ExitCode != 0)
-            throw new InvalidOperationException(ModuleImportFailureFormatter.BuildFailureMessage(result, buildResult.ManifestPath));
+        foreach (var target in GetImportValidationTargets(plan.CompatiblePSEditions))
+        {
+            var result = RunScript(_powerShellRunner, script, args, TimeSpan.FromMinutes(5), preferPwsh: target.PreferPwsh);
+            if (result.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    ModuleImportFailureFormatter.BuildFailureMessage(
+                        result,
+                        buildResult.ManifestPath,
+                        validationTarget: target.Label));
+            }
+        }
+    }
+
+    private static ImportValidationTarget[] GetImportValidationTargets(IReadOnlyList<string>? compatiblePSEditions)
+    {
+        var compatible = compatiblePSEditions ?? Array.Empty<string>();
+        var hasDesktop = compatible.Any(static s => string.Equals(s, "Desktop", StringComparison.OrdinalIgnoreCase));
+        var hasCore = compatible.Any(static s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
+
+        if (Path.DirectorySeparatorChar != '\\')
+            return new[] { new ImportValidationTarget("PowerShell/Core", preferPwsh: true) };
+
+        var targets = new List<ImportValidationTarget>(2);
+        if (hasDesktop)
+            targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", preferPwsh: false));
+        if (hasCore || targets.Count == 0)
+            targets.Add(new ImportValidationTarget("PowerShell/Core", preferPwsh: true));
+        return targets.ToArray();
+    }
+
+    private sealed class ImportValidationTarget
+    {
+        public string Label { get; }
+        public bool PreferPwsh { get; }
+
+        public ImportValidationTarget(string label, bool preferPwsh)
+        {
+            Label = label;
+            PreferPwsh = preferPwsh;
+        }
     }
 
     private void RunTestsAfterMerge(

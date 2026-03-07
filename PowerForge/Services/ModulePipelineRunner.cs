@@ -38,6 +38,7 @@ namespace PowerForge;
 public sealed partial class ModulePipelineRunner
 {
     private readonly ILogger _logger;
+    private readonly IPowerShellRunner _powerShellRunner;
 
     private sealed class RequiredModuleDraft
     {
@@ -60,6 +61,10 @@ public sealed partial class ModulePipelineRunner
     /// <summary>
     /// Creates a new instance using the provided logger.
     /// </summary>
-    public ModulePipelineRunner(ILogger logger) => _logger = logger;
+    public ModulePipelineRunner(ILogger logger, IPowerShellRunner? powerShellRunner = null)
+    {
+        _logger = logger;
+        _powerShellRunner = powerShellRunner ?? new PowerShellRunner();
+    }
 
 }

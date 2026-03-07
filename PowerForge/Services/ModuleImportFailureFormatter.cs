@@ -7,18 +7,22 @@ namespace PowerForge;
 
 internal static class ModuleImportFailureFormatter
 {
-    internal static string BuildFailureMessage(PowerShellRunResult result, string? modulePath = null)
+    internal static string BuildFailureMessage(PowerShellRunResult result, string? modulePath = null, string? validationTarget = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
 
         var diagnostics = Parse(result.StdOut, result.StdErr);
         var cause = FirstNonEmpty(
+            diagnostics.LoaderErrors.FirstOrDefault(),
             diagnostics.ImportError,
             diagnostics.StderrSummary,
             diagnostics.StdoutSummary);
 
         var sb = new StringBuilder();
-        sb.Append($"Import-Module failed (exit {result.ExitCode}).");
+        sb.Append("Import-Module failed");
+        if (!string.IsNullOrWhiteSpace(validationTarget))
+            sb.Append(" during ").Append(validationTarget!.Trim()).Append(" validation");
+        sb.Append($" (exit {result.ExitCode}).");
 
         if (!string.IsNullOrWhiteSpace(cause))
             sb.AppendLine().Append("Cause: ").Append(cause);
@@ -48,6 +52,12 @@ internal static class ModuleImportFailureFormatter
             sb.AppendLine().Append("Detail: ").Append(diagnostics.StderrSummary);
         }
 
+        var extraLoaderErrors = diagnostics.LoaderErrors
+            .Skip(string.Equals(diagnostics.LoaderErrors.FirstOrDefault(), cause, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ToArray();
+        if (extraLoaderErrors.Length > 0)
+            sb.AppendLine().Append("Loader: ").Append(string.Join(" | ", extraLoaderErrors));
+
         if (string.IsNullOrWhiteSpace(cause) &&
             !string.IsNullOrWhiteSpace(result.StdOut))
         {
@@ -67,8 +77,10 @@ internal static class ModuleImportFailureFormatter
     {
         string? psVersion = null;
         string? psEdition = null;
+        string? errorType = null;
         string? importError = null;
         string? stdoutSummary = null;
+        var loaderErrors = new List<string>();
 
         foreach (var rawLine in SplitLines(stdout))
         {
@@ -87,9 +99,26 @@ internal static class ModuleImportFailureFormatter
                 continue;
             }
 
+            if (line.StartsWith("PFIMPORT::ERRORTYPE::", StringComparison.OrdinalIgnoreCase))
+            {
+                errorType = line.Substring("PFIMPORT::ERRORTYPE::".Length).Trim();
+                continue;
+            }
+
             if (line.StartsWith("PFIMPORT::ERROR::", StringComparison.OrdinalIgnoreCase))
             {
                 importError = line.Substring("PFIMPORT::ERROR::".Length).Trim();
+                continue;
+            }
+
+            if (line.StartsWith("PFIMPORT::LOADERERROR::", StringComparison.OrdinalIgnoreCase))
+            {
+                var loaderError = line.Substring("PFIMPORT::LOADERERROR::".Length).Trim();
+                if (!string.IsNullOrWhiteSpace(loaderError) &&
+                    !loaderErrors.Contains(loaderError, StringComparer.OrdinalIgnoreCase))
+                {
+                    loaderErrors.Add(loaderError);
+                }
                 continue;
             }
 
@@ -102,7 +131,9 @@ internal static class ModuleImportFailureFormatter
         return new ImportFailureDiagnostics(
             psVersion,
             psEdition,
+            errorType,
             importError,
+            loaderErrors.ToArray(),
             Normalize(stderr),
             stdoutSummary);
     }
@@ -132,20 +163,26 @@ internal static class ModuleImportFailureFormatter
     {
         internal string? PowerShellVersion { get; }
         internal string? PSEdition { get; }
+        internal string? ErrorType { get; }
         internal string? ImportError { get; }
+        internal string[] LoaderErrors { get; }
         internal string? StderrSummary { get; }
         internal string? StdoutSummary { get; }
 
         internal ImportFailureDiagnostics(
             string? powerShellVersion,
             string? psEdition,
+            string? errorType,
             string? importError,
+            string[]? loaderErrors,
             string? stderrSummary,
             string? stdoutSummary)
         {
             PowerShellVersion = powerShellVersion;
             PSEdition = psEdition;
+            ErrorType = errorType;
             ImportError = importError;
+            LoaderErrors = loaderErrors ?? Array.Empty<string>();
             StderrSummary = stderrSummary;
             StdoutSummary = stdoutSummary;
         }
