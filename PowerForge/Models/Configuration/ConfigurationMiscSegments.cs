@@ -68,6 +68,9 @@ public sealed class ImportModulesConfiguration
     /// <summary>Import required modules from the manifest.</summary>
     public bool? RequiredModules { get; set; }
 
+    /// <summary>Skip binary dependency preflight before importing the built module.</summary>
+    public bool? SkipBinaryDependencyCheck { get; set; }
+
     /// <summary>Enable verbose output.</summary>
     public bool? Verbose { get; set; }
 }

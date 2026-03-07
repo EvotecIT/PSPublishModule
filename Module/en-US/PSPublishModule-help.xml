@@ -14816,6 +14816,18 @@ This is primarily used by test and documentation steps that execute PowerShell c
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipBinaryDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skips binary dependency preflight before importing the built module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -14835,6 +14847,18 @@ This is primarily used by test and documentation steps that execute PowerShell c
         <maml:name>ImportSelf</maml:name>
         <maml:description>
           <maml:para>Indicates whether to import the current module itself.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipBinaryDependencyCheck</maml:name>
+        <maml:description>
+          <maml:para>Skips binary dependency preflight before importing the built module.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

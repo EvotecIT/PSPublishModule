@@ -339,6 +339,7 @@ public sealed partial class ModulePipelineRunner
                     importModules ??= new ImportModulesConfiguration();
                     if (cfg.Self.HasValue) importModules.Self = cfg.Self;
                     if (cfg.RequiredModules.HasValue) importModules.RequiredModules = cfg.RequiredModules;
+                    if (cfg.SkipBinaryDependencyCheck.HasValue) importModules.SkipBinaryDependencyCheck = cfg.SkipBinaryDependencyCheck;
                     if (cfg.Verbose.HasValue) importModules.Verbose = cfg.Verbose;
                     break;
                 }

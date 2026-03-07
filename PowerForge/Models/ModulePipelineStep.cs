@@ -165,6 +165,14 @@ public sealed class ModulePipelineStep
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
+            if (plan.ImportModules.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Tests,
+                    key: "tests:binary-dependencies",
+                    title: "Check binary dependencies"));
+            }
+
             steps.Add(new ModulePipelineStep(
                 kind: ModulePipelineStepKind.Tests,
                 key: "tests:import-modules",

@@ -106,4 +106,56 @@ public sealed class ModuleBuilderDependencyCopyTests
             }
         }
     }
+
+    [Fact]
+    public void BuildInPlace_WarnsWhenUsingExistingLibPayloadWithoutCsproj()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "TestModule";
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psd1"), "@{ RootModule = 'TestModule.psm1'; ModuleVersion = '1.0.0' }");
+
+            var libDefault = Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+            File.WriteAllText(Path.Combine(libDefault.FullName, "Existing.Binary.dll"), "placeholder");
+
+            var logger = new CollectingLogger();
+            var builder = new ModuleBuilder(logger);
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "1.0.0",
+                CsprojPath = string.Empty
+            });
+
+            Assert.Contains(logger.Warnings, warning => warning.Contains("using the existing Lib payload without rebuilding binaries", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
+    }
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> Warnings { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) { }
+        public void Success(string message) { }
+        public void Warn(string message) => Warnings.Add(message ?? string.Empty);
+        public void Error(string message) { }
+        public void Verbose(string message) { }
+    }
 }

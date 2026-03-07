@@ -57,8 +57,13 @@ public sealed partial class ModulePipelineRunner
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
+        var binaryDependenciesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:binary-dependencies", StringComparison.OrdinalIgnoreCase));
         var importModulesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase));
-        var testSteps = steps.Where(s => s.Kind == ModulePipelineStepKind.Tests && s.Key.StartsWith("tests:", StringComparison.OrdinalIgnoreCase) && !string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var testSteps = steps
+            .Where(s => s.Kind == ModulePipelineStepKind.Tests &&
+                        s.Key.StartsWith("tests:", StringComparison.OrdinalIgnoreCase) &&
+                        s.Key.EndsWith(":aftermerge", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -600,6 +605,21 @@ public sealed partial class ModulePipelineRunner
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
+            if (plan.ImportModules.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true)
+            {
+                SafeStart(reporter, startedKeys, binaryDependenciesStep);
+                try
+                {
+                    RunBinaryDependencyPreflight(plan, buildResult);
+                    SafeDone(reporter, binaryDependenciesStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(reporter, binaryDependenciesStep, ex);
+                    throw;
+                }
+            }
+
             SafeStart(reporter, startedKeys, importModulesStep);
             try
             {

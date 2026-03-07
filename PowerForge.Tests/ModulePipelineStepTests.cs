@@ -195,6 +195,93 @@ public sealed class ModulePipelineStepTests
         }
     }
 
+    [Fact]
+    public void Create_IncludesBinaryDependencyPreflightStep_WhenImportingSelf()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration
+                        {
+                            Self = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            Assert.Contains(steps, s => s.Key == "tests:binary-dependencies");
+            Assert.Contains(steps, s => s.Key == "tests:import-modules");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Create_OmitsBinaryDependencyPreflightStep_WhenSkipped()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration
+                        {
+                            Self = true,
+                            SkipBinaryDependencyCheck = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            Assert.DoesNotContain(steps, s => s.Key == "tests:binary-dependencies");
+            Assert.Contains(steps, s => s.Key == "tests:import-modules");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);

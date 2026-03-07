@@ -32,6 +32,9 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
     /// <summary>Indicates whether to import required modules from the manifest.</summary>
     [Parameter] public SwitchParameter ImportRequiredModules { get; set; }
 
+    /// <summary>Skips binary dependency preflight before importing the built module.</summary>
+    [Parameter] public SwitchParameter SkipBinaryDependencyCheck { get; set; }
+
     /// <summary>Emits import configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -39,6 +42,7 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
         {
             Self = MyInvocation.BoundParameters.ContainsKey(nameof(ImportSelf)) ? ImportSelf.IsPresent : null,
             RequiredModules = MyInvocation.BoundParameters.ContainsKey(nameof(ImportRequiredModules)) ? ImportRequiredModules.IsPresent : null,
+            SkipBinaryDependencyCheck = MyInvocation.BoundParameters.ContainsKey(nameof(SkipBinaryDependencyCheck)) ? SkipBinaryDependencyCheck.IsPresent : null,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose") ? true : null
         };
 

@@ -11,7 +11,7 @@ Creates a configuration for importing PowerShell modules.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [<CommonParameters>]
+New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-SkipBinaryDependencyCheck] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -52,6 +52,22 @@ Accept wildcard characters: True
 
 ### -ImportSelf
 Indicates whether to import the current module itself.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipBinaryDependencyCheck
+Skips binary dependency preflight before importing the built module.
 
 ```yaml
 Type: SwitchParameter

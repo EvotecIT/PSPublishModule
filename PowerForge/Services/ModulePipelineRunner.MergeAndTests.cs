@@ -201,6 +201,26 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private void RunBinaryDependencyPreflight(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        var cfg = plan.ImportModules;
+        if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
+
+        var service = new BinaryDependencyPreflightService(_logger);
+        foreach (var target in GetImportValidationTargets(plan.CompatiblePSEditions))
+        {
+            var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition);
+            if (result.HasIssues)
+            {
+                throw new InvalidOperationException(
+                    BinaryDependencyPreflightService.BuildFailureMessage(
+                        result,
+                        buildResult.ManifestPath,
+                        validationTarget: target.Label));
+            }
+        }
+    }
+
     private static ImportValidationTarget[] GetImportValidationTargets(IReadOnlyList<string>? compatiblePSEditions)
     {
         var compatible = compatiblePSEditions ?? Array.Empty<string>();
@@ -208,24 +228,26 @@ public sealed partial class ModulePipelineRunner
         var hasCore = compatible.Any(static s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
 
         if (Path.DirectorySeparatorChar != '\\')
-            return new[] { new ImportValidationTarget("PowerShell/Core", preferPwsh: true) };
+            return new[] { new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true) };
 
         var targets = new List<ImportValidationTarget>(2);
         if (hasDesktop)
-            targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", preferPwsh: false));
+            targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
         if (hasCore || targets.Count == 0)
-            targets.Add(new ImportValidationTarget("PowerShell/Core", preferPwsh: true));
+            targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         return targets.ToArray();
     }
 
     private sealed class ImportValidationTarget
     {
         public string Label { get; }
+        public string PowerShellEdition { get; }
         public bool PreferPwsh { get; }
 
-        public ImportValidationTarget(string label, bool preferPwsh)
+        public ImportValidationTarget(string label, string powerShellEdition, bool preferPwsh)
         {
             Label = label;
+            PowerShellEdition = powerShellEdition;
             PreferPwsh = preferPwsh;
         }
     }

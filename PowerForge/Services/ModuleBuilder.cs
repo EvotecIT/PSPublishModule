@@ -146,7 +146,18 @@ public sealed class ModuleBuilder
         }
         else
         {
-            _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
+            var existingLibRoot = Path.Combine(opts.ProjectRoot, "Lib");
+            var hasExistingBinaryPayload = Directory.Exists(existingLibRoot) &&
+                                           Directory.EnumerateFiles(existingLibRoot, "*.dll", SearchOption.AllDirectories).Any();
+
+            if (hasExistingBinaryPayload)
+            {
+                _logger.Warn($"No CsprojPath specified for {opts.ModuleName}; using the existing Lib payload without rebuilding binaries.");
+            }
+            else
+            {
+                _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
+            }
         }
 
         // 2) Manifest generation
