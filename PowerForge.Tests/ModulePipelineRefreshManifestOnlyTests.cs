@@ -169,7 +169,7 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
-    public void Run_NormalBuild_UpdatesProjectRootManifest()
+    public void Run_NormalBuild_UpdatesProjectRootManifestAndGeneratedScripts()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -210,13 +210,19 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             var plan = runner.Plan(spec);
             var result = runner.Run(spec, plan);
 
+            var projectLibraries = Path.Combine(root.FullName, moduleName + ".Libraries.ps1");
             Assert.NotNull(result.BuildResult);
             Assert.True(File.Exists(projectManifest));
+            Assert.True(File.Exists(projectLibraries));
 
             Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "ModuleVersion", out var projectVersion));
             Assert.Equal("2.0.0", projectVersion);
             Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "Author", out var projectAuthor));
             Assert.Equal("NewAuthor", projectAuthor);
+
+            var projectPsm1 = Path.Combine(root.FullName, moduleName + ".psm1");
+            var projectPsm1Content = File.ReadAllText(projectPsm1);
+            Assert.Contains(moduleName + ".Libraries.ps1", projectPsm1Content, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

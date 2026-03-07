@@ -17,47 +17,38 @@ public sealed partial class ModulePipelineRunner
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         var modulePsd1 = Path.Combine(stagingRoot, $"{plan.ModuleName}.psd1");
+        var projectPsd1 = Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
+        var librariesRelativePath = $"{plan.ModuleName}.Libraries.ps1";
         var filesToSync = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            modulePsd1
+            modulePsd1,
+            Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1"),
+            Path.Combine(stagingRoot, librariesRelativePath)
         };
+        var staleGeneratedRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        staleGeneratedRelativePaths.Add(librariesRelativePath);
+        foreach (var relativePath in GetManifestControlledRelativePaths(projectPsd1))
+            staleGeneratedRelativePaths.Add(relativePath);
+        foreach (var relativePath in GetManifestControlledRelativePaths(modulePsd1))
+        {
+            filesToSync.Add(Path.Combine(stagingRoot, relativePath));
+            staleGeneratedRelativePaths.Remove(relativePath);
+        }
 
         if (plan.BuildSpec.RefreshManifestOnly)
         {
-            var projectPsd1 = Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
-            var staleGeneratedRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            filesToSync.Add(Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1"));
-
-            foreach (var relativePath in GetManifestControlledRelativePaths(projectPsd1))
-                staleGeneratedRelativePaths.Add(relativePath);
-            foreach (var relativePath in GetManifestControlledRelativePaths(modulePsd1))
-            {
-                filesToSync.Add(Path.Combine(stagingRoot, relativePath));
-                staleGeneratedRelativePaths.Remove(relativePath);
-            }
-
             foreach (var result in formattingStagingResults ?? Array.Empty<FormatterResult>())
             {
                 if (result is null || !result.Changed) continue;
                 if (!IsPowerShellSource(result.Path)) continue;
                 filesToSync.Add(Path.GetFullPath(result.Path));
             }
-
-            foreach (var relativePath in staleGeneratedRelativePaths)
-            {
-                if (string.IsNullOrWhiteSpace(relativePath)) continue;
-                if (File.Exists(Path.Combine(stagingRoot, relativePath))) continue;
-
-                var destinationPath = Path.Combine(projectRoot, relativePath);
-                if (!File.Exists(destinationPath)) continue;
-
-                File.Delete(destinationPath);
-            }
         }
 
         var sourcePrefix = stagingRoot + Path.DirectorySeparatorChar;
         var synced = 0;
+        var removed = 0;
 
         foreach (var sourcePath in filesToSync)
         {
@@ -77,7 +68,19 @@ public sealed partial class ModulePipelineRunner
             synced++;
         }
 
-        _logger.Info($"Project sync: synchronized {synced} build-controlled file(s) from staging back to project root.");
+        foreach (var relativePath in staleGeneratedRelativePaths)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath)) continue;
+            if (File.Exists(Path.Combine(stagingRoot, relativePath))) continue;
+
+            var destinationPath = Path.Combine(projectRoot, relativePath);
+            if (!File.Exists(destinationPath)) continue;
+
+            File.Delete(destinationPath);
+            removed++;
+        }
+
+        _logger.Info($"Project sync: synchronized {synced} build-controlled file(s) and removed {removed} stale generated file(s) from staging back to project root.");
 
         static string[] GetManifestControlledRelativePaths(string manifestPath)
         {
