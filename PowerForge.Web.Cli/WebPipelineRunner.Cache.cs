@@ -274,6 +274,39 @@ internal static partial class WebPipelineRunner
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
+            case "project-apidocs":
+            case "project-apidoc":
+            case "project-api-docs":
+            {
+                var outputs = new List<string>();
+                var siteRoot = ResolvePath(baseDir,
+                    GetString(step, "siteRoot") ??
+                    GetString(step, "site-root") ??
+                    GetString(step, "siteOut") ??
+                    GetString(step, "site-out"));
+                var outRoot = ResolvePath(baseDir,
+                    GetString(step, "outRoot") ??
+                    GetString(step, "out-root") ??
+                    GetString(step, "projectsOut") ??
+                    GetString(step, "projects-out"));
+                if (!string.IsNullOrWhiteSpace(outRoot))
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, outRoot));
+                }
+                else if (!string.IsNullOrWhiteSpace(siteRoot))
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, Path.Combine(siteRoot, "projects")));
+                }
+
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path") ??
+                    "./Build/project-apidocs-last-run.json"));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "dotnet-publish":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "overlay":

@@ -331,6 +331,26 @@ internal static partial class WebPipelineRunner
             BrandUrl = brandUrl,
             BrandIcon = brandIcon
         };
+        if (TryGetObject(step, "templateTokens", out var templateTokens) ||
+            TryGetObject(step, "template-tokens", out templateTokens))
+        {
+            foreach (var property in templateTokens.EnumerateObject())
+            {
+                var value = property.Value.ValueKind switch
+                {
+                    JsonValueKind.Null => null,
+                    JsonValueKind.String => property.Value.GetString(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    _ => property.Value.ToString()
+                };
+
+                if (string.IsNullOrWhiteSpace(property.Name))
+                    continue;
+
+                options.TemplateTokens[property.Name] = value;
+            }
+        }
         if (sourceUrlMappings.Length > 0)
             options.SourceUrlMappings.AddRange(sourceUrlMappings);
 

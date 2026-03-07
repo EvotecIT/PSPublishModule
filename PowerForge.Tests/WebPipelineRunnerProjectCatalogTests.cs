@@ -224,8 +224,8 @@ public class WebPipelineRunnerProjectCatalogTests
 
             var catalogText = File.ReadAllText(catalogPath);
             Assert.Contains("\"hubPath\": \"/projects/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"docs\": \"/docs/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"apiPowerShell\": \"/api/pswritehtml/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"docs\": \"/projects/pswritehtml/docs/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"apiPowerShell\": \"/projects/pswritehtml/api/\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"source\": \"https://github.com/EvotecIT/PSWriteHTML\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"powerShellGallery\": \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", catalogText, StringComparison.OrdinalIgnoreCase);
 
@@ -235,6 +235,87 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("meta.project_link_psgallery: \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_github_last_pushed_at_display: \"2026-02-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_release_latest_published_at_display: \"2025-12-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_NormalizesQuoteOnlyMetadataValues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-quote-normalize-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "pswritehtml",
+                      "name": "PSWriteHTML",
+                      "githubRepo": "EvotecIT/PSWriteHTML",
+                      "mode": "\"",
+                      "externalUrl": "\"",
+                      "links": {
+                        "docs": "\"",
+                        "apiPowerShell": "\"",
+                        "examples": "\"",
+                        "source": "https://github.com/EvotecIT/PSWriteHTML"
+                      },
+                      "surfaces": {
+                        "docs": true,
+                        "apiPowerShell": true,
+                        "examples": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "contentRoot": "./content/projects",
+                      "summaryPath": "./summary.json",
+                      "importManifests": false,
+                      "applyCuration": false,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": true,
+                      "generateSections": true,
+                      "validate": true,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var catalogText = File.ReadAllText(catalogPath);
+            Assert.Contains("\"mode\": \"hub-full\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"docs\": \"/projects/pswritehtml/docs/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"externalUrl\": \"\\\"\"", catalogText, StringComparison.OrdinalIgnoreCase);
+
+            var docsPagePath = Path.Combine(root, "content", "projects", "pswritehtml.docs.md");
+            Assert.True(File.Exists(docsPagePath));
+            var docsPage = File.ReadAllText(docsPagePath);
+            Assert.DoesNotContain("meta.project_mode: \"\\\"\"", docsPage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("meta.project_external_url: \"\\\"\"", docsPage, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("meta.project_link_docs: \"\\\"\"", docsPage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("meta.project_link_docs: \"/projects/pswritehtml/docs/\"", docsPage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -322,7 +403,7 @@ public class WebPipelineRunnerProjectCatalogTests
             var catalogText = File.ReadAllText(catalogPath);
             Assert.Contains("\"contentMode\": \"hybrid\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"examples\": true", catalogText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"examples\": \"/examples/alpha/\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"examples\": \"/projects/alpha/examples/\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"artifacts\":", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"docs\": \"https://example.invalid/alpha-docs.zip\"", catalogText, StringComparison.OrdinalIgnoreCase);
 

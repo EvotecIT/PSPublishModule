@@ -260,7 +260,7 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
-    public void Run_PersistsCommandModuleDependencies_FromConfigurationCommand()
+    public void Run_KeepsCommandModuleDependenciesInPlanWithoutPersistingManifestKey()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -301,10 +301,9 @@ public sealed class ModulePipelineRegressionParityTests
             Assert.Contains("Get-ADGroup", activeDirectoryDeps, StringComparer.OrdinalIgnoreCase);
 
             var manifest = File.ReadAllText(result.BuildResult.ManifestPath);
-            Assert.Contains("CommandModuleDependencies", manifest, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("ActiveDirectory", manifest, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Get-ADUser", manifest, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Get-ADGroup", manifest, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("CommandModuleDependencies", manifest, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Get-ADUser", manifest, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Get-ADGroup", manifest, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
