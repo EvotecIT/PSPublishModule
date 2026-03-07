@@ -9,6 +9,13 @@ public static partial class WebApiDocsGenerator
 {
     private static void ApplyNavTokens(WebApiDocsOptions options, List<string> warnings, ref string header, ref string footer)
     {
+        var tokens = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["YEAR"] = DateTime.UtcNow.Year.ToString()
+        };
+        foreach (var pair in options.TemplateTokens)
+            tokens[pair.Key] = pair.Value;
+
         // Fail-fast (in CI via apidocs failOnWarnings): if fragments expect nav injection but the step
         // forgot to provide navJsonPath, we should emit a deterministic warning instead of silently
         // producing API pages without navigation.
@@ -20,10 +27,21 @@ public static partial class WebApiDocsGenerator
         if (needsNavTokens && string.IsNullOrWhiteSpace(options.NavJsonPath))
         {
             warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
+            if (!string.IsNullOrWhiteSpace(header))
+                header = ApplyTemplate(header, tokens);
+            if (!string.IsNullOrWhiteSpace(footer))
+                footer = ApplyTemplate(footer, tokens);
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(options.NavJsonPath)) return;
+        if (string.IsNullOrWhiteSpace(options.NavJsonPath))
+        {
+            if (!string.IsNullOrWhiteSpace(header))
+                header = ApplyTemplate(header, tokens);
+            if (!string.IsNullOrWhiteSpace(footer))
+                footer = ApplyTemplate(footer, tokens);
+            return;
+        }
 
         var navPath = Path.GetFullPath(options.NavJsonPath);
         if (!File.Exists(navPath))
@@ -43,21 +61,24 @@ public static partial class WebApiDocsGenerator
         }
 
         var nav = LoadNavConfig(options);
-        if (nav is null) return;
-
-        var tokens = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        if (nav is null)
         {
-            ["SITE_NAME"] = nav.SiteName,
-            ["BRAND_NAME"] = nav.SiteName,
-            ["BRAND_URL"] = nav.BrandUrl,
-            ["BRAND_ICON"] = nav.BrandIcon,
-            ["NAV_LINKS"] = BuildLinkHtml(nav.Primary),
-            ["NAV_ACTIONS"] = BuildActionHtml(nav.Actions),
-            ["FOOTER_PRODUCT"] = BuildLinkHtml(nav.FooterProduct),
-            ["FOOTER_RESOURCES"] = BuildLinkHtml(nav.FooterResources),
-            ["FOOTER_COMPANY"] = BuildLinkHtml(nav.FooterCompany),
-            ["YEAR"] = DateTime.UtcNow.Year.ToString()
-        };
+            if (!string.IsNullOrWhiteSpace(header))
+                header = ApplyTemplate(header, tokens);
+            if (!string.IsNullOrWhiteSpace(footer))
+                footer = ApplyTemplate(footer, tokens);
+            return;
+        }
+
+        tokens["SITE_NAME"] = nav.SiteName;
+        tokens["BRAND_NAME"] = nav.SiteName;
+        tokens["BRAND_URL"] = nav.BrandUrl;
+        tokens["BRAND_ICON"] = nav.BrandIcon;
+        tokens["NAV_LINKS"] = BuildLinkHtml(nav.Primary);
+        tokens["NAV_ACTIONS"] = BuildActionHtml(nav.Actions);
+        tokens["FOOTER_PRODUCT"] = BuildLinkHtml(nav.FooterProduct);
+        tokens["FOOTER_RESOURCES"] = BuildLinkHtml(nav.FooterResources);
+        tokens["FOOTER_COMPANY"] = BuildLinkHtml(nav.FooterCompany);
 
         if (!string.IsNullOrWhiteSpace(header))
             header = ApplyTemplate(header, tokens);

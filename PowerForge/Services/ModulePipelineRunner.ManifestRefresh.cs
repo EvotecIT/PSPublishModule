@@ -104,10 +104,9 @@ public sealed partial class ModulePipelineRunner
         ManifestEditor.TryRemoveTopLevelKey(manifestPath, "ScriptsToProcess");
         ManifestEditor.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
 
-        if (plan.CommandModuleDependencies is { Count: > 0 })
-            ManifestEditor.TrySetTopLevelHashtableStringArray(manifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);
-        else
-            ManifestEditor.TryRemoveTopLevelKey(manifestPath, "CommandModuleDependencies");
+        // Keep command/module hints in the in-memory plan only.
+        // Persisting them into the PSD1 breaks downstream Import-Module consumers such as the documentation engine.
+        ManifestEditor.TryRemoveTopLevelKey(manifestPath, "CommandModuleDependencies");
     }
 
     private static void SetOrRemoveTopLevelString(string manifestPath, string key, string? value, bool removeWhenEmpty)
