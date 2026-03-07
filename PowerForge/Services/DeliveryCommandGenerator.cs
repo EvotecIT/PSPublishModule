@@ -122,6 +122,8 @@ public sealed class DeliveryCommandGenerator
         var includeRootReadme = delivery.IncludeRootReadme ? "$true" : "$false";
         var includeRootChangelog = delivery.IncludeRootChangelog ? "$true" : "$false";
         var includeRootLicense = delivery.IncludeRootLicense ? "$true" : "$false";
+        var preservePaths = BuildPowerShellStringArrayLiteral(delivery.PreservePaths);
+        var overwritePaths = BuildPowerShellStringArrayLiteral(delivery.OverwritePaths);
 
         var escInternals = EscapeSingleQuotes(internalsPath);
         var escModule = EscapeSingleQuotes(moduleName);
@@ -134,7 +136,9 @@ public sealed class DeliveryCommandGenerator
             ["InternalsPath"] = escInternals,
             ["IncludeRootReadme"] = includeRootReadme,
             ["IncludeRootChangelog"] = includeRootChangelog,
-            ["IncludeRootLicense"] = includeRootLicense
+            ["IncludeRootLicense"] = includeRootLicense,
+            ["PreservePathsArray"] = preservePaths,
+            ["OverwritePathsArray"] = overwritePaths
         };
 
         return RenderDeliveryTemplate(
@@ -160,6 +164,21 @@ public sealed class DeliveryCommandGenerator
             "Update-Delivery.ps1",
             "Scripts/DeliveryCommands/Update-Delivery.Template.ps1",
             tokens);
+    }
+
+    private static string BuildPowerShellStringArrayLiteral(string[]? values)
+    {
+        if (values is null || values.Length == 0) return "@()";
+
+        var items = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => $"'{EscapeSingleQuotes(v.Trim())}'")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return items.Length == 0
+            ? "@()"
+            : "@(" + string.Join(", ", items) + ")";
     }
 
     private static string RenderDeliveryTemplate(
