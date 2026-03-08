@@ -18,16 +18,13 @@ public sealed partial class ModulePipelineRunner
 
         var modulePsd1 = Path.Combine(stagingRoot, $"{plan.ModuleName}.psd1");
         var projectPsd1 = Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
-        var librariesRelativePath = $"{plan.ModuleName}.Libraries.ps1";
         var filesToSync = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             modulePsd1,
-            Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1"),
-            Path.Combine(stagingRoot, librariesRelativePath)
+            Path.Combine(stagingRoot, $"{plan.ModuleName}.psm1")
         };
         var staleGeneratedRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        staleGeneratedRelativePaths.Add(librariesRelativePath);
         foreach (var relativePath in GetManifestControlledRelativePaths(projectPsd1))
             staleGeneratedRelativePaths.Add(relativePath);
         foreach (var relativePath in GetManifestControlledRelativePaths(modulePsd1))
