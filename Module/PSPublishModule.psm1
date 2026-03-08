@@ -14,50 +14,40 @@ $Standard = $false
 foreach ($A in $AssemblyFolders.Name) {
     if ($A -eq 'Default') {
         $Default = $true
-    }
-    elseif ($A -eq 'Core') {
+    } elseif ($A -eq 'Core') {
         $Core = $true
-    }
-    elseif ($A -eq 'Standard') {
+    } elseif ($A -eq 'Standard') {
         $Standard = $true
     }
 }
 if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
     $Framework = 'Standard'
-}
-elseif ($Standard -and $Core) {
+} elseif ($Standard -and $Core) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core -and $Default) {
+} elseif ($Core -and $Default) {
     $Framework = 'Core'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard -and $Default) {
+} elseif ($Standard -and $Default) {
     $Framework = 'Standard'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard) {
+} elseif ($Standard) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core) {
+} elseif ($Core) {
     $Framework = 'Core'
     $FrameworkNet = ''
-}
-elseif ($Default) {
+} elseif ($Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
-}
-else {
+} else {
     Write-Error -Message 'No assemblies found'
 }
 
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
-}
-else {
+} else {
     $LibFolder = $FrameworkNet
 }
 
@@ -66,17 +56,14 @@ try {
 
     if (-not ($Class -as [type])) {
         & $ImportModule ([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)) -ErrorAction Stop
-    }
-    else {
+    } else {
         $Type = "$Class" -as [Type]
         & $importModule -Force -Assembly ($Type.Assembly)
     }
-}
-catch {
+} catch {
     if ($ErrorActionPreference -eq 'Stop') {
         throw
-    }
-    else {
+    } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
     }
 }

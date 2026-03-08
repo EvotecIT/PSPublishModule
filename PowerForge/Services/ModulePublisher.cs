@@ -476,7 +476,7 @@ public sealed class ModulePublisher
                         credential: credential),
                     timeout: TimeSpan.FromMinutes(2))
                 .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(r => r.Version)
+                .Select(GetRepositoryVersionText)
             : _psResourceGet.Find(
                     new PSResourceFindOptions(
                         names: new[] { moduleName },
@@ -486,7 +486,7 @@ public sealed class ModulePublisher
                         credential: credential),
                     timeout: TimeSpan.FromMinutes(2))
                 .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(r => r.Version);
+                .Select(GetRepositoryVersionText);
 
         SemVer? latest = null;
         foreach (var v in versions)
@@ -495,6 +495,14 @@ public sealed class ModulePublisher
             if (latest is null || parsed.CompareTo(latest.Value) > 0) latest = parsed;
         }
         return latest;
+    }
+
+    internal static string GetRepositoryVersionText(PSResourceInfo resource)
+    {
+        if (resource is null)
+            throw new ArgumentNullException(nameof(resource));
+
+        return FormatSemVer(resource.Version, resource.PreRelease);
     }
 
     private static (string RepositoryName, PublishRepositoryConfiguration? Repository) ResolveRepository(PublishConfiguration publish)

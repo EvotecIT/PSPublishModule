@@ -15,6 +15,8 @@ public sealed class PSResourceInfo
     public string Name { get; }
     /// <summary>Resolved resource version.</summary>
     public string Version { get; }
+    /// <summary>Resolved prerelease label when the repository reports it separately.</summary>
+    public string? PreRelease { get; }
     /// <summary>Resource GUID (when available).</summary>
     public string? Guid { get; }
     /// <summary>Repository name (when available).</summary>
@@ -27,10 +29,11 @@ public sealed class PSResourceInfo
     /// <summary>
     /// Creates a new instance.
     /// </summary>
-    public PSResourceInfo(string name, string version, string? repository, string? author, string? description, string? guid = null)
+    public PSResourceInfo(string name, string version, string? repository, string? author, string? description, string? guid = null, string? preRelease = null)
     {
         Name = name;
         Version = version;
+        PreRelease = string.IsNullOrWhiteSpace(preRelease) ? null : preRelease;
         Guid = guid;
         Repository = repository;
         Author = author;
@@ -470,7 +473,8 @@ public sealed partial class PSResourceGetClient
             var author = EmptyToNull(Decode(parts[5]));
             var desc = EmptyToNull(Decode(parts[6]));
             var guid = parts.Length > 7 ? EmptyToNull(Decode(parts[7])) : null;
-            list.Add(new PSResourceInfo(name, version, repo, author, desc, guid));
+            var preRelease = parts.Length > 8 ? EmptyToNull(Decode(parts[8])) : null;
+            list.Add(new PSResourceInfo(name, version, repo, author, desc, guid, preRelease));
         }
         return list;
     }

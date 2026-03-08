@@ -47,7 +47,8 @@ try {
     $author = [string]$r.Author
     $desc = [string]$r.Description
     $guid = [string]$r.Guid
-    $fields = @($name, $ver, $repo, $author, $desc, $guid) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    $pre = [string]$r.Prerelease
+    $fields = @($name, $ver, $repo, $author, $desc, $guid, $pre) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
     Write-Output ('PFPSRG::ITEM::' + ($fields -join '::'))
   }
   exit 0
