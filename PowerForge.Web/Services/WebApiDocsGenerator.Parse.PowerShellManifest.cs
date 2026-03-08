@@ -1,13 +1,15 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
-    private static PowerShellCommandKindHints LoadPowerShellCommandKindHints(string? manifestPath, List<string> warnings)
+    private static PowerShellCommandKindHints LoadPowerShellCommandKindHints(string? manifestPath, string? commandMetadataPath, List<string> warnings)
     {
         var hints = new PowerShellCommandKindHints();
+        LoadPowerShellCommandMetadataHints(commandMetadataPath, hints, warnings);
         if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
             return hints;
 
@@ -56,6 +58,75 @@ public static partial class WebApiDocsGenerator
         }
 
         return hints;
+    }
+
+    private static void LoadPowerShellCommandMetadataHints(string? commandMetadataPath, PowerShellCommandKindHints hints, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(commandMetadataPath) || !File.Exists(commandMetadataPath))
+            return;
+
+        PowerShellCommandMetadataDocument? document;
+        try
+        {
+            document = JsonSerializer.Deserialize<PowerShellCommandMetadataDocument>(File.ReadAllText(commandMetadataPath), WebJson.Options);
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"PowerShell command metadata unavailable: {Path.GetFileName(commandMetadataPath)} ({ex.GetType().Name}: {ex.Message})");
+            return;
+        }
+
+        if (document?.Commands is null)
+            return;
+
+        foreach (var command in document.Commands)
+        {
+            if (command is null)
+                continue;
+
+            var commandName = command.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(commandName))
+                continue;
+
+            var normalizedKind = NormalizePowerShellCommandType(command.Kind) ??
+                                 NormalizePowerShellCommandType(command.CommandType) ??
+                                 NormalizePowerShellCommandType(command.Type);
+            if (!string.IsNullOrWhiteSpace(normalizedKind))
+            {
+                hints.CommandKinds[commandName] = normalizedKind;
+                switch (normalizedKind)
+                {
+                    case "Alias":
+                        hints.Aliases.Add(commandName);
+                        break;
+                    case "Function":
+                        hints.Functions.Add(commandName);
+                        break;
+                    case "Cmdlet":
+                        hints.Cmdlets.Add(commandName);
+                        break;
+                }
+            }
+
+            if (command.Aliases is null)
+                continue;
+
+            foreach (var alias in command.Aliases)
+            {
+                var aliasName = alias?.Trim();
+                if (string.IsNullOrWhiteSpace(aliasName))
+                    continue;
+
+                hints.Aliases.Add(aliasName);
+                if (!hints.CommandAliases.TryGetValue(commandName, out var aliases))
+                {
+                    aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    hints.CommandAliases[commandName] = aliases;
+                }
+
+                aliases.Add(aliasName);
+            }
+        }
     }
 
     private static bool ParseManifestExportValues(string text, string key, ISet<string> values)
@@ -332,9 +403,34 @@ public static partial class WebApiDocsGenerator
         public HashSet<string> Cmdlets { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> Functions { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> CommandKinds { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, HashSet<string>> CommandAliases { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool CmdletsWildcard { get; set; }
         public bool FunctionsWildcard { get; set; }
         public bool AliasesWildcard { get; set; }
-        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
+        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CommandKinds.Count > 0 || CommandAliases.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
+
+        public IReadOnlyList<string> GetAliasesForCommand(string commandName)
+        {
+            if (string.IsNullOrWhiteSpace(commandName))
+                return Array.Empty<string>();
+            return CommandAliases.TryGetValue(commandName, out var aliases)
+                ? aliases.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray()
+                : Array.Empty<string>();
+        }
+    }
+
+    private sealed class PowerShellCommandMetadataDocument
+    {
+        public List<PowerShellCommandMetadataEntry>? Commands { get; set; }
+    }
+
+    private sealed class PowerShellCommandMetadataEntry
+    {
+        public string? Name { get; set; }
+        public string? Kind { get; set; }
+        public string? CommandType { get; set; }
+        public string? Type { get; set; }
+        public List<string>? Aliases { get; set; }
     }
 }

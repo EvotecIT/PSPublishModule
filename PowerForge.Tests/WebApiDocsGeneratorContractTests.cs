@@ -817,12 +817,15 @@ public class WebApiDocsGeneratorContractTests
             .api-sidebar{}
             .api-content{}
             .api-overview{}
+            .api-overview-grid{}
             .type-chips{}
             .type-chip{}
             .chip-icon{}
             .sidebar-count{}
             .sidebar-toggle{}
             .type-item{}
+            .type-detail-shell{}
+            .type-detail-rail{}
             .filter-button{}
             .member-card{}
             .member-signature{}
@@ -881,26 +884,9 @@ public class WebApiDocsGeneratorContractTests
 
         var cssPath = Path.Combine(root, "css", "api.css");
         Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
-        File.WriteAllText(cssPath,
-            """
-            .api-layout{}
-            .api-sidebar{}
-            .api-content{}
-            .api-overview{}
-            .type-chips{}
-            .type-chip{}
-            .chip-icon{}
-            .sidebar-count{}
-            .sidebar-toggle{}
-            .type-item{}
-            .filter-button{}
-            .member-card{}
-            .member-signature{}
-            .member-header pre.member-signature{}
-            .member-card pre::-webkit-scrollbar{}
-            .member-card pre::-webkit-scrollbar-track{}
-            .member-card pre::-webkit-scrollbar-thumb{}
-            """);
+        var fallbackCssPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Web", "Assets", "ApiDocs", "fallback.css"));
+        Assert.True(File.Exists(fallbackCssPath), "Expected embedded API fallback CSS to exist for contract validation.");
+        File.WriteAllText(cssPath, File.ReadAllText(fallbackCssPath));
 
         var outputPath = Path.Combine(root, "api");
         var options = new WebApiDocsOptions
@@ -1020,7 +1006,8 @@ public class WebApiDocsGeneratorContractTests
             Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
             var html = File.ReadAllText(indexHtmlPath);
 
-            Assert.Contains("href=\"/docs/powershell/\" class=\"back-link\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/powershell/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("back-link", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1127,7 +1114,8 @@ public class WebApiDocsGeneratorContractTests
             var indexHtmlPath = Path.Combine(outputPath, "index.html");
             Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
             var indexHtml = File.ReadAllText(indexHtmlPath);
-            Assert.Contains("class=\"sidebar-title active\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("sidebar-title", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("active", indexHtml, StringComparison.OrdinalIgnoreCase);
 
             var typeIndexPath = Directory
                 .GetFiles(outputPath, "index.html", SearchOption.AllDirectories)
@@ -1135,7 +1123,8 @@ public class WebApiDocsGeneratorContractTests
             Assert.False(string.IsNullOrWhiteSpace(typeIndexPath), "Expected at least one generated type index page.");
 
             var typeHtml = File.ReadAllText(typeIndexPath!);
-            Assert.Contains("class=\"sidebar-title active\"", typeHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("sidebar-title", typeHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("active", typeHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

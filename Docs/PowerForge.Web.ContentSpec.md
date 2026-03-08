@@ -407,6 +407,24 @@ When `UseToc` is true, `powerforge web verify` warns about pages that are
 missing from the TOC. If `UseToc` is true but no `toc.json` / `toc.yml` is found,
 `powerforge web verify` emits a warning so you don’t silently fall back.
 
+### Translation completeness per collection
+By default, localization verification expects every `translation_key` to exist in
+every configured site language. For mixed sites, you can narrow that expectation
+per collection:
+
+```json
+{
+  "Name": "blog",
+  "Preset": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "ExpectedTranslationLanguages": [ "en", "pl" ]
+}
+```
+
+Use this when a collection intentionally publishes only a subset of the site’s
+languages, while other collections still require the full localization set.
+
 ## Data files
 JSON files under `data/` become `data.<fileName>` in Scriban.
 ```

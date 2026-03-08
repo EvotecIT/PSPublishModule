@@ -20,6 +20,10 @@ public sealed class WebApiDocsOptions
     public string XmlPath { get; set; } = string.Empty;
     /// <summary>Path to PowerShell help XML or folder.</summary>
     public string? HelpPath { get; set; }
+    /// <summary>Optional path to a PowerShell module manifest used for detached website artifacts.</summary>
+    public string? PowerShellModuleManifestPath { get; set; }
+    /// <summary>Optional path to exported PowerShell command metadata (kind + aliases).</summary>
+    public string? PowerShellCommandMetadataPath { get; set; }
     /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
     /// <summary>Output directory for generated docs.</summary>
@@ -250,12 +254,15 @@ public static partial class WebApiDocsGenerator
         ".api-sidebar",
         ".api-content",
         ".api-overview",
+        ".api-overview-grid",
         ".type-chips",
         ".type-chip",
         ".chip-icon",
         ".sidebar-count",
         ".sidebar-toggle",
         ".type-item",
+        ".type-detail-shell",
+        ".type-detail-rail",
         ".filter-button",
         ".member-card",
         ".member-signature",

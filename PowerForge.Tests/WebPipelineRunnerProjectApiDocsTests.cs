@@ -23,6 +23,29 @@ public class WebPipelineRunnerProjectApiDocsTests
                       "slug": "alpha",
                       "name": "Alpha",
                       "mode": "hub-full",
+                      "manifestGeneratedAt": "2026-03-07T09:39:12.7138991+01:00",
+                      "manifestCommit": "da741ca2a12e30ec1dff8875182eaa5782534b13",
+                      "metrics": {
+                        "github": {
+                          "language": "PowerShell",
+                          "stars": 321,
+                          "forks": 12,
+                          "openIssues": 4,
+                          "lastPushedAt": "2026-02-14T21:19:34.0000000+00:00"
+                        },
+                        "powerShellGallery": {
+                          "totalDownloads": 1234567,
+                          "galleryUrl": "https://example.test/gallery/alpha"
+                        },
+                        "downloads": {
+                          "total": 1234567,
+                          "powerShellGallery": 1234567,
+                          "nuget": 0
+                        },
+                        "release": {
+                          "latestTag": "v1.2.3"
+                        }
+                      },
                       "surfaces": {
                         "apiPowerShell": true
                       }
@@ -35,6 +58,10 @@ public class WebPipelineRunnerProjectApiDocsTests
             Directory.CreateDirectory(Path.Combine(powerShellRoot, "examples"));
             File.WriteAllText(Path.Combine(powerShellRoot, "Alpha-help.xml"), SamplePowerShellHelpXml("Get-AlphaItem", "Returns alpha items."));
             File.WriteAllText(Path.Combine(powerShellRoot, "examples", "Get-AlphaItem.ps1"), "Get-AlphaItem -Name 'Demo'");
+            var headerPath = Path.Combine(root, "api-header.html");
+            var footerPath = Path.Combine(root, "api-footer.html");
+            File.WriteAllText(headerPath, "<header>{{PROJECT_DOWNLOADS_LABEL}} {{PROJECT_DOWNLOADS}} Updated: {{PROJECT_LAST_PUSH}}</header>");
+            File.WriteAllText(footerPath, "<footer>{{YEAR}}</footer>");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -48,7 +75,9 @@ public class WebPipelineRunnerProjectApiDocsTests
                       "siteRoot": "./_site",
                       "summaryPath": "./summary.json",
                       "template": "docs",
-                      "format": "html"
+                      "format": "html",
+                      "headerHtml": "./api-header.html",
+                      "footerHtml": "./api-footer.html"
                     }
                   ]
                 }
@@ -62,9 +91,92 @@ public class WebPipelineRunnerProjectApiDocsTests
             var html = File.ReadAllText(indexPath);
             Assert.Contains("Alpha API Reference", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Get-AlphaItem", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PowerShell Gallery downloads", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("1,234,567", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Updated: 2026-02-14", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Manifest commit:", html, StringComparison.OrdinalIgnoreCase);
 
             var summary = File.ReadAllText(Path.Combine(root, "summary.json"));
             Assert.Contains("\"generated\": 1", summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_UsesPowerShellCommandMetadataForFunctionKindsAndAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-powershell-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "alpha",
+                      "name": "Alpha",
+                      "mode": "hub-full",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var powerShellRoot = Path.Combine(root, "data", "project-api", "alpha", "powershell");
+            Directory.CreateDirectory(powerShellRoot);
+            File.WriteAllText(Path.Combine(powerShellRoot, "Alpha-help.xml"), SamplePowerShellHelpXml("Add-HTML", "Adds alpha html."));
+            File.WriteAllText(Path.Combine(powerShellRoot, "command-metadata.json"),
+                """
+                {
+                  "commands": [
+                    {
+                      "name": "Add-HTML",
+                      "kind": "Function",
+                      "aliases": [ "EmailHTML" ]
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "apiRoot": "./data/project-api",
+                      "siteRoot": "./_site",
+                      "template": "docs",
+                      "format": "html"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var indexPath = Path.Combine(root, "_site", "projects", "alpha", "api", "index.html");
+            Assert.True(File.Exists(indexPath));
+            var indexHtml = File.ReadAllText(indexPath);
+            Assert.Contains("Functions (1)", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Cmdlets (1)", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("EmailHTML", indexHtml, StringComparison.Ordinal);
+            Assert.Contains("Aliases: EmailHTML", indexHtml, StringComparison.Ordinal);
+
+            var detailHtml = File.ReadAllText(Path.Combine(root, "_site", "projects", "alpha", "api", "add-html", "index.html"));
+            Assert.Contains("Aliases", detailHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("EmailHTML", detailHtml, StringComparison.Ordinal);
+            Assert.Contains("type-header-aliases", detailHtml, StringComparison.Ordinal);
         }
         finally
         {

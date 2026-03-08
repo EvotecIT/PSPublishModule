@@ -108,6 +108,30 @@ public class WebReleaseHubRenderingTests
         Assert.Contains("pf-release-asset-badge--platform", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_RendersPfReleaseHelpers_FromProjectScopedReleaseHubDataPath()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Project Release Hub
+            """,
+            setup: root =>
+            {
+                WriteReleaseHubData(root);
+                WriteProjectScopedReleaseHubData(root, "pswritehtml");
+            },
+            useScribanTheme: true,
+            scribanLayoutBody: """
+            <section class="cta">{{ pf.release_button "pswritehtml.module" "stable" "any" "any" "zip" "Download PSWriteHTML" "btn btn-primary" "release_hub.projects.pswritehtml" }}</section>
+            <section class="timeline">{{ pf.release_changelog "" 5 true "project-release-timeline" "release_hub.projects.pswritehtml" }}</section>
+            """);
+
+        Assert.Contains("Download PSWriteHTML", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data-release-product=\"pswritehtml.module\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PSWriteHTML 1.40.0", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Latest Stable", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(
         string markdown,
         Action<string> setup,
@@ -336,6 +360,44 @@ public class WebReleaseHubRenderingTests
                   "includePreview": false
                 }
               }
+            }
+            """);
+    }
+
+    private static void WriteProjectScopedReleaseHubData(string root, string slug)
+    {
+        var releaseHubProjectsDir = Path.Combine(root, "data", "release-hub", "projects");
+        Directory.CreateDirectory(releaseHubProjectsDir);
+        File.WriteAllText(Path.Combine(releaseHubProjectsDir, $"{slug}.json"),
+            """
+            {
+              "title": "PSWriteHTML Releases",
+              "products": [
+                { "id": "pswritehtml.module", "name": "PSWriteHTML Module", "order": 10 }
+              ],
+              "releases": [
+                {
+                  "tag": "v1.40.0",
+                  "title": "PSWriteHTML 1.40.0",
+                  "url": "https://github.com/EvotecIT/PSWriteHTML/releases/tag/v1.40.0",
+                  "publishedAt": "2025-12-14T19:44:49Z",
+                  "isPrerelease": false,
+                  "isLatestStable": true,
+                  "body_md": "## Highlights\n- Embedded changelog support for the project hub",
+                  "assets": [
+                    {
+                      "name": "PSWriteHTML-v1.40.0.zip",
+                      "downloadUrl": "https://example.test/downloads/PSWriteHTML-v1.40.0.zip",
+                      "product": "pswritehtml.module",
+                      "channel": "stable",
+                      "platform": "any",
+                      "arch": "any",
+                      "kind": "zip",
+                      "size": 2048000
+                    }
+                  ]
+                }
+              ]
             }
             """);
     }

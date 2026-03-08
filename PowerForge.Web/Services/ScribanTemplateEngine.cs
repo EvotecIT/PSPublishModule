@@ -182,7 +182,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 1;
-        public int ParameterCount => 7;
+        public int ParameterCount => 8;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -197,6 +197,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 4 => new ScriptParameterInfo(typeof(string), "kind", string.Empty),
                 5 => new ScriptParameterInfo(typeof(string), "label", string.Empty),
                 6 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                7 => new ScriptParameterInfo(typeof(string), "data_path", string.Empty),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -210,7 +211,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var kind = arguments.Count > 4 ? arguments[4]?.ToString() : null;
             var label = arguments.Count > 5 ? arguments[5]?.ToString() : null;
             var cssClass = arguments.Count > 6 ? arguments[6]?.ToString() : null;
-            return _helpers.ReleaseButton(product, channel, platform, arch, kind, label, cssClass);
+            var dataPath = arguments.Count > 7 ? arguments[7]?.ToString() : null;
+            return _helpers.ReleaseButton(product, channel, platform, arch, kind, label, cssClass, dataPath);
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
@@ -229,7 +231,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 1;
-        public int ParameterCount => 8;
+        public int ParameterCount => 9;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -245,6 +247,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 5 => new ScriptParameterInfo(typeof(string), "arch", string.Empty),
                 6 => new ScriptParameterInfo(typeof(string), "kind", string.Empty),
                 7 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                8 => new ScriptParameterInfo(typeof(string), "data_path", string.Empty),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -259,7 +262,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var arch = arguments.Count > 5 ? arguments[5]?.ToString() : null;
             var kind = arguments.Count > 6 ? arguments[6]?.ToString() : null;
             var cssClass = arguments.Count > 7 ? arguments[7]?.ToString() : null;
-            return _helpers.ReleaseButtons(product, channel, limit, groupBy, platform, arch, kind, cssClass);
+            var dataPath = arguments.Count > 8 ? arguments[8]?.ToString() : null;
+            return _helpers.ReleaseButtons(product, channel, limit, groupBy, platform, arch, kind, cssClass, dataPath);
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
@@ -278,7 +282,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 0;
-        public int ParameterCount => 4;
+        public int ParameterCount => 5;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -290,6 +294,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 1 => new ScriptParameterInfo(typeof(int), "limit", 20),
                 2 => new ScriptParameterInfo(typeof(bool), "include_preview", true),
                 3 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
+                4 => new ScriptParameterInfo(typeof(string), "data_path", string.Empty),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -300,7 +305,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var limit = arguments.Count > 1 ? ScribanThemeHelpers.ParseInt(arguments[1], 20) : 20;
             var includePreview = arguments.Count > 2 ? ScribanThemeHelpers.ParseBool(arguments[2], true) : true;
             var cssClass = arguments.Count > 3 ? arguments[3]?.ToString() : null;
-            return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass);
+            var dataPath = arguments.Count > 4 ? arguments[4]?.ToString() : null;
+            return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass, dataPath);
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)

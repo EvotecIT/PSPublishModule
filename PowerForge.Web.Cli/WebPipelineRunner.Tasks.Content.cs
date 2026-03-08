@@ -81,6 +81,8 @@ internal static partial class WebPipelineRunner
             "source-url-mappings",
             "sourceMappings",
             "source-mappings");
+        var powerShellManifestPath = ResolvePath(baseDir, GetString(step, "psManifestPath") ?? GetString(step, "ps-manifest-path") ?? GetString(step, "powerShellManifestPath") ?? GetString(step, "powershell-manifest-path"));
+        var powerShellCommandMetadataPath = ResolvePath(baseDir, GetString(step, "psCommandMetadataPath") ?? GetString(step, "ps-command-metadata-path") ?? GetString(step, "powerShellCommandMetadataPath") ?? GetString(step, "powershell-command-metadata-path"));
         var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
         var navContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ??
@@ -270,6 +272,8 @@ internal static partial class WebPipelineRunner
             Type = apiType,
             XmlPath = xml ?? string.Empty,
             HelpPath = help,
+            PowerShellModuleManifestPath = powerShellManifestPath,
+            PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
             AssemblyPath = assembly,
             OutputPath = outPath,
             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,

@@ -20,6 +20,7 @@
   var memberReset = document.querySelector('.member-reset');
   var tocToggle = document.querySelector('.type-toc-toggle');
   var memberSectionToggles = Array.prototype.slice.call(document.querySelectorAll('.member-section-toggle'));
+  var overviewGroupToggles = Array.prototype.slice.call(document.querySelectorAll('[data-overview-group-toggle]'));
 
   function setSidebar(open) {
     if (!sidebar || !overlay) return;
@@ -588,6 +589,29 @@
       toc.classList.toggle('collapsed');
       window.__pfTocCollapsed = toc.classList.contains('collapsed');
       saveState();
+    });
+  }
+
+  if (overviewGroupToggles.length) {
+    overviewGroupToggles.forEach(function(toggleButton) {
+      function syncOverviewGroup(expanded) {
+        var group = toggleButton.closest('[data-overview-group]');
+        if (!group) return;
+        var extras = Array.prototype.slice.call(group.querySelectorAll('[data-overview-extra]'));
+        extras.forEach(function(node) {
+          node.hidden = !expanded;
+        });
+        toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggleButton.textContent = expanded
+          ? (toggleButton.getAttribute('data-collapse-label') || 'Show fewer')
+          : (toggleButton.getAttribute('data-expand-label') || 'Show more');
+      }
+
+      syncOverviewGroup(false);
+      toggleButton.addEventListener('click', function() {
+        var expanded = toggleButton.getAttribute('aria-expanded') === 'true';
+        syncOverviewGroup(!expanded);
+      });
     });
   }
 

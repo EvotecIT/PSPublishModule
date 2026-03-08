@@ -668,6 +668,89 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Verify_RespectsCollectionExpectedTranslationLanguages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-collection-lang-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogEnPath = Path.Combine(root, "content", "blog", "en");
+            var blogPlPath = Path.Combine(root, "content", "blog", "pl");
+            Directory.CreateDirectory(blogEnPath);
+            Directory.CreateDirectory(blogPlPath);
+
+            File.WriteAllText(Path.Combine(blogEnPath, "post-a.md"),
+                """
+                ---
+                title: Post A
+                date: 2026-01-01
+                translation_key: wp-post-demo
+                ---
+
+                Post A
+                """);
+            File.WriteAllText(Path.Combine(blogPlPath, "post-a.md"),
+                """
+                ---
+                title: Post A PL
+                date: 2026-01-02
+                translation_key: wp-post-demo
+                ---
+
+                Post A PL
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Features Collection Language Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Default = true },
+                        new LanguageSpec { Code = "pl" },
+                        new LanguageSpec { Code = "de" },
+                        new LanguageSpec { Code = "fr" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Preset = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ExpectedTranslationLanguages = new[] { "en", "pl" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var verification = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.DoesNotContain(
+                verification.Warnings,
+                warning => warning.Contains("[PFWEB.LOCALIZATION]", StringComparison.OrdinalIgnoreCase) &&
+                           warning.Contains("translation 'wp-post-demo' is missing languages", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsForLocalizationConfigGaps()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-config-" + Guid.NewGuid().ToString("N"));

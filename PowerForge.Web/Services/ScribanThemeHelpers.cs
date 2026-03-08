@@ -150,7 +150,8 @@ internal sealed class ScribanThemeHelpers
         string? arch = null,
         string? kind = null,
         string? label = null,
-        string? cssClass = null)
+        string? cssClass = null,
+        string? dataPath = null)
     {
         return ReleaseHubRenderer.RenderReleaseButton(
             _context.Data,
@@ -161,7 +162,8 @@ internal sealed class ScribanThemeHelpers
             arch,
             kind,
             label,
-            cssClass);
+            cssClass,
+            dataPath);
     }
 
     public string ReleaseButtons(
@@ -172,7 +174,8 @@ internal sealed class ScribanThemeHelpers
         string? platform = null,
         string? arch = null,
         string? kind = null,
-        string? cssClass = null)
+        string? cssClass = null,
+        string? dataPath = null)
     {
         return ReleaseHubRenderer.RenderReleaseButtons(
             _context.Data,
@@ -184,14 +187,16 @@ internal sealed class ScribanThemeHelpers
             platform,
             arch,
             kind,
-            cssClass);
+            cssClass,
+            dataPath);
     }
 
     public string ReleaseChangelog(
         string? product = null,
         int limit = 20,
         bool includePreview = true,
-        string? cssClass = null)
+        string? cssClass = null,
+        string? dataPath = null)
     {
         return ReleaseHubRenderer.RenderReleaseChangelog(
             _context.Data,
@@ -199,7 +204,8 @@ internal sealed class ScribanThemeHelpers
             product,
             limit,
             includePreview,
-            cssClass);
+            cssClass,
+            dataPath);
     }
 
     public string EditorialCards(

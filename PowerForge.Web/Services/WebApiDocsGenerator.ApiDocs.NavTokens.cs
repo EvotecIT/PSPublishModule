@@ -11,7 +11,14 @@ public static partial class WebApiDocsGenerator
     {
         var tokens = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["YEAR"] = DateTime.UtcNow.Year.ToString()
+            ["YEAR"] = DateTime.UtcNow.Year.ToString(),
+            ["LANGUAGE"] = "en",
+            ["LANGUAGE_UPPER"] = "EN",
+            ["LABEL_SEARCH"] = "Search",
+            ["LABEL_SEARCH_PLACEHOLDER"] = "Search pages, projects, docs...",
+            ["LABEL_FUZZY_SEARCH"] = "Fuzzy search",
+            ["LABEL_LANGUAGE_SWITCH"] = "Language switch",
+            ["LABEL_SWITCH_THEME"] = "Switch theme"
         };
         foreach (var pair in options.TemplateTokens)
             tokens[pair.Key] = pair.Value;

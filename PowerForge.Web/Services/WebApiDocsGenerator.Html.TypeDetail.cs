@@ -33,7 +33,7 @@ public static partial class WebApiDocsGenerator
         var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
         var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
         var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
-        sb.AppendLine("    <article class=\"type-detail\">");
+        sb.AppendLine("    <article class=\"type-detail ev-page-body\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
         sb.AppendLine("      <nav class=\"breadcrumb\">");
         sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
@@ -41,12 +41,14 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
         sb.AppendLine("      </nav>");
 
-        sb.AppendLine("      <header class=\"type-header\" id=\"overview\">");
+        sb.AppendLine("      <header class=\"type-header ev-docs-header\" id=\"overview\">");
+        sb.AppendLine("        <p class=\"ev-eyebrow\">API Reference</p>");
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         sb.AppendLine("        <div class=\"type-title-row\">");
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
         sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
         sb.AppendLine("        </div>");
+        AppendAliasInlineMeta(sb, type, "type-header-meta", "type-header-aliases");
         var sourceAction = RenderTypeSourceAction(type.Source);
         if (!string.IsNullOrWhiteSpace(sourceAction))
         {
@@ -159,166 +161,189 @@ public static partial class WebApiDocsGenerator
         }
         sb.AppendLine("      </div>");
 
-        if (toc.Count > 1)
-        {
-          sb.AppendLine("      <nav class=\"type-toc\">");
-          sb.AppendLine("        <div class=\"type-toc-header\">");
-          sb.AppendLine("          <span class=\"type-toc-title\">On this page</span>");
-          sb.AppendLine("          <button class=\"type-toc-toggle\" type=\"button\" aria-label=\"Toggle table of contents\">");
-          sb.AppendLine("            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-          sb.AppendLine("              <path d=\"M9 18l6-6-6-6\"/>");
-          sb.AppendLine("            </svg>");
-          sb.AppendLine("          </button>");
-          sb.AppendLine("        </div>");
-          sb.AppendLine("        <ul>");
-            foreach (var entry in toc)
-            {
-                sb.AppendLine($"          <li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
-            }
-            sb.AppendLine("        </ul>");
-            sb.AppendLine("      </nav>");
-        }
+        var detailBody = new StringBuilder();
 
         if (!string.IsNullOrWhiteSpace(type.Summary))
-            sb.AppendLine($"      <p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
+            detailBody.AppendLine($"      <p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
         if (inheritanceChain.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-inheritance\" id=\"inheritance\">");
-            sb.AppendLine("        <h2>Inheritance</h2>");
-            sb.AppendLine("        <ul class=\"inheritance-list\">");
+            detailBody.AppendLine("      <section class=\"type-inheritance\" id=\"inheritance\">");
+            detailBody.AppendLine("        <h2>Inheritance</h2>");
+            detailBody.AppendLine("        <ul class=\"inheritance-list\">");
             foreach (var entry in inheritanceChain)
             {
-                sb.AppendLine($"          <li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
+                detailBody.AppendLine($"          <li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
             }
-            sb.AppendLine($"          <li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
-            sb.AppendLine("        </ul>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine($"          <li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
+            detailBody.AppendLine("        </ul>");
+            detailBody.AppendLine("      </section>");
         }
 
         if (derivedTypes.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-derived\" id=\"derived-types\">");
-            sb.AppendLine("        <h2>Derived Types</h2>");
-            sb.AppendLine("        <ul class=\"derived-list\">");
+            detailBody.AppendLine("      <section class=\"type-derived\" id=\"derived-types\">");
+            detailBody.AppendLine("        <h2>Derived Types</h2>");
+            detailBody.AppendLine("        <ul class=\"derived-list\">");
             foreach (var derived in derivedTypes)
             {
-                sb.AppendLine($"          <li>{LinkifyType(derived.FullName, baseUrl, slugMap)}</li>");
+                detailBody.AppendLine($"          <li>{LinkifyType(derived.FullName, baseUrl, slugMap)}</li>");
             }
-            sb.AppendLine("        </ul>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("        </ul>");
+            detailBody.AppendLine("      </section>");
         }
 
         if (!string.IsNullOrWhiteSpace(type.Remarks))
         {
-            sb.AppendLine("      <section class=\"remarks\" id=\"remarks\">");
-            sb.AppendLine("        <h2>Remarks</h2>");
-            sb.AppendLine($"        <p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("      <section class=\"remarks\" id=\"remarks\">");
+            detailBody.AppendLine("        <h2>Remarks</h2>");
+            detailBody.AppendLine($"        <p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
+            detailBody.AppendLine("      </section>");
         }
 
         if (type.TypeParameters.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-parameters\" id=\"type-parameters\">");
-            sb.AppendLine("        <h2>Type Parameters</h2>");
-            sb.AppendLine("        <dl class=\"typeparam-list\">");
+            detailBody.AppendLine("      <section class=\"type-parameters\" id=\"type-parameters\">");
+            detailBody.AppendLine("        <h2>Type Parameters</h2>");
+            detailBody.AppendLine("        <dl class=\"typeparam-list\">");
             foreach (var tp in type.TypeParameters)
             {
-                sb.AppendLine($"          <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
+                detailBody.AppendLine($"          <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
                 if (!string.IsNullOrWhiteSpace(tp.Summary))
-                    sb.AppendLine($"          <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+                    detailBody.AppendLine($"          <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
             }
-            sb.AppendLine("        </dl>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("        </dl>");
+            detailBody.AppendLine("      </section>");
         }
 
         if (type.Examples.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
-            sb.AppendLine("        <h2>Examples</h2>");
-            AppendExamples(sb, type.Examples, baseUrl, slugMap, codeLanguage);
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
+            detailBody.AppendLine("        <h2>Examples</h2>");
+            AppendExamples(detailBody, type.Examples, baseUrl, slugMap, codeLanguage);
+            detailBody.AppendLine("      </section>");
         }
 
         if (type.SeeAlso.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-see-also\" id=\"see-also\">");
-            sb.AppendLine("        <h2>See Also</h2>");
-            sb.AppendLine("        <ul class=\"see-also-list\">");
+            detailBody.AppendLine("      <section class=\"type-see-also\" id=\"see-also\">");
+            detailBody.AppendLine("        <h2>See Also</h2>");
+            detailBody.AppendLine("        <ul class=\"see-also-list\">");
             foreach (var item in type.SeeAlso)
             {
-                sb.AppendLine($"          <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+                detailBody.AppendLine($"          <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
             }
-            sb.AppendLine("        </ul>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("        </ul>");
+            detailBody.AppendLine("      </section>");
         }
 
         if (hasPowerShellCommonParameters)
         {
             var commonParametersLink = ResolvePowerShellCommonParametersUrl(baseUrl, slugMap);
             var commonParametersLinkTarget = IsExternal(commonParametersLink) ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
-            sb.AppendLine("      <section class=\"type-common-parameters\" id=\"common-parameters\">");
-            sb.AppendLine("        <h2>Common Parameters</h2>");
-            sb.AppendLine("        <p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
-            sb.AppendLine($"        <p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
-            sb.AppendLine("      </section>");
+            detailBody.AppendLine("      <section class=\"type-common-parameters\" id=\"common-parameters\">");
+            detailBody.AppendLine("        <h2>Common Parameters</h2>");
+            detailBody.AppendLine("        <p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
+            detailBody.AppendLine($"        <p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
+            detailBody.AppendLine("      </section>");
         }
 
         var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
         if (totalMembers > 0)
         {
-            sb.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
-            sb.AppendLine("        <div class=\"member-filter\">");
-            sb.AppendLine($"          <label for=\"api-member-filter\">{memberFilterLabel}</label>");
-            sb.AppendLine($"          <input id=\"api-member-filter\" type=\"text\" placeholder=\"{memberFilterPlaceholder}\" />");
-            sb.AppendLine("        </div>");
-            sb.AppendLine("        <div class=\"member-kind-filter\">");
-            sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
+            detailBody.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
+            detailBody.AppendLine("        <div class=\"member-filter\">");
+            detailBody.AppendLine($"          <label for=\"api-member-filter\">{memberFilterLabel}</label>");
+            detailBody.AppendLine($"          <input id=\"api-member-filter\" type=\"text\" placeholder=\"{memberFilterPlaceholder}\" />");
+            detailBody.AppendLine("        </div>");
+            detailBody.AppendLine("        <div class=\"member-kind-filter\">");
+            detailBody.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
             if (type.Constructors.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
             if (type.Methods.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{methodSectionLabel} ({type.Methods.Count})</button>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{methodSectionLabel} ({type.Methods.Count})</button>");
             if (type.Properties.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
             if (type.Fields.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
             if (type.Events.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
             if (type.ExtensionMethods.Count > 0)
-                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
-            sb.AppendLine("        </div>");
+                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
+            detailBody.AppendLine("        </div>");
             if (!isPowerShellCommand)
             {
-                sb.AppendLine("        <label class=\"member-toggle\">");
-                sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
-                sb.AppendLine("          Show inherited");
-                sb.AppendLine("        </label>");
+                detailBody.AppendLine("        <label class=\"member-toggle\">");
+                detailBody.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
+                detailBody.AppendLine("          Show inherited");
+                detailBody.AppendLine("        </label>");
             }
-            sb.AppendLine("        <div class=\"member-actions\">");
-            sb.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
-            sb.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
-            sb.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
-            sb.AppendLine("        </div>");
-            sb.AppendLine("      </div>");
+            detailBody.AppendLine("        <div class=\"member-actions\">");
+            detailBody.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
+            detailBody.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
+            detailBody.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
+            detailBody.AppendLine("        </div>");
+            detailBody.AppendLine("      </div>");
 
             var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (isPowerShellCommand)
             {
-                AppendMemberSections(sb, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
+                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
             }
             else
             {
-                AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-                AppendMemberSections(sb, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
-                AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
-                AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
-                AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
+                AppendMemberSections(detailBody, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
+                AppendMemberSections(detailBody, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
+                AppendMemberSections(detailBody, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+                AppendMemberSections(detailBody, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
                 if (type.ExtensionMethods.Count > 0)
-                    AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+                    AppendMemberSections(detailBody, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
             }
+        }
+
+        if (toc.Count > 1)
+        {
+            sb.AppendLine("      <div class=\"type-detail-shell\">");
+            sb.AppendLine("        <div class=\"type-detail-main\">");
+            sb.Append(detailBody.ToString());
+            sb.AppendLine("        </div>");
+            sb.AppendLine("        <aside class=\"type-detail-rail\">");
+            sb.Append(BuildTypeTocHtml(toc));
+            sb.AppendLine("        </aside>");
+            sb.AppendLine("      </div>");
+        }
+        else
+        {
+            sb.Append(detailBody.ToString());
         }
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildTypeTocHtml(IReadOnlyList<(string id, string label)> toc)
+    {
+        if (toc is null || toc.Count <= 1)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("          <nav class=\"type-toc\">");
+        sb.AppendLine("            <div class=\"type-toc-header\">");
+        sb.AppendLine("              <span class=\"type-toc-title\">On this page</span>");
+        sb.AppendLine("              <button class=\"type-toc-toggle\" type=\"button\" aria-label=\"Toggle table of contents\">");
+        sb.AppendLine("                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+        sb.AppendLine("                  <path d=\"M9 18l6-6-6-6\"/>");
+        sb.AppendLine("                </svg>");
+        sb.AppendLine("              </button>");
+        sb.AppendLine("            </div>");
+        sb.AppendLine("            <ul>");
+        foreach (var entry in toc)
+        {
+            sb.AppendLine($"              <li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
+        }
+        sb.AppendLine("            </ul>");
+        sb.AppendLine("          </nav>");
+        return sb.ToString();
     }
 
     private static void AppendMemberSections(

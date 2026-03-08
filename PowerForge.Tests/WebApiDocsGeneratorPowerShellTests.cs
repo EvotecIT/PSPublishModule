@@ -458,6 +458,92 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_UsesDetachedCommandMetadataForFunctionsAndAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-detached-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var artifactRoot = Path.Combine(root, "WebsiteArtifacts", "apidocs", "powershell");
+            Directory.CreateDirectory(artifactRoot);
+            var helpPath = Path.Combine(artifactRoot, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Add-HTML</command:name>
+                      <maml:description><maml:para>Adds HTML output.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax><command:syntaxItem><command:name>Add-HTML</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+            var metadataPath = Path.Combine(artifactRoot, "command-metadata.json");
+            File.WriteAllText(metadataPath,
+                """
+                {
+                  "commands": [
+                    {
+                      "name": "Add-HTML",
+                      "kind": "Function",
+                      "aliases": [ "EmailHTML" ]
+                    }
+                  ]
+                }
+                """);
+
+            var moduleRoot = Path.Combine(root, "module");
+            Directory.CreateDirectory(moduleRoot);
+            var manifestPath = Path.Combine(moduleRoot, "Sample.Module.psd1");
+            File.WriteAllText(manifestPath,
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Add-HTML')
+                    AliasesToExport = @('EmailHTML')
+                }
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = artifactRoot,
+                PowerShellModuleManifestPath = manifestPath,
+                PowerShellCommandMetadataPath = metadataPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(1, result.TypeCount);
+
+            using var typeJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "add-html.json")));
+            Assert.Equal("Function", typeJson.RootElement.GetProperty("kind").GetString());
+            Assert.Contains(typeJson.RootElement.GetProperty("commandAliases").EnumerateArray(), static item => item.GetString() == "EmailHTML");
+
+            var indexHtml = File.ReadAllText(Path.Combine(outputPath, "index.html"));
+            Assert.Contains("Functions (1)", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("EmailHTML", indexHtml, StringComparison.Ordinal);
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "add-html", "index.html"));
+            Assert.Contains("Aliases", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("EmailHTML", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_PrefersCommandTypeFromHelpXmlOverManifestHints()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-command-type-" + Guid.NewGuid().ToString("N"));

@@ -29,6 +29,11 @@ public sealed class CollectionSpec
     public SortOrder? SortOrder { get; set; }
     /// <summary>Optional output formats for the collection.</summary>
     public string[] Outputs { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Optional subset of site languages that should be treated as required for translation completeness
+    /// warnings in <c>verify</c>. When omitted, all configured site languages are expected.
+    /// </summary>
+    public string[] ExpectedTranslationLanguages { get; set; } = Array.Empty<string>();
     /// <summary>Collection-level SEO configuration (overrides site-level templates).</summary>
     public SeoSpec? Seo { get; set; }
     /// <summary>Optional page size for generated section pagination.</summary>

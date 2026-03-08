@@ -131,7 +131,7 @@ public static partial class WebSiteVerifier
                     list = new List<CollectionRoute>();
                     collectionRoutes[collection.Name] = list;
                 }
-                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false, resolvedLanguage, translationKey));
+                list.Add(new CollectionRoute(collection.Name, route, file, matter?.Draft ?? false, resolvedLanguage, translationKey));
             }
         }
 
@@ -149,7 +149,7 @@ public static partial class WebSiteVerifier
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
-        ValidateLocalizationTranslationMappings(localization, collectionRoutes, warnings);
+        ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
         ValidateNavigationLint(spec, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
