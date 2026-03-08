@@ -227,4 +227,5 @@ public sealed class ModulePipelineManifestRefreshTests
             "    }" + Environment.NewLine +
             "}" + Environment.NewLine);
     }
+
 }

@@ -542,6 +542,70 @@ public sealed partial class ModulePipelineRunner
             : prefix + Environment.NewLine + Environment.NewLine + content;
     }
 
+    private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(stagingPath) || string.IsNullOrWhiteSpace(moduleName))
+            return;
+
+        var psm1Path = Path.Combine(stagingPath, $"{moduleName}.psm1");
+        if (!File.Exists(psm1Path))
+            return;
+
+        var generatedScripts = (scriptPaths ?? Array.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(File.ReadAllText)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
+
+        if (generatedScripts.Length == 0)
+            return;
+
+        var existing = File.ReadAllText(psm1Path);
+        var withoutExportBlock = RemoveTrailingExportBlock(existing).TrimEnd();
+
+        var sb = new StringBuilder(withoutExportBlock);
+        foreach (var script in generatedScripts)
+        {
+            if (sb.Length > 0)
+                sb.AppendLine().AppendLine();
+
+            sb.Append(script.TrimEnd());
+        }
+
+        var exports = ReadExportsFromManifest(manifestPath);
+        var exportBlock = BuildExportBlock(exports).TrimEnd();
+        if (!string.IsNullOrWhiteSpace(exportBlock))
+        {
+            if (sb.Length > 0)
+                sb.AppendLine().AppendLine();
+            sb.Append(exportBlock);
+        }
+
+        WriteMergedPsm1(psm1Path, sb.ToString());
+    }
+
+    private static string RemoveTrailingExportBlock(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return content ?? string.Empty;
+
+        var normalized = content.Replace("\r\n", "\n");
+        var exportStart = normalized.LastIndexOf("\n$FunctionsToExport = ", StringComparison.Ordinal);
+        if (exportStart < 0 && normalized.StartsWith("$FunctionsToExport = ", StringComparison.Ordinal))
+            exportStart = 0;
+
+        if (exportStart < 0)
+            return content;
+
+        var exportLine = "Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport";
+        var exportLineIndex = normalized.IndexOf(exportLine, exportStart, StringComparison.Ordinal);
+        if (exportLineIndex < 0)
+            return content;
+
+        return normalized.Substring(0, exportStart).TrimEnd('\n').Replace("\n", "\r\n");
+    }
+
     private static void WriteMergedPsm1(string path, string content)
     {
         var normalized = NormalizeCrLf(content);

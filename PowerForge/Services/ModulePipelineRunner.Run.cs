@@ -132,6 +132,9 @@ public sealed partial class ModulePipelineRunner
                                     var functions = ExportDetector.DetectScriptFunctions(scripts);
                                     BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
                                 }
+
+                                if (mergedScripts)
+                                    SyncMergedPsm1WithGeneratedScripts(buildResult.ManifestPath, buildResult.StagingPath, plan.ModuleName, generated.Select(g => g.ScriptPath));
                             }
                             catch (Exception ex)
                             {
@@ -672,6 +675,7 @@ public sealed partial class ModulePipelineRunner
                         preRelease: plan.PreRelease,
                         requiredModules: packagingRequiredModules,
                         information: plan.Information,
+                        delivery: plan.Delivery,
                         includeScriptFolders: !mergedScripts));
                     SafeDone(reporter, step);
                 }
@@ -723,6 +727,7 @@ public sealed partial class ModulePipelineRunner
                     buildResult.StagingPath,
                     installPackagePath,
                     plan.Information,
+                    plan.Delivery,
                     includeScriptFolders: !mergedScripts);
 
                 var installSpec = new ModuleInstallSpec

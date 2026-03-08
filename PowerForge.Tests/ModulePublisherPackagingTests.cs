@@ -21,6 +21,7 @@ public sealed class ModulePublisherPackagingTests
                 stagingPath: root.FullName,
                 moduleName: moduleName,
                 information: null,
+                delivery: null,
                 includeScriptFolders: true);
 
             Assert.NotNull(publishPath);
@@ -55,11 +56,45 @@ public sealed class ModulePublisherPackagingTests
                 stagingPath: root.FullName,
                 moduleName: moduleName,
                 information: null,
+                delivery: null,
                 includeScriptFolders: false);
 
             Assert.True(File.Exists(Path.Combine(publishPath!, "TestModule.psd1")));
             Assert.True(File.Exists(Path.Combine(publishPath!, "TestModule.psm1")));
             Assert.False(Directory.Exists(Path.Combine(publishPath!, "Public")));
+        }
+        finally
+        {
+            ModulePublisher.CleanupTemporaryPublishPath(publishPath);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PrepareModulePackageForRepositoryPublish_IncludesDeliveryInternals_WhenInformationIsNotConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? publishPath = null;
+
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteStagingFixture(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Internals"));
+            File.WriteAllText(Path.Combine(root.FullName, "Internals", "tool.txt"), "hello");
+
+            publishPath = ModulePublisher.PrepareModulePackageForRepositoryPublish(
+                stagingPath: root.FullName,
+                moduleName: moduleName,
+                information: null,
+                delivery: new DeliveryOptionsConfiguration
+                {
+                    Enable = true,
+                    InternalsPath = "Internals"
+                },
+                includeScriptFolders: true);
+
+            Assert.True(File.Exists(Path.Combine(publishPath!, "Internals", "tool.txt")));
         }
         finally
         {
@@ -89,4 +124,3 @@ public sealed class ModulePublisherPackagingTests
         File.WriteAllText(Path.Combine(stagingRoot, ".github", "dependabot.yml"), "version: 2");
     }
 }
-

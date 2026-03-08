@@ -125,6 +125,7 @@ public sealed class ModulePublisher
                 stagingPath: buildResult.StagingPath,
                 moduleName: plan.ModuleName,
                 information: plan.Information,
+                delivery: plan.Delivery,
                 includeScriptFolders: includeScriptFolders);
 
             if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
@@ -204,6 +205,7 @@ public sealed class ModulePublisher
         string stagingPath,
         string moduleName,
         InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
     {
         if (string.IsNullOrWhiteSpace(stagingPath))
@@ -222,6 +224,7 @@ public sealed class ModulePublisher
             stagingRoot: source,
             destinationModuleRoot: publishPath,
             information: information,
+            delivery: delivery,
             includeScriptFolders: includeScriptFolders);
 
         return publishPath;

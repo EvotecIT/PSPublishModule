@@ -493,7 +493,6 @@ public sealed partial class ModulePipelineRunner
             }
 
             ApplyTo("Delivery");
-            ApplyTo("PSPublishModuleDelivery");
 
             if (delivery.RepositoryPaths is { Length: > 0 } || !string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
             {

@@ -21,6 +21,7 @@ public sealed partial class ArtefactBuilder
     /// <param name="preRelease">Optional prerelease tag.</param>
     /// <param name="requiredModules">Required modules from configuration (used when AddRequiredModules is enabled).</param>
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
+    /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
     public ArtefactBuildResult Build(
         ConfigurationArtefactSegment segment,
@@ -31,6 +32,7 @@ public sealed partial class ArtefactBuilder
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
         InformationConfiguration? information = null,
+        DeliveryOptionsConfiguration? delivery = null,
         bool includeScriptFolders = true)
     {
         if (segment is null) throw new ArgumentNullException(nameof(segment));
@@ -47,8 +49,8 @@ public sealed partial class ArtefactBuilder
 
         return segment.ArtefactType switch
         {
-            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, includeScriptFolders),
-            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, includeScriptFolders),
+            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders),
+            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders),
             _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported yet.")
         };
     }
@@ -57,9 +59,10 @@ public sealed partial class ArtefactBuilder
         string stagingRoot,
         string destinationModuleRoot,
         InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders = true)
     {
-        var include = ResolvePackagingInformation(information, includeScriptFolders);
+        var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
         CopyModulePackage(stagingRoot, destinationModuleRoot, include);
     }
 
@@ -73,13 +76,14 @@ public sealed partial class ArtefactBuilder
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
         InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
     {
         if (cfg.DoNotClear != true)
             ClearDirectorySafe(outputRoot);
         Directory.CreateDirectory(outputRoot);
 
-        var include = ResolvePackagingInformation(information, includeScriptFolders);
+        var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
 
         var requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
         var modulesRoot = ResolveModulesRootForUnpacked(cfg, outputRoot, requiredRoot, projectRoot, moduleName, moduleVersion, preRelease);
@@ -131,13 +135,14 @@ public sealed partial class ArtefactBuilder
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
         InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
     {
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
             ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
 
-        var include = ResolvePackagingInformation(information, includeScriptFolders);
+        var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
 
         var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
         var zipPath = Path.Combine(outputRoot, artefactName);

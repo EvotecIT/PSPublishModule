@@ -18,7 +18,10 @@ public sealed partial class ArtefactBuilder
         public string[] IncludeAll { get; set; } = Array.Empty<string>();
     }
 
-    private static PackagingInformation ResolvePackagingInformation(InformationConfiguration? information, bool includeScriptFolders = true)
+    private static PackagingInformation ResolvePackagingInformation(
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders = true)
     {
         var info = information ?? new InformationConfiguration();
 
@@ -54,8 +57,29 @@ public sealed partial class ArtefactBuilder
             ExcludeFromPackage = Normalize(exclude),
             IncludeRoot = Normalize(includeRoot),
             IncludePS1 = Normalize(includePS1),
-            IncludeAll = Normalize(includeAll),
+            IncludeAll = MergeDeliveryIncludeAll(Normalize(includeAll), delivery),
         };
+    }
+
+    private static string[] MergeDeliveryIncludeAll(string[] includeAll, DeliveryOptionsConfiguration? delivery)
+    {
+        if (delivery?.Enable != true)
+            return includeAll ?? Array.Empty<string>();
+
+        var internalsPath = string.IsNullOrWhiteSpace(delivery.InternalsPath)
+            ? "Internals"
+            : delivery.InternalsPath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.IsNullOrWhiteSpace(internalsPath))
+            return includeAll ?? Array.Empty<string>();
+
+        var merged = new List<string>((includeAll ?? Array.Empty<string>()).Length + 1);
+        merged.AddRange(includeAll ?? Array.Empty<string>());
+
+        if (!merged.Any(x => string.Equals(x, internalsPath, StringComparison.OrdinalIgnoreCase)))
+            merged.Add(internalsPath);
+
+        return merged.ToArray();
     }
 
     private static string ResolveOutputRoot(string? configuredPath, string projectRoot, string moduleName, string moduleVersion, string? preRelease, ArtefactType type)
