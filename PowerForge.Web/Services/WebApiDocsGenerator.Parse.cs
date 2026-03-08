@@ -101,8 +101,9 @@ public static partial class WebApiDocsGenerator
         if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             moduleName = moduleName[..^4];
         apiDoc.AssemblyName = moduleName;
-        var manifestPath = TryResolvePowerShellModuleManifestPath(resolved, moduleName);
-        var kindHints = LoadPowerShellCommandKindHints(manifestPath, warnings);
+        var manifestPath = ResolvePowerShellModuleManifestPath(resolved, moduleName, options.PowerShellModuleManifestPath);
+        var commandMetadataPath = ResolvePowerShellCommandMetadataPath(resolved, options.PowerShellCommandMetadataPath);
+        var kindHints = LoadPowerShellCommandKindHints(manifestPath, commandMetadataPath, warnings);
 
         XDocument doc;
         try
@@ -140,7 +141,10 @@ public static partial class WebApiDocsGenerator
                         outputTypes.Add(outputType);
                 }
             }
-            var commandAliases = ParsePowerShellCommandAliases(command, details, commandNs, mamlNs);
+            var commandAliases = MergePowerShellCommandAliases(
+                name!,
+                ParsePowerShellCommandAliases(command, details, commandNs, mamlNs),
+                kindHints);
 
             var commandKind = ResolvePowerShellCommandKind(name!, kindHints, details?.Element(commandNs + "commandType")?.Value);
             var type = new ApiTypeModel
@@ -496,6 +500,24 @@ public static partial class WebApiDocsGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static List<string> MergePowerShellCommandAliases(string commandName, List<string> commandAliases, PowerShellCommandKindHints hints)
+    {
+        var merged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (commandAliases is not null)
+        {
+            foreach (var alias in commandAliases)
+            {
+                if (!string.IsNullOrWhiteSpace(alias))
+                    merged.Add(alias);
+            }
+        }
+
+        foreach (var alias in hints.GetAliasesForCommand(commandName))
+            merged.Add(alias);
+
+        return merged.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static List<string> ParsePowerShellTypeNames(
@@ -914,6 +936,8 @@ public static partial class WebApiDocsGenerator
             return commandType;
         if (commandName.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
             return "About";
+        if (hints.CommandKinds.TryGetValue(commandName, out var inferredKind) && !string.IsNullOrWhiteSpace(inferredKind))
+            return inferredKind;
         if (hints.Aliases.Contains(commandName))
             return "Alias";
         if (hints.Functions.Contains(commandName))
@@ -926,7 +950,7 @@ public static partial class WebApiDocsGenerator
             return "Cmdlet";
         if (hints.HasSignals)
             return "Command";
-        return "Cmdlet";
+        return "Command";
     }
 
     private static string? NormalizePowerShellCommandType(string? commandTypeRaw)
@@ -1112,6 +1136,26 @@ public static partial class WebApiDocsGenerator
 
         var remarks = string.Join(Environment.NewLine, lines).Trim();
         return string.IsNullOrWhiteSpace(remarks) ? null : remarks;
+    }
+
+    private static string? ResolvePowerShellModuleManifestPath(string resolvedHelpPath, string moduleName, string? explicitManifestPath)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitManifestPath) && File.Exists(explicitManifestPath))
+            return Path.GetFullPath(explicitManifestPath);
+        return TryResolvePowerShellModuleManifestPath(resolvedHelpPath, moduleName);
+    }
+
+    private static string? ResolvePowerShellCommandMetadataPath(string resolvedHelpPath, string? explicitCommandMetadataPath)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitCommandMetadataPath) && File.Exists(explicitCommandMetadataPath))
+            return Path.GetFullPath(explicitCommandMetadataPath);
+
+        var helpDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (string.IsNullOrWhiteSpace(helpDir) || !Directory.Exists(helpDir))
+            return null;
+
+        var metadataPath = Path.Combine(helpDir, "command-metadata.json");
+        return File.Exists(metadataPath) ? Path.GetFullPath(metadataPath) : null;
     }
 
     private static string? TryResolvePowerShellModuleManifestPath(string resolvedHelpPath, string moduleName)

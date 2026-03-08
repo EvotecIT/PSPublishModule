@@ -14,6 +14,8 @@ internal static partial class WebCliCommandHandlers
         var typeText = TryGetOptionValue(subArgs, "--type");
         var xmlPath = TryGetOptionValue(subArgs, "--xml");
         var helpPath = TryGetOptionValue(subArgs, "--help-path");
+        var powerShellManifestPath = TryGetOptionValue(subArgs, "--ps-manifest") ?? TryGetOptionValue(subArgs, "--ps-manifest-path");
+        var powerShellCommandMetadataPath = TryGetOptionValue(subArgs, "--ps-command-metadata") ?? TryGetOptionValue(subArgs, "--ps-command-metadata-path");
         var outPath = TryGetOptionValue(subArgs, "--out") ??
                       TryGetOptionValue(subArgs, "--out-path") ??
                       TryGetOptionValue(subArgs, "--output-path");
@@ -104,6 +106,8 @@ internal static partial class WebCliCommandHandlers
             Type = apiType,
             XmlPath = xmlPath ?? string.Empty,
             HelpPath = helpPath,
+            PowerShellModuleManifestPath = powerShellManifestPath,
+            PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
             AssemblyPath = assemblyPath,
             OutputPath = outPath,
             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,

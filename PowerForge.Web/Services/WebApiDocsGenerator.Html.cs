@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -872,10 +873,20 @@ $@"<!doctype html>
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
+        sb.AppendLine("    <div class=\"ev-docs-menu api-sidebar-shell\">");
+        var primaryKindLabel = ResolvePrimaryKindLabel(types);
+        sb.AppendLine("    <div class=\"sidebar-project-indicator ev-docs-project-indicator\">");
+        sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link sidebar-back-link ev-docs-project-back\">");
+        sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
+        sb.AppendLine("          <path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
+        sb.AppendLine("        </svg>");
+        sb.AppendLine("        Back to project");
+        sb.AppendLine("      </a>");
+        sb.AppendLine("    </div>");
         sb.AppendLine("    <div class=\"sidebar-header\">");
         // Keep API reference chrome consistent between index and type pages.
         var active = " active";
-        sb.AppendLine($"      <a href=\"{indexUrl}\" class=\"sidebar-title{active}\">");
+        sb.AppendLine($"      <a href=\"{indexUrl}\" class=\"sidebar-title sidebar-menu-title ev-docs-menu-title{active}\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"18\" height=\"18\">");
         sb.AppendLine("          <path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/>");
         sb.AppendLine("          <path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/>");
@@ -889,7 +900,7 @@ $@"<!doctype html>
           sb.AppendLine("        <circle cx=\"11\" cy=\"11\" r=\"8\"/>");
           sb.AppendLine("        <path d=\"M21 21l-4.35-4.35\"/>");
           sb.AppendLine("      </svg>");
-          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter types ({totalTypes})...\" />");
+          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindLabel.ToLowerInvariant()} ({totalTypes})...\" />");
           sb.AppendLine("      <button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
           sb.AppendLine("        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
           sb.AppendLine("          <path d=\"M18 6L6 18M6 6l12 12\"/>");
@@ -901,7 +912,7 @@ $@"<!doctype html>
           if (kindFilters.Count > 0)
           {
               sb.AppendLine("    <div class=\"sidebar-filters\">");
-              sb.AppendLine("      <div class=\"filter-label\">Type filters</div>");
+              sb.AppendLine($"      <div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindLabel)} filters</div>");
               sb.AppendLine("      <div class=\"filter-buttons\">");
               sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
               foreach (var kind in kindFilters)
@@ -985,14 +996,7 @@ $@"<!doctype html>
 
           sb.AppendLine("    </nav>");
           sb.AppendLine("    <div class=\"sidebar-empty\" hidden>No matching types.</div>");
-          sb.AppendLine("    <div class=\"sidebar-footer\">");
-          sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link\">");
-        sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
-        sb.AppendLine("          <path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
-        sb.AppendLine("        </svg>");
-        sb.AppendLine("        Back to Docs");
-        sb.AppendLine("      </a>");
-        sb.AppendLine("    </div>");
+          sb.AppendLine("    </div>");
         return sb.ToString().TrimEnd();
     }
 
@@ -1003,16 +1007,16 @@ $@"<!doctype html>
         IReadOnlyDictionary<string, string> typeDisplayNames)
     {
         var active = string.Equals(activeSlug, type.Slug, StringComparison.OrdinalIgnoreCase) ? " active" : string.Empty;
-        var summary = StripCrefTokens(type.Summary);
         var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-        var search = $"{displayName} {type.Name} {type.FullName} {summary}".Trim();
+        var search = BuildTypeSearchText(type, displayName);
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
         var name = System.Web.HttpUtility.HtmlEncode(displayName);
         var kind = NormalizeKind(type.Kind);
         var icon = RenderApiGlyphSpan($"type-icon {kind}", "type-icon-glyph", GetTypeIcon(type.Kind));
         var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
-        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\">" +
+        var aliasAttr = BuildAliasTitleAttribute(type);
+        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\"{aliasAttr}>" +
                $"{icon}<span class=\"type-name\">{name}</span></a>";
     }
 
@@ -1024,9 +1028,29 @@ $@"<!doctype html>
     {
         var sb = new StringBuilder();
         var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
-        sb.AppendLine("    <div class=\"api-overview\">");
-        sb.AppendLine($"      <h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
-        sb.AppendLine("      <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
+        var namespaceGroups = types
+            .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
+            .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var aliasCount = types.Sum(static type => type.Aliases
+            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(static alias => alias.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count());
+        var primaryKindLabel = ResolvePrimaryKindLabel(types);
+        var primaryKindCount = types.Count(type =>
+            string.Equals(NormalizeKind(type.Kind), NormalizeKind(primaryKindLabel), StringComparison.OrdinalIgnoreCase) ||
+            (primaryKindLabel.Equals("Function", StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(NormalizeKind(type.Kind), "function", StringComparison.OrdinalIgnoreCase)));
+
+        sb.AppendLine("    <div class=\"api-overview ev-page-body\">");
+        sb.AppendLine("      <header class=\"ev-docs-header api-overview-header\">");
+        sb.AppendLine("        <p class=\"ev-eyebrow\">API Reference</p>");
+        sb.AppendLine($"        <h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
+        sb.AppendLine("        <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
+        sb.AppendLine("      </header>");
+        sb.AppendLine("      <div class=\"api-overview-grid\">");
+        sb.AppendLine("        <div class=\"api-overview-main\">");
 
         var mainTypes = GetMainTypes(types, options);
         if (mainTypes.Count > 0)
@@ -1046,6 +1070,7 @@ $@"<!doctype html>
                 sb.AppendLine($"              {quickIcon}");
                 sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(displayName)}</strong>");
                 sb.AppendLine("            </div>");
+                AppendAliasInlineMeta(sb, type, "quick-card-meta", "quick-card-aliases");
                 if (!string.IsNullOrWhiteSpace(summary))
                 {
                     sb.AppendLine($"            <p>{System.Web.HttpUtility.HtmlEncode(summary)}</p>");
@@ -1058,35 +1083,114 @@ $@"<!doctype html>
 
         sb.AppendLine("      <section class=\"all-namespaces\">");
         sb.AppendLine("        <h2>All Namespaces</h2>");
-        sb.AppendLine($"        <p class=\"section-desc\">Browse all {types.Count} types organized by namespace.</p>");
-        foreach (var group in types.GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
-                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        sb.AppendLine($"        <p class=\"section-desc\">Browse all {types.Count} {primaryKindLabel.ToLowerInvariant()}s organized by namespace.</p>");
+        foreach (var group in namespaceGroups)
         {
-            sb.AppendLine("        <div class=\"namespace-group\">");
-            var nsLabel = System.Web.HttpUtility.HtmlEncode(group.Key);
-            sb.AppendLine($"          <h3>{nsLabel} <span class=\"count\">({group.Count()})</span></h3>");
-            sb.AppendLine("          <div class=\"type-chips\">");
-            foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                var summary = StripCrefTokens(type.Summary);
-                var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-                var search = $"{displayName} {type.Name} {type.FullName} {summary}".Trim();
-                var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
-                var kind = NormalizeKind(type.Kind);
-                var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
-                var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
-                var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
-                sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\">");
-                sb.AppendLine($"              {chipIcon}");
-                sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
-                sb.AppendLine("            </a>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
+            AppendOverviewNamespaceGroup(sb, group, baseUrl, typeDisplayNames);
         }
         sb.AppendLine("      </section>");
+        sb.AppendLine("        </div>");
+        sb.AppendLine("        <aside class=\"api-overview-rail\">");
+        sb.AppendLine("          <section class=\"api-overview-rail-card api-overview-rail-card--stats\">");
+        sb.AppendLine("            <p class=\"api-overview-rail-eyebrow\">Workspace Stats</p>");
+        sb.AppendLine("            <h2>Browse smarter</h2>");
+        sb.AppendLine("            <p>Use the left filter rail to narrow by name, kind, or namespace. Namespace sections below open in batches so large modules stay easier to scan.</p>");
+        sb.AppendLine("            <div class=\"overview-stat-grid\">");
+        AppendOverviewStat(sb, "Entries", types.Count.ToString("N0", CultureInfo.InvariantCulture));
+        AppendOverviewStat(sb, "Namespaces", namespaceGroups.Count.ToString("N0", CultureInfo.InvariantCulture));
+        AppendOverviewStat(sb, "Aliases", aliasCount.ToString("N0", CultureInfo.InvariantCulture));
+        if (primaryKindCount > 0)
+            AppendOverviewStat(sb, primaryKindLabel + "s", primaryKindCount.ToString("N0", CultureInfo.InvariantCulture));
+        sb.AppendLine("            </div>");
+        sb.AppendLine("          </section>");
+        if (namespaceGroups.Count > 0)
+        {
+            sb.AppendLine("          <section class=\"api-overview-rail-card api-overview-rail-card--jump\">");
+            sb.AppendLine("            <p class=\"api-overview-rail-eyebrow\">Jump To</p>");
+            sb.AppendLine("            <h3>Namespaces</h3>");
+            sb.AppendLine("            <div class=\"overview-jump-list\">");
+            foreach (var group in namespaceGroups.Take(10))
+            {
+                var anchor = BuildNamespaceAnchorId(group.Key);
+                var nsLabel = System.Web.HttpUtility.HtmlEncode(group.Key);
+                sb.AppendLine($"              <a href=\"#{anchor}\" class=\"overview-jump-link\">{nsLabel}<span>{group.Count().ToString("N0", CultureInfo.InvariantCulture)}</span></a>");
+            }
+            sb.AppendLine("            </div>");
+            sb.AppendLine("          </section>");
+        }
+        sb.AppendLine("        </aside>");
+        sb.AppendLine("      </div>");
         sb.AppendLine("    </div>");
         return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendOverviewNamespaceGroup(
+        StringBuilder sb,
+        IGrouping<string, ApiTypeModel> group,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> typeDisplayNames)
+    {
+        const int visibleLimit = 24;
+        var namespaceName = group.Key;
+        var anchor = BuildNamespaceAnchorId(namespaceName);
+        var ordered = group.OrderBy(static t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var total = ordered.Count;
+        var hasOverflow = total > visibleLimit;
+        var namespaceLabel = System.Web.HttpUtility.HtmlEncode(namespaceName);
+
+        sb.AppendLine($"        <div class=\"namespace-group\" id=\"{anchor}\" data-overview-group>");
+        sb.AppendLine("          <div class=\"namespace-group-header\">");
+        sb.AppendLine("            <div class=\"namespace-group-heading\">");
+        sb.AppendLine($"              <h3>{namespaceLabel} <span class=\"count\">({total.ToString("N0", CultureInfo.InvariantCulture)})</span></h3>");
+        sb.AppendLine("            </div>");
+        sb.AppendLine("          </div>");
+        sb.AppendLine("          <div class=\"type-chips\" data-overview-group-list>");
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var type = ordered[index];
+            var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+            var search = BuildTypeSearchText(type, displayName);
+            var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
+            var kind = NormalizeKind(type.Kind);
+            var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
+            var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+            var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
+            var aliasAttr = BuildAliasTitleAttribute(type);
+            var overflowAttr = hasOverflow && index >= visibleLimit ? " data-overview-extra hidden" : string.Empty;
+            sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\"{aliasAttr}{overflowAttr}>");
+            sb.AppendLine($"              {chipIcon}");
+            sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
+            AppendAliasInlineMeta(sb, type, "type-chip-meta", "type-chip-aliases");
+            sb.AppendLine("            </a>");
+        }
+        sb.AppendLine("          </div>");
+        if (hasOverflow)
+        {
+            var expandLabel = $"Show all {total.ToString("N0", CultureInfo.InvariantCulture)} entries";
+            sb.AppendLine("          <div class=\"namespace-group-actions\">");
+            sb.AppendLine($"            <button class=\"overview-group-toggle\" type=\"button\" data-overview-group-toggle data-expand-label=\"{System.Web.HttpUtility.HtmlAttributeEncode(expandLabel)}\" data-collapse-label=\"Show fewer\" aria-expanded=\"false\">{System.Web.HttpUtility.HtmlEncode(expandLabel)}</button>");
+            sb.AppendLine("          </div>");
+        }
+        sb.AppendLine("        </div>");
+    }
+
+    private static void AppendOverviewStat(StringBuilder sb, string label, string value)
+    {
+        if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(value))
+            return;
+
+        sb.AppendLine("              <div class=\"overview-stat\">");
+        sb.AppendLine($"                <span class=\"overview-stat-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+        sb.AppendLine($"                <strong class=\"overview-stat-value\">{System.Web.HttpUtility.HtmlEncode(value)}</strong>");
+        sb.AppendLine("              </div>");
+    }
+
+    private static string BuildNamespaceAnchorId(string namespaceName)
+    {
+        var normalized = string.IsNullOrWhiteSpace(namespaceName) ? "global" : namespaceName.Trim().ToLowerInvariant();
+        normalized = normalized.Replace("(global)", "global", StringComparison.OrdinalIgnoreCase);
+        normalized = SlugDashRegex.Replace(SlugNonAlnumRegex.Replace(normalized, "-"), "-").Trim('-');
+        return string.IsNullOrWhiteSpace(normalized) ? "namespace-global" : "namespace-" + normalized;
     }
 
     private static string RenderApiGlyphSpan(string containerClass, string glyphClass, string glyph)
@@ -1095,5 +1199,65 @@ $@"<!doctype html>
         var safeGlyphClass = System.Web.HttpUtility.HtmlEncode(glyphClass ?? string.Empty);
         var safeGlyph = System.Web.HttpUtility.HtmlEncode(glyph ?? string.Empty);
         return $"<span class=\"{safeContainer}\"><span class=\"{safeGlyphClass}\">{safeGlyph}</span></span>";
+    }
+
+    private static string BuildTypeSearchText(ApiTypeModel type, string displayName)
+    {
+        var summary = StripCrefTokens(type.Summary);
+        var aliasText = type.Aliases.Count == 0
+            ? string.Empty
+            : string.Join(' ', type.Aliases
+                .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+                .Select(static alias => alias.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+        return $"{displayName} {type.Name} {type.FullName} {aliasText} {summary}".Trim();
+    }
+
+    private static string BuildAliasTitleAttribute(ApiTypeModel type)
+    {
+        var aliases = type.Aliases
+            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(static alias => alias.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (aliases.Length == 0)
+            return string.Empty;
+
+        var title = System.Web.HttpUtility.HtmlAttributeEncode($"Aliases: {string.Join(", ", aliases)}");
+        return $" title=\"{title}\"";
+    }
+
+    private static string ResolvePrimaryKindLabel(IReadOnlyList<ApiTypeModel> types)
+    {
+        if (types is null || types.Count == 0)
+            return "Type";
+
+        var distinctKinds = types
+            .Select(static type => NormalizeKind(type.Kind))
+            .Where(static kind => !string.IsNullOrWhiteSpace(kind))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (distinctKinds.Length != 1)
+            return "Type";
+
+        return distinctKinds[0].Equals("function", StringComparison.OrdinalIgnoreCase)
+            ? "Function"
+            : GetKindLabel(distinctKinds[0], 0).Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+    }
+
+    private static void AppendAliasInlineMeta(StringBuilder sb, ApiTypeModel type, string wrapperClass, string aliasesClass)
+    {
+        var aliases = type.Aliases
+            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(static alias => alias.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (aliases.Length == 0)
+            return;
+
+        sb.AppendLine($"            <span class=\"{System.Web.HttpUtility.HtmlEncode(wrapperClass)}\">");
+        sb.AppendLine($"              <span class=\"{System.Web.HttpUtility.HtmlEncode(aliasesClass)}\">Aliases: {System.Web.HttpUtility.HtmlEncode(string.Join(", ", aliases))}</span>");
+        sb.AppendLine("            </span>");
     }
 }

@@ -46,6 +46,8 @@ internal static partial class WebPipelineRunner
         "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
         "xrefMap", "xref-map", "xrefMapPath", "xref-map-path",
         "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
+        "psManifestPath", "ps-manifest-path", "powerShellManifestPath", "powershell-manifest-path",
+        "psCommandMetadataPath", "ps-command-metadata-path", "powerShellCommandMetadataPath", "powershell-command-metadata-path",
         "catalog", "catalogPath", "catalog-path",
         "sourcesRoot", "sources-root", "contentRoot", "content-root",
         "apiRoot", "api-root", "examplesRoot", "examples-root",

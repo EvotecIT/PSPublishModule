@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PowerForge.Web;
@@ -348,6 +349,16 @@ internal static partial class WebPipelineRunner
             return false;
 
         var examplesPath = ResolveExistingSubdirectory(powerShellRoot, "examples", "Examples", "content/examples");
+        var manifestPath = Directory.Exists(powerShellRoot)
+            ? Directory.GetFiles(powerShellRoot, "*.psd1", SearchOption.AllDirectories)
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault()
+            : null;
+        var commandMetadataPath = Directory.Exists(powerShellRoot)
+            ? Directory.GetFiles(powerShellRoot, "command-metadata.json", SearchOption.AllDirectories)
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault()
+            : null;
         var hasPlaceholder = TryDetectPlaceholderContent(helpFile, placeholderMarkers, out var placeholderPath);
         if (!hasPlaceholder && !string.IsNullOrWhiteSpace(examplesPath))
             hasPlaceholder = TryDetectPlaceholderContent(examplesPath, placeholderMarkers, out placeholderPath);
@@ -357,6 +368,8 @@ internal static partial class WebPipelineRunner
             Type = "PowerShell",
             RootPath = powerShellRoot,
             HelpPath = Path.GetFullPath(helpFile),
+            PowerShellManifestPath = string.IsNullOrWhiteSpace(manifestPath) ? null : Path.GetFullPath(manifestPath),
+            PowerShellCommandMetadataPath = string.IsNullOrWhiteSpace(commandMetadataPath) ? null : Path.GetFullPath(commandMetadataPath),
             PowerShellExamplesPath = string.IsNullOrWhiteSpace(examplesPath) ? null : Path.GetFullPath(examplesPath),
             HasPlaceholderContent = hasPlaceholder,
             PlaceholderPath = placeholderPath
@@ -558,6 +571,10 @@ internal static partial class WebPipelineRunner
             node["css"] = cssHref;
         if (!string.IsNullOrWhiteSpace(selected.HelpPath))
             node["helpPath"] = selected.HelpPath;
+        if (!string.IsNullOrWhiteSpace(selected.PowerShellManifestPath))
+            node["psManifestPath"] = selected.PowerShellManifestPath;
+        if (!string.IsNullOrWhiteSpace(selected.PowerShellCommandMetadataPath))
+            node["psCommandMetadataPath"] = selected.PowerShellCommandMetadataPath;
         if (!string.IsNullOrWhiteSpace(selected.PowerShellExamplesPath))
             node["psExamplesPath"] = selected.PowerShellExamplesPath;
         if (!string.IsNullOrWhiteSpace(selected.XmlPath))
@@ -599,15 +616,16 @@ internal static partial class WebPipelineRunner
         var docsVisible = (TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false);
         var examplesVisible = (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false);
         var description = NormalizeOptionalString(project.Description);
-        var stars = project.Metrics?.GitHub?.Stars > 0 ? project.Metrics.GitHub.Stars.ToString() : null;
-        var forks = project.Metrics?.GitHub?.Forks > 0 ? project.Metrics.GitHub.Forks.ToString() : null;
-        var openIssues = project.Metrics?.GitHub?.OpenIssues > 0 ? project.Metrics.GitHub.OpenIssues.ToString() : null;
-        var downloads = ResolveProjectDownloadsValue(project);
+        var stars = FormatProjectMetric(project.Metrics?.GitHub?.Stars);
+        var forks = FormatProjectMetric(project.Metrics?.GitHub?.Forks);
+        var openIssues = FormatProjectMetric(project.Metrics?.GitHub?.OpenIssues);
+        var (downloadsLabel, downloadsValue) = ResolveProjectDownloadsPresentation(project);
+        var downloads = FormatProjectMetric(downloadsValue);
         var release = NormalizeOptionalString(project.Metrics?.Release?.LatestTag) ?? NormalizeOptionalString(project.Version);
         var language = NormalizeOptionalString(project.Metrics?.GitHub?.Language);
-        var lastPush = NormalizeOptionalString(project.Metrics?.GitHub?.LastPushedAt);
-        var metadataRefresh = NormalizeOptionalString(project.ManifestGeneratedAt);
-        var manifestCommit = NormalizeOptionalString(project.ManifestCommit);
+        var lastPush = FormatProjectApiDate(project.Metrics?.GitHub?.LastPushedAt);
+        var metadataRefresh = FormatProjectApiDate(project.ManifestGeneratedAt);
+        var manifestCommit = ShortenProjectCommit(project.ManifestCommit);
 
         return new JsonObject
         {
@@ -632,6 +650,7 @@ internal static partial class WebPipelineRunner
             ["PROJECT_FORKS_HIDDEN"] = BuildHiddenAttribute(forks),
             ["PROJECT_OPEN_ISSUES"] = EncodeToken(openIssues),
             ["PROJECT_OPEN_ISSUES_HIDDEN"] = BuildHiddenAttribute(openIssues),
+            ["PROJECT_DOWNLOADS_LABEL"] = EncodeToken(downloadsLabel ?? "Downloads"),
             ["PROJECT_DOWNLOADS"] = EncodeToken(downloads),
             ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloads),
             ["PROJECT_RELEASE"] = EncodeToken(release),
@@ -686,6 +705,60 @@ internal static partial class WebPipelineRunner
         if (project.Metrics?.NuGet?.TotalDownloads > 0)
             return project.Metrics.NuGet.TotalDownloads.ToString();
         return null;
+    }
+
+    private static (string Label, long? Value) ResolveProjectDownloadsPresentation(ProjectCatalogEntry project)
+    {
+        var total = project.Metrics?.Downloads?.Total > 0 ? project.Metrics.Downloads.Total : 0;
+        var powerShellGallery = project.Metrics?.PowerShellGallery?.TotalDownloads > 0 ? project.Metrics.PowerShellGallery.TotalDownloads : 0;
+        var nuGet = project.Metrics?.NuGet?.TotalDownloads > 0 ? project.Metrics.NuGet.TotalDownloads : 0;
+
+        if (total > 0 && powerShellGallery > 0 && nuGet == 0 && total == powerShellGallery)
+            return ("PowerShell Gallery downloads", powerShellGallery);
+        if (total > 0 && nuGet > 0 && powerShellGallery == 0 && total == nuGet)
+            return ("NuGet downloads", nuGet);
+        if (powerShellGallery > 0 && nuGet == 0)
+            return ("PowerShell Gallery downloads", powerShellGallery);
+        if (nuGet > 0 && powerShellGallery == 0)
+            return ("NuGet downloads", nuGet);
+        if (total > 0)
+            return ("Total downloads", total);
+
+        return ("Downloads", null);
+    }
+
+    private static string? FormatProjectMetric(long? value)
+    {
+        if (!value.HasValue || value.Value <= 0)
+            return null;
+
+        return value.Value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    private static string? FormatProjectMetric(int? value)
+    {
+        return !value.HasValue ? null : FormatProjectMetric((long)value.Value);
+    }
+
+    private static string? FormatProjectApiDate(string? value)
+    {
+        value = NormalizeOptionalString(value);
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        return value;
+    }
+
+    private static string? ShortenProjectCommit(string? value)
+    {
+        value = NormalizeOptionalString(value);
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Length <= 8 ? value : value[..8];
     }
 
     private static string EnsureProjectRouteTrailingSlash(string path)
@@ -797,6 +870,8 @@ internal static partial class WebPipelineRunner
         public string Type { get; init; } = string.Empty;
         public string RootPath { get; init; } = string.Empty;
         public string? HelpPath { get; init; }
+        public string? PowerShellManifestPath { get; init; }
+        public string? PowerShellCommandMetadataPath { get; init; }
         public string? PowerShellExamplesPath { get; init; }
         public string? XmlPath { get; init; }
         public string? AssemblyPath { get; init; }

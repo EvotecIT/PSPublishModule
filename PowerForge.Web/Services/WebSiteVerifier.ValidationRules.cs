@@ -740,6 +740,7 @@ public static partial class WebSiteVerifier
     }
 
     private static void ValidateLocalizationTranslationMappings(
+        SiteSpec spec,
         ResolvedLocalizationConfig localization,
         IReadOnlyDictionary<string, List<CollectionRoute>> collectionRoutes,
         List<string> warnings)
@@ -761,6 +762,7 @@ public static partial class WebSiteVerifier
             .Where(static route => !string.IsNullOrWhiteSpace(route.TranslationKey))
             .Select(route => new
             {
+                route.Collection,
                 route.Route,
                 route.File,
                 Language = NormalizeLanguageToken(route.Language),
@@ -789,6 +791,14 @@ public static partial class WebSiteVerifier
                 $"Localization: duplicate translation mapping for key '{duplicate.First().TranslationKey}' in language '{duplicate.First().Language}' ({string.Join(", ", sampleFiles)}).");
         }
 
+        var defaultExpectedLanguages = expectedLanguages;
+        var expectedLanguagesByCollection = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Where(static collection => collection is not null && !string.IsNullOrWhiteSpace(collection.Name))
+            .ToDictionary(
+                static collection => collection.Name,
+                collection => ResolveExpectedTranslationLanguagesForCollection(localization, collection, defaultExpectedLanguages),
+                StringComparer.OrdinalIgnoreCase);
+
         foreach (var group in entries.GroupBy(static entry => entry.TranslationKey, StringComparer.OrdinalIgnoreCase))
         {
             var presentLanguages = group
@@ -799,7 +809,18 @@ public static partial class WebSiteVerifier
             if (presentLanguages.Length < 2)
                 continue;
 
-            var missingLanguages = expectedLanguages
+            var expectedLanguagesForGroup = group
+                .Select(entry => expectedLanguagesByCollection.TryGetValue(entry.Collection, out var configuredLanguages)
+                    ? configuredLanguages
+                    : defaultExpectedLanguages)
+                .SelectMany(static languages => languages)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (expectedLanguagesForGroup.Length <= 1)
+                continue;
+
+            var missingLanguages = expectedLanguagesForGroup
                 .Where(language => !presentLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
                 .ToArray();
             if (missingLanguages.Length == 0)
@@ -808,6 +829,25 @@ public static partial class WebSiteVerifier
             warnings.Add(
                 $"Localization: translation '{group.Key}' is missing languages [{string.Join(", ", missingLanguages)}] (present: [{string.Join(", ", presentLanguages)}]).");
         }
+    }
+
+    private static string[] ResolveExpectedTranslationLanguagesForCollection(
+        ResolvedLocalizationConfig localization,
+        CollectionSpec collection,
+        string[] defaultExpectedLanguages)
+    {
+        if (collection.ExpectedTranslationLanguages is not { Length: > 0 })
+            return defaultExpectedLanguages;
+
+        var configuredLanguages = collection.ExpectedTranslationLanguages
+            .Select(NormalizeLanguageToken)
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Where(language => localization.ByCode.ContainsKey(language))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return configuredLanguages.Length > 0 ? configuredLanguages : defaultExpectedLanguages;
     }
 
     private sealed class ResolvedLocalizationConfig
@@ -831,5 +871,5 @@ public static partial class WebSiteVerifier
 
     private sealed record ReleasePlacementReference(string Placement, string? PlacementsRoot);
 
-    private sealed record CollectionRoute(string Route, string File, bool Draft, string Language, string TranslationKey);
+    private sealed record CollectionRoute(string Collection, string Route, string File, bool Draft, string Language, string TranslationKey);
 }
