@@ -34,6 +34,11 @@ internal static partial class WebPipelineRunner
             case "apidocs":
                 ExecuteApiDocs(step, label, baseDir, fast, effectiveMode, logger, stepResult);
                 break;
+            case "project-apidocs":
+            case "project-apidoc":
+            case "project-api-docs":
+                ExecuteProjectApiDocs(step, label, baseDir, fast, effectiveMode, logger, lastBuildOutPath, stepResult);
+                break;
             case "changelog":
                 ExecuteChangelog(step, baseDir, stepResult);
                 break;

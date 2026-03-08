@@ -107,6 +107,11 @@ public sealed class WebApiDocsOptions
     public string? BrandUrl { get; set; }
     /// <summary>Optional brand icon URL override.</summary>
     public string? BrandIcon { get; set; }
+    /// <summary>
+    /// Optional template tokens injected into custom API header/footer fragments.
+    /// Values are inserted verbatim, so callers should HTML-encode plain-text tokens when appropriate.
+    /// </summary>
+    public Dictionary<string, string?> TemplateTokens { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Optional HTML template name (simple, docs).</summary>
     public string? Template { get; set; }
     /// <summary>Optional root folder for API docs templates/assets overrides.</summary>

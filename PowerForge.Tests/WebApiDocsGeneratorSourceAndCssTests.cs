@@ -106,7 +106,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
     }
 
     [Fact]
-    public void GenerateDocsHtml_AlwaysIncludesFallbackCssBaseline_WhenCustomCssIsConfigured()
+    public void GenerateDocsHtml_UsesThemeCssLinksWithoutInliningFallback_WhenCustomCssIsConfigured()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-fallback-css-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -149,17 +149,12 @@ public class WebApiDocsGeneratorSourceAndCssTests
             var html = File.ReadAllText(indexHtmlPath);
 
             Assert.Contains("href=\"/css/api.css\"", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".type-chip{display:inline-flex", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".chip-icon{display:inline-flex", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("id=\"api-namespace\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("initNamespaceCombobox", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".member-card pre::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".member-card pre::-webkit-scrollbar-track", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".member-card pre::-webkit-scrollbar-thumb", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(".member-header pre.member-signature", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("[data-theme=\"light\"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("initNavDropdowns", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<style>body.pf-api-docs", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(".member-header pre.member-signature", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
