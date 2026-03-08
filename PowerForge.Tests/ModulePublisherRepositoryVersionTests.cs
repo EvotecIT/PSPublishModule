@@ -53,6 +53,24 @@ public sealed class ModulePublisherRepositoryVersionTests
         Assert.Equal("2.0.1-Preview1", versionText);
     }
 
+    [Fact]
+    public void GetGitHubTag_Default_IncludesPrereleaseSuffix()
+    {
+        var publish = new PublishConfiguration
+        {
+            Destination = PublishDestination.GitHub,
+            Enabled = true
+        };
+
+        var tag = ModulePublisher.GetGitHubTag(
+            publish,
+            moduleName: "Mailozaurr",
+            resolvedVersion: "2.0.1",
+            preRelease: "Preview2");
+
+        Assert.Equal("v2.0.1-Preview2", tag);
+    }
+
     private static string Encode(string value)
         => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 

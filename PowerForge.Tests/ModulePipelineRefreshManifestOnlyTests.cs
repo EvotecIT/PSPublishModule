@@ -229,6 +229,85 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
         }
     }
 
+    [Fact]
+    public void SyncPublishedManifestToProjectRoot_RefreshesProjectRootManifestWithoutCopyingStagedFile()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var projectManifest = Path.Combine(root.FullName, moduleName + ".psd1");
+            Assert.True(ManifestEditor.TrySetTopLevelString(projectManifest, "Author", "OldAuthor"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            ModuleVersion = "2.0.0",
+                            Author = "PublishedAuthor",
+                            Prerelease = "Preview9"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            File.WriteAllText(result.BuildResult.ManifestPath, "@{ ModuleVersion = '9.9.9'; RootModule = 'Broken.psm1' }");
+
+            runner.SyncPublishedManifestToProjectRoot(
+                plan,
+                result.BuildResult,
+                Array.Empty<ManifestEditor.RequiredModule>(),
+                Array.Empty<string>(),
+                new[]
+                {
+                    new ModulePublishResult(
+                        destination: PublishDestination.PowerShellGallery,
+                        repositoryName: "PSGallery",
+                        userName: null,
+                        tagName: null,
+                        versionText: "2.0.0-Preview9",
+                        isPreRelease: true,
+                        assetPaths: Array.Empty<string>(),
+                        releaseUrl: null,
+                        succeeded: true,
+                        errorMessage: null)
+                });
+
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "ModuleVersion", out var projectVersion));
+            Assert.Equal("2.0.0", projectVersion);
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "Author", out var projectAuthor));
+            Assert.Equal("PublishedAuthor", projectAuthor);
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "RootModule", out var rootModule));
+            Assert.Equal("TestModule.psm1", rootModule);
+            var projectManifestContent = File.ReadAllText(projectManifest);
+            Assert.Contains("Prerelease", projectManifestContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Preview9", projectManifestContent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Broken.psm1", projectManifestContent, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string rootPath, string moduleName, string moduleVersion)
     {
         File.WriteAllText(Path.Combine(rootPath, moduleName + ".psm1"), "function Test-Example { 'ok' }");

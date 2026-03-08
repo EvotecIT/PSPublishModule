@@ -53,6 +53,7 @@ internal static partial class SpectrePipelineConsoleUi
 
         var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
+        var versionText = BuildServices.FormatVersionWithPreRelease(res.Plan.ResolvedVersion, res.Plan.PreRelease);
 
         AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
 
@@ -61,7 +62,7 @@ internal static partial class SpectrePipelineConsoleUi
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
+        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(versionText)}[/]");
         table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
 
         var fileConsistencySettings = res.Plan.FileConsistencySettings;
@@ -188,6 +189,11 @@ internal static partial class SpectrePipelineConsoleUi
         else
             table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", "[grey]None[/]");
 
+        if (res.PublishResults is { Length: > 0 })
+            table.AddRow($"{(unicode ? "🚀" : "*")} Publish", $"[green]{res.PublishResults.Length}[/] destination(s)");
+        else
+            table.AddRow($"{(unicode ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
+
         if (res.InstallResult is not null)
             table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
@@ -236,12 +242,73 @@ internal static partial class SpectrePipelineConsoleUi
             AnsiConsole.Write(artefacts);
         }
 
+        if (res.PublishResults is { Length: > 0 })
+        {
+            AnsiConsole.WriteLine();
+
+            var publishes = new Table()
+                .Border(border)
+                .AddColumn(new TableColumn("Destination").NoWrap())
+                .AddColumn(new TableColumn("Target").NoWrap())
+                .AddColumn(new TableColumn("Published").NoWrap())
+                .AddColumn(new TableColumn("Reference"));
+
+            foreach (var publish in res.PublishResults)
+            {
+                var target = BuildPublishTarget(publish);
+                var published = BuildPublishLabel(publish);
+                var reference = BuildPublishReference(res.Plan, publish);
+                publishes.AddRow(Esc(publish.Destination.ToString()), Esc(target), Esc(published), Esc(reference));
+            }
+
+            AnsiConsole.Write(publishes);
+        }
+
         if (res.InstallResult is not null && res.InstallResult.InstalledPaths is { Count: > 0 })
         {
             AnsiConsole.MarkupLine($"[grey]{(unicode ? "📍" : "*")} Installed paths:[/]");
             foreach (var path in res.InstallResult.InstalledPaths)
                 AnsiConsole.MarkupLine($"  [grey]{(unicode ? "→" : "->")}[/] {Esc(path)}");
         }
+    }
+
+    private static string BuildPublishTarget(ModulePublishResult publish)
+    {
+        if (publish.Destination == PublishDestination.GitHub)
+        {
+            var owner = string.IsNullOrWhiteSpace(publish.UserName) ? "(owner?)" : publish.UserName;
+            var repo = string.IsNullOrWhiteSpace(publish.RepositoryName) ? "(repo?)" : publish.RepositoryName;
+            return $"{owner}/{repo}";
+        }
+
+        return string.IsNullOrWhiteSpace(publish.RepositoryName) ? "(repository?)" : publish.RepositoryName!;
+    }
+
+    private static string BuildPublishLabel(ModulePublishResult publish)
+    {
+        var version = string.IsNullOrWhiteSpace(publish.VersionText) ? "(unknown)" : publish.VersionText;
+        if (publish.Destination != PublishDestination.GitHub)
+            return version;
+
+        var tag = string.IsNullOrWhiteSpace(publish.TagName) ? "(tag?)" : publish.TagName;
+        var assetCount = publish.AssetPaths?.Length ?? 0;
+        return assetCount > 0 ? $"{tag} ({version}, assets {assetCount})" : $"{tag} ({version})";
+    }
+
+    private static string BuildPublishReference(ModulePipelinePlan plan, ModulePublishResult publish)
+    {
+        if (!string.IsNullOrWhiteSpace(publish.ReleaseUrl))
+            return publish.ReleaseUrl!;
+
+        if (publish.Destination == PublishDestination.PowerShellGallery &&
+            string.Equals(publish.RepositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(plan.ModuleName) &&
+            !string.IsNullOrWhiteSpace(publish.VersionText))
+        {
+            return $"https://www.powershellgallery.com/packages/{plan.ModuleName}/{publish.VersionText}";
+        }
+
+        return string.Empty;
     }
 
     private static void WriteFileConsistencyIssues(
@@ -349,7 +416,7 @@ internal static partial class SpectrePipelineConsoleUi
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(plan.ModuleName)} [grey]{Esc(plan.ResolvedVersion)}[/]");
+        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(plan.ModuleName)} [grey]{Esc(BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease))}[/]");
         table.AddRow($"{(unicode ? "📁" : "*")} Project", Esc(plan.ProjectRoot));
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;

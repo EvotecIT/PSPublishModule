@@ -17,6 +17,9 @@ public sealed class ModulePublishResult
     /// <summary>Optional tag name used for GitHub releases.</summary>
     public string? TagName { get; }
 
+    /// <summary>Published module version including prerelease suffix when applicable.</summary>
+    public string VersionText { get; }
+
     /// <summary>True when the GitHub release was marked as prerelease.</summary>
     public bool IsPreRelease { get; }
 
@@ -40,6 +43,7 @@ public sealed class ModulePublishResult
         string? repositoryName,
         string? userName,
         string? tagName,
+        string versionText,
         bool isPreRelease,
         string[] assetPaths,
         string? releaseUrl,
@@ -50,6 +54,7 @@ public sealed class ModulePublishResult
         RepositoryName = repositoryName;
         UserName = userName;
         TagName = tagName;
+        VersionText = versionText ?? string.Empty;
         IsPreRelease = isPreRelease;
         AssetPaths = assetPaths ?? Array.Empty<string>();
         ReleaseUrl = releaseUrl;
@@ -57,4 +62,3 @@ public sealed class ModulePublishResult
         ErrorMessage = errorMessage;
     }
 }
-

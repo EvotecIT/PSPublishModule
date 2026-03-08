@@ -57,6 +57,7 @@ public sealed class ModulePublisher
                 repositoryName: publish.RepositoryName,
                 userName: publish.UserName,
                 tagName: null,
+                versionText: string.Empty,
                 isPreRelease: false,
                 assetPaths: Array.Empty<string>(),
                 releaseUrl: null,
@@ -116,6 +117,7 @@ public sealed class ModulePublisher
         var credential = repoConfig?.Credential;
         bool createdRepository = false;
         string? temporaryPublishPath = null;
+        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         try
         {
@@ -133,7 +135,7 @@ public sealed class ModulePublisher
             if (!publish.Force)
                 EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
 
-            _logger.Info($"Publishing {plan.ModuleName} {FormatSemVer(plan.ResolvedVersion, plan.PreRelease)} to repository '{repositoryName}' using {tool}");
+            _logger.Info($"Publishing {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}");
 
             var modulePath = Path.GetFullPath(temporaryPublishPath);
 
@@ -162,6 +164,8 @@ public sealed class ModulePublisher
                         credential: credential));
             }
 
+            _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");
+
             CleanupTemporaryPublishPath(temporaryPublishPath);
             temporaryPublishPath = null;
         }
@@ -188,6 +192,7 @@ public sealed class ModulePublisher
             repositoryName: repositoryName,
             userName: null,
             tagName: null,
+            versionText: versionText,
             isPreRelease: false,
             assetPaths: Array.Empty<string>(),
             releaseUrl: null,
@@ -575,11 +580,8 @@ public sealed class ModulePublisher
 
         var owner = publish.UserName!.Trim();
         var repo = string.IsNullOrWhiteSpace(publish.RepositoryName) ? plan.ModuleName : publish.RepositoryName!.Trim();
-
-        var defaultTag = "v" + plan.ResolvedVersion;
-        var tag = string.IsNullOrWhiteSpace(publish.OverwriteTagName)
-            ? defaultTag
-            : BuildServices.ReplacePathTokens(publish.OverwriteTagName!, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease);
+        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var tag = GetGitHubTag(publish, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease);
 
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
 
@@ -604,16 +606,30 @@ public sealed class ModulePublisher
             ? $"https://github.com/{owner}/{repo}/releases/tag/{tag}"
             : created.HtmlUrl;
 
+        _logger.Info($"Published GitHub release {owner}/{repo} tag '{tag}' ({versionText}) => {releaseUrl}");
+
         return new ModulePublishResult(
             destination: PublishDestination.GitHub,
             repositoryName: repo,
             userName: owner,
             tagName: tag,
+            versionText: versionText,
             isPreRelease: isPreRelease,
             assetPaths: assets,
             releaseUrl: releaseUrl,
             succeeded: true,
             errorMessage: null);
+    }
+
+    internal static string GetGitHubTag(PublishConfiguration publish, string moduleName, string resolvedVersion, string? preRelease)
+    {
+        if (publish is null)
+            throw new ArgumentNullException(nameof(publish));
+
+        if (string.IsNullOrWhiteSpace(publish.OverwriteTagName))
+            return "v" + BuildServices.FormatVersionWithPreRelease(resolvedVersion, preRelease);
+
+        return BuildServices.ReplacePathTokens(publish.OverwriteTagName!, moduleName, resolvedVersion, preRelease);
     }
 
     private static ArtefactBuildResult[] SelectPackedArtefacts(IReadOnlyList<ArtefactBuildResult> artefactResults, string? id)

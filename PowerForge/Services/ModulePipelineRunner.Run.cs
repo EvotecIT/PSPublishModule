@@ -702,6 +702,13 @@ public sealed partial class ModulePipelineRunner
                     throw;
                 }
             }
+
+            SyncPublishedManifestToProjectRoot(
+                plan,
+                buildResult,
+                manifestRequiredModules,
+                manifestExternalModuleDependencies,
+                publishResults);
         }
 
         ModuleInstallerResult? installResult = null;

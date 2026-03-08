@@ -165,10 +165,11 @@ internal static partial class SpectrePipelineConsoleUi
         static string Icon(string? s) => Esc(NormalizeIcon(s));
 
         var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
+        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         var title = unicode
-            ? $"🛠️ PowerForge • {plan.ModuleName} {plan.ResolvedVersion}"
-            : $"PowerForge • {plan.ModuleName} {plan.ResolvedVersion}";
+            ? $"🛠️ PowerForge • {plan.ModuleName} {versionText}"
+            : $"PowerForge • {plan.ModuleName} {versionText}";
         AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var iconColWidth = unicode ? 2 : 3;

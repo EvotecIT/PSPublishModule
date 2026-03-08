@@ -221,6 +221,13 @@ public static class BuildServices
     /// Replaces common PSPublishModule path tokens (e.g., <c>&lt;ModuleName&gt;</c>, <c>&lt;ModuleVersion&gt;</c>, <c>&lt;TagName&gt;</c>).
     /// Intended for legacy PowerShell build scripts.
     /// </summary>
+    public static string FormatVersionWithPreRelease(string moduleVersion, string? preRelease = null)
+        => string.IsNullOrWhiteSpace(preRelease) ? (moduleVersion ?? string.Empty) : (moduleVersion ?? string.Empty) + "-" + preRelease;
+
+    /// <summary>
+    /// Replaces common PSPublishModule path tokens (e.g., <c>&lt;ModuleName&gt;</c>, <c>&lt;ModuleVersion&gt;</c>, <c>&lt;TagName&gt;</c>).
+    /// Intended for legacy PowerShell build scripts.
+    /// </summary>
     public static string ReplacePathTokens(string replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
     {
         if (replacementPath is null) return string.Empty;
@@ -229,9 +236,7 @@ public static class BuildServices
         moduleVersion ??= string.Empty;
 
         var tagName = "v" + moduleVersion;
-        var moduleVersionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
-            ? moduleVersion
-            : moduleVersion + "-" + preRelease;
+        var moduleVersionWithPreRelease = FormatVersionWithPreRelease(moduleVersion, preRelease);
         var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;
 
         var path = replacementPath;

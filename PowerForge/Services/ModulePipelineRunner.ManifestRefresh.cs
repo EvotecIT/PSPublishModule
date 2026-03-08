@@ -12,7 +12,19 @@ public sealed partial class ModulePipelineRunner
         ManifestEditor.RequiredModule[] manifestRequiredModules,
         string[] manifestExternalModuleDependencies)
     {
-        var manifestPath = buildResult.ManifestPath;
+        RefreshManifestPathFromPlan(
+            plan,
+            buildResult.ManifestPath,
+            manifestRequiredModules,
+            manifestExternalModuleDependencies);
+    }
+
+    private void RefreshManifestPathFromPlan(
+        ModulePipelinePlan plan,
+        string manifestPath,
+        ManifestEditor.RequiredModule[] manifestRequiredModules,
+        string[] manifestExternalModuleDependencies)
+    {
         var manifest = plan.Manifest;
         var hasManifestSegment = manifest is not null;
 
