@@ -21,8 +21,14 @@ if (-not $JsonOnly) {
     Remove-Item -Path (Join-Path $PSScriptRoot '..\Lib') -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+$csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
+$sourceManifest = Join-Path -Path $PSScriptRoot -ChildPath '..\PSPublishModule.psd1'
+$sourceLibRoot = Join-Path -Path $PSScriptRoot -ChildPath '..\Lib'
+$runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
+$tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
+$binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
+
 if (-not $JsonOnly -and -not $NoDotnetBuild) {
-    $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
     if (Test-Path -LiteralPath $csproj) {
         $i = [char]0x2139 # ℹ
         Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
@@ -36,14 +42,14 @@ if (-not $JsonOnly -and -not $NoDotnetBuild) {
     }
 }
 
-Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
+# The source manifest bootstrap requires Module\Lib to exist. Self-builds generate the
+# pipeline config before staged module libraries are present, so prefer the compiled DLL then.
+if (Test-Path -LiteralPath $sourceLibRoot) {
+    Import-Module $sourceManifest -Force
+}
 
 if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
-    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-    $tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
-    $binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
     if (-not (Test-Path -LiteralPath $binaryModule)) {
-        $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
         if (Test-Path -LiteralPath $csproj) {
             $i = [char]0x2139 # ℹ
             Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
