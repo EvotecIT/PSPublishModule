@@ -276,7 +276,7 @@ public sealed partial class ModulePipelineRunner
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
-            SyncBuildControlledOutputsToProjectRoot(plan, buildResult, formattingStagingResults);
+            SyncRefreshManifestToProjectRoot(plan, buildResult);
 
             if (plan.SignModule)
             {
