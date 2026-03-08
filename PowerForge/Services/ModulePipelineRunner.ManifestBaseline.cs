@@ -9,6 +9,8 @@ public sealed partial class ModulePipelineRunner
     private sealed class ProjectManifestBaseline
     {
         public ManifestConfiguration Manifest { get; set; } = new();
+        public ManifestEditor.RequiredModule[] RequiredModules { get; set; } = Array.Empty<ManifestEditor.RequiredModule>();
+        public string[] ExternalModuleDependencies { get; set; } = Array.Empty<string>();
     }
 
     private ProjectManifestBaseline? TryReadProjectManifestBaseline(string projectRoot, string moduleName)
@@ -41,7 +43,9 @@ public sealed partial class ModulePipelineRunner
 
             return new ProjectManifestBaseline
             {
-                Manifest = manifest
+                Manifest = manifest,
+                RequiredModules = ReadRequiredModules(manifestPath),
+                ExternalModuleDependencies = ReadPsDataStringArray(manifestPath, "ExternalModuleDependencies")
             };
         }
         catch (Exception ex)
@@ -79,6 +83,26 @@ public sealed partial class ModulePipelineRunner
         return NormalizeArray(values);
     }
 
+    private static ManifestEditor.RequiredModule[] ReadRequiredModules(string manifestPath)
+    {
+        if (!ManifestEditor.TryGetRequiredModules(manifestPath, out var values) || values is null)
+            return Array.Empty<ManifestEditor.RequiredModule>();
+
+        return values
+            .Where(v => v is not null && !string.IsNullOrWhiteSpace(v.ModuleName))
+            .Select(v =>
+            {
+                var entry = v!;
+                return new ManifestEditor.RequiredModule(
+                    moduleName: entry.ModuleName.Trim(),
+                    moduleVersion: NormalizeNullable(entry.ModuleVersion),
+                    requiredVersion: NormalizeNullable(entry.RequiredVersion),
+                    maximumVersion: NormalizeNullable(entry.MaximumVersion),
+                    guid: NormalizeNullable(entry.Guid));
+            })
+            .ToArray();
+    }
+
     private static string? ReadPsDataSingleString(string manifestPath, string key)
     {
         var values = ReadPsDataStringArray(manifestPath, key);
@@ -95,5 +119,13 @@ public sealed partial class ModulePipelineRunner
             .Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string? NormalizeNullable(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value!.Trim();
     }
 }

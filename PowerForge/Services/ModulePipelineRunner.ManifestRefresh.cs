@@ -19,6 +19,17 @@ public sealed partial class ModulePipelineRunner
             manifestExternalModuleDependencies);
     }
 
+    private void RefreshProjectManifestFromPlan(
+        ModulePipelinePlan plan,
+        string manifestPath)
+    {
+        RefreshManifestPathFromPlan(
+            plan,
+            manifestPath,
+            plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>(),
+            plan.ExternalModuleDependencies ?? Array.Empty<string>());
+    }
+
     private void RefreshManifestPathFromPlan(
         ModulePipelinePlan plan,
         string manifestPath,

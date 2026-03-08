@@ -276,7 +276,7 @@ public sealed partial class ModulePipelineRunner
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
-            SyncRefreshManifestToProjectRoot(plan, buildResult);
+            SyncRefreshManifestToProjectRoot(plan);
 
             if (plan.SignModule)
             {
@@ -705,9 +705,6 @@ public sealed partial class ModulePipelineRunner
 
             SyncPublishedManifestToProjectRoot(
                 plan,
-                buildResult,
-                manifestRequiredModules,
-                manifestExternalModuleDependencies,
                 publishResults);
         }
 

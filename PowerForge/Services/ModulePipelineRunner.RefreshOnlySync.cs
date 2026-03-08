@@ -6,20 +6,21 @@ namespace PowerForge;
 public sealed partial class ModulePipelineRunner
 {
     internal void SyncRefreshManifestToProjectRoot(
-        ModulePipelinePlan plan,
-        ModuleBuildResult buildResult)
+        ModulePipelinePlan plan)
     {
         if (!plan.BuildSpec.RefreshManifestOnly)
             return;
 
-        SyncManifestToProjectRoot(plan, buildResult, "RefreshPSD1Only");
+        var projectManifestPath = GetProjectManifestPath(plan);
+        if (!File.Exists(projectManifestPath))
+            return;
+
+        RefreshProjectManifestFromPlan(plan, projectManifestPath);
+        _logger.Info("RefreshPSD1Only: refreshed project-root manifest from source manifest inputs.");
     }
 
     internal void SyncPublishedManifestToProjectRoot(
         ModulePipelinePlan plan,
-        ModuleBuildResult buildResult,
-        ManifestEditor.RequiredModule[] manifestRequiredModules,
-        string[] manifestExternalModuleDependencies,
         IReadOnlyList<ModulePublishResult>? publishResults)
     {
         if (publishResults is null || publishResults.Count == 0)
@@ -28,42 +29,19 @@ public sealed partial class ModulePipelineRunner
         if (publishResults.Any(r => r is null || !r.Succeeded))
             return;
 
-        var projectManifestPath = Path.Combine(
-            Path.GetFullPath(plan.ProjectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            $"{plan.ModuleName}.psd1");
-
+        var projectManifestPath = GetProjectManifestPath(plan);
         if (!File.Exists(projectManifestPath))
             return;
 
-        RefreshManifestPathFromPlan(
-            plan,
-            projectManifestPath,
-            manifestRequiredModules,
-            manifestExternalModuleDependencies);
+        RefreshProjectManifestFromPlan(plan, projectManifestPath);
 
-        _logger.Info("Publish: refreshed project-root manifest from the resolved manifest plan.");
+        _logger.Info("Publish: refreshed project-root manifest from source manifest inputs.");
     }
 
-    private void SyncManifestToProjectRoot(
-        ModulePipelinePlan plan,
-        ModuleBuildResult buildResult,
-        string reason)
+    private static string GetProjectManifestPath(ModulePipelinePlan plan)
     {
-        var stagingRoot = Path.GetFullPath(buildResult.StagingPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var projectRoot = Path.GetFullPath(plan.ProjectRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        var modulePsd1 = Path.Combine(stagingRoot, $"{plan.ModuleName}.psd1");
-        if (!File.Exists(modulePsd1))
-            return;
-
-        var destinationPath = Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
-        var destinationDirectory = Path.GetDirectoryName(destinationPath);
-        if (!string.IsNullOrWhiteSpace(destinationDirectory))
-            Directory.CreateDirectory(destinationDirectory);
-
-        File.Copy(modulePsd1, destinationPath, overwrite: true);
-        _logger.Info($"{reason}: synchronized 1 manifest file from staging back to project root.");
+        return Path.Combine(projectRoot, $"{plan.ModuleName}.psd1");
     }
 }

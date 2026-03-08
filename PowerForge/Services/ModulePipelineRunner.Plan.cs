@@ -104,6 +104,48 @@ public sealed partial class ModulePipelineRunner
         {
             manifestConfiguration = manifestBaseline.Manifest;
 
+            foreach (var external in manifestBaseline.ExternalModuleDependencies)
+            {
+                if (string.IsNullOrWhiteSpace(external))
+                    continue;
+
+                var name = external.Trim();
+                if (externalIndex.Add(name))
+                    externalModules.Add(name);
+            }
+
+            foreach (var module in manifestBaseline.RequiredModules)
+            {
+                if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                    continue;
+
+                var draft = new RequiredModuleDraft(
+                    moduleName: module.ModuleName.Trim(),
+                    moduleVersion: module.ModuleVersion,
+                    minimumVersion: module.ModuleVersion,
+                    requiredVersion: module.RequiredVersion,
+                    guid: module.Guid);
+
+                if (requiredIndex.TryGetValue(draft.ModuleName, out var idx))
+                    requiredModulesDraft[idx] = draft;
+                else
+                {
+                    requiredIndex[draft.ModuleName] = requiredModulesDraft.Count;
+                    requiredModulesDraft.Add(draft);
+                }
+
+                if (manifestBaseline.ExternalModuleDependencies.Contains(draft.ModuleName, StringComparer.OrdinalIgnoreCase))
+                    continue;
+
+                if (requiredPackagingIndex.TryGetValue(draft.ModuleName, out var pidx))
+                    requiredModulesDraftForPackaging[pidx] = draft;
+                else
+                {
+                    requiredPackagingIndex[draft.ModuleName] = requiredModulesDraftForPackaging.Count;
+                    requiredModulesDraftForPackaging.Add(draft);
+                }
+            }
+
             if (manifestBaseline.Manifest.CompatiblePSEditions is { Length: > 0 })
                 compatible = manifestBaseline.Manifest.CompatiblePSEditions;
             if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Prerelease))

@@ -118,6 +118,10 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
 
             var projectManifest = Path.Combine(root.FullName, moduleName + ".psd1");
             Assert.True(ManifestEditor.TrySetTopLevelString(projectManifest, "Author", "OldAuthor"));
+            Assert.True(ManifestEditor.TrySetRequiredModules(projectManifest, new[]
+            {
+                new ManifestEditor.RequiredModule("PSSharedGoods", moduleVersion: "0.0.312", guid: "e272aa8-baaa-4edf-9f45-b6d6f7d844fe")
+            }));
 
             var spec = new ModulePipelineSpec
             {
@@ -161,6 +165,10 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Equal("2.0.0", projectVersion);
             Assert.True(ManifestEditor.TryGetTopLevelString(projectManifest, "Author", out var projectAuthor));
             Assert.Equal("NewAuthor", projectAuthor);
+            Assert.True(ManifestEditor.TryGetRequiredModules(projectManifest, out var projectRequiredModules));
+            var required = Assert.Single(projectRequiredModules!);
+            Assert.Equal("PSSharedGoods", required.ModuleName);
+            Assert.Equal("0.0.312", required.ModuleVersion);
         }
         finally
         {
@@ -240,6 +248,10 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
 
             var projectManifest = Path.Combine(root.FullName, moduleName + ".psd1");
             Assert.True(ManifestEditor.TrySetTopLevelString(projectManifest, "Author", "OldAuthor"));
+            Assert.True(ManifestEditor.TrySetRequiredModules(projectManifest, new[]
+            {
+                new ManifestEditor.RequiredModule("PSSharedGoods", moduleVersion: "0.0.312", guid: "e272aa8-baaa-4edf-9f45-b6d6f7d844fe")
+            }));
 
             var spec = new ModulePipelineSpec
             {
@@ -273,9 +285,6 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
 
             runner.SyncPublishedManifestToProjectRoot(
                 plan,
-                result.BuildResult,
-                Array.Empty<ManifestEditor.RequiredModule>(),
-                Array.Empty<string>(),
                 new[]
                 {
                     new ModulePublishResult(
@@ -301,6 +310,10 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Contains("Prerelease", projectManifestContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Preview9", projectManifestContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Broken.psm1", projectManifestContent, StringComparison.OrdinalIgnoreCase);
+            Assert.True(ManifestEditor.TryGetRequiredModules(projectManifest, out var projectRequiredModules));
+            var required = Assert.Single(projectRequiredModules!);
+            Assert.Equal("PSSharedGoods", required.ModuleName);
+            Assert.Equal("0.0.312", required.ModuleVersion);
         }
         finally
         {
