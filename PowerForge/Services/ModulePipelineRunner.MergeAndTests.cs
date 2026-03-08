@@ -15,7 +15,12 @@ public sealed partial class ModulePipelineRunner
         if (plan is null || buildResult is null) return false;
         if (!plan.MergeModule && !plan.MergeMissing) return false;
 
-        var mergeInfo = BuildMergeSources(buildResult.StagingPath, plan.ModuleName, plan.Information, buildResult.Exports);
+        var mergeInfo = BuildMergeSources(
+            buildResult.StagingPath,
+            plan.ModuleName,
+            plan.Information,
+            buildResult.Exports,
+            fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths);
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             _logger.Warn("Merge requested but no script sources or PSM1 file were found.");
@@ -329,7 +334,7 @@ public sealed partial class ModulePipelineRunner
     }
 
 
-    private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports)
+    private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports, bool fixRelativePaths)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
@@ -358,7 +363,7 @@ public sealed partial class ModulePipelineRunner
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var merged = ordered.Length > 0 ? BuildMergedScriptContent(root, ordered, exports) : string.Empty;
+        var merged = ordered.Length > 0 ? BuildMergedScriptContent(root, ordered, exports, fixRelativePaths) : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
 
@@ -382,7 +387,7 @@ public sealed partial class ModulePipelineRunner
         return ordered.ToArray();
     }
 
-    private static string BuildMergedScriptContent(string rootPath, IReadOnlyList<string> files, ExportSet exports)
+    private static string BuildMergedScriptContent(string rootPath, IReadOnlyList<string> files, ExportSet exports, bool fixRelativePaths)
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -411,7 +416,7 @@ public sealed partial class ModulePipelineRunner
                     usingLines.Add(trimmed);
                     continue;
                 }
-                block.Add(line);
+                block.Add(fixRelativePaths ? NormalizeMergedRelativePathReferences(line) : line);
             }
 
             if (block.Count == 0) continue;
@@ -476,6 +481,25 @@ public sealed partial class ModulePipelineRunner
 
     private static string EscapePsSingleQuoted(string value)
         => value?.Replace("'", "''") ?? string.Empty;
+
+    private static string NormalizeMergedRelativePathReferences(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+            return line ?? string.Empty;
+
+        var updated = line;
+        updated = updated.Replace("$PSScriptRoot\\..\\..\\", "$PSScriptRoot\\");
+        updated = updated.Replace("$PSScriptRoot\\..\\", "$PSScriptRoot\\");
+        updated = updated.Replace("$PSScriptRoot/../../", "$PSScriptRoot/");
+        updated = updated.Replace("$PSScriptRoot/../", "$PSScriptRoot/");
+        updated = updated.Replace("`$PSScriptRoot, '..',", "$PSScriptRoot,");
+        updated = updated.Replace("`$PSScriptRoot,'..',", "$PSScriptRoot,");
+        updated = updated.Replace("$PSScriptRoot, '..',", "$PSScriptRoot,");
+        updated = updated.Replace("$PSScriptRoot,'..',", "$PSScriptRoot,");
+        updated = updated.Replace("$PSScriptRoot, \"..\",", "$PSScriptRoot,");
+        updated = updated.Replace("$PSScriptRoot,\"..\",", "$PSScriptRoot,");
+        return updated;
+    }
 
     private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
     {

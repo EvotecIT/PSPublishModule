@@ -138,6 +138,11 @@ public sealed class ModulePipelinePlan
     public bool MergeMissing { get; }
 
     /// <summary>
+    /// When true, skips legacy relative path normalization during merge.
+    /// </summary>
+    public bool DoNotAttemptToFixRelativePaths { get; }
+
+    /// <summary>
     /// Approved module names that can be used as function donors during merge.
     /// </summary>
     public string[] ApprovedModules { get; }
@@ -262,6 +267,7 @@ public sealed class ModulePipelinePlan
         TestConfiguration[] testsAfterMerge,
         bool mergeModule,
         bool mergeMissing,
+        bool doNotAttemptToFixRelativePaths,
         string[] approvedModules,
         ModuleSkipConfiguration? moduleSkip,
         bool signModule,
@@ -308,6 +314,7 @@ public sealed class ModulePipelinePlan
         TestsAfterMerge = testsAfterMerge ?? Array.Empty<TestConfiguration>();
         MergeModule = mergeModule;
         MergeMissing = mergeMissing;
+        DoNotAttemptToFixRelativePaths = doNotAttemptToFixRelativePaths;
         ApprovedModules = approvedModules ?? Array.Empty<string>();
         ModuleSkip = moduleSkip;
         SignModule = signModule;

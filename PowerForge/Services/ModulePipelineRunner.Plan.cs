@@ -58,6 +58,7 @@ public sealed partial class ModulePipelineRunner
         bool mergeModuleSet = false;
         bool mergeMissing = false;
         bool mergeMissingSet = false;
+        bool doNotAttemptToFixRelativePaths = false;
         bool refreshPsd1Only = false;
         SigningOptionsConfiguration? signing = null;
 
@@ -186,6 +187,7 @@ public sealed partial class ModulePipelineRunner
                     if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
                     if (b.RefreshPSD1Only.HasValue) refreshPsd1Only = b.RefreshPSD1Only.Value;
+                    if (b.DoNotAttemptToFixRelativePaths.HasValue) doNotAttemptToFixRelativePaths = b.DoNotAttemptToFixRelativePaths.Value;
                     if (b.Merge.HasValue)
                     {
                         mergeModule = b.Merge.Value;
@@ -668,6 +670,7 @@ public sealed partial class ModulePipelineRunner
             testsAfterMerge: testsAfterMerge.ToArray(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
+            doNotAttemptToFixRelativePaths: doNotAttemptToFixRelativePaths,
             approvedModules: approved,
             moduleSkip: moduleSkip,
             signModule: signModule,
