@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace PowerForge;
 
@@ -39,7 +41,7 @@ public sealed partial class ModulePipelineRunner
         try { reporter.StepFailed(step, ex); } catch { /* best effort */ }
     }
 
-    private static ModulePipelineResult BuildPipelineResult(
+    private ModulePipelineResult BuildPipelineResult(
         ModulePipelineSpec spec,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
@@ -61,19 +63,21 @@ public sealed partial class ModulePipelineRunner
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix,
         ModuleSigningResult? signingResult)
     {
-        var diagnostics = BuildDiagnosticsFactory.CreatePipelineDiagnostics(
+        var diagnostics = new List<BuildDiagnostic>(BuildDiagnosticsFactory.CreatePipelineDiagnostics(
             fileConsistencyReport,
             plan.FileConsistencySettings,
             projectRootFileConsistencyReport,
             compatibilityReport,
-            validationReport);
+            validationReport));
+        diagnostics.AddRange(CreateAutomaticBinaryConflictDiagnostics(plan, buildResult));
+        diagnostics.AddRange(CreateBinaryConflictDiagnostics(spec.Diagnostics, plan, buildResult));
         var diagnosticsBaseline = BuildDiagnosticsBaselineStore.Evaluate(
             plan.ProjectRoot,
             spec.Diagnostics,
-            diagnostics);
+            diagnostics.ToArray());
         var diagnosticsPolicy = BuildDiagnosticsPolicyEvaluator.Evaluate(
             spec.Diagnostics,
-            diagnostics,
+            diagnostics.ToArray(),
             diagnosticsBaseline);
 
         var result = new ModulePipelineResult(
@@ -87,7 +91,7 @@ public sealed partial class ModulePipelineRunner
             fileConsistencyLineEndingFix,
             compatibilityReport,
             validationReport,
-            diagnostics,
+            diagnostics.ToArray(),
             diagnosticsBaseline,
             diagnosticsPolicy,
             publishResults,
@@ -104,6 +108,44 @@ public sealed partial class ModulePipelineRunner
             throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);
 
         return result;
+    }
+
+    private BuildDiagnostic[] CreateBinaryConflictDiagnostics(
+        ModulePipelineDiagnosticsOptions? options,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult)
+    {
+        var roots = (options?.BinaryConflictSearchRoots ?? Array.Empty<string>())
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Select(static root => root.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (roots.Length == 0)
+            return Array.Empty<BuildDiagnostic>();
+
+        var editions = (plan.CompatiblePSEditions ?? Array.Empty<string>())
+            .Where(static edition => !string.IsNullOrWhiteSpace(edition))
+            .Select(static edition => edition.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (editions.Length == 0)
+            editions = new[] { "Core" };
+
+        var detector = new BinaryConflictDetectionService(_logger);
+        var diagnostics = new List<BuildDiagnostic>();
+        foreach (var edition in editions)
+        {
+            var result = detector.Analyze(
+                buildResult.StagingPath,
+                edition,
+                currentModuleName: plan.ModuleName,
+                searchRoots: roots);
+            diagnostics.AddRange(BuildDiagnosticsFactory.CreateBinaryConflictDiagnostics(result));
+        }
+
+        return diagnostics.ToArray();
     }
 
     private static void NotifySkippedStepsOnFailure(

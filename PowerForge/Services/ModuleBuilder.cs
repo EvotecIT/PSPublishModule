@@ -67,6 +67,12 @@ public sealed class ModuleBuilder
         /// When true, skips binary cmdlet/alias scanning and keeps existing manifest <c>CmdletsToExport</c>/<c>AliasesToExport</c> values.
         /// </summary>
         public bool DisableBinaryCmdletScan { get; set; }
+
+        /// <summary>
+        /// Optional module roots to scan for binary conflict advisories during build.
+        /// When empty, the builder uses default local PowerShell module roots for warning-only checks.
+        /// </summary>
+        public IReadOnlyList<string> BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
     }
 
     /// <summary>
@@ -159,6 +165,8 @@ public sealed class ModuleBuilder
                 _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
             }
         }
+
+        WarnOnInstalledBinaryConflicts(opts);
 
         // 2) Manifest generation
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
@@ -403,6 +411,47 @@ public sealed class ModuleBuilder
         }
 
         return fileNames;
+    }
+
+    private void WarnOnInstalledBinaryConflicts(Options opts)
+    {
+        var compatiblePSEditions = (opts.CompatiblePSEditions ?? Array.Empty<string>())
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .Select(static s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (compatiblePSEditions.Length == 0)
+            compatiblePSEditions = new[] { "Core" };
+
+        var detector = new BinaryConflictDetectionService(_logger);
+        foreach (var edition in compatiblePSEditions)
+        {
+            var result = detector.Analyze(
+                opts.ProjectRoot,
+                edition,
+                currentModuleName: opts.ModuleName,
+                searchRoots: opts.BinaryConflictSearchRoots);
+            if (!result.HasConflicts)
+                continue;
+
+            _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
+
+            foreach (var issue in result.Issues.Take(3))
+            {
+                var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
+                var relation = issue.VersionComparison > 0 ? "older" : "newer";
+
+                _logger.Warn(
+                    $"  {issue.AssemblyName} payload {issue.PayloadAssemblyVersion} may conflict with {moduleLabel} " +
+                    $"({relation} installed version {issue.InstalledAssemblyVersion}).");
+            }
+
+            if (result.Issues.Length > 3)
+                _logger.Warn($"  +{result.Issues.Length - 3} more conflict(s) detected.");
+        }
     }
 
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)

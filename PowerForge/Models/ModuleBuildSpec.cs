@@ -73,6 +73,12 @@ public sealed class ModuleBuildSpec
     public bool DisableBinaryCmdletScan { get; set; }
 
     /// <summary>
+    /// Optional module roots to scan for binary conflict advisories during build.
+    /// When empty, the builder uses default local PowerShell module roots for warning-only checks.
+    /// </summary>
+    public string[] BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }

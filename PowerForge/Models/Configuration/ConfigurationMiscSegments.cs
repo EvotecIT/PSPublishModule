@@ -68,6 +68,17 @@ public sealed class ImportModulesConfiguration
     /// <summary>Import required modules from the manifest.</summary>
     public bool? RequiredModules { get; set; }
 
+    /// <summary>
+    /// Analyze likely binary assembly conflicts across required modules and the module under build.
+    /// When not specified, conflict analysis is enabled when required modules are imported.
+    /// </summary>
+    public bool? AnalyzeBinaryConflicts { get; set; }
+
+    /// <summary>
+    /// When true, reorder RequiredModules using a conflict-aware heuristic before writing the manifest and validating imports.
+    /// </summary>
+    public bool? PreferBinaryConflictOrder { get; set; }
+
     /// <summary>Skip binary dependency preflight before importing the built module.</summary>
     public bool? SkipBinaryDependencyCheck { get; set; }
 

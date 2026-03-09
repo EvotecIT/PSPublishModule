@@ -110,43 +110,43 @@ public sealed partial class ModulePipelineRunner
         return trimmed;
     }
 
-    private Dictionary<string, (string? Version, string? Guid)> TryGetLatestInstalledModuleInfo(IReadOnlyList<string> names)
+    private Dictionary<string, InstalledModuleReference> TryGetLatestInstalledModuleInfo(IReadOnlyList<string> names)
     {
         var list = (names ?? Array.Empty<string>())
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(n => n.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (list.Length == 0) return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        if (list.Length == 0) return new Dictionary<string, InstalledModuleReference>(StringComparer.OrdinalIgnoreCase);
 
-        var runner = new PowerShellRunner();
         var script = BuildGetInstalledModuleInfoScript();
         var args = new List<string>(1) { EncodeLines(list) };
 
-        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(2));
+        var result = RunScript(_powerShellRunner, script, args, TimeSpan.FromMinutes(2));
         if (result.ExitCode != 0)
         {
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
-            return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, InstalledModuleReference>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var map = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, InstalledModuleReference>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in SplitLines(result.StdOut))
         {
             if (!line.StartsWith("PFMODINFO::ITEM::", StringComparison.Ordinal)) continue;
             var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
-            if (parts.Length < 5) continue;
+            if (parts.Length < 6) continue;
 
             var name = Decode(parts[2]);
             var ver = EmptyToNull(Decode(parts[3]));
             var guid = EmptyToNull(Decode(parts[4]));
+            var moduleBasePath = EmptyToNull(Decode(parts[5]));
             if (string.IsNullOrWhiteSpace(name)) continue;
-            map[name] = (ver, guid);
+            map[name] = new InstalledModuleReference(name, ver, guid, moduleBasePath);
         }
 
         foreach (var n in list)
-            if (!map.ContainsKey(n)) map[n] = (null, null);
+            if (!map.ContainsKey(n)) map[n] = new InstalledModuleReference(n, null, null, null);
 
         return map;
     }
@@ -166,14 +166,12 @@ public sealed partial class ModulePipelineRunner
             return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
 
         var repos = ParseRepositoryList(repository);
-        var runner = new PowerShellRunner();
-
         IReadOnlyList<PSResourceInfo> items = Array.Empty<PSResourceInfo>();
         var resolved = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            var psrg = new PSResourceGetClient(runner, _logger);
+            var psrg = new PSResourceGetClient(_powerShellRunner, _logger);
             var opts = new PSResourceFindOptions(list, version: null, prerelease: prerelease, repositories: repos, credential: credential);
             items = psrg.Find(opts, timeout: TimeSpan.FromMinutes(2));
             resolved = SelectLatestVersions(items, prerelease);
@@ -190,7 +188,7 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            var psg = new PowerShellGetClient(runner, _logger);
+            var psg = new PowerShellGetClient(_powerShellRunner, _logger);
             var useRepos = repos.Length == 0 ? new[] { "PSGallery" } : repos;
             var opts = new PowerShellGetFindOptions(list, prerelease: prerelease, repositories: useRepos, credential: credential);
             items = psg.Find(opts, timeout: TimeSpan.FromMinutes(2));
@@ -284,4 +282,23 @@ public sealed partial class ModulePipelineRunner
         return hasPreA ? -1 : 1;
     }
 
+}
+
+public sealed partial class ModulePipelineRunner
+{
+    private sealed class InstalledModuleReference
+    {
+        public string Name { get; }
+        public string? Version { get; }
+        public string? Guid { get; }
+        public string? ModuleBasePath { get; }
+
+        public InstalledModuleReference(string name, string? version, string? guid, string? moduleBasePath)
+        {
+            Name = name;
+            Version = version;
+            Guid = guid;
+            ModuleBasePath = moduleBasePath;
+        }
+    }
 }

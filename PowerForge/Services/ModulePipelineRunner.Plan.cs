@@ -383,6 +383,8 @@ public sealed partial class ModulePipelineRunner
                     importModules ??= new ImportModulesConfiguration();
                     if (cfg.Self.HasValue) importModules.Self = cfg.Self;
                     if (cfg.RequiredModules.HasValue) importModules.RequiredModules = cfg.RequiredModules;
+                    if (cfg.AnalyzeBinaryConflicts.HasValue) importModules.AnalyzeBinaryConflicts = cfg.AnalyzeBinaryConflicts;
+                    if (cfg.PreferBinaryConflictOrder.HasValue) importModules.PreferBinaryConflictOrder = cfg.PreferBinaryConflictOrder;
                     if (cfg.SkipBinaryDependencyCheck.HasValue) importModules.SkipBinaryDependencyCheck = cfg.SkipBinaryDependencyCheck;
                     if (cfg.Verbose.HasValue) importModules.Verbose = cfg.Verbose;
                     break;
@@ -569,6 +571,8 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesPrerelease,
             installMissingModulesRepository,
             installMissingModulesCredential);
+        if (importModules?.PreferBinaryConflictOrder == true)
+            requiredModules = ReorderRequiredModulesForBinaryConflicts(requiredModules, compatible);
         var requiredModulesForPackaging = AreRequiredModuleDraftListsEquivalent(requiredModulesDraft, requiredModulesDraftForPackaging)
             ? requiredModules.ToArray()
             : ResolveRequiredModules(

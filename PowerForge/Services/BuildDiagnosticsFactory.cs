@@ -41,6 +41,44 @@ public static class BuildDiagnosticsFactory
         return diagnostics.ToArray();
     }
 
+    internal static IReadOnlyList<BuildDiagnostic> CreateBinaryConflictDiagnostics(BinaryConflictDetectionResult result)
+    {
+        var diagnostics = new List<BuildDiagnostic>();
+        if (result is null || !result.HasConflicts)
+            return diagnostics;
+
+        foreach (var issue in result.Issues)
+        {
+            if (issue is null)
+                continue;
+
+            var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                ? issue.InstalledModuleName
+                : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
+            var action = issue.VersionComparison < 0
+                ? $"Review the packaged version of {issue.AssemblyName} in this module, or preload the newer dependency source before importing it with {moduleLabel}."
+                : $"If {issue.AssemblyName} is backward compatible, import this module before {moduleLabel}; otherwise align the shared dependency versions.";
+            var details = $"{issue.PowerShellEdition}: {issue.PayloadAssemblyFileName} payload {issue.PayloadAssemblyVersion} conflicts with {moduleLabel} shipping {issue.InstalledAssemblyVersion}.";
+            if (!string.IsNullOrWhiteSpace(issue.InstalledAssemblyRelativePath))
+                details += $" Reference: {issue.InstalledAssemblyRelativePath}.";
+
+            diagnostics.Add(new BuildDiagnostic(
+                ruleId: "BUILD-BINARY-CONFLICT",
+                area: BuildDiagnosticArea.Build,
+                severity: BuildDiagnosticSeverity.Warning,
+                scope: BuildDiagnosticScope.Staging,
+                owner: BuildDiagnosticOwner.ModuleAuthor,
+                remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+                canAutoFix: false,
+                summary: $"Resolve {issue.AssemblyName} version conflicts",
+                details: details,
+                recommendedAction: action,
+                sourcePath: issue.InstalledAssemblyRelativePath));
+        }
+
+        return diagnostics;
+    }
+
     public static IReadOnlyList<BuildDiagnostic> CreateValidationDiagnostics(ModuleValidationReport report)
     {
         var diagnostics = new List<BuildDiagnostic>();

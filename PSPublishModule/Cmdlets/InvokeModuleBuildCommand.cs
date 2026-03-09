@@ -312,6 +312,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public BuildDiagnosticSeverity? FailOnDiagnosticsSeverity { get; set; }
 
     /// <summary>
+    /// Optional module roots to scan for deterministic binary conflict diagnostics.
+    /// When provided, conflict findings can participate in diagnostics baselines and policy.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public string[]? DiagnosticsBinaryConflictSearchRoot { get; set; }
+
+    /// <summary>
     /// When specified, requests the host to exit with code 0 on success and 1 on failure.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -416,6 +424,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     KeepStaging = KeepStaging.IsPresent,
                     ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
                     ExcludeFiles = BuildStageExcludeFiles(moduleName),
+                    BinaryConflictSearchRoots = DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>(),
                 },
                 Install = new ModulePipelineInstallOptions
                 {
@@ -432,7 +441,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     GenerateBaseline = GenerateDiagnosticsBaseline.IsPresent,
                     UpdateBaseline = UpdateDiagnosticsBaseline.IsPresent,
                     FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
-                    FailOnSeverity = FailOnDiagnosticsSeverity
+                    FailOnSeverity = FailOnDiagnosticsSeverity,
+                    BinaryConflictSearchRoots = DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>()
                 },
                 Segments = segments,
             };

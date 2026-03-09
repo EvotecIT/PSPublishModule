@@ -134,7 +134,7 @@ public sealed partial class ModulePipelineRunner
                 }
 
                 installed.TryGetValue(d.ModuleName, out var info);
-                if (!string.IsNullOrWhiteSpace(info.Version)) continue;
+                if (!string.IsNullOrWhiteSpace(info?.Version)) continue;
 
                 var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
                 if (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource))
@@ -154,8 +154,8 @@ public sealed partial class ModulePipelineRunner
         {
             installed.TryGetValue(d.ModuleName, out var info);
 
-            var availableVersion = info.Version;
-            var availableGuid = info.Guid;
+            var availableVersion = info?.Version;
+            var availableGuid = info?.Guid;
             if (onlineVersions is not null &&
                 onlineVersions.TryGetValue(d.ModuleName, out var onlineInfo))
             {
@@ -207,7 +207,7 @@ public sealed partial class ModulePipelineRunner
             foreach (var name in moduleNames)
             {
                 installed.TryGetValue(name, out var info);
-                var installedVersion = info.Version;
+                var installedVersion = info?.Version;
 
                 string? latestVersion = null;
                 if (onlineVersions is not null &&
