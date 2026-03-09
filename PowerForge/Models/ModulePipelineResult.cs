@@ -86,6 +86,11 @@ public sealed class ModulePipelineResult
     public BuildDiagnosticsBaselineComparison? DiagnosticsBaseline { get; }
 
     /// <summary>
+    /// Diagnostics policy evaluation for the run when policy options were used.
+    /// </summary>
+    public BuildDiagnosticsPolicyEvaluation? DiagnosticsPolicy { get; }
+
+    /// <summary>
     /// Formatting results for the staging output (empty when formatting was disabled).
     /// </summary>
     public FormatterResult[] FormattingStagingResults { get; }
@@ -126,6 +131,7 @@ public sealed class ModulePipelineResult
         ModuleValidationReport? validationReport,
         BuildDiagnostic[]? diagnostics,
         BuildDiagnosticsBaselineComparison? diagnosticsBaseline,
+        BuildDiagnosticsPolicyEvaluation? diagnosticsPolicy,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
@@ -152,6 +158,7 @@ public sealed class ModulePipelineResult
         ValidationReport = validationReport;
         Diagnostics = diagnostics ?? Array.Empty<BuildDiagnostic>();
         DiagnosticsBaseline = diagnosticsBaseline;
+        DiagnosticsPolicy = diagnosticsPolicy;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  

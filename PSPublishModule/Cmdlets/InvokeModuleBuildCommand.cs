@@ -62,6 +62,14 @@ namespace PSPublishModule;
 ///     -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 /// </code>
 /// </example>
+/// <example>
+/// <summary>Fail CI only on new diagnostics compared to a committed baseline</summary>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+///     -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+///     -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
+/// </code>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]
 public sealed partial class InvokeModuleBuildCommand : PSCmdlet
@@ -289,6 +297,21 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public SwitchParameter UpdateDiagnosticsBaseline { get; set; }
 
     /// <summary>
+    /// Fails the build when diagnostics appear that are not present in the loaded baseline.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter FailOnNewDiagnostics { get; set; }
+
+    /// <summary>
+    /// Fails the build when diagnostics at or above the specified severity are present.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    [ValidateSet(nameof(BuildDiagnosticSeverity.Warning), nameof(BuildDiagnosticSeverity.Error))]
+    public BuildDiagnosticSeverity? FailOnDiagnosticsSeverity { get; set; }
+
+    /// <summary>
     /// When specified, requests the host to exit with code 0 on success and 1 on failure.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -407,7 +430,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 {
                     BaselinePath = DiagnosticsBaselinePath,
                     GenerateBaseline = GenerateDiagnosticsBaseline.IsPresent,
-                    UpdateBaseline = UpdateDiagnosticsBaseline.IsPresent
+                    UpdateBaseline = UpdateDiagnosticsBaseline.IsPresent,
+                    FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
+                    FailOnSeverity = FailOnDiagnosticsSeverity
                 },
                 Segments = segments,
             };
@@ -443,17 +468,32 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
         catch (Exception ex)
         {
+            var policyFailure = ex as ModulePipelineDiagnosticsPolicyException;
+            var wrotePolicySummary = false;
+            if (policyFailure is not null)
+            {
+                try
+                {
+                    SpectrePipelineConsoleUi.WriteSummary(policyFailure.Result);
+                    wrotePolicySummary = true;
+                }
+                catch
+                {
+                    wrotePolicySummary = false;
+                }
+            }
+
             // When -ExitCode is used, treat the cmdlet as an "app-like" command:
             // print friendly output and set the host exit code, but avoid emitting a PowerShell error record
             // (which adds noisy invocation context like script line numbers).
             // Additionally, avoid emitting a PowerShell error record when using the interactive Spectre.Console view
             // because it breaks the live UI experience with the default PowerShell formatting.
-            var emitErrorRecord = !exitCodeMode && !usedInteractiveView;
+            var emitErrorRecord = !exitCodeMode && !usedInteractiveView && policyFailure is null;
             if (emitErrorRecord)
                 WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
             if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
                 WriteLogTail(interactiveBuffer, logger);
-            if (usedInteractiveView && lastPlan is not null)
+            if (usedInteractiveView && lastPlan is not null && !wrotePolicySummary)
             {
                 try { SpectrePipelineConsoleUi.WriteFailureSummary(lastPlan, ex); }
                 catch { /* best effort */ }

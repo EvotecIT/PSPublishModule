@@ -71,8 +71,12 @@ public sealed partial class ModulePipelineRunner
             plan.ProjectRoot,
             spec.Diagnostics,
             diagnostics);
+        var diagnosticsPolicy = BuildDiagnosticsPolicyEvaluator.Evaluate(
+            spec.Diagnostics,
+            diagnostics,
+            diagnosticsBaseline);
 
-        return new ModulePipelineResult(
+        var result = new ModulePipelineResult(
             plan,
             buildResult,
             installResult,
@@ -85,6 +89,7 @@ public sealed partial class ModulePipelineRunner
             validationReport,
             diagnostics,
             diagnosticsBaseline,
+            diagnosticsPolicy,
             publishResults,
             artefactResults,
             formattingStagingResults,
@@ -94,6 +99,11 @@ public sealed partial class ModulePipelineRunner
             projectRootFileConsistencyEncodingFix,
             projectRootFileConsistencyLineEndingFix,
             signingResult);
+
+        if (diagnosticsPolicy?.PolicyViolated == true)
+            throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);
+
+        return result;
     }
 
     private static void NotifySkippedStepsOnFailure(

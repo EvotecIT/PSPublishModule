@@ -16,7 +16,10 @@ param(
     [switch] $SignIncludeExe,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
-    [switch] $UpdateDiagnosticsBaseline
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity
 )
 
 $oldConsoleOutputEncoding = $null
@@ -113,6 +116,8 @@ try {
     if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildArgs.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
     if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildArgs.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
     if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildArgs.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
+    if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $buildArgs.FailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
+    if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $buildArgs.FailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
 
     & $buildScript @buildArgs
     if (-not (Test-Path -LiteralPath $configPath)) {

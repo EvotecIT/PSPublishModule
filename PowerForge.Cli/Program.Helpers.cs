@@ -24,7 +24,7 @@ internal static partial class Program
       powerforge test --config <TestSpec.json>
       powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
       powerforge install --config <InstallSpec.json>
-      powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--output json]
+      powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--fail-on-new-diagnostics] [--fail-on-diagnostics-severity <Warning|Error>] [--output json]
       powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
       powerforge publish --path <Path> [--repo <Repo>] [--tool auto|psresourceget|powershellget] [--apikey <Key>] [--nupkg]
@@ -385,6 +385,16 @@ internal static partial class Program
                 logger.Info($"Diagnostics baseline: {(baseline.BaselineLoaded ? "loaded" : "not loaded")} (known {baseline.BaselineDiagnosticCount}, current {baseline.CurrentDiagnosticCount}, new {baseline.NewDiagnosticCount}, resolved {baseline.ResolvedDiagnosticCount})");
                 if (!string.IsNullOrWhiteSpace(baseline.BaselinePath))
                     logger.Info($"Diagnostics baseline path: {baseline.BaselinePath}");
+            }
+
+            if (res.DiagnosticsPolicy is not null)
+            {
+                var policy = res.DiagnosticsPolicy;
+                var severityText = policy.FailOnSeverity?.ToString() ?? "disabled";
+                var statusText = policy.PolicyViolated ? "Fail" : "Pass";
+                logger.Info($"Diagnostics policy: {statusText} (fail-on-new {policy.FailOnNewDiagnostics}, severity {severityText}, current {policy.CurrentDiagnosticCount}, new {policy.NewDiagnosticCount}, severity matches {policy.SeverityDiagnosticCount})");
+                if (!string.IsNullOrWhiteSpace(policy.FailureReason))
+                    logger.Info($"Diagnostics policy reason: {policy.FailureReason}");
             }
 
             if (res.InstallResult is not null)

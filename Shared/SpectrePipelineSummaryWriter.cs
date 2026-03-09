@@ -209,6 +209,19 @@ internal static class SpectrePipelineSummaryWriter
             table.AddRow($"{(unicode ? "🧭" : "*")} Diagnostics baseline", $"[grey]{Esc(detail)}[/]");
         }
 
+        if (res.DiagnosticsPolicy is not null)
+        {
+            var policy = res.DiagnosticsPolicy;
+            var policyStatus = policy.PolicyViolated ? "[red]Fail[/]" : "[green]Pass[/]";
+            var parts = new List<string>();
+            if (policy.FailOnNewDiagnostics)
+                parts.Add($"new {policy.NewDiagnosticCount}");
+            if (policy.FailOnSeverity.HasValue)
+                parts.Add($"{policy.FailOnSeverity.Value}+ {policy.SeverityDiagnosticCount}");
+            var detail = parts.Count == 0 ? "configured" : string.Join(", ", parts);
+            table.AddRow($"{(unicode ? "🛡️" : "*")} Diagnostics policy", $"{policyStatus} [grey]{Esc(detail)}[/]");
+        }
+
         if (res.InstallResult is not null)
             table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
@@ -272,6 +285,9 @@ internal static class SpectrePipelineSummaryWriter
 
         if (res.DiagnosticsBaseline is not null)
             WriteDiagnosticsBaseline(res.DiagnosticsBaseline, border);
+
+        if (res.DiagnosticsPolicy is not null)
+            WriteDiagnosticsPolicy(res.DiagnosticsPolicy, border);
 
         if (res.ArtefactResults is { Length: > 0 })
         {
@@ -598,6 +614,34 @@ internal static class SpectrePipelineSummaryWriter
             table.AddRow("Action", "Baseline generated from current diagnostics");
         else if (comparison.BaselineUpdated)
             table.AddRow("Action", "Baseline updated from current diagnostics");
+
+        AnsiConsole.Write(table);
+    }
+
+    private static void WriteDiagnosticsPolicy(BuildDiagnosticsPolicyEvaluation policy, TableBorder border)
+    {
+        if (policy is null)
+            return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Diagnostics policy[/]").LeftJustified());
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Item").NoWrap())
+            .AddColumn(new TableColumn("Value"));
+
+        table.AddRow("Fail on new diagnostics", policy.FailOnNewDiagnostics ? "Yes" : "No");
+        table.AddRow("Fail on severity", policy.FailOnSeverity?.ToString() ?? "No");
+        table.AddRow("Current diagnostics", policy.CurrentDiagnosticCount.ToString());
+        table.AddRow("New diagnostics", policy.NewDiagnosticCount.ToString());
+        table.AddRow("Severity matches", policy.SeverityDiagnosticCount.ToString());
+        table.AddRow("Result", policy.PolicyViolated ? "[red]Fail[/]" : "[green]Pass[/]");
+
+        if (!string.IsNullOrWhiteSpace(policy.FailureReason))
+            table.AddRow("Reason", Esc(policy.FailureReason));
 
         AnsiConsole.Write(table);
     }

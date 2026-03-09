@@ -11,12 +11,12 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -57,6 +57,13 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
 -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
 -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
+```
+
+### EXAMPLE 5
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+-DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+-FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
 ```
 
 ## PARAMETERS
@@ -207,6 +214,38 @@ Accept wildcard characters: True
 
 ### -ExitCode
 When specified, requests the host to exit with code 0 on success and 1 on failure.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FailOnDiagnosticsSeverity
+Fails the build when diagnostics at or above the specified severity are present.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Modern, Configuration
+Aliases: None
+Possible values: Warning, Error
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FailOnNewDiagnostics
+Fails the build when diagnostics appear that are not present in the loaded baseline.
 
 ```yaml
 Type: SwitchParameter
