@@ -222,6 +222,19 @@ internal static class SpectrePipelineSummaryWriter
             table.AddRow($"{(unicode ? "🛡️" : "*")} Diagnostics policy", $"{policyStatus} [grey]{Esc(detail)}[/]");
         }
 
+        if (res.Diagnostics is { Length: > 0 })
+        {
+            var infoCount = res.Diagnostics.Count(static diagnostic => diagnostic.Severity == BuildDiagnosticSeverity.Info);
+            var warningCount = res.Diagnostics.Count(static diagnostic => diagnostic.Severity == BuildDiagnosticSeverity.Warning);
+            var errorCount = res.Diagnostics.Count(static diagnostic => diagnostic.Severity == BuildDiagnosticSeverity.Error);
+            var parts = new List<string>();
+            if (infoCount > 0) parts.Add($"{infoCount} info");
+            if (warningCount > 0) parts.Add($"{warningCount} warning");
+            if (errorCount > 0) parts.Add($"{errorCount} error");
+            var detail = parts.Count == 0 ? "none" : string.Join(", ", parts);
+            table.AddRow($"{(unicode ? "💡" : "*")} Diagnostics", $"[grey]{Esc(detail)}[/]");
+        }
+
         if (res.InstallResult is not null)
             table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
@@ -261,6 +274,9 @@ internal static class SpectrePipelineSummaryWriter
             var validationRecommendations = BuildRecommendations(res, BuildDiagnosticArea.Validation);
             WriteRecommendationTable("Recommended actions", validationRecommendations, border);
         }
+
+        var buildRecommendations = BuildRecommendations(res, BuildDiagnosticArea.Build);
+        WriteRecommendationTable("Build advisories", buildRecommendations, border);
 
         if (res.FileConsistencyReport is not null && res.Plan.FileConsistencySettings?.Severity != ValidationSeverity.Off)
             WriteFileConsistencyIssues(

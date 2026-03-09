@@ -69,6 +69,7 @@ public sealed partial class ModulePipelineRunner
             projectRootFileConsistencyReport,
             compatibilityReport,
             validationReport));
+        diagnostics.AddRange(CreateAutomaticBinaryConflictDiagnostics(plan, buildResult));
         diagnostics.AddRange(CreateBinaryConflictDiagnostics(spec.Diagnostics, plan, buildResult));
         var diagnosticsBaseline = BuildDiagnosticsBaselineStore.Evaluate(
             plan.ProjectRoot,
