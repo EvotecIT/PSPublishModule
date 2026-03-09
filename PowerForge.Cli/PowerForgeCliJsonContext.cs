@@ -23,6 +23,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(ModuleValidationReport))]
 [JsonSerializable(typeof(BuildDiagnostic[]))]
 [JsonSerializable(typeof(BuildDiagnosticsBaselineComparison))]
+[JsonSerializable(typeof(BuildDiagnosticsPolicyEvaluation))]
 [JsonSerializable(typeof(ProjectConsistencyReport))]
 [JsonSerializable(typeof(ProjectConversionResult))]
 [JsonSerializable(typeof(PowerShellCompatibilityReport))]

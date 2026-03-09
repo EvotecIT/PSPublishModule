@@ -409,6 +409,18 @@ internal static partial class Program
                     spec.Diagnostics.BaselinePath = ResolvePathFromBase(Path.GetDirectoryName(loaded.FullPath) ?? Directory.GetCurrentDirectory(), diagnosticsBaselinePath);
                 spec.Diagnostics.GenerateBaseline = spec.Diagnostics.GenerateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-generate", StringComparison.OrdinalIgnoreCase));
                 spec.Diagnostics.UpdateBaseline = spec.Diagnostics.UpdateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-update", StringComparison.OrdinalIgnoreCase));
+                spec.Diagnostics.FailOnNewDiagnostics = spec.Diagnostics.FailOnNewDiagnostics || argv.Any(a => a.Equals("--fail-on-new-diagnostics", StringComparison.OrdinalIgnoreCase));
+                var failOnSeverity = TryGetOptionValue(argv, "--fail-on-diagnostics-severity");
+                if (!string.IsNullOrWhiteSpace(failOnSeverity))
+                {
+                    if (!Enum.TryParse<BuildDiagnosticSeverity>(failOnSeverity, ignoreCase: true, out var severity) ||
+                        severity == BuildDiagnosticSeverity.Info)
+                    {
+                        throw new InvalidOperationException("Invalid value for --fail-on-diagnostics-severity. Expected Warning or Error.");
+                    }
+
+                    spec.Diagnostics.FailOnSeverity = severity;
+                }
             }
             catch (Exception ex)
             {
@@ -466,6 +478,7 @@ internal static partial class Program
             }
             catch (Exception ex)
             {
+                var policyFailure = ex as ModulePipelineDiagnosticsPolicyException;
                 if (outputJson)
                 {
                     WriteJson(new CliJsonEnvelope
@@ -474,14 +487,22 @@ internal static partial class Program
                         Command = "pipeline",
                         Success = false,
                         ExitCode = 1,
-                        Error = ex.Message
+                        Error = ex.Message,
+                        Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                        Result = policyFailure is null ? null : CliJson.SerializeToElement(policyFailure.Result, CliJson.Context.ModulePipelineResult)
                     });
                     return 1;
                 }
 
                 if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
                     WriteLogTail(interactiveBuffer, logger);
-                if (usedInteractiveView && lastPlan is not null)
+
+                if (policyFailure is not null)
+                {
+                    WritePipelineSummary(policyFailure.Result, cli, logger);
+                    logger.Error(policyFailure.Message);
+                }
+                else if (usedInteractiveView && lastPlan is not null)
                 {
                     try { PipelineConsoleUi.WriteFailureSummary(lastPlan, ex); } catch { }
                 }

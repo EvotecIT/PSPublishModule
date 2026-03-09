@@ -17,7 +17,10 @@
     [switch] $SignIncludeExe,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
-    [switch] $UpdateDiagnosticsBaseline
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity
 )
 
 if (-not $JsonOnly) {
@@ -95,6 +98,8 @@ if ($JsonOnly) {
 if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
 if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
 if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $buildParams.FailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $buildParams.FailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
 
 Invoke-ModuleBuild @buildParams -Settings {
     # Usual defaults as per standard module

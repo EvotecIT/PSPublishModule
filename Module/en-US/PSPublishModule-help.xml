@@ -3828,6 +3828,34 @@ Redirect output or use -Verbose to force plain, line-by-line output (useful for 
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FailOnDiagnosticsSeverity</maml:name>
+          <maml:description>
+            <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FailOnNewDiagnostics</maml:name>
+          <maml:description>
+            <maml:para>Fails the build when diagnostics appear that are not present in the loaded baseline.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>FunctionsToExportFolder</maml:name>
           <maml:description>
             <maml:para>Folder name containing functions to export. Default: Public.</maml:para>
@@ -4215,6 +4243,34 @@ Defaults to powerforge.json in the project root.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FailOnDiagnosticsSeverity</maml:name>
+          <maml:description>
+            <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FailOnNewDiagnostics</maml:name>
+          <maml:description>
+            <maml:para>Fails the build when diagnostics appear that are not present in the loaded baseline.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>GenerateDiagnosticsBaseline</maml:name>
           <maml:description>
             <maml:para>Writes a diagnostics baseline file from the current run.</maml:para>
@@ -4407,6 +4463,34 @@ Defaults to powerforge.json in the project root.</maml:para>
         <maml:name>ExitCode</maml:name>
         <maml:description>
           <maml:para>When specified, requests the host to exit with code 0 on success and 1 on failure.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FailOnDiagnosticsSeverity</maml:name>
+        <maml:description>
+          <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FailOnNewDiagnostics</maml:name>
+        <maml:description>
+          <maml:para>Fails the build when diagnostics appear that are not present in the loaded baseline.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -4791,6 +4875,15 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
 -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
 -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Fail CI only on new diagnostics compared to a committed baseline</maml:title>
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+-DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+-FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
