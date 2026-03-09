@@ -16,10 +16,11 @@ foreach ($n in $names) {
     $m = Get-Module -ListAvailable -Name $n | Sort-Object Version -Descending | Select-Object -First 1
     $ver = if ($m) { [string]$m.Version } else { '' }
     $guid = if ($m) { [string]$m.Guid } else { '' }
-    $fields = @($n, $ver, $guid) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    $moduleBase = if ($m) { [string]$m.ModuleBase } else { '' }
+    $fields = @($n, $ver, $guid, $moduleBase) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
     Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
   } catch {
-    $fields = @($n, '', '') | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    $fields = @($n, '', '', '') | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
     Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
   }
 }

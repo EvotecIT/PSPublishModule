@@ -19,7 +19,8 @@ internal sealed class BinaryConflictDetectionService
         string moduleRoot,
         string powerShellEdition,
         string? currentModuleName = null,
-        IReadOnlyList<string>? searchRoots = null)
+        IReadOnlyList<string>? searchRoots = null,
+        IReadOnlyList<string>? searchModulePaths = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot))
             throw new ArgumentException("Module root is required.", nameof(moduleRoot));
@@ -57,7 +58,8 @@ internal sealed class BinaryConflictDetectionService
         }
 
         var roots = ResolveSearchRoots(searchRoots, edition);
-        if (roots.Length == 0)
+        var modulePaths = ResolveModulePaths(searchModulePaths, root);
+        if (roots.Length == 0 && modulePaths.Length == 0)
         {
             return new BinaryConflictDetectionResult(
                 edition,
@@ -72,65 +74,78 @@ internal sealed class BinaryConflictDetectionService
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var normalizedCurrentModuleName = string.IsNullOrWhiteSpace(currentModuleName) ? null : currentModuleName.Trim();
 
+        void AnalyzeInstalledAssembly(string installedAssemblyPath, InstalledModuleInfo moduleInfo)
+        {
+            if (!TryReadAssemblyIdentity(installedAssemblyPath, out var installedAssembly))
+                return;
+
+            if (string.IsNullOrWhiteSpace(installedAssembly.SimpleName))
+                return;
+
+            if (!payloadAssemblies.TryGetValue(installedAssembly.SimpleName, out var payloadMatches))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(normalizedCurrentModuleName) &&
+                string.Equals(moduleInfo.ModuleName, normalizedCurrentModuleName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            foreach (var payloadAssembly in payloadMatches)
+            {
+                if (payloadAssembly.Version is null || installedAssembly.Version is null)
+                    continue;
+
+                if (payloadAssembly.Version.Equals(installedAssembly.Version))
+                    continue;
+
+                var key = string.Join(
+                    "|",
+                    edition,
+                    payloadAssembly.SimpleName,
+                    payloadAssembly.Version,
+                    moduleInfo.ModuleName,
+                    moduleInfo.ModuleVersion,
+                    installedAssembly.Version,
+                    installedAssemblyPath);
+
+                if (!seen.Add(key))
+                    continue;
+
+                issues.Add(new BinaryConflictDetectionIssue(
+                    powerShellEdition: edition,
+                    assemblyName: payloadAssembly.SimpleName,
+                    payloadAssemblyFileName: payloadAssembly.FileName,
+                    payloadAssemblyVersion: payloadAssembly.Version.ToString(),
+                    installedModuleName: moduleInfo.ModuleName,
+                    installedModuleVersion: moduleInfo.ModuleVersion,
+                    installedAssemblyVersion: installedAssembly.Version.ToString(),
+                    installedAssemblyRelativePath: moduleInfo.RelativeAssemblyPath,
+                    installedAssemblyPath: installedAssemblyPath,
+                    versionComparison: payloadAssembly.Version.CompareTo(installedAssembly.Version)));
+            }
+        }
+
         foreach (var searchRootPath in roots)
         {
             foreach (var installedAssemblyPath in EnumerateCandidateAssemblies(searchRootPath))
             {
-                if (!TryReadAssemblyIdentity(installedAssemblyPath, out var installedAssembly))
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(installedAssembly.SimpleName))
-                    continue;
-
-                if (!payloadAssemblies.TryGetValue(installedAssembly.SimpleName, out var payloadMatches))
-                    continue;
-
-                var moduleInfo = ResolveModuleInfo(searchRootPath, installedAssemblyPath);
-                if (!string.IsNullOrWhiteSpace(normalizedCurrentModuleName) &&
-                    string.Equals(moduleInfo.ModuleName, normalizedCurrentModuleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                foreach (var payloadAssembly in payloadMatches)
-                {
-                    if (payloadAssembly.Version is null || installedAssembly.Version is null)
-                        continue;
-
-                    if (payloadAssembly.Version.Equals(installedAssembly.Version))
-                        continue;
-
-                    var key = string.Join(
-                        "|",
-                        edition,
-                        payloadAssembly.SimpleName,
-                        payloadAssembly.Version,
-                        moduleInfo.ModuleName,
-                        moduleInfo.ModuleVersion,
-                        installedAssembly.Version,
-                        installedAssemblyPath);
-
-                    if (!seen.Add(key))
-                        continue;
-
-                    issues.Add(new BinaryConflictDetectionIssue(
-                        powerShellEdition: edition,
-                        assemblyName: payloadAssembly.SimpleName,
-                        payloadAssemblyFileName: payloadAssembly.FileName,
-                        payloadAssemblyVersion: payloadAssembly.Version.ToString(),
-                        installedModuleName: moduleInfo.ModuleName,
-                        installedModuleVersion: moduleInfo.ModuleVersion,
-                        installedAssemblyVersion: installedAssembly.Version.ToString(),
-                        installedAssemblyRelativePath: moduleInfo.RelativeAssemblyPath,
-                        installedAssemblyPath: installedAssemblyPath,
-                        versionComparison: payloadAssembly.Version.CompareTo(installedAssembly.Version)));
-                }
+                AnalyzeInstalledAssembly(installedAssemblyPath, ResolveModuleInfo(searchRootPath, installedAssemblyPath));
             }
         }
 
+        foreach (var searchModulePath in modulePaths)
+        {
+            foreach (var installedAssemblyPath in EnumerateCandidateAssemblies(searchModulePath))
+            {
+                AnalyzeInstalledAssembly(installedAssemblyPath, ResolveModuleInfoFromModulePath(searchModulePath, installedAssemblyPath));
+            }
+        }
+
+        var sourceCount = roots.Length + modulePaths.Length;
         var summary = issues.Count == 0
-            ? $"no conflicts across {roots.Length} module root{(roots.Length == 1 ? string.Empty : "s")}"
-            : $"{issues.Count} conflict{(issues.Count == 1 ? string.Empty : "s")} across {roots.Length} module root{(roots.Length == 1 ? string.Empty : "s")}";
+            ? $"no conflicts across {sourceCount} module source{(sourceCount == 1 ? string.Empty : "s")}"
+            : $"{issues.Count} conflict{(issues.Count == 1 ? string.Empty : "s")} across {sourceCount} module source{(sourceCount == 1 ? string.Empty : "s")}";
 
         if (_logger.IsVerbose)
             _logger.Verbose($"Binary conflict detection ({edition}) scanned '{assemblyRoot}' -> {summary}.");
@@ -142,6 +157,20 @@ internal sealed class BinaryConflictDetectionService
             relativeAssemblyRoot,
             issues.ToArray(),
             summary);
+    }
+
+    private static string[] ResolveModulePaths(IReadOnlyList<string>? searchModulePaths, string currentModuleRoot)
+    {
+        if (searchModulePaths is not { Count: > 0 })
+            return Array.Empty<string>();
+
+        return searchModulePaths
+            .Where(static p => !string.IsNullOrWhiteSpace(p))
+            .Select(static p => Path.GetFullPath(p.Trim()))
+            .Where(Directory.Exists)
+            .Where(path => !string.Equals(path, currentModuleRoot, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string[] ResolveSearchRoots(IReadOnlyList<string>? searchRoots, string edition)
@@ -338,6 +367,37 @@ internal sealed class BinaryConflictDetectionService
                 moduleVersion = segments[1];
 
             return new InstalledModuleInfo(moduleName, moduleVersion, relative.Replace(Path.DirectorySeparatorChar, '/'));
+        }
+        catch
+        {
+            return new InstalledModuleInfo("(unknown)", null, string.Empty);
+        }
+    }
+
+    private static InstalledModuleInfo ResolveModuleInfoFromModulePath(string modulePath, string assemblyPath)
+    {
+        try
+        {
+            var fullModulePath = Path.GetFullPath(modulePath);
+            var relative = Path.GetRelativePath(fullModulePath, assemblyPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+
+            var directory = new DirectoryInfo(fullModulePath);
+            if (directory.Parent is not null && Version.TryParse(directory.Name, out _))
+            {
+                var moduleName = directory.Parent.Name;
+                var moduleVersion = directory.Name;
+                var decoratedRelative = string.IsNullOrWhiteSpace(relative)
+                    ? moduleName + "/" + moduleVersion
+                    : moduleName + "/" + moduleVersion + "/" + relative;
+                return new InstalledModuleInfo(moduleName, moduleVersion, decoratedRelative);
+            }
+
+            var fallbackName = directory.Name;
+            var fallbackRelative = string.IsNullOrWhiteSpace(relative)
+                ? fallbackName
+                : fallbackName + "/" + relative;
+            return new InstalledModuleInfo(fallbackName, null, fallbackRelative);
         }
         catch
         {

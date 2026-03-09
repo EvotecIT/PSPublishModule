@@ -32,6 +32,12 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
     /// <summary>Indicates whether to import required modules from the manifest.</summary>
     [Parameter] public SwitchParameter ImportRequiredModules { get; set; }
 
+    /// <summary>Skips required-module and self-module binary conflict advisories during import validation.</summary>
+    [Parameter] public SwitchParameter SkipBinaryConflictAnalysis { get; set; }
+
+    /// <summary>Reorders RequiredModules using a conflict-aware heuristic before manifest refresh and import validation.</summary>
+    [Parameter] public SwitchParameter PreferBinaryConflictOrder { get; set; }
+
     /// <summary>Skips binary dependency preflight before importing the built module.</summary>
     [Parameter] public SwitchParameter SkipBinaryDependencyCheck { get; set; }
 
@@ -42,6 +48,8 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
         {
             Self = MyInvocation.BoundParameters.ContainsKey(nameof(ImportSelf)) ? ImportSelf.IsPresent : null,
             RequiredModules = MyInvocation.BoundParameters.ContainsKey(nameof(ImportRequiredModules)) ? ImportRequiredModules.IsPresent : null,
+            AnalyzeBinaryConflicts = MyInvocation.BoundParameters.ContainsKey(nameof(SkipBinaryConflictAnalysis)) ? !SkipBinaryConflictAnalysis.IsPresent : null,
+            PreferBinaryConflictOrder = MyInvocation.BoundParameters.ContainsKey(nameof(PreferBinaryConflictOrder)) ? PreferBinaryConflictOrder.IsPresent : null,
             SkipBinaryDependencyCheck = MyInvocation.BoundParameters.ContainsKey(nameof(SkipBinaryDependencyCheck)) ? SkipBinaryDependencyCheck.IsPresent : null,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose") ? true : null
         };

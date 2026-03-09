@@ -107,6 +107,39 @@ public sealed class BinaryConflictDetectionServiceTests
         }
     }
 
+    [Fact]
+    public void Analyze_FindsVersionMismatchAcrossDirectModulePaths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var stagedAssembly = BuildLibrary(root.FullName, "SharedAuth", "2.0.0");
+            var installedAssembly = BuildLibrary(root.FullName, "SharedAuth", "1.0.0", projectFolderName: "SharedAuth_DirectPath");
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var libCore = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+            File.Copy(stagedAssembly, Path.Combine(libCore.FullName, "SharedAuth.dll"), overwrite: true);
+
+            var directModulePath = Directory.CreateDirectory(Path.Combine(root.FullName, "ExchangeOnlineManagement", "3.7.0", "bin"));
+            File.Copy(installedAssembly, Path.Combine(directModulePath.FullName, "SharedAuth.dll"), overwrite: true);
+
+            var result = new BinaryConflictDetectionService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                currentModuleName: "TestModule",
+                searchModulePaths: new[] { directModulePath.Parent!.FullName });
+
+            var issue = Assert.Single(result.Issues);
+            Assert.Equal("ExchangeOnlineManagement", issue.InstalledModuleName);
+            Assert.Equal("3.7.0", issue.InstalledModuleVersion);
+            Assert.Contains("ExchangeOnlineManagement/3.7.0/", issue.InstalledAssemblyRelativePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static string BuildLibrary(string rootPath, string assemblyName, string version, string? projectFolderName = null)
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(rootPath, projectFolderName ?? (assemblyName + "_" + version.Replace('.', '_'))));
