@@ -1,4 +1,4 @@
-param(
+﻿param(
     $Path,
     $LocalStore,
     $Thumbprint,

@@ -1,4 +1,4 @@
-# Get public and private function definition files.
+﻿# Get public and private function definition files.
 $Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 $Private = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 $Classes = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)

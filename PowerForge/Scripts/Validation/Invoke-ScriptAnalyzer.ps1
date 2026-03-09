@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$PathsB64,
     [string]$ExcludeB64,
     [string]$OutJson,

@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$TestPath,
   [string]$OutputFormat,
   [string]$EnableCodeCoverage,

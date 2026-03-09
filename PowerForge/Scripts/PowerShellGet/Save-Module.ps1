@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Name,
   [string]$MinimumVersion,
   [string]$RequiredVersion,

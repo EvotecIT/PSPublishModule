@@ -1,4 +1,4 @@
-function {{UpdateCommandName}} {
+﻿function {{UpdateCommandName}} {
     <#
     .SYNOPSIS
     Updates bundled module artefacts in a folder.

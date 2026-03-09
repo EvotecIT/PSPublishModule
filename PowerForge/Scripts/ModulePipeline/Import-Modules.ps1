@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$ModulesB64,
   [string]$ImportRequired,
   [string]$ImportSelf,

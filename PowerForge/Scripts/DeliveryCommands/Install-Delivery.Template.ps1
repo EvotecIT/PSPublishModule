@@ -1,4 +1,4 @@
-function {{CommandName}} {
+﻿function {{CommandName}} {
     <#
     .SYNOPSIS
     Installs bundled module artefacts to a folder.

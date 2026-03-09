@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$StagingPath,
   [string]$ManifestPath,
   [string]$OutputJsonPath

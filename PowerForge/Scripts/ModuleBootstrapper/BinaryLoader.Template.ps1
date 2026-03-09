@@ -1,4 +1,4 @@
-# Get library name, from the PSM1 file name
+﻿# Get library name, from the PSM1 file name
 $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"

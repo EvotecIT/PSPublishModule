@@ -1,4 +1,4 @@
-param($name)
+﻿param($name)
 $mod = Get-Module -ListAvailable -Name $name |
   Sort-Object Version -Descending |
   Select-Object -First 1

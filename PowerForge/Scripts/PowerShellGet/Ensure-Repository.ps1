@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Name,
   [string]$SourceUri,
   [string]$PublishUri,

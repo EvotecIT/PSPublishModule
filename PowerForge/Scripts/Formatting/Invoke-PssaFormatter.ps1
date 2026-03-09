@@ -1,4 +1,4 @@
-param([string]$SettingsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
+﻿param([string]$SettingsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
 $ErrorActionPreference = 'Stop'
 try {
     if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {

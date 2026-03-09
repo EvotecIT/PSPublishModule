@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$NamesB64,
   [string]$Version,
   [string]$ReposB64,

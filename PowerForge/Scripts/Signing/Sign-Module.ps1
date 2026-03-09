@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$RootPath,
   [string]$IncludeB64,
   [string]$ExcludeB64,

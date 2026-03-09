@@ -1,4 +1,4 @@
-param([string]$FlagsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
+﻿param([string]$FlagsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
 $ErrorActionPreference = 'Stop'
 
 try {
