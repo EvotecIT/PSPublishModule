@@ -25,7 +25,7 @@ public static class ExportDetector
                 Token[] tokens; ParseError[] errors;
                 var ast = Parser.ParseFile(file, out tokens, out errors);
                 if (errors != null && errors.Length > 0) continue;
-                var funcs = ast.FindAll(a => a is FunctionDefinitionAst, true).Cast<FunctionDefinitionAst>();
+                var funcs = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false).Cast<FunctionDefinitionAst>();
                 foreach (var f in funcs)
                 {
                     // Use the declared function name; skip private helper names starting with '_' by convention
