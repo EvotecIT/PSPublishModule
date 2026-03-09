@@ -1,4 +1,4 @@
-# Example: Advanced Module Testing with Custom Configuration
+﻿# Example: Advanced Module Testing with Custom Configuration
 # This example shows advanced usage with custom settings including failure analysis
 
 # Advanced usage - still one command, but with custom options

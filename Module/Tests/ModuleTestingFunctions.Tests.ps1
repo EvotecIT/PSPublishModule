@@ -1,4 +1,4 @@
-Describe "Module Testing Functions" {
+﻿Describe "Module Testing Functions" {
     BeforeAll {
         # Clean up any existing module instances first
         Get-Module PSPublishModule | Remove-Module -Force -ErrorAction SilentlyContinue

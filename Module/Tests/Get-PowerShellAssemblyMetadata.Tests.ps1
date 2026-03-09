@@ -1,4 +1,4 @@
-Describe 'Get-PowerShellAssemblyMetadata' {
+﻿Describe 'Get-PowerShellAssemblyMetadata' {
     It 'loads cmdlets when runtime contains a different assembly version' {
         $runtimeDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
         $testRoot = Join-Path $TestDrive 'metadata'

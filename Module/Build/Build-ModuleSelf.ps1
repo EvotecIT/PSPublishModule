@@ -1,4 +1,4 @@
-# Self-build script for PSPublishModule.
+﻿# Self-build script for PSPublishModule.
 # Builds PowerForge.Cli and runs `powerforge pipeline` using the same configuration as Build-Module.ps1.
 [CmdletBinding()]
 param(
