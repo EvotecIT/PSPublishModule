@@ -268,6 +268,27 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string? JsonPath { get; set; }
 
     /// <summary>
+    /// Optional path to a diagnostics baseline file used to compare current issues with known issues.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public string? DiagnosticsBaselinePath { get; set; }
+
+    /// <summary>
+    /// Writes a diagnostics baseline file from the current run.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter GenerateDiagnosticsBaseline { get; set; }
+
+    /// <summary>
+    /// Updates a diagnostics baseline file from the current run.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter UpdateDiagnosticsBaseline { get; set; }
+
+    /// <summary>
     /// When specified, requests the host to exit with code 0 on success and 1 on failure.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -381,6 +402,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     Roots = boundParameters?.ContainsKey(nameof(InstallRoots)) == true ? (InstallRoots ?? Array.Empty<string>()) : null,
                     LegacyFlatHandling = boundParameters?.ContainsKey(nameof(LegacyFlatHandling)) == true ? LegacyFlatHandling : null,
                     PreserveVersions = boundParameters?.ContainsKey(nameof(PreserveInstallVersions)) == true ? PreserveInstallVersions : null,
+                },
+                Diagnostics = new ModulePipelineDiagnosticsOptions
+                {
+                    BaselinePath = DiagnosticsBaselinePath,
+                    GenerateBaseline = GenerateDiagnosticsBaseline.IsPresent,
+                    UpdateBaseline = UpdateDiagnosticsBaseline.IsPresent
                 },
                 Segments = segments,
             };
@@ -518,6 +545,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
+        if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
+            spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
     }
 
     private static string MakeRelativeForConfig(string baseDir, string path)

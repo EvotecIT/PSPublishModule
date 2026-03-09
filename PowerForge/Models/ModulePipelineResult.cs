@@ -81,6 +81,11 @@ public sealed class ModulePipelineResult
     public BuildDiagnostic[] Diagnostics { get; }
 
     /// <summary>
+    /// Baseline comparison details for diagnostics when baseline options were used.
+    /// </summary>
+    public BuildDiagnosticsBaselineComparison? DiagnosticsBaseline { get; }
+
+    /// <summary>
     /// Formatting results for the staging output (empty when formatting was disabled).
     /// </summary>
     public FormatterResult[] FormattingStagingResults { get; }
@@ -120,6 +125,7 @@ public sealed class ModulePipelineResult
         PowerShellCompatibilityReport? compatibilityReport,
         ModuleValidationReport? validationReport,
         BuildDiagnostic[]? diagnostics,
+        BuildDiagnosticsBaselineComparison? diagnosticsBaseline,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
@@ -145,6 +151,7 @@ public sealed class ModulePipelineResult
         CompatibilityReport = compatibilityReport;
         ValidationReport = validationReport;
         Diagnostics = diagnostics ?? Array.Empty<BuildDiagnostic>();
+        DiagnosticsBaseline = diagnosticsBaseline;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  

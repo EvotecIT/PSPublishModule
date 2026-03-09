@@ -3740,6 +3740,18 @@ Redirect output or use -Verbose to force plain, line-by-line output (useful for 
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DiagnosticsBaselinePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a diagnostics baseline file used to compare current issues with known issues.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>DotNetConfiguration</maml:name>
           <maml:description>
             <maml:para>Build configuration for publishing the .NET project (Release or Debug).</maml:para>
@@ -3823,6 +3835,18 @@ Redirect output or use -Verbose to force plain, line-by-line output (useful for 
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateDiagnosticsBaseline</maml:name>
+          <maml:description>
+            <maml:para>Writes a diagnostics baseline file from the current run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -4115,6 +4139,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UpdateDiagnosticsBaseline</maml:name>
+          <maml:description>
+            <maml:para>Updates a diagnostics baseline file from the current run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Configuration">
         <maml:name>Invoke-ModuleBuild</maml:name>
@@ -4126,6 +4162,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           <command:parameterValue required="true" variableLength="false">IDictionary</command:parameterValue>
           <dev:type>
             <maml:name>IDictionary</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DiagnosticsBaselinePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a diagnostics baseline file used to compare current issues with known issues.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -4158,6 +4206,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           <maml:name>ExitCode</maml:name>
           <maml:description>
             <maml:para>When specified, requests the host to exit with code 0 on success and 1 on failure.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateDiagnosticsBaseline</maml:name>
+          <maml:description>
+            <maml:para>Writes a diagnostics baseline file from the current run.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -4216,6 +4276,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UpdateDiagnosticsBaseline</maml:name>
+          <maml:description>
+            <maml:para>Updates a diagnostics baseline file from the current run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -4247,6 +4319,18 @@ Defaults to powerforge.json in the project root.</maml:para>
         <maml:name>CsprojPath</maml:name>
         <maml:description>
           <maml:para>Optional path to a .NET project (.csproj) to publish into the module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DiagnosticsBaselinePath</maml:name>
+        <maml:description>
+          <maml:para>Optional path to a diagnostics baseline file used to compare current issues with known issues.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -4339,6 +4423,18 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>GenerateDiagnosticsBaseline</maml:name>
+        <maml:description>
+          <maml:para>Writes a diagnostics baseline file from the current run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -4627,6 +4723,18 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UpdateDiagnosticsBaseline</maml:name>
+        <maml:description>
+          <maml:para>Updates a diagnostics baseline file from the current run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

@@ -403,6 +403,12 @@ internal static partial class Program
                 var loaded = LoadPipelineSpecWithPath(configPath);
                 spec = loaded.Value;
                 ResolvePipelineSpecPaths(spec, loaded.FullPath);
+                spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
+                var diagnosticsBaselinePath = TryGetOptionValue(argv, "--diagnostics-baseline");
+                if (!string.IsNullOrWhiteSpace(diagnosticsBaselinePath))
+                    spec.Diagnostics.BaselinePath = ResolvePathFromBase(Path.GetDirectoryName(loaded.FullPath) ?? Directory.GetCurrentDirectory(), diagnosticsBaselinePath);
+                spec.Diagnostics.GenerateBaseline = spec.Diagnostics.GenerateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-generate", StringComparison.OrdinalIgnoreCase));
+                spec.Diagnostics.UpdateBaseline = spec.Diagnostics.UpdateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-update", StringComparison.OrdinalIgnoreCase));
             }
             catch (Exception ex)
             {

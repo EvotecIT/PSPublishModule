@@ -11,12 +11,12 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -99,6 +99,22 @@ Optional path to a .NET project (.csproj) to publish into the module.
 ```yaml
 Type: String
 Parameter Sets: Modern
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DiagnosticsBaselinePath
+Optional path to a diagnostics baseline file used to compare current issues with known issues.
+
+```yaml
+Type: String
+Parameter Sets: Modern, Configuration
 Aliases: None
 Possible values: 
 
@@ -211,6 +227,22 @@ Folder name containing functions to export. Default: Public.
 ```yaml
 Type: String
 Parameter Sets: Modern
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GenerateDiagnosticsBaseline
+Writes a diagnostics baseline file from the current run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
 Aliases: None
 Possible values: 
 
@@ -581,6 +613,22 @@ Staging directory for the PowerForge pipeline. When omitted, a temporary folder 
 ```yaml
 Type: String
 Parameter Sets: Modern
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UpdateDiagnosticsBaseline
+Updates a diagnostics baseline file from the current run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
 Aliases: None
 Possible values: 
 

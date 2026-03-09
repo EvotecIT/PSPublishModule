@@ -111,6 +111,10 @@ public sealed class BuildDiagnostic
     public string SourcePath { get; }
     /// <summary>Optional build component that introduced/generated the issue.</summary>
     public string GeneratedBy { get; }
+    /// <summary>Stable key used for baseline comparisons.</summary>
+    public string BaselineKey { get; internal set; } = string.Empty;
+    /// <summary>Whether the diagnostic is new, known, or not baseline-compared.</summary>
+    public BuildDiagnosticBaselineState BaselineState { get; internal set; } = BuildDiagnosticBaselineState.Unspecified;
 
     /// <summary>
     /// Creates a new structured build diagnostic.
