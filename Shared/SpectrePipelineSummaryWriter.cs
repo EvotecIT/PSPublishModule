@@ -200,6 +200,15 @@ internal static class SpectrePipelineSummaryWriter
         else
             table.AddRow($"{(unicode ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
 
+        if (res.DiagnosticsBaseline is not null)
+        {
+            var baseline = res.DiagnosticsBaseline;
+            var detail = baseline.BaselineLoaded
+                ? $"known {baseline.BaselineDiagnosticCount}, new {baseline.NewDiagnosticCount}, resolved {baseline.ResolvedDiagnosticCount}"
+                : $"current {baseline.CurrentDiagnosticCount}";
+            table.AddRow($"{(unicode ? "🧭" : "*")} Diagnostics baseline", $"[grey]{Esc(detail)}[/]");
+        }
+
         if (res.InstallResult is not null)
             table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
@@ -260,6 +269,9 @@ internal static class SpectrePipelineSummaryWriter
 
         if (res.CompatibilityReport is not null && res.Plan.CompatibilitySettings?.Severity != ValidationSeverity.Off)
             WriteCompatibilityIssues(res, res.CompatibilityReport, border);
+
+        if (res.DiagnosticsBaseline is not null)
+            WriteDiagnosticsBaseline(res.DiagnosticsBaseline, border);
 
         if (res.ArtefactResults is { Length: > 0 })
         {
@@ -555,6 +567,39 @@ internal static class SpectrePipelineSummaryWriter
         }
 
         return text;
+    }
+
+    private static void WriteDiagnosticsBaseline(BuildDiagnosticsBaselineComparison comparison, TableBorder border)
+    {
+        if (comparison is null)
+            return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Diagnostics baseline[/]").LeftJustified());
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Item").NoWrap())
+            .AddColumn(new TableColumn("Value"));
+
+        if (!string.IsNullOrWhiteSpace(comparison.BaselinePath))
+            table.AddRow("Path", Esc(comparison.BaselinePath));
+
+        table.AddRow("Loaded", comparison.BaselineLoaded ? "Yes" : "No");
+        table.AddRow("Baseline issues", comparison.BaselineDiagnosticCount.ToString());
+        table.AddRow("Current issues", comparison.CurrentDiagnosticCount.ToString());
+        table.AddRow("Known issues", comparison.ExistingDiagnosticCount.ToString());
+        table.AddRow("New issues", comparison.NewDiagnosticCount.ToString());
+        table.AddRow("Resolved issues", comparison.ResolvedDiagnosticCount.ToString());
+
+        if (comparison.BaselineGenerated)
+            table.AddRow("Action", "Baseline generated from current diagnostics");
+        else if (comparison.BaselineUpdated)
+            table.AddRow("Action", "Baseline updated from current diagnostics");
+
+        AnsiConsole.Write(table);
     }
 
     private static List<(string When, string Action)> BuildRecommendations(

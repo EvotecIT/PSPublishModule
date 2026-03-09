@@ -761,6 +761,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         return BuildPipelineResult(
+            spec,
             plan,
             buildResult,
             installResult,

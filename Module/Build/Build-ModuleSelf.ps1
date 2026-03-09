@@ -13,7 +13,10 @@ param(
     [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
-    [switch] $SignIncludeExe
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline
 )
 
 $oldConsoleOutputEncoding = $null
@@ -107,6 +110,9 @@ try {
     if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs.SignIncludeBinaries = $SignIncludeBinaries.IsPresent }
     if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs.SignIncludeInternals = $SignIncludeInternals.IsPresent }
     if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs.SignIncludeExe = $SignIncludeExe.IsPresent }
+    if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildArgs.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
+    if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildArgs.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
+    if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildArgs.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
 
     & $buildScript @buildArgs
     if (-not (Test-Path -LiteralPath $configPath)) {

@@ -40,6 +40,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static ModulePipelineResult BuildPipelineResult(
+        ModulePipelineSpec spec,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         ModuleInstallerResult? installResult,
@@ -66,6 +67,10 @@ public sealed partial class ModulePipelineRunner
             projectRootFileConsistencyReport,
             compatibilityReport,
             validationReport);
+        var diagnosticsBaseline = BuildDiagnosticsBaselineStore.Evaluate(
+            plan.ProjectRoot,
+            spec.Diagnostics,
+            diagnostics);
 
         return new ModulePipelineResult(
             plan,
@@ -79,6 +84,7 @@ public sealed partial class ModulePipelineRunner
             compatibilityReport,
             validationReport,
             diagnostics,
+            diagnosticsBaseline,
             publishResults,
             artefactResults,
             formattingStagingResults,

@@ -24,7 +24,7 @@ internal static partial class Program
       powerforge test --config <TestSpec.json>
       powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
       powerforge install --config <InstallSpec.json>
-      powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--output json]
+      powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--output json]
       powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
       powerforge publish --path <Path> [--repo <Repo>] [--tool auto|psresourceget|powershellget] [--apikey <Key>] [--nupkg]
@@ -377,6 +377,14 @@ internal static partial class Program
                 logger.Info($"Artefacts: {res.ArtefactResults.Length}");
                 foreach (var a in res.ArtefactResults)
                     logger.Info($" - {a.Type}{(string.IsNullOrWhiteSpace(a.Id) ? string.Empty : $" ({a.Id})")}: {a.OutputPath}");
+            }
+
+            if (res.DiagnosticsBaseline is not null)
+            {
+                var baseline = res.DiagnosticsBaseline;
+                logger.Info($"Diagnostics baseline: {(baseline.BaselineLoaded ? "loaded" : "not loaded")} (known {baseline.BaselineDiagnosticCount}, current {baseline.CurrentDiagnosticCount}, new {baseline.NewDiagnosticCount}, resolved {baseline.ResolvedDiagnosticCount})");
+                if (!string.IsNullOrWhiteSpace(baseline.BaselinePath))
+                    logger.Info($"Diagnostics baseline path: {baseline.BaselinePath}");
             }
 
             if (res.InstallResult is not null)

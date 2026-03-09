@@ -14,7 +14,10 @@
     [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
-    [switch] $SignIncludeExe
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline
 )
 
 if (-not $JsonOnly) {
@@ -89,6 +92,9 @@ if ($JsonOnly) {
     $buildParams.JsonOnly = $true
     $buildParams.JsonPath = $JsonPath
 }
+if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
+if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
 
 Invoke-ModuleBuild @buildParams -Settings {
     # Usual defaults as per standard module

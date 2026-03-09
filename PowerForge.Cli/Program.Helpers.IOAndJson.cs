@@ -78,6 +78,8 @@ internal static partial class Program
             spec.Build.SourcePath = ResolvePathFromBase(baseDir, spec.Build.SourcePath);
         spec.Build.StagingPath = ResolvePathFromBaseNullable(baseDir, spec.Build.StagingPath);
         spec.Build.CsprojPath = ResolvePathFromBaseNullable(baseDir, spec.Build.CsprojPath);
+        if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
+            spec.Diagnostics.BaselinePath = ResolvePathFromBase(baseDir, spec.Diagnostics.BaselinePath);
     }
 
     static string? FindDefaultPipelineConfig(string baseDir)
@@ -700,4 +702,3 @@ sealed class QuietLogger : ILogger
     public void Error(string message) => _inner.Error(message);
     public void Verbose(string message) { }
 }
-
