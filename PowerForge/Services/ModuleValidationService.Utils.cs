@@ -176,6 +176,19 @@ public sealed partial class ModuleValidationService
         return string.Join(", ", list.Take(max)) + ", ...";
     }
 
+    private static string TrimForIssue(string text, int maxLength = 240)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var flattened = string.Join(" ", text
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0));
+
+        if (flattened.Length <= maxLength) return flattened;
+        return flattened.Substring(0, maxLength) + "...";
+    }
+
     private sealed class ScriptAnalyzerIssue
     {
         public string? RuleName { get; set; }

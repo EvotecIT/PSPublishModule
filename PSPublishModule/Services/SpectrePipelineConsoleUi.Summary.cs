@@ -114,9 +114,12 @@ internal static partial class SpectrePipelineConsoleUi
         if (res.CompatibilityReport is not null && res.Plan.CompatibilitySettings?.Severity != ValidationSeverity.Off)
         {
             var s = res.CompatibilityReport.Summary;
+            var detail = s.Status == CheckStatus.Pass
+                ? $"{s.CrossCompatibilityPercentage:0.0}% cross-compatible"
+                : $"{s.CrossCompatibilityPercentage:0.0}% cross-compatible, {s.FilesWithIssues} file(s) with issues";
             table.AddRow(
                 $"{(unicode ? "🔎" : "*")} Compatibility",
-                $"{StatusMarkup(s.Status)} [grey]{s.CrossCompatibilityPercentage:0.0}% cross-compatible[/]");
+                $"{StatusMarkup(s.Status)} [grey]{Esc(detail)}[/]");
         }
         else
         {
@@ -227,6 +230,9 @@ internal static partial class SpectrePipelineConsoleUi
 
         if (res.ProjectRootFileConsistencyReport is not null && res.Plan.FileConsistencySettings?.Severity != ValidationSeverity.Off)
             WriteFileConsistencyIssues(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings, "project", border);
+
+        if (res.CompatibilityReport is not null && res.Plan.CompatibilitySettings?.Severity != ValidationSeverity.Off)
+            WriteCompatibilityIssues(res.CompatibilityReport, border);
 
         if (res.ArtefactResults is { Length: > 0 })
         {
@@ -366,6 +372,73 @@ internal static partial class SpectrePipelineConsoleUi
 
         if (issues.Length > maxItems)
             AnsiConsole.MarkupLine($"[grey]... {issues.Length - maxItems} more not shown.[/]");
+    }
+
+    private static void WriteCompatibilityIssues(PowerShellCompatibilityReport report, TableBorder border)
+    {
+        if (report is null) return;
+
+        var summary = report.Summary;
+        if (summary.Status == CheckStatus.Pass && summary.FilesWithIssues <= 0) return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        var affectedFiles = report.Files.Where(f => f.Issues.Length > 0).ToArray();
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Compatibility details[/]").LeftJustified());
+        AnsiConsole.MarkupLine($"[grey]{Esc(summary.Message)}[/]");
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            AnsiConsole.MarkupLine($"[grey]Report:[/] {Esc(report.ExportPath)}");
+
+        if (summary.Recommendations.Length > 0)
+        {
+            foreach (var recommendation in summary.Recommendations.Where(s => !string.IsNullOrWhiteSpace(s)).Take(3))
+                AnsiConsole.MarkupLine($"  [grey]- {Esc(recommendation)}[/]");
+        }
+
+        if (affectedFiles.Length == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]No file-level compatibility items were attached to the report.[/]");
+            return;
+        }
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("File"))
+            .AddColumn(new TableColumn("Editions").NoWrap())
+            .AddColumn(new TableColumn("Issues"));
+
+        const int maxItems = 8;
+        foreach (var file in affectedFiles.Take(maxItems))
+        {
+            var editions = new List<string>(2);
+            if (!file.PowerShell51Compatible) editions.Add("PS 5.1");
+            if (!file.PowerShell7Compatible) editions.Add("PS 7");
+            if (editions.Count == 0) editions.Add("Cross-version");
+
+            var issueSummary = string.Join(
+                "; ",
+                file.Issues
+                    .Take(3)
+                    .Select(i => string.IsNullOrWhiteSpace(i.Description)
+                        ? i.Type.ToString()
+                        : $"{i.Type}: {i.Description}"));
+
+            if (file.Issues.Length > 3)
+                issueSummary += $"; +{file.Issues.Length - 3} more";
+
+            table.AddRow(
+                Esc(file.RelativePath),
+                Esc(string.Join(", ", editions)),
+                Esc(issueSummary));
+        }
+
+        AnsiConsole.Write(table);
+
+        if (affectedFiles.Length > maxItems)
+            AnsiConsole.MarkupLine($"[grey]... {affectedFiles.Length - maxItems} more file(s) with compatibility issues not shown.[/]");
     }
 
     private static List<string> BuildFileConsistencyReasons(

@@ -16,6 +16,8 @@ public sealed class DeliveryCommandGeneratorTests
             {
                 Enable = true,
                 InternalsPath = "Internals",
+                PreservePaths = new[] { "Config/**", "Docs" },
+                OverwritePaths = new[] { "Artefacts/**" },
                 GenerateInstallCommand = true,
                 GenerateUpdateCommand = true
             };
@@ -36,6 +38,14 @@ public sealed class DeliveryCommandGeneratorTests
             Assert.Contains("function Install-EFAdminManager", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Write-Host \"[EFAdminManager] Installing bundled package content\"", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Write-DeliveryError", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string[]] $PreservePaths = @('Config/**', 'Docs')", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string[]] $OverwritePaths = @('Artefacts/**')", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[switch] $Bootstrap", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string] $RepositoryCredentialSecretFilePath", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[switch] $__DeliveryNoBootstrap", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("function Resolve-DeliverySecret", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("function Test-DeliveryPathMatch", installContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("function Get-DeliveryAction", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("function Copy-DeliveryRootFiles", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
@@ -44,6 +54,11 @@ public sealed class DeliveryCommandGeneratorTests
             Assert.Contains("Install-EFAdminManager", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Write-Host \"[EFAdminManager] Updating bundled package content via Install-EFAdminManager\"", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Delivery.InstallCommandMissing", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string[]] $PreservePaths", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string[]] $OverwritePaths", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[switch] $Bootstrap", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[string] $RepositoryCredentialSecretFilePath", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("[switch] $__DeliveryNoBootstrap", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("{{", updateContent, StringComparison.Ordinal);
         }
         finally

@@ -453,6 +453,26 @@ public sealed partial class ModulePipelineRunner
                         ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "RepositoryPaths", repoPaths);
                 }
 
+                if (delivery.PreservePaths is { Length: > 0 })
+                {
+                    var preserve = delivery.PreservePaths
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (preserve.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "PreservePaths", preserve);
+                }
+
+                if (delivery.OverwritePaths is { Length: > 0 })
+                {
+                    var overwrite = delivery.OverwritePaths
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (overwrite.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "OverwritePaths", overwrite);
+                }
+
                 if (!string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
                     ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "RepositoryBranch", delivery.RepositoryBranch!.Trim());
 

@@ -258,14 +258,19 @@ public sealed partial class ModuleValidationService
             if (!File.Exists(jsonPath))
             {
                 var msg = ExtractMarker(result.StdOut, "PFVALID::ERROR::") ?? result.StdErr;
-                if (string.IsNullOrWhiteSpace(msg))
-                {
-                    issues.Add("PSScriptAnalyzer produced no output.");
-                }
-                else
-                {
-                    issues.Add($"PSScriptAnalyzer produced no output. {msg.Trim()}");
-                }
+                var detailParts = new List<string>(4);
+                if (!string.IsNullOrWhiteSpace(msg))
+                    detailParts.Add(msg.Trim());
+                if (!string.IsNullOrWhiteSpace(result.Executable))
+                    detailParts.Add($"runner={Path.GetFileName(result.Executable)}");
+                if (!string.IsNullOrWhiteSpace(result.StdOut))
+                    detailParts.Add($"stdout={TrimForIssue(result.StdOut)}");
+                if (!string.IsNullOrWhiteSpace(result.StdErr))
+                    detailParts.Add($"stderr={TrimForIssue(result.StdErr)}");
+
+                issues.Add(detailParts.Count == 0
+                    ? "PSScriptAnalyzer runner completed without writing the results file."
+                    : $"PSScriptAnalyzer runner completed without writing the results file. {string.Join("; ", detailParts)}");
                 return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "no output");
             }
 

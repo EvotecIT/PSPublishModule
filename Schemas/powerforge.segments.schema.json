@@ -299,6 +299,8 @@
         "RepositoryPaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "RepositoryBranch": { "type": ["string", "null"] },
         "DocumentationOrder": { "type": ["array", "null"], "items": { "type": "string" } },
+        "PreservePaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "OverwritePaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "GenerateInstallCommand": { "type": "boolean" },
         "GenerateUpdateCommand": { "type": "boolean" },
         "InstallCommandName": { "type": ["string", "null"] },

@@ -6,6 +6,15 @@ function {{UpdateCommandName}} {
     .DESCRIPTION
     Delegates to {{InstallCommandName}}. Re-running the install command is typically enough to update new files while keeping existing configuration.
 
+    .PARAMETER PreservePaths
+    Optional wildcard patterns (relative to Internals) to preserve during merge, for example: Config/**.
+
+    .PARAMETER OverwritePaths
+    Optional wildcard patterns (relative to Internals) to overwrite during merge, for example: Artefacts/**.
+
+    .PARAMETER Bootstrap
+    Forces bootstrap behavior: installs/imports this module before extraction.
+
     .EXAMPLE
     {{UpdateCommandName}} -Path 'C:\Tools' -Verbose
     #>
@@ -20,7 +29,21 @@ function {{UpdateCommandName}} {
 
         [switch] $Force,
         [switch] $ListOnly,
-        [switch] $Unblock
+        [switch] $Unblock,
+
+        [string[]] $PreservePaths,
+        [string[]] $OverwritePaths,
+
+        [switch] $Bootstrap,
+        [string] $Version,
+        [string] $Repository,
+        [switch] $AllowPrerelease,
+        [string] $RepositoryCredentialUserName,
+        [string] $RepositoryCredentialSecret,
+        [string] $RepositoryCredentialSecretFilePath,
+
+        [Parameter(DontShow)]
+        [switch] $__DeliveryNoBootstrap
     )
 
     if (-not (Get-Command -Name '{{InstallCommandName}}' -ErrorAction SilentlyContinue)) {

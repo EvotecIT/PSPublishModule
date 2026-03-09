@@ -11,7 +11,7 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
+New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-PreservePaths <string[]>] [-OverwritePaths <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -19,6 +19,9 @@ Delivery configuration is used to bundle “internals” (docs, examples, tools,
 generate public helper commands (Install-<ModuleName> / Update-<ModuleName>) that can copy these files to a target folder.
 
 This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
+
+Merge behavior for generated delivery commands can be fine-tuned with PreservePaths and
+OverwritePaths so selected relative paths keep local changes or are refreshed during updates.
 
 ## EXAMPLES
 
@@ -35,6 +38,13 @@ PS>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch '
 ```
 
 Helps modules expose docs from a repository path in a consistent order.
+
+### EXAMPLE 3
+```powershell
+PS>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'
+```
+
+Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.
 
 ## PARAMETERS
 
@@ -254,6 +264,40 @@ Type: DeliveryBundleDestination
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Internals, Root, Both, None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OverwritePaths
+Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.
+Example: Artefacts/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreservePaths
+Optional wildcard patterns (relative to Internals) that should be preserved during merge installs by generated Install-/Update- helpers.
+Example: Config/**.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
 
 Required: False
 Position: named
