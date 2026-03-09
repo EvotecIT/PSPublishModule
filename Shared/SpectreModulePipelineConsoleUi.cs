@@ -2,8 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
-using System.Threading;
-using System.Threading.Tasks;
 using PowerForge;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -95,9 +93,6 @@ internal static class SpectreModulePipelineConsoleUi
                     iconLookup,
                     startLookup,
                     doneLookup);
-
-                using var refreshCts = new CancellationTokenSource();
-                var refresher = StartRefreshLoop(ctx, refreshCts.Token);
                 try
                 {
                     result = runner.Run(spec, plan, reporter);
@@ -106,11 +101,6 @@ internal static class SpectreModulePipelineConsoleUi
                 {
                     failure = ex;
                     AbortRemainingTasks(tasksByKey, labelsByKey, iconLookup, startLookup, doneLookup);
-                }
-                finally
-                {
-                    refreshCts.Cancel();
-                    try { refresher.GetAwaiter().GetResult(); } catch { }
                 }
             });
 
@@ -129,16 +119,6 @@ internal static class SpectreModulePipelineConsoleUi
         if (viewportWidth >= 80) return 12;
         return 10;
     }
-
-    private static Task StartRefreshLoop(ProgressContext ctx, CancellationToken token)
-        => Task.Run(async () =>
-        {
-            while (!token.IsCancellationRequested)
-            {
-                try { ctx.Refresh(); } catch { }
-                try { await Task.Delay(100, token).ConfigureAwait(false); } catch { }
-            }
-        }, token);
 
     private static ProgressColumn[] BuildColumns(
         bool includeBar,

@@ -238,10 +238,20 @@ internal static class SpectrePipelineSummaryWriter
         }
 
         if (res.FileConsistencyReport is not null && res.Plan.FileConsistencySettings?.Severity != ValidationSeverity.Off)
-            WriteFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings, "staging", border);
+            WriteFileConsistencyIssues(
+                report: res.FileConsistencyReport,
+                settings: res.Plan.FileConsistencySettings,
+                label: "staging",
+                border: border,
+                projectReport: res.ProjectRootFileConsistencyReport);
 
         if (res.ProjectRootFileConsistencyReport is not null && res.Plan.FileConsistencySettings?.Severity != ValidationSeverity.Off)
-            WriteFileConsistencyIssues(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings, "project", border);
+            WriteFileConsistencyIssues(
+                report: res.ProjectRootFileConsistencyReport,
+                settings: res.Plan.FileConsistencySettings,
+                label: "project",
+                border: border,
+                projectReport: null);
 
         if (res.CompatibilityReport is not null && res.Plan.CompatibilitySettings?.Severity != ValidationSeverity.Off)
             WriteCompatibilityIssues(res.CompatibilityReport, border);
@@ -374,7 +384,8 @@ internal static class SpectrePipelineSummaryWriter
         ProjectConsistencyReport report,
         FileConsistencySettings? settings,
         string label,
-        TableBorder border)
+        TableBorder border,
+        ProjectConsistencyReport? projectReport)
     {
         if (report is null) return;
 
@@ -404,6 +415,9 @@ internal static class SpectrePipelineSummaryWriter
             AnsiConsole.MarkupLine($"[grey]Summary:[/] {string.Join(", ", parts)} (total {summary.TotalFiles})");
         else
             AnsiConsole.MarkupLine($"[grey]Summary:[/] {CountLabel(summary.TotalFiles, "file", "files")} checked");
+
+        var recommendations = BuildFileConsistencyRecommendations(report, projectReport, settings, label);
+        WriteRecommendationTable("Recommended actions", recommendations, border);
 
         var table = new Table()
             .Border(border)
@@ -451,6 +465,8 @@ internal static class SpectrePipelineSummaryWriter
             detailsTable.AddRow("Report", Esc(report.ExportPath));
 
         AnsiConsole.Write(detailsTable);
+
+        WriteRecommendationTable("Recommended actions", BuildCompatibilityRecommendations(report), border);
 
         if (affectedFiles.Length == 0)
         {
@@ -544,6 +560,208 @@ internal static class SpectrePipelineSummaryWriter
         return string.IsNullOrWhiteSpace(detail)
             ? StatusWithSeparator(status)
             : $"{StatusWithSeparator(status)} [grey]{Markup.Escape(detail!.Trim())}[/]";
+    }
+
+    private static void WriteRecommendationTable(
+        string title,
+        IReadOnlyList<(string When, string Action)> recommendations,
+        TableBorder border)
+    {
+        if (recommendations is null || recommendations.Count == 0)
+            return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn(title).NoWrap())
+            .AddColumn(new TableColumn("Do this"));
+
+        foreach (var recommendation in recommendations)
+        {
+            if (string.IsNullOrWhiteSpace(recommendation.When) || string.IsNullOrWhiteSpace(recommendation.Action))
+                continue;
+
+            table.AddRow(Esc(recommendation.When), Esc(recommendation.Action));
+        }
+
+        if (table.Rows.Count > 0)
+            AnsiConsole.Write(table);
+    }
+
+    private static List<(string When, string Action)> BuildFileConsistencyRecommendations(
+        ProjectConsistencyReport report,
+        ProjectConsistencyReport? projectReport,
+        FileConsistencySettings? settings,
+        string label)
+    {
+        var recommendations = new List<(string When, string Action)>();
+        var summary = report.Summary;
+        var isProject = string.Equals(label, "project", StringComparison.OrdinalIgnoreCase);
+
+        if (isProject)
+        {
+            AddRecommendation(
+                recommendations,
+                "Fix source files",
+                "Update the listed files in your repository and commit those changes.");
+        }
+        else
+        {
+            var stagingIssuePaths = new HashSet<string>(
+                report.ProblematicFiles.Select(static file => file.RelativePath),
+                StringComparer.OrdinalIgnoreCase);
+            var mirroredPaths = projectReport is null
+                ? 0
+                : projectReport.ProblematicFiles.Count(file => stagingIssuePaths.Contains(file.RelativePath));
+            var stagingOnlyPaths = Math.Max(0, stagingIssuePaths.Count - mirroredPaths);
+
+            if (projectReport is not null)
+            {
+                if (mirroredPaths > 0)
+                {
+                    AddRecommendation(
+                        recommendations,
+                        "Mirrors project issues",
+                        $"Fix the {CountLabel(mirroredPaths, "matching source file", "matching source files")} in the project report, then rebuild.");
+                }
+
+                if (stagingOnlyPaths > 0)
+                {
+                    AddRecommendation(
+                        recommendations,
+                        "Staging-only issues",
+                        $"Review the {CountLabel(stagingOnlyPaths, "staging-only file", "staging-only files")}; these were introduced during build or generation.");
+                }
+            }
+            else
+            {
+                AddRecommendation(
+                    recommendations,
+                    "Find the source",
+                    "Enable file consistency with Scope StagingAndProject to see whether issues come from repository files or generated output.");
+            }
+        }
+
+        if (summary.FilesNeedingEncodingConversion > 0)
+        {
+            AddRecommendation(
+                recommendations,
+                $"Encoding issues ({summary.FilesNeedingEncodingConversion})",
+                $"Resave affected files as {summary.RecommendedEncoding}.");
+        }
+
+        if (summary.FilesNeedingLineEndingConversion > 0)
+        {
+            AddRecommendation(
+                recommendations,
+                $"Line endings ({summary.FilesNeedingLineEndingConversion})",
+                $"Normalize affected files to {summary.RecommendedLineEnding} line endings.");
+        }
+
+        if (settings?.CheckMixedLineEndings == true && summary.FilesWithMixedLineEndings > 0)
+        {
+            AddRecommendation(
+                recommendations,
+                $"Mixed endings ({summary.FilesWithMixedLineEndings})",
+                $"Rewrite affected files with consistent {summary.RecommendedLineEnding} line endings throughout.");
+        }
+
+        if (settings?.CheckMissingFinalNewline == true && summary.FilesMissingFinalNewline > 0)
+        {
+            AddRecommendation(
+                recommendations,
+                $"Missing final newline ({summary.FilesMissingFinalNewline})",
+                "Add a newline at the end of each affected file.");
+        }
+
+        if (settings is not null && !settings.AutoFix)
+        {
+            var autofix = settings.CreateBackups
+                ? "Enable New-ConfigurationFileConsistency -AutoFix to normalize files automatically during local cleanup."
+                : "Enable New-ConfigurationFileConsistency -AutoFix -CreateBackups for a safer local cleanup pass.";
+            AddRecommendation(recommendations, "Local cleanup", autofix);
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+        {
+            AddRecommendation(
+                recommendations,
+                "Full report",
+                "Open the CSV report for the complete file list if the table below is truncated.");
+        }
+
+        return recommendations;
+    }
+
+    private static List<(string When, string Action)> BuildCompatibilityRecommendations(PowerShellCompatibilityReport report)
+    {
+        var recommendations = new List<(string When, string Action)>();
+        var affectedFiles = report.Files.Where(file => file.Issues.Length > 0).ToArray();
+        if (affectedFiles.Length == 0)
+            return recommendations;
+
+        AddRecommendation(
+            recommendations,
+            "Review affected files",
+            $"Start with the {CountLabel(affectedFiles.Length, "file", "files")} listed below; those are the actual compatibility blockers or warnings.");
+
+        var issueTypes = affectedFiles
+            .SelectMany(static file => file.Issues)
+            .Select(static issue => issue.Type)
+            .Distinct()
+            .ToArray();
+
+        if (issueTypes.Contains(PowerShellCompatibilityIssueType.DotNetFramework))
+        {
+            AddRecommendation(
+                recommendations,
+                ".NET Framework APIs",
+                "Replace .NET Framework-only assemblies or guard them behind edition-specific logic before loading them in PowerShell 7.");
+        }
+
+        if (issueTypes.Contains(PowerShellCompatibilityIssueType.Encoding))
+        {
+            AddRecommendation(
+                recommendations,
+                "Encoding",
+                "Resave the flagged files using the expected encoding before validating Windows PowerShell 5.1 compatibility again.");
+        }
+
+        if (issueTypes.Contains(PowerShellCompatibilityIssueType.PowerShell7Feature) ||
+            issueTypes.Contains(PowerShellCompatibilityIssueType.PowerShell51Feature))
+        {
+            AddRecommendation(
+                recommendations,
+                "Edition-specific features",
+                "Guard version-specific commands or syntax with edition/version checks, or replace them with cross-version alternatives.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+        {
+            AddRecommendation(
+                recommendations,
+                "Full report",
+                "Open the CSV report for the complete findings list and any files not shown in the table below.");
+        }
+
+        return recommendations;
+    }
+
+    private static void AddRecommendation(
+        ICollection<(string When, string Action)> recommendations,
+        string when,
+        string action)
+    {
+        if (string.IsNullOrWhiteSpace(when) || string.IsNullOrWhiteSpace(action))
+            return;
+
+        if (recommendations.Any(item =>
+                string.Equals(item.When, when, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Action, action, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        recommendations.Add((when.Trim(), action.Trim()));
     }
 
     private static List<string> BuildFileConsistencyReasons(
