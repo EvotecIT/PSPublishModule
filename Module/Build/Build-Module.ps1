@@ -42,13 +42,17 @@ if (-not $JsonOnly -and -not $NoDotnetBuild) {
     }
 }
 
+# Always reload PSPublishModule from this repo for self-builds. Otherwise an older
+# installed/imported module in the caller session can shadow the current source changes.
+Get-Module -Name 'PSPublishModule' -All -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
+
+$importPath = $null
+
 # The source manifest bootstrap requires Module\Lib to exist. Self-builds generate the
 # pipeline config before staged module libraries are present, so prefer the compiled DLL then.
 if (Test-Path -LiteralPath $sourceLibRoot) {
-    Import-Module $sourceManifest -Force
-}
-
-if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
+    $importPath = $sourceManifest
+} else {
     if (-not (Test-Path -LiteralPath $binaryModule)) {
         if (Test-Path -LiteralPath $csproj) {
             $i = [char]0x2139 # ℹ
@@ -60,13 +64,21 @@ if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
             }
         }
     }
+
     if (Test-Path -LiteralPath $binaryModule) {
-        Import-Module $binaryModule -Force
+        $importPath = $binaryModule
     }
 }
 
-if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
+if (-not $importPath) {
     throw "Invoke-ModuleBuild is not available. Ensure PSPublishModule.dll built and importable."
+}
+
+Import-Module $importPath -Force
+
+$invokeModuleBuildCommand = Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue
+if (-not $invokeModuleBuildCommand -or $invokeModuleBuildCommand.Source -ne 'PSPublishModule') {
+    throw "Invoke-ModuleBuild did not load from the local PSPublishModule build."
 }
 
 $buildParams = @{

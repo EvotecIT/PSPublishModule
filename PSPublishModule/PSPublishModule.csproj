@@ -48,4 +48,10 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\SpectrePipelineSummaryWriter.cs" Link="Shared\SpectrePipelineSummaryWriter.cs" />
+    <Compile Include="..\Shared\SpectreConsoleLogger.cs" Link="Shared\SpectreConsoleLogger.cs" />
+    <Compile Include="..\Shared\SpectreModulePipelineConsoleUi.cs" Link="Shared\SpectreModulePipelineConsoleUi.cs" />
+  </ItemGroup>
+
 </Project>

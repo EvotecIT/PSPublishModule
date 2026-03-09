@@ -12,6 +12,9 @@ namespace PowerForge;
 
 public sealed partial class ModuleValidationService
 {
+    private static string CountLabel(int count, string singular, string plural)
+        => $"{count} {(count == 1 ? singular : plural)}";
+
     private static ModuleValidationCheckResult? ValidateStructure(
         ModuleValidationSpec spec,
         ModuleStructureValidationSettings settings)
@@ -125,7 +128,7 @@ public sealed partial class ModuleValidationService
             }
         }
 
-        var summary = summaryParts.Count == 0 ? "ok" : string.Join(", ", summaryParts);
+        var summary = summaryParts.Count == 0 ? "structure verified" : string.Join(", ", summaryParts);
         return BuildResult("Module structure", settings.Severity, issues, summary);
     }
 
@@ -280,7 +283,7 @@ public sealed partial class ModuleValidationService
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? Array.Empty<ScriptAnalyzerIssue>();
 
             if (parsed.Length == 0)
-                return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "ok");
+                return BuildResult("PSScriptAnalyzer", settings.Severity, issues, $"Checked {CountLabel(scripts.Length, "script", "scripts")}, found 0 issues");
 
             foreach (var i in parsed.Take(25))
             {
@@ -293,7 +296,7 @@ public sealed partial class ModuleValidationService
                 issues.Add(line.Trim());
             }
 
-            var summary = $"{parsed.Length} issue(s)";
+            var summary = $"Checked {CountLabel(scripts.Length, "script", "scripts")}, found {CountLabel(parsed.Length, "issue", "issues")}";
             return BuildResult("PSScriptAnalyzer", settings.Severity, issues, summary);
         }
         finally
@@ -380,7 +383,9 @@ public sealed partial class ModuleValidationService
             }
         }
 
-        var summary = issues.Count == 0 ? "ok" : $"{issues.Count} issue(s)";
+        var summary = issues.Count == 0
+            ? $"Checked {CountLabel(files.Length, "file", "files")}, found 0 issues"
+            : $"Checked {CountLabel(files.Length, "file", "files")}, found {CountLabel(issues.Count, "issue", "issues")}";
         return BuildResult("File integrity", settings.Severity, issues, summary);
     }
 

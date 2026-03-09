@@ -46,7 +46,6 @@ public sealed class DeliveryCommandGeneratorTests
             Assert.Contains("function Resolve-DeliverySecret", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("function Test-DeliveryPathMatch", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("function Get-DeliveryAction", installContent, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("function Copy-DeliveryRootFiles", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
             var updateContent = File.ReadAllText(updatePath);

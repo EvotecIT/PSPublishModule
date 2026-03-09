@@ -380,7 +380,9 @@ public sealed partial class ModulePipelineRunner
         var message = status switch
         {
             CheckStatus.Pass => $"All {s.TotalFiles} files meet compatibility requirements",
-            CheckStatus.Warning => $"{s.FilesWithIssues} files have compatibility issues but requirements are met",
+            CheckStatus.Warning => s.FilesWithIssues == 1
+                ? "1 file has compatibility issues, but requirements are met"
+                : $"{s.FilesWithIssues} files have compatibility issues, but requirements are met",
             _ => $"Compatibility requirements not met: {string.Join(", ", failures)}"
         };
 

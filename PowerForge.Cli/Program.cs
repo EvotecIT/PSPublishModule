@@ -424,14 +424,18 @@ internal static partial class Program
             }
 
             BufferingLogger? interactiveBuffer = null;
+            ModulePipelinePlan? lastPlan = null;
+            bool usedInteractiveView = false;
             try
             {
                 var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+                usedInteractiveView = interactive;
                 var (cmdLogger, logBuffer) = interactive
                     ? (interactiveBuffer = new BufferingLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
                     : CreateCommandLogger(outputJson, cli, logger);
                 var runner = new ModulePipelineRunner(cmdLogger);
                 var plan = runner.Plan(spec);
+                lastPlan = plan;
                 var res = interactive
                     ? PipelineConsoleUi.Run(runner, spec, plan, configPath, outputJson, cli)
                     : RunWithStatus(outputJson, cli, "Running pipeline", () => runner.Run(spec, plan));
@@ -471,7 +475,14 @@ internal static partial class Program
 
                 if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
                     WriteLogTail(interactiveBuffer, logger);
-                logger.Error(ex.Message);
+                if (usedInteractiveView && lastPlan is not null)
+                {
+                    try { PipelineConsoleUi.WriteFailureSummary(lastPlan, ex); } catch { }
+                }
+                else
+                {
+                    logger.Error(ex.Message);
+                }
                 return 1;
             }
         }

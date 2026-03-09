@@ -25,4 +25,10 @@
     <PackageReference Include="Spectre.Console" Version="0.54.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\SpectrePipelineSummaryWriter.cs" Link="Shared\SpectrePipelineSummaryWriter.cs" />
+    <Compile Include="..\Shared\SpectreConsoleLogger.cs" Link="Shared\SpectreConsoleLogger.cs" />
+    <Compile Include="..\Shared\SpectreModulePipelineConsoleUi.cs" Link="Shared\SpectreModulePipelineConsoleUi.cs" />
+  </ItemGroup>
+
 </Project>
