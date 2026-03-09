@@ -60,6 +60,13 @@ public sealed partial class ModulePipelineRunner
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix,
         ModuleSigningResult? signingResult)
     {
+        var diagnostics = BuildDiagnosticsFactory.CreatePipelineDiagnostics(
+            fileConsistencyReport,
+            plan.FileConsistencySettings,
+            projectRootFileConsistencyReport,
+            compatibilityReport,
+            validationReport);
+
         return new ModulePipelineResult(
             plan,
             buildResult,
@@ -71,6 +78,7 @@ public sealed partial class ModulePipelineRunner
             fileConsistencyLineEndingFix,
             compatibilityReport,
             validationReport,
+            diagnostics,
             publishResults,
             artefactResults,
             formattingStagingResults,

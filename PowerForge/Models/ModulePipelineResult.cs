@@ -76,6 +76,11 @@ public sealed class ModulePipelineResult
     public ModuleValidationReport? ValidationReport { get; }
 
     /// <summary>
+    /// Unified structured diagnostics produced by the pipeline.
+    /// </summary>
+    public BuildDiagnostic[] Diagnostics { get; }
+
+    /// <summary>
     /// Formatting results for the staging output (empty when formatting was disabled).
     /// </summary>
     public FormatterResult[] FormattingStagingResults { get; }
@@ -114,6 +119,7 @@ public sealed class ModulePipelineResult
         ProjectConversionResult? fileConsistencyLineEndingFix,
         PowerShellCompatibilityReport? compatibilityReport,
         ModuleValidationReport? validationReport,
+        BuildDiagnostic[]? diagnostics,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
@@ -138,6 +144,7 @@ public sealed class ModulePipelineResult
         ProjectRootFileConsistencyLineEndingFix = projectRootFileConsistencyLineEndingFix;
         CompatibilityReport = compatibilityReport;
         ValidationReport = validationReport;
+        Diagnostics = diagnostics ?? Array.Empty<BuildDiagnostic>();
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
