@@ -121,6 +121,7 @@ internal sealed class BinaryConflictDetectionService
                         installedModuleName: moduleInfo.ModuleName,
                         installedModuleVersion: moduleInfo.ModuleVersion,
                         installedAssemblyVersion: installedAssembly.Version.ToString(),
+                        installedAssemblyRelativePath: moduleInfo.RelativeAssemblyPath,
                         installedAssemblyPath: installedAssemblyPath,
                         versionComparison: payloadAssembly.Version.CompareTo(installedAssembly.Version)));
                 }
@@ -325,22 +326,22 @@ internal sealed class BinaryConflictDetectionService
         {
             var relative = Path.GetRelativePath(searchRoot, assemblyPath);
             if (string.IsNullOrWhiteSpace(relative))
-                return new InstalledModuleInfo("(unknown)", null);
+                return new InstalledModuleInfo("(unknown)", null, string.Empty);
 
             var segments = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
             if (segments.Length == 0)
-                return new InstalledModuleInfo("(unknown)", null);
+                return new InstalledModuleInfo("(unknown)", null, string.Empty);
 
             var moduleName = segments[0];
             string? moduleVersion = null;
             if (segments.Length > 1 && Version.TryParse(segments[1], out _))
                 moduleVersion = segments[1];
 
-            return new InstalledModuleInfo(moduleName, moduleVersion);
+            return new InstalledModuleInfo(moduleName, moduleVersion, relative.Replace(Path.DirectorySeparatorChar, '/'));
         }
         catch
         {
-            return new InstalledModuleInfo("(unknown)", null);
+            return new InstalledModuleInfo("(unknown)", null, string.Empty);
         }
     }
 
@@ -364,11 +365,13 @@ internal sealed class BinaryConflictDetectionService
     {
         internal string ModuleName { get; }
         internal string? ModuleVersion { get; }
+        internal string RelativeAssemblyPath { get; }
 
-        internal InstalledModuleInfo(string moduleName, string? moduleVersion)
+        internal InstalledModuleInfo(string moduleName, string? moduleVersion, string relativeAssemblyPath)
         {
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
+            RelativeAssemblyPath = relativeAssemblyPath;
         }
     }
 }
@@ -409,6 +412,7 @@ internal sealed class BinaryConflictDetectionIssue
     internal string InstalledModuleName { get; }
     internal string? InstalledModuleVersion { get; }
     internal string InstalledAssemblyVersion { get; }
+    internal string InstalledAssemblyRelativePath { get; }
     internal string InstalledAssemblyPath { get; }
     internal int VersionComparison { get; }
 
@@ -420,6 +424,7 @@ internal sealed class BinaryConflictDetectionIssue
         string installedModuleName,
         string? installedModuleVersion,
         string installedAssemblyVersion,
+        string installedAssemblyRelativePath,
         string installedAssemblyPath,
         int versionComparison)
     {
@@ -430,6 +435,7 @@ internal sealed class BinaryConflictDetectionIssue
         InstalledModuleName = installedModuleName;
         InstalledModuleVersion = installedModuleVersion;
         InstalledAssemblyVersion = installedAssemblyVersion;
+        InstalledAssemblyRelativePath = installedAssemblyRelativePath;
         InstalledAssemblyPath = installedAssemblyPath;
         VersionComparison = versionComparison;
     }

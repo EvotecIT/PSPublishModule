@@ -199,6 +199,42 @@ public sealed class BuildDiagnosticsFactoryTests
         Assert.Contains(diagnostics, d => d.Area == BuildDiagnosticArea.Validation);
     }
 
+    [Fact]
+    public void CreateBinaryConflictDiagnostics_ProducesBuildWarnings()
+    {
+        var result = new BinaryConflictDetectionResult(
+            powerShellEdition: "Core",
+            moduleRoot: @"C:\Repo\TestModule",
+            assemblyRootPath: @"C:\Repo\TestModule\Lib\Core",
+            assemblyRootRelativePath: @"Lib\Core",
+            issues: new[]
+            {
+                new BinaryConflictDetectionIssue(
+                    powerShellEdition: "Core",
+                    assemblyName: "Microsoft.Identity.Client",
+                    payloadAssemblyFileName: "Microsoft.Identity.Client.dll",
+                    payloadAssemblyVersion: "4.79.1.0",
+                    installedModuleName: "ExchangeOnlineManagement",
+                    installedModuleVersion: "3.7.0",
+                    installedAssemblyVersion: "4.61.3.0",
+                    installedAssemblyRelativePath: "ExchangeOnlineManagement/3.7.0/bin/Microsoft.Identity.Client.dll",
+                    installedAssemblyPath: @"C:\Modules\ExchangeOnlineManagement\3.7.0\bin\Microsoft.Identity.Client.dll",
+                    versionComparison: 1)
+            },
+            summary: "1 conflict across 1 module root");
+
+        var diagnostics = BuildDiagnosticsFactory.CreateBinaryConflictDiagnostics(result);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("BUILD-BINARY-CONFLICT", diagnostic.RuleId);
+        Assert.Equal(BuildDiagnosticArea.Build, diagnostic.Area);
+        Assert.Equal(BuildDiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal(BuildDiagnosticScope.Staging, diagnostic.Scope);
+        Assert.Equal(BuildDiagnosticOwner.ModuleAuthor, diagnostic.Owner);
+        Assert.Contains("ExchangeOnlineManagement 3.7.0", diagnostic.Details);
+        Assert.Equal("ExchangeOnlineManagement/3.7.0/bin/Microsoft.Identity.Client.dll", diagnostic.SourcePath);
+    }
+
     private static ProjectConsistencyReport CreateConsistencyReport(
         string relativePath,
         bool needsEncodingConversion = false,

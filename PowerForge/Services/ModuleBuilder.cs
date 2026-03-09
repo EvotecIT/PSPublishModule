@@ -67,6 +67,12 @@ public sealed class ModuleBuilder
         /// When true, skips binary cmdlet/alias scanning and keeps existing manifest <c>CmdletsToExport</c>/<c>AliasesToExport</c> values.
         /// </summary>
         public bool DisableBinaryCmdletScan { get; set; }
+
+        /// <summary>
+        /// Optional module roots to scan for binary conflict advisories during build.
+        /// When empty, the builder uses default local PowerShell module roots for warning-only checks.
+        /// </summary>
+        public IReadOnlyList<string> BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
     }
 
     /// <summary>
@@ -421,7 +427,11 @@ public sealed class ModuleBuilder
         var detector = new BinaryConflictDetectionService(_logger);
         foreach (var edition in compatiblePSEditions)
         {
-            var result = detector.Analyze(opts.ProjectRoot, edition, currentModuleName: opts.ModuleName);
+            var result = detector.Analyze(
+                opts.ProjectRoot,
+                edition,
+                currentModuleName: opts.ModuleName,
+                searchRoots: opts.BinaryConflictSearchRoots);
             if (!result.HasConflicts)
                 continue;
 

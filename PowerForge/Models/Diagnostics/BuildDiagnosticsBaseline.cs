@@ -1,4 +1,6 @@
 #pragma warning disable CS1591
+using System;
+
 namespace PowerForge;
 
 public enum BuildDiagnosticBaselineState
@@ -15,6 +17,7 @@ public sealed class ModulePipelineDiagnosticsOptions
     public bool UpdateBaseline { get; set; }
     public bool FailOnNewDiagnostics { get; set; }
     public BuildDiagnosticSeverity? FailOnSeverity { get; set; }
+    public string[] BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
 }
 
 public sealed class BuildDiagnosticsBaselineComparison
