@@ -160,6 +160,8 @@ public sealed class ModuleBuilder
             }
         }
 
+        WarnOnInstalledBinaryConflicts(opts);
+
         // 2) Manifest generation
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
         // Prefer a script RootModule for compatibility; load binary via NestedModules
@@ -403,6 +405,43 @@ public sealed class ModuleBuilder
         }
 
         return fileNames;
+    }
+
+    private void WarnOnInstalledBinaryConflicts(Options opts)
+    {
+        var compatiblePSEditions = (opts.CompatiblePSEditions ?? Array.Empty<string>())
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .Select(static s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (compatiblePSEditions.Length == 0)
+            compatiblePSEditions = new[] { "Core" };
+
+        var detector = new BinaryConflictDetectionService(_logger);
+        foreach (var edition in compatiblePSEditions)
+        {
+            var result = detector.Analyze(opts.ProjectRoot, edition, currentModuleName: opts.ModuleName);
+            if (!result.HasConflicts)
+                continue;
+
+            _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
+
+            foreach (var issue in result.Issues.Take(3))
+            {
+                var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
+                var relation = issue.VersionComparison > 0 ? "older" : "newer";
+
+                _logger.Warn(
+                    $"  {issue.AssemblyName} payload {issue.PayloadAssemblyVersion} may conflict with {moduleLabel} " +
+                    $"({relation} installed version {issue.InstalledAssemblyVersion}).");
+            }
+
+            if (result.Issues.Length > 3)
+                _logger.Warn($"  +{result.Issues.Length - 3} more conflict(s) detected.");
+        }
     }
 
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)
