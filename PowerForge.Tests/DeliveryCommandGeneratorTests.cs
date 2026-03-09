@@ -53,6 +53,8 @@ public sealed class DeliveryCommandGeneratorTests
             Assert.Contains("Install-EFAdminManager", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Write-Host \"[EFAdminManager] Updating bundled package content via Install-EFAdminManager\"", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Delivery.InstallCommandMissing", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Install-EFAdminManager @PSBoundParameters", updateContent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("& 'Install-EFAdminManager' @PSBoundParameters", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[string[]] $PreservePaths", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[string[]] $OverwritePaths", updateContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[switch] $Bootstrap", updateContent, StringComparison.OrdinalIgnoreCase);

@@ -57,5 +57,5 @@
     Write-Host "  Destination : $Path" -ForegroundColor DarkGray
     Write-Host "  Mode        : $OnExists" -ForegroundColor DarkGray
 
-    & '{{InstallCommandName}}' @PSBoundParameters
+    {{InstallCommandName}} @PSBoundParameters
 }
