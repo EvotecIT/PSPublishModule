@@ -183,7 +183,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             }
 
             preferPowerShellGet = credential is null &&
-                                  string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.Ordinal);
+                                  string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.OrdinalIgnoreCase);
         }
         else
         {

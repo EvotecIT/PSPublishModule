@@ -460,6 +460,9 @@ public sealed class ModuleDependencyInstaller
             if (VersionsEquivalent(installedVersion, latestRepositoryVersion))
                 return null;
 
+            if (CompareVersionStrings(latestRepositoryVersion, installedVersion) <= 0)
+                return null;
+
             InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion), scopedRepository, credential, timeout);
             return "PowerShellGet";
         }

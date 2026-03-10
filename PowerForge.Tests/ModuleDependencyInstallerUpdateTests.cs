@@ -124,6 +124,30 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal("1.1.0", result.ResolvedVersion);
     }
 
+    [Fact]
+    public void EnsureUpdated_DoesNotDowngrade_WhenRepositoryFallbackFindsOlderVersion()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0-preview10")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(1, string.Empty, "Repository 'Company' is not registered in PSResourceGet.", "pwsh.exe"),
+            new PowerShellRunResult(0, BuildPowerShellGetFindStdOut(("ModuleA", "1.2.0-preview9", "Company")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0-preview10")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA") },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
+        Assert.Equal("1.2.0-preview10", result.InstalledVersion);
+        Assert.Equal("1.2.0-preview10", result.ResolvedVersion);
+        Assert.Null(result.Installer);
+        Assert.Equal("Already up to date", result.Message);
+    }
+
     private static string BuildInstalledVersionsStdOut(params (string Name, string Version)[] items)
     {
         var lines = new List<string>(items.Length);

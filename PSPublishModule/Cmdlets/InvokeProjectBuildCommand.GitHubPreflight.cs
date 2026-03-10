@@ -20,7 +20,7 @@ public sealed partial class InvokeProjectBuildCommand
     /// <param name="plannedAssetNames">Asset names that would be published for the current plan.</param>
     /// <param name="existingAssetNames">Asset names already attached to the existing GitHub release.</param>
     /// <returns>An advisory message when the reuse is unsafe; otherwise <see langword="null"/>.</returns>
-    public static string? BuildGitHubSingleReleaseReuseAdvisory(
+    internal static string? BuildGitHubSingleReleaseReuseAdvisory(
         string tag,
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         IReadOnlyCollection<string> plannedAssetNames,
