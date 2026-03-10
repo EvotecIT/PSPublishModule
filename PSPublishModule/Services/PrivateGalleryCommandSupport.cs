@@ -895,7 +895,7 @@ internal static class PrivateGalleryCommandSupport
             $"Repository '{registration.RepositoryName}' is not registered for PSResourceGet or PowerShellGet.");
     }
 
-    private static bool VersionMeetsMinimum(string? versionText, string minimumVersion)
+    internal static bool VersionMeetsMinimum(string? versionText, string minimumVersion)
     {
         if (string.IsNullOrWhiteSpace(versionText) || string.IsNullOrWhiteSpace(minimumVersion))
             return false;

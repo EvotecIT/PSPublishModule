@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -18,13 +17,7 @@ public sealed class PrivateGalleryPrerequisiteVersionPolicyTests
     [InlineData("", "1.1.1", false)]
     public void VersionMeetsMinimum_EvaluatesExpectedValues(string versionText, string minimumVersion, bool expected)
     {
-        var helperType = typeof(PSPublishModule.RegisterModuleRepositoryCommand).Assembly
-            .GetType("PSPublishModule.PrivateGalleryCommandSupport", throwOnError: true);
-        var method = helperType!
-            .GetMethod("VersionMeetsMinimum", BindingFlags.NonPublic | BindingFlags.Static);
-
-        Assert.NotNull(method);
-        var actual = (bool)method!.Invoke(null, new object?[] { versionText, minimumVersion })!;
+        var actual = PSPublishModule.PrivateGalleryCommandSupport.VersionMeetsMinimum(versionText, minimumVersion);
 
         Assert.Equal(expected, actual);
     }

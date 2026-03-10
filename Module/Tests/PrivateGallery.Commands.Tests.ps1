@@ -169,4 +169,18 @@ Describe 'Private gallery command metadata' {
         $result.RecommendedNativeInstallCommand | Should -Be "Install-Module -Name <ModuleName> -Repository 'Company'"
         $result.RecommendedBootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
     }
+
+    It 'rejects PSGallery as an Azure Artifacts repository name' {
+        {
+            New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -RepositoryName 'PSGallery' -Enabled
+        } | Should -Throw "*RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.*"
+    }
+
+    It 'returns a registration result for Connect-ModuleRepository -WhatIf' {
+        $result = Connect-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode ExistingSession -WhatIf -WarningAction SilentlyContinue
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
+        $result.RegistrationPerformed | Should -BeFalse
+    }
 }

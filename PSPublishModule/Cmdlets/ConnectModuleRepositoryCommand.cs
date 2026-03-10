@@ -131,7 +131,11 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
         result.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 
         if (!result.RegistrationPerformed)
+        {
+            PrivateGalleryCommandSupport.WriteRegistrationSummary(this, result);
+            WriteObject(result);
             return;
+        }
 
         var probe = PrivateGalleryCommandSupport.ProbeRepositoryAccess(result, credentialResolution.Credential);
         result.AccessProbePerformed = true;
@@ -146,8 +150,14 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
             var hint = string.IsNullOrWhiteSpace(result.RecommendedBootstrapCommand)
                 ? string.Empty
                 : $" Recommended next step: {result.RecommendedBootstrapCommand}";
-            throw new InvalidOperationException(
+            var exception = new InvalidOperationException(
                 $"Repository '{result.RepositoryName}' could not be connected via {probe.Tool}. {probe.Message}{hint}".Trim());
+            ThrowTerminatingError(new ErrorRecord(
+                exception,
+                "ConnectModuleRepositoryProbeFailed",
+                ErrorCategory.OpenError,
+                result.RepositoryName));
+            return;
         }
 
         WriteObject(result);

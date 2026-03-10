@@ -35,6 +35,9 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {
+    private const string AzureArtifactsApiKeyPlaceholder = "AzureDevOps";
+    private const string PowerShellGalleryRepositoryName = "PSGallery";
+
     /// <summary>Choose between PowerShellGallery and GitHub.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
@@ -181,7 +184,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var apiKeyToUse = ParameterSetName switch
         {
             "ApiFromFile" => File.ReadAllText(FilePath).Trim(),
-            "AzureArtifacts" => "AzureDevOps",
+            // Azure Artifacts accepts any non-empty API key placeholder for NuGet publish operations.
+            "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
             _ => ApiKey
         };
 
@@ -205,6 +209,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             !string.IsNullOrWhiteSpace(RepositorySourceUri) ||
             !string.IsNullOrWhiteSpace(RepositoryPublishUri);
 
+        if (isAzureArtifacts &&
+            !string.IsNullOrWhiteSpace(RepositoryName) &&
+            string.Equals(RepositoryName.Trim(), PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.");
+        }
+
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new PSArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.");
 
@@ -212,7 +223,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         {
             if (string.IsNullOrWhiteSpace(RepositoryName))
                 throw new PSArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
-            if (string.Equals(RepositoryName!.Trim(), "PSGallery", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(RepositoryName!.Trim(), PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
                 throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
         }
 

@@ -70,7 +70,16 @@ function Get-CredentialProviderVersion([string[]]$Paths) {
   return $null
 }
 
-if (-not $IsWindows) {
+function Test-IsWindows {
+  $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
+  if ($null -ne $isWindowsVariable) {
+    return [bool]$isWindowsVariable.Value
+  }
+
+  return $env:OS -eq 'Windows_NT'
+}
+
+if (-not (Test-IsWindows)) {
   Write-Encoded 'PFAZART::ERROR::' 'Automatic Azure Artifacts Credential Provider installation is currently supported on Windows only.'
   exit 2
 }

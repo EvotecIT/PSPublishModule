@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security;
 
 namespace PowerForge;
 
@@ -81,7 +82,15 @@ public static class AzureArtifactsCredentialProviderLocator
                         matches.Add(Path.GetFullPath(file));
                 }
             }
-            catch
+            catch (IOException)
+            {
+                // Best effort discovery only.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Best effort discovery only.
+            }
+            catch (SecurityException)
             {
                 // Best effort discovery only.
             }
@@ -114,7 +123,15 @@ public static class AzureArtifactsCredentialProviderLocator
                 if (!string.IsNullOrWhiteSpace(info.FileVersion))
                     return info.FileVersion;
             }
-            catch
+            catch (IOException)
+            {
+                // best effort only
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // best effort only
+            }
+            catch (SecurityException)
             {
                 // best effort only
             }
