@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -129,6 +130,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
                 TagName, ReleaseName!, ReleaseNotes, Commitish, GenerateReleaseNotes.IsPresent, IsDraft, IsPreRelease, ReuseExistingReleaseOnConflict);
 
             result.ReleaseCreationSucceeded = true;
+            result.ReusedExistingRelease = release.ReusedExistingRelease;
             result.ReleaseUrl = release.HtmlUrl;
 
             if (thereAreNoAssetsToInclude)
@@ -139,7 +141,8 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             }
 
             var uploadUrl = RemoveUploadUrlTemplate(release.UploadUrl);
-            UploadAssets(uploadUrl, assets, GitHubAccessToken);
+            var skippedAssets = UploadAssets(uploadUrl, assets, GitHubAccessToken);
+            result.SkippedExistingAssets.AddRange(skippedAssets);
 
             result.AllAssetUploadsSucceeded = true;
             result.Succeeded = true;
@@ -215,18 +218,18 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
                 (int)response.StatusCode == 422 &&
                 IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
             {
-                WriteWarning($"GitHub release for tag '{tagName}' already exists; reusing existing release and continuing.");
-                return GetReleaseByTag(owner, repo, token, tagName);
+                WriteVerbose($"GitHub release for tag '{tagName}' already exists; reusing existing release.");
+                return GetReleaseByTag(owner, repo, token, tagName, reusedExistingRelease: true);
             }
 
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
         }
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
-        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty);
+        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty, reusedExistingRelease: false);
     }
 
-    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName)
+    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName, bool reusedExistingRelease)
     {
         using var client = CreateHttpClient(token);
         var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
@@ -237,12 +240,13 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             throw new InvalidOperationException($"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
-        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty);
+        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty, reusedExistingRelease);
     }
 
-    private void UploadAssets(string uploadUrl, string[] assets, string token)
+    private IReadOnlyList<string> UploadAssets(string uploadUrl, string[] assets, string token)
     {
         using var client = CreateHttpClient(token);
+        var skippedAssets = new List<string>();
 
         foreach (var assetPath in assets)
         {
@@ -261,13 +265,16 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
                 // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
                 if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
                 {
-                    WriteWarning($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    WriteVerbose($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    skippedAssets.Add(fileName);
                     continue;
                 }
 
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
             }
         }
+
+        return skippedAssets;
     }
 
     private static HttpClient CreateHttpClient(string token)
@@ -395,11 +402,13 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     {
         public string HtmlUrl { get; }
         public string UploadUrl { get; }
+        public bool ReusedExistingRelease { get; }
 
-        public GitHubReleaseApiResponse(string htmlUrl, string uploadUrl)
+        public GitHubReleaseApiResponse(string htmlUrl, string uploadUrl, bool reusedExistingRelease)
         {
             HtmlUrl = htmlUrl;
             UploadUrl = uploadUrl;
+            ReusedExistingRelease = reusedExistingRelease;
         }
     }
 
@@ -419,6 +428,12 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         /// <summary>The URL of the created release.</summary>
         public string? ReleaseUrl { get; set; }
+
+        /// <summary>True when an existing release/tag was reused instead of creating a new release.</summary>
+        public bool ReusedExistingRelease { get; set; }
+
+        /// <summary>Assets skipped because they already existed on the release.</summary>
+        public List<string> SkippedExistingAssets { get; } = new();
 
         /// <summary>Error message describing what went wrong when <see cref="Succeeded"/> is false.</summary>
         public string? ErrorMessage { get; set; }

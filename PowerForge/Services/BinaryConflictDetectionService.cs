@@ -72,7 +72,9 @@ internal sealed class BinaryConflictDetectionService
 
         var issues = new List<BinaryConflictDetectionIssue>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var normalizedCurrentModuleName = string.IsNullOrWhiteSpace(currentModuleName) ? null : currentModuleName.Trim();
+        string? normalizedCurrentModuleName = null;
+        if (!string.IsNullOrWhiteSpace(currentModuleName))
+            normalizedCurrentModuleName = currentModuleName!.Trim();
 
         void AnalyzeInstalledAssembly(string installedAssemblyPath, InstalledModuleInfo moduleInfo)
         {
@@ -185,7 +187,7 @@ internal sealed class BinaryConflictDetectionService
                 .ToArray();
         }
 
-        if (OperatingSystem.IsWindows())
+        if (IsWindowsPlatform())
         {
             var roots = new List<string>(2);
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -353,7 +355,7 @@ internal sealed class BinaryConflictDetectionService
     {
         try
         {
-            var relative = Path.GetRelativePath(searchRoot, assemblyPath);
+            var relative = GetRelativePathCompat(searchRoot, assemblyPath);
             if (string.IsNullOrWhiteSpace(relative))
                 return new InstalledModuleInfo("(unknown)", null, string.Empty);
 
@@ -379,7 +381,7 @@ internal sealed class BinaryConflictDetectionService
         try
         {
             var fullModulePath = Path.GetFullPath(modulePath);
-            var relative = Path.GetRelativePath(fullModulePath, assemblyPath)
+            var relative = GetRelativePathCompat(fullModulePath, assemblyPath)
                 .Replace(Path.DirectorySeparatorChar, '/');
 
             var directory = new DirectoryInfo(fullModulePath);
@@ -432,6 +434,48 @@ internal sealed class BinaryConflictDetectionService
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
             RelativeAssemblyPath = relativeAssemblyPath;
+        }
+    }
+
+    private static bool IsWindowsPlatform()
+    {
+        var platform = Environment.OSVersion.Platform;
+        return platform == PlatformID.Win32NT ||
+               platform == PlatformID.Win32Windows ||
+               platform == PlatformID.Win32S ||
+               platform == PlatformID.WinCE;
+    }
+
+    private static string GetRelativePathCompat(string relativeTo, string path)
+    {
+        if (string.IsNullOrWhiteSpace(relativeTo))
+            return path ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        try
+        {
+            var basePath = Path.GetFullPath(relativeTo);
+            var targetPath = Path.GetFullPath(path);
+
+            if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
+                !basePath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            {
+                basePath += Path.DirectorySeparatorChar;
+            }
+
+            var baseUri = new Uri(basePath, UriKind.Absolute);
+            var targetUri = new Uri(targetPath, UriKind.Absolute);
+            if (!string.Equals(baseUri.Scheme, targetUri.Scheme, StringComparison.OrdinalIgnoreCase))
+                return targetPath;
+
+            var relativeUri = baseUri.MakeRelativeUri(targetUri);
+            var relative = Uri.UnescapeDataString(relativeUri.ToString());
+            return relative.Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch
+        {
+            return path;
         }
     }
 }

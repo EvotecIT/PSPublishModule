@@ -1,14 +1,27 @@
 Describe 'Private gallery command metadata' {
     BeforeAll {
-        Get-Module PSPublishModule -All | Remove-Module -Force -ErrorAction SilentlyContinue
+        $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
 
         $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
         $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\bin\Release\net8.0') -ChildPath 'PSPublishModule.dll'
 
-        if (Test-Path -LiteralPath $binaryModule) {
-            $script:PrivateGalleryTestModule = Import-Module $binaryModule -Force -PassThru
+        if ($loadedModule) {
+            $script:PrivateGalleryTestModule = $loadedModule
+        } elseif (Test-Path -LiteralPath $binaryModule) {
+            try {
+                $script:PrivateGalleryTestModule = Import-Module $binaryModule -Force -PassThru -ErrorAction Stop
+            } catch {
+                $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
+            }
         } else {
-            $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru
+            $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
+        }
+
+        $command = Get-Command Connect-ModuleRepository -ErrorAction Stop
+        $script:PrivateGalleryTestAssembly = if ($script:PrivateGalleryTestModule.ImplementingAssembly) {
+            $script:PrivateGalleryTestModule.ImplementingAssembly
+        } else {
+            $command.ImplementingType.Assembly
         }
     }
 
@@ -66,8 +79,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'reports readiness information on the registration result type' {
-        $module = $script:PrivateGalleryTestModule
-        $type = $module.ImplementingAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
         $result = [System.Activator]::CreateInstance($type)
         $result.RepositoryName = 'Company'
         $result.AzureDevOpsOrganization = 'contoso'
@@ -125,8 +137,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'recommends prerequisite installation when bootstrap dependencies are missing or outdated' {
-        $module = $script:PrivateGalleryTestModule
-        $type = $module.ImplementingAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
         $result = [System.Activator]::CreateInstance($type)
         $result.RepositoryName = 'Company'
         $result.AzureDevOpsOrganization = 'contoso'
@@ -146,8 +157,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'prefers Install-Module when PSResourceGet cannot support ExistingSession bootstrap' {
-        $module = $script:PrivateGalleryTestModule
-        $type = $module.ImplementingAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
         $result = [System.Activator]::CreateInstance($type)
         $result.RepositoryName = 'Company'
         $result.AzureDevOpsOrganization = 'contoso'

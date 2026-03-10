@@ -129,7 +129,6 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
-    New-ConfigurationModule -Type RequiredModule -Name 'Microsoft.PowerShell.PSResourceGet' -Guid 'Auto' -Version 'Latest'
 
     # Add external module dependencies, using loop for simplicity
     New-ConfigurationModule -Type ExternalModule -Name @(
@@ -263,6 +262,7 @@ Invoke-ModuleBuild @buildParams -Settings {
 
         VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
         VersionedInstallKeep           = 3                # how many versions to retain
+        InstallMissingModules          = $true
         KillLockersBeforeInstall       = $true
         KillLockersForce               = $true
     }

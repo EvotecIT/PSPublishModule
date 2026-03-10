@@ -32,10 +32,6 @@
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
             ModuleVersion = '5.7.1'
-        }, @{
-            Guid          = 'e4e0bda1-0703-44a5-b70d-8fe704cd0643'
-            ModuleName    = 'Microsoft.PowerShell.PSResourceGet'
-            ModuleVersion = '1.1.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
     NestedModules          = @()
