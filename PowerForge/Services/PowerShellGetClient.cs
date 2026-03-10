@@ -467,32 +467,32 @@ public sealed class PowerShellGetClient
     private static string BuildFindScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Find-Module.ps1");
-}
+    }
 
     private static string BuildAvailabilityScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Test-Availability.ps1");
-}
+    }
 
     private static string BuildPublishScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1");
-}
+    }
 
     private static string BuildSaveScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Save-Module.ps1");
-}
+    }
 
     private static string BuildEnsureRepositoryScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Ensure-Repository.ps1");
-}
+    }
 
     private static string BuildUnregisterRepositoryScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Unregister-Repository.ps1");
-}
+    }
 
     private static bool ParseAvailability(string stdout)
     {

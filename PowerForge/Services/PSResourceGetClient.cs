@@ -581,27 +581,27 @@ public sealed partial class PSResourceGetClient
     private static string BuildFindScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Find-PSResource.ps1");
-}
+    }
 
     private static string BuildAvailabilityScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Test-Availability.ps1");
-}
+    }
 
     private static string BuildPublishScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Publish-PSResource.ps1");
-}
+    }
 
     private static string BuildInstallScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Install-PSResource.ps1");
-}
+    }
 
     private static string BuildSaveScript()
     {
         return EmbeddedScripts.Load("Scripts/PSResourceGet/Save-PSResource.ps1");
-}
+    }
 
     private static bool ParseAvailability(string stdout)
     {

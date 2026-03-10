@@ -111,7 +111,8 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             CredentialUserName,
             CredentialSecret,
             CredentialSecretFilePath,
-            PromptForCredential);
+            PromptForCredential,
+            prerequisiteInstall.Status);
 
         var result = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
             this,
@@ -126,6 +127,7 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             credentialResolution.BootstrapModeUsed,
             credentialResolution.CredentialSource,
             credentialResolution.Credential,
+            prerequisiteInstall.Status,
             shouldProcessAction: Tool == RepositoryRegistrationTool.Auto
                 ? "Update module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
                 : $"Update module repository using {Tool}");

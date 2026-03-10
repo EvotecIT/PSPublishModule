@@ -99,6 +99,94 @@ public sealed class ModuleDependencyInstaller
             .ToArray();
     }
 
+    /// <summary>
+    /// Ensures that all <paramref name="dependencies"/> are updated when already installed, and installed when missing.
+    /// </summary>
+    public IReadOnlyList<ModuleDependencyInstallResult> EnsureUpdated(
+        IEnumerable<ModuleDependency> dependencies,
+        IEnumerable<string>? skipModules = null,
+        string? repository = null,
+        RepositoryCredential? credential = null,
+        bool prerelease = false,
+        bool preferPowerShellGet = false,
+        TimeSpan? timeoutPerModule = null)
+    {
+        var list = (dependencies ?? Array.Empty<ModuleDependency>())
+            .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.Name))
+            .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (list.Length == 0) return Array.Empty<ModuleDependencyInstallResult>();
+
+        var skip = new HashSet<string>(
+            (skipModules ?? Array.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var names = list.Select(d => d.Name).ToArray();
+        var before = GetLatestInstalledModuleVersions(names);
+
+        var actions = new List<ActionItem>(list.Length);
+        var perModuleTimeout = timeoutPerModule ?? TimeSpan.FromMinutes(5);
+
+        foreach (var dep in list)
+        {
+            var installedBefore = before.TryGetValue(dep.Name, out var v) ? v : null;
+            if (skip.Contains(dep.Name))
+            {
+                actions.Add(new ActionItem(dep.Name, installedBefore, requestedVersion: null, ModuleDependencyInstallStatus.Skipped, installer: null, message: "Skipped"));
+                continue;
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(installedBefore))
+                {
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
+                }
+                else
+                {
+                    var updateStatus = TryUpdate(dep, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
+                }
+            }
+            catch (Exception ex)
+            {
+                actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Failed, installer: null, message: ex.Message));
+            }
+        }
+
+        var after = GetLatestInstalledModuleVersions(names);
+        return actions
+            .Select(a =>
+            {
+                var resolvedVersion = after.TryGetValue(a.Name, out var av) ? av : null;
+                var status = a.Status;
+                var message = a.Message;
+
+                if (a.Status == ModuleDependencyInstallStatus.Updated &&
+                    VersionsEquivalent(a.InstalledBefore, resolvedVersion))
+                {
+                    status = ModuleDependencyInstallStatus.Satisfied;
+                    message = "Already up to date";
+                }
+
+                return new ModuleDependencyInstallResult(
+                    name: a.Name,
+                    installedVersion: a.InstalledBefore,
+                    resolvedVersion: resolvedVersion,
+                    requestedVersion: a.RequestedVersion,
+                    status: status,
+                    installer: a.Installer,
+                    message: message);
+            })
+            .ToArray();
+    }
+
     private static Decision Decide(ModuleDependency dep, string? installedVersion, bool force)
     {
         if (force)
@@ -209,6 +297,40 @@ public sealed class ModuleDependencyInstaller
         }
     }
 
+    private string TryUpdate(
+        ModuleDependency dep,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease,
+        bool preferPowerShellGet,
+        TimeSpan timeout)
+    {
+        if (preferPowerShellGet)
+        {
+            try
+            {
+                UpdateWithPowerShellGet(dep, credential, prerelease, timeout);
+                return "PowerShellGet";
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Update-PSResource for '{dep.Name}'.");
+            }
+        }
+
+        try
+        {
+            UpdateWithPSResourceGet(dep, repository, credential, prerelease, timeout);
+            return "PSResourceGet";
+        }
+        catch (PowerShellToolNotAvailableException)
+        {
+            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'.");
+            UpdateWithPowerShellGet(dep, credential, prerelease, timeout);
+            return "PowerShellGet";
+        }
+    }
+
     private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
     {
         var script = BuildInstallModuleScript();
@@ -226,6 +348,49 @@ public sealed class ModuleDependencyInstaller
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;
             var full = $"Install-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PowerShellGet", full);
+            throw new InvalidOperationException(full);
+        }
+    }
+
+    private void UpdateWithPSResourceGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        var script = BuildUpdatePSResourceScript();
+        var args = new List<string>(5)
+        {
+            dep.Name,
+            repository ?? string.Empty,
+            prerelease ? "1" : "0",
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
+        };
+        var result = RunScript(script, args, timeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Update-PSResource failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
+            throw new InvalidOperationException(full);
+        }
+    }
+
+    private void UpdateWithPowerShellGet(ModuleDependency dep, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        var script = BuildUpdateModuleScript();
+        var args = new List<string>(4)
+        {
+            dep.Name,
+            prerelease ? "1" : "0",
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
+        };
+        var result = RunScript(script, args, timeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Update-Module failed (exit {result.ExitCode}). {msg}".Trim();
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -320,6 +485,17 @@ public sealed class ModuleDependencyInstaller
         return false;
     }
 
+    private static bool VersionsEquivalent(string? left, string? right)
+    {
+        if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+            return parsedLeft == parsedRight;
+
+        return false;
+    }
+
     private static IEnumerable<string> SplitLines(string? text)
         => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -351,12 +527,22 @@ public sealed class ModuleDependencyInstaller
     private static string BuildGetInstalledVersionsScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
-}
+    }
 
     private static string BuildInstallModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Install-Module.ps1");
-}
+    }
+
+    private static string BuildUpdateModuleScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Update-Module.ps1");
+    }
+
+    private static string BuildUpdatePSResourceScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Update-PSResource.ps1");
+    }
 
     private readonly struct Decision
     {

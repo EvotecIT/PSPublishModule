@@ -281,7 +281,8 @@ internal static class PrivateGalleryCommandSupport
         string? credentialUserName,
         string? credentialSecret,
         string? credentialSecretFilePath,
-        SwitchParameter promptForCredential)
+        SwitchParameter promptForCredential,
+        BootstrapPrerequisiteStatus? prerequisiteStatus = null)
     {
         var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
         var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
@@ -319,12 +320,13 @@ internal static class PrivateGalleryCommandSupport
         var effectiveMode = bootstrapMode;
         if (bootstrapMode == PrivateGalleryBootstrapMode.Auto)
         {
+            var detectedPrerequisites = prerequisiteStatus ?? GetBootstrapPrerequisiteStatus();
             effectiveMode = promptForCredential.IsPresent || hasExplicitCredential
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
-                : GetRecommendedBootstrapMode(GetBootstrapPrerequisiteStatus());
+                : GetRecommendedBootstrapMode(detectedPrerequisites);
 
             if (effectiveMode == PrivateGalleryBootstrapMode.Auto)
-                effectiveMode = PrivateGalleryBootstrapMode.ExistingSession;
+                throw new InvalidOperationException(BuildBootstrapUnavailableMessage(repositoryName, detectedPrerequisites));
         }
 
         if (effectiveMode == PrivateGalleryBootstrapMode.ExistingSession)
@@ -419,6 +421,7 @@ internal static class PrivateGalleryCommandSupport
         PrivateGalleryBootstrapMode bootstrapModeUsed,
         PrivateGalleryCredentialSource credentialSource,
         RepositoryCredential? credential,
+        BootstrapPrerequisiteStatus prerequisiteStatus,
         string shouldProcessAction)
     {
         var endpoint = AzureArtifactsRepositoryEndpoints.Create(
@@ -426,7 +429,6 @@ internal static class PrivateGalleryCommandSupport
             azureDevOpsProject,
             azureArtifactsFeed,
             repositoryName);
-        var prerequisiteStatus = GetBootstrapPrerequisiteStatus();
 
         var effectiveTool = tool;
 
@@ -904,6 +906,20 @@ internal static class PrivateGalleryCommandSupport
             : IsCredentialPromptBootstrapReady(status)
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
                 : PrivateGalleryBootstrapMode.Auto;
+
+    private static string BuildBootstrapUnavailableMessage(string repositoryName, BootstrapPrerequisiteStatus status)
+    {
+        var message = $"No supported private-gallery bootstrap path is ready for repository '{repositoryName}'.";
+        var reasons = status.ReadinessMessages
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (reasons.Length > 0)
+            message += " " + string.Join(" ", reasons);
+
+        message += " Install prerequisites with -InstallPrerequisites or ensure PowerShellGet/PSResourceGet availability before retrying.";
+        return message;
+    }
 
     private static bool IsExistingSessionBootstrapReady(BootstrapPrerequisiteStatus status)
         => status.PSResourceGetSupportsExistingSessionBootstrap && status.CredentialProviderDetection.IsDetected;
