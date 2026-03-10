@@ -18,6 +18,7 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj" />
     <ProjectReference Include="..\PowerForge.Web.Cli\PowerForge.Web.Cli.csproj" />
+    <ProjectReference Include="..\PSPublishModule\PSPublishModule.csproj" />
   </ItemGroup>
 
   <ItemGroup>

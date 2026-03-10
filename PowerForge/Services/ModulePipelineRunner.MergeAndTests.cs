@@ -181,9 +181,6 @@ public sealed partial class ModulePipelineRunner
                 .ToArray()
             : Array.Empty<ImportModuleEntry>();
 
-        if (ShouldAnalyzeBinaryConflicts(cfg, importRequired))
-            WarnOnImportModuleBinaryConflicts(plan, buildResult);
-
         var modulesB64 = EncodeImportModules(modules);
         var args = new List<string>(5)
         {

@@ -144,9 +144,38 @@ public sealed partial class DotNetRepositoryReleaseService
         return p.ExitCode;
     }
 
-    private static bool PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate, out string error)
+    internal static PackagePushResult ClassifyNuGetPushOutcome(int exitCode, bool skipDuplicate, string stdErr, string stdOut)
     {
-        error = string.Empty;
+        var combined = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
+
+        if (exitCode != 0)
+        {
+            return new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.Failed,
+                Message = combined
+            };
+        }
+
+        if (skipDuplicate && LooksLikeSkippedDuplicate(combined))
+        {
+            return new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.SkippedDuplicate,
+                Message = combined
+            };
+        }
+
+        return new PackagePushResult
+        {
+            Outcome = PackagePushOutcome.Published,
+            Message = combined
+        };
+    }
+
+    private static bool PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate, out PackagePushResult result)
+    {
+        result = new PackagePushResult();
 
         var psi = new ProcessStartInfo
         {
@@ -179,14 +208,44 @@ public sealed partial class DotNetRepositoryReleaseService
 #endif
 
         using var p = Process.Start(psi);
-        if (p is null) { error = "Failed to start dotnet."; return false; }
+        if (p is null)
+        {
+            result = new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.Failed,
+                Message = "Failed to start dotnet."
+            };
+            return false;
+        }
         var stdOut = p.StandardOutput.ReadToEnd();
         var stdErr = p.StandardError.ReadToEnd();
         p.WaitForExit();
-        if (p.ExitCode == 0) return true;
+        result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
+        return result.Outcome != PackagePushOutcome.Failed;
+    }
 
-        error = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
-        return false;
+    private static bool LooksLikeSkippedDuplicate(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        return text.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("409 (Conflict)", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("cannot be modified", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("skip duplicate", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    internal enum PackagePushOutcome
+    {
+        Published,
+        SkippedDuplicate,
+        Failed
+    }
+
+    internal sealed class PackagePushResult
+    {
+        public PackagePushOutcome Outcome { get; set; }
+        public string? Message { get; set; }
     }
 
 }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -73,7 +72,9 @@ internal sealed class BinaryConflictDetectionService
 
         var issues = new List<BinaryConflictDetectionIssue>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var normalizedCurrentModuleName = string.IsNullOrWhiteSpace(currentModuleName) ? null : currentModuleName?.Trim();
+        string? normalizedCurrentModuleName = null;
+        if (!string.IsNullOrWhiteSpace(currentModuleName))
+            normalizedCurrentModuleName = currentModuleName!.Trim();
 
         void AnalyzeInstalledAssembly(string installedAssemblyPath, InstalledModuleInfo moduleInfo)
         {
@@ -406,45 +407,6 @@ internal sealed class BinaryConflictDetectionService
         }
     }
 
-    private static bool IsWindowsPlatform()
-        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-
-    private static string GetRelativePathCompat(string basePath, string fullPath)
-    {
-        if (string.IsNullOrWhiteSpace(basePath))
-            return fullPath ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(fullPath))
-            return string.Empty;
-
-        var normalizedBasePath = AppendDirectorySeparatorChar(Path.GetFullPath(basePath));
-        var normalizedFullPath = Path.GetFullPath(fullPath);
-
-        if (!Uri.TryCreate(normalizedBasePath, UriKind.Absolute, out var baseUri) ||
-            !Uri.TryCreate(normalizedFullPath, UriKind.Absolute, out var fullUri))
-        {
-            return normalizedFullPath;
-        }
-
-        if (!string.Equals(baseUri.Scheme, fullUri.Scheme, StringComparison.OrdinalIgnoreCase))
-            return normalizedFullPath;
-
-        var relativeUri = baseUri.MakeRelativeUri(fullUri);
-        var relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-        return relativePath.Replace('/', Path.DirectorySeparatorChar);
-    }
-
-    private static string AppendDirectorySeparatorChar(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return string.Empty;
-
-        if (path[path.Length - 1] == Path.DirectorySeparatorChar || path[path.Length - 1] == Path.AltDirectorySeparatorChar)
-            return path;
-
-        return path + Path.DirectorySeparatorChar;
-    }
-
     private struct DiscoveredAssembly
     {
         internal string SimpleName { get; }
@@ -472,6 +434,48 @@ internal sealed class BinaryConflictDetectionService
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
             RelativeAssemblyPath = relativeAssemblyPath;
+        }
+    }
+
+    private static bool IsWindowsPlatform()
+    {
+        var platform = Environment.OSVersion.Platform;
+        return platform == PlatformID.Win32NT ||
+               platform == PlatformID.Win32Windows ||
+               platform == PlatformID.Win32S ||
+               platform == PlatformID.WinCE;
+    }
+
+    private static string GetRelativePathCompat(string relativeTo, string path)
+    {
+        if (string.IsNullOrWhiteSpace(relativeTo))
+            return path ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        try
+        {
+            var basePath = Path.GetFullPath(relativeTo);
+            var targetPath = Path.GetFullPath(path);
+
+            if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
+                !basePath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            {
+                basePath += Path.DirectorySeparatorChar;
+            }
+
+            var baseUri = new Uri(basePath, UriKind.Absolute);
+            var targetUri = new Uri(targetPath, UriKind.Absolute);
+            if (!string.Equals(baseUri.Scheme, targetUri.Scheme, StringComparison.OrdinalIgnoreCase))
+                return targetPath;
+
+            var relativeUri = baseUri.MakeRelativeUri(targetUri);
+            var relative = Uri.UnescapeDataString(relativeUri.ToString());
+            return relative.Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch
+        {
+            return path;
         }
     }
 }

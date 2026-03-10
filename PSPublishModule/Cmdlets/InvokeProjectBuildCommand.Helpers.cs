@@ -296,6 +296,23 @@ public sealed partial class InvokeProjectBuildCommand
         AnsiConsole.Write(table);
     }
 
+    private static void WriteGitHubPublishNotes(
+        ILogger logger,
+        string? tag,
+        SendGitHubReleaseCommand.GitHubReleaseResult result)
+    {
+        if (result.ReusedExistingRelease && !string.IsNullOrWhiteSpace(tag))
+            logger.Info($"GitHub release for tag '{tag}' already exists; reusing existing release.");
+
+        foreach (var asset in result.SkippedExistingAssets
+                     .Where(name => !string.IsNullOrWhiteSpace(name))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
+        {
+            logger.Info($"GitHub release asset '{asset}' already exists; skipping upload.");
+        }
+    }
+
     private sealed class ProjectBuildConfig
     {
         public string? RootPath { get; set; }

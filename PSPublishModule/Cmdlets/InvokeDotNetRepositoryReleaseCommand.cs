@@ -283,6 +283,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         totals.AddRow("Packages", totalPackages.ToString());
         if (result.PublishedPackages.Count > 0)
             totals.AddRow("Published", result.PublishedPackages.Count.ToString());
+        if (result.SkippedDuplicatePackages.Count > 0)
+            totals.AddRow("Skipped duplicates", result.SkippedDuplicatePackages.Count.ToString());
+        if (result.FailedPackages.Count > 0)
+            totals.AddRow("Failed publishes", result.FailedPackages.Count.ToString());
         if (!string.IsNullOrWhiteSpace(result.ResolvedVersion))
             totals.AddRow("Resolved version", Esc(result.ResolvedVersion));
 
