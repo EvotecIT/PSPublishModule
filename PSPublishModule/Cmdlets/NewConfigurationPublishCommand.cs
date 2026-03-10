@@ -211,7 +211,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
 
         var resolvedAzureArtifactsRepositoryName = string.IsNullOrWhiteSpace(RepositoryName)
             ? AzureArtifactsFeed?.Trim()
-            : RepositoryName.Trim();
+            : RepositoryName?.Trim();
 
         if (isAzureArtifacts &&
             !string.IsNullOrWhiteSpace(resolvedAzureArtifactsRepositoryName) &&
