@@ -410,15 +410,25 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
-                    var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var error);
+                    var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var pushResult);
                     if (push)
                     {
-                        result.PublishedPackages.Add(pkg);
-                        _logger.Success($"Published {Path.GetFileName(pkg)}.");
+                        if (pushResult.Outcome == PackagePushOutcome.SkippedDuplicate)
+                        {
+                            result.SkippedDuplicatePackages.Add(pkg);
+                            _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)}; package already exists in the feed.");
+                        }
+                        else
+                        {
+                            result.PublishedPackages.Add(pkg);
+                            _logger.Success($"Published {Path.GetFileName(pkg)}.");
+                        }
                     }
                     else
                     {
                         result.Success = false;
+                        result.FailedPackages.Add(pkg);
+                        var error = pushResult.Message;
                         _logger.Warn($"NuGet push failed for {pkg}: {error}");
                         if (packageLookup.TryGetValue(pkg, out var project) && string.IsNullOrWhiteSpace(project.ErrorMessage))
                             project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";

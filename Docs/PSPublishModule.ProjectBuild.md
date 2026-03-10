@@ -12,6 +12,8 @@ Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,
   packs and signs NuGet packages, and can publish to NuGet and GitHub.
 - A plan-only run can be produced with `PlanOnly` or `-Plan`, which writes the plan JSON without changing files.
+- `Invoke-ProjectBuild` now treats publish checks from the plan pass as blocking preflight.
+  NuGet and GitHub prechecks are evaluated before any real publish starts.
 
 Example configuration
 ```
@@ -91,8 +93,15 @@ GitHub releases
   - `{Date}` and `{UtcDate}` are formatted `yyyy.MM.dd`.
 - `GitHubTagConflictPolicy`:
   - `Reuse` (default): idempotent, reuse existing release/tag when it already exists.
+    In `Single` mode, project-build now performs a GitHub precheck before any real publish.
+    If the computed tag already exists and the planned asset set differs for a mixed-version package group,
+    the run stops with an advisory instead of attaching new assets to the old release.
   - `Fail`: fail if tag already exists.
   - `AppendUtcTimestamp`: append `-yyyyMMddHHmmss` UTC suffix to computed tags.
+- For mixed-version repositories, prefer one of these patterns:
+  - `GitHubReleaseMode: "PerProject"` for one release per package version.
+  - `GitHubTagConflictPolicy: "Fail"` or `AppendUtcTimestamp` to avoid silent reuse.
+  - `GitHubTagTemplate: "{Repo}-v{UtcTimestamp}"` for unique per-run tags (OfficeIMO-style).
 
 Signing
 - `CertificateThumbprint`, `CertificateStore`, `TimeStampServer` control package signing.

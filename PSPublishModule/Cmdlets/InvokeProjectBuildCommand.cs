@@ -196,13 +196,30 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
+        var preflightErrors = new List<string>();
+        if (!plan.Success)
+            preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
+
         var preflightError = ValidatePreflight(publishNuget, publishGitHub, createReleaseZip, publishApiKey, config, configDir);
         if (!string.IsNullOrWhiteSpace(preflightError))
+            preflightErrors.Add(preflightError!);
+
+        var gitHubToken = publishGitHub
+            ? ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir)
+            : null;
+        if (publishGitHub && string.IsNullOrWhiteSpace(preflightError))
+        {
+            var gitHubPreflightError = ValidateGitHubPublishPreflight(config, plan, gitHubToken!, logger);
+            if (!string.IsNullOrWhiteSpace(gitHubPreflightError))
+                preflightErrors.Add(gitHubPreflightError!);
+        }
+
+        if (preflightErrors.Count > 0)
         {
             WriteObject(new ProjectBuildResult
             {
                 Success = false,
-                ErrorMessage = preflightError,
+                ErrorMessage = string.Join(Environment.NewLine, preflightErrors),
                 Release = plan
             });
             return;
@@ -233,7 +250,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var gitHubToken = ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
+        gitHubToken ??= ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
         if (string.IsNullOrWhiteSpace(gitHubToken))
         {
             result.Success = false;
@@ -377,6 +394,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                     ok = gr.Succeeded;
                     releaseUrl = gr.ReleaseUrl;
                     errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                    WriteGitHubPublishNotes(logger, tag, gr);
                 }
                 else if (status is PSObject pso)
                 {
@@ -486,6 +504,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                 ok = gr.Succeeded;
                 releaseUrl = gr.ReleaseUrl;
                 errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                WriteGitHubPublishNotes(logger, tag, gr);
             }
             else if (status is PSObject pso)
             {
