@@ -112,7 +112,6 @@ jobs:
             exit 0
           }
           node ./Build/linecount.js --root . --max 800 --files-from $changedPath
-
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -185,7 +184,6 @@ jobs:
             exit 0
           }
           node ./Build/linecount.js --root . --max 800 --files-from $changedPath
-
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -258,7 +256,6 @@ jobs:
             exit 0
           }
           node ./Build/linecount.js --root . --max 800 --files-from $changedPath
-
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10

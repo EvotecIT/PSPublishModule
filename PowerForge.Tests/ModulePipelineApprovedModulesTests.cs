@@ -146,7 +146,9 @@ public sealed class ModulePipelineApprovedModulesTests
             var result = runner.Run(spec, plan);
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
-            Assert.Empty(requiredNames);
+            Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -195,11 +197,13 @@ public sealed class ModulePipelineApprovedModulesTests
             var result = runner.Run(spec, plan);
 
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
-            Assert.Empty(requiredNames);
+            Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var externalDeps));
             Assert.NotNull(externalDeps);
-            Assert.Empty(externalDeps!);
+            Assert.Contains("Microsoft.PowerShell.Utility", externalDeps!, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Management", externalDeps!, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
