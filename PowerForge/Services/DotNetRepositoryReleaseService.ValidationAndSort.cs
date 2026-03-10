@@ -46,6 +46,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec)
     {
+        var versionSources = GetPublishPreflightVersionSources(spec);
+
         foreach (var project in projects)
         {
             if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
@@ -65,7 +67,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             var latest = _resolver.ResolveLatest(
                 packageId: project.ProjectName,
-                sources: spec.VersionSources,
+                sources: versionSources,
                 credential: spec.VersionSourceCredential,
                 includePrerelease: spec.IncludePrerelease);
 
@@ -77,6 +79,22 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         return (true, null);
+    }
+
+    private static IReadOnlyList<string>? GetPublishPreflightVersionSources(DotNetRepositoryReleaseSpec spec)
+    {
+        var configured = (spec.VersionSources ?? Array.Empty<string>())
+            .Where(source => !string.IsNullOrWhiteSpace(source))
+            .Select(source => source.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (configured.Length > 0)
+            return configured;
+
+        if (!string.IsNullOrWhiteSpace(spec.PublishSource))
+            return new[] { spec.PublishSource!.Trim() };
+
+        return null;
     }
 
     private IReadOnlyList<DotNetRepositoryProjectResult> SortProjectsForPublish(IReadOnlyList<DotNetRepositoryProjectResult> projects)

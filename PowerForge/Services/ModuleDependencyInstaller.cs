@@ -328,6 +328,19 @@ public sealed class ModuleDependencyInstaller
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'.");
             return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.Warn($"Update-PSResource failed for '{dep.Name}'; trying PowerShellGet Update-Module fallback. {ex.Message}");
+            try
+            {
+                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+            }
+            catch (Exception fallbackEx) when (fallbackEx is PowerShellToolNotAvailableException or InvalidOperationException)
+            {
+                throw new InvalidOperationException(
+                    $"Update-PSResource failed for '{dep.Name}' and PowerShellGet fallback also failed. PSResourceGet: {ex.Message} PowerShellGet: {fallbackEx.Message}");
+            }
+        }
     }
 
     private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)

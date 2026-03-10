@@ -13,11 +13,11 @@ env:
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
+  # Triggers the workflow on push or pull request events for the default branch
   push:
-    branches: [ "v2-speedgonzales" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "v2-speedgonzales" ]
+    branches: [ "main" ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -59,6 +59,8 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -79,7 +81,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
           if ('${{ github.event_name }}' -eq 'pull_request') {
             $headers = @{
               Authorization = "Bearer $env:GITHUB_TOKEN"
@@ -98,6 +100,8 @@ jobs:
               Where-Object { $_.filename -like '*.cs' } |
               ForEach-Object { $_.filename } |
               Set-Content $changedPath
+          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
+            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -129,7 +133,7 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -150,7 +154,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
           if ('${{ github.event_name }}' -eq 'pull_request') {
             $headers = @{
               Authorization = "Bearer $env:GITHUB_TOKEN"
@@ -169,6 +173,8 @@ jobs:
               Where-Object { $_.filename -like '*.cs' } |
               ForEach-Object { $_.filename } |
               Set-Content $changedPath
+          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
+            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -200,7 +206,7 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -221,7 +227,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
           if ('${{ github.event_name }}' -eq 'pull_request') {
             $headers = @{
               Authorization = "Bearer $env:GITHUB_TOKEN"
@@ -240,6 +246,8 @@ jobs:
               Where-Object { $_.filename -like '*.cs' } |
               ForEach-Object { $_.filename } |
               Set-Content $changedPath
+          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
+            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }

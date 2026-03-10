@@ -161,6 +161,15 @@ public sealed class ModulePipelineStep
                 title: "Validate module"));
         }
 
+        if (plan.ImportModules?.RequiredModules == true &&
+            plan.ImportModules.AnalyzeBinaryConflicts != false)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:binary-conflicts",
+                title: "Analyze binary conflicts"));
+        }
+
         // 5) Tests (after validation, before signing/packaging/publish/install).
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
