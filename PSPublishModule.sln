@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.35027.167
@@ -17,13 +17,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.Web.Cli", "Power
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.Web.Sample.App", "PowerForge.Web.Sample.App\PowerForge.Web.Sample.App.csproj", "{0F1AD7E9-1742-4BEA-9C18-1A2E5E6C39E5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseOpsStudio.Domain", "ReleaseOpsStudio.Domain\ReleaseOpsStudio.Domain.csproj", "{2CE4ED29-7565-4F53-9C55-96611B849D23}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Domain", "PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj", "{2CE4ED29-7565-4F53-9C55-96611B849D23}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseOpsStudio.Orchestrator", "ReleaseOpsStudio.Orchestrator\ReleaseOpsStudio.Orchestrator.csproj", "{E599F247-549D-4F7B-8391-EFF29DB2E290}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Orchestrator", "PowerForgeStudio.Orchestrator\PowerForgeStudio.Orchestrator.csproj", "{E599F247-549D-4F7B-8391-EFF29DB2E290}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseOpsStudio.Wpf", "ReleaseOpsStudio.Wpf\ReleaseOpsStudio.Wpf.csproj", "{C80B0159-4DDB-41A6-B911-98D594102466}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Wpf", "PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj", "{C80B0159-4DDB-41A6-B911-98D594102466}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseOpsStudio.Tests", "ReleaseOpsStudio.Tests\ReleaseOpsStudio.Tests.csproj", "{E29D1629-5000-4F24-AB59-FEAC26C10C07}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Tests", "PowerForgeStudio.Tests\PowerForgeStudio.Tests.csproj", "{E29D1629-5000-4F24-AB59-FEAC26C10C07}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -175,3 +175,4 @@ Global
 		SolutionGuid = {FBCF2ABB-4092-4C5F-98E4-8E4B05BB6029}
 	EndGlobalSection
 EndGlobal
+

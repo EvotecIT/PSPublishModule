@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Description>PowerForgeStudio WPF shell for release orchestration and portfolio management.</Description>
+    <AssemblyName>PowerForgeStudio.Wpf</AssemblyName>
+    <RootNamespace>PowerForgeStudio.Wpf</RootNamespace>
+    <LangVersion>Latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
+    <ProjectReference Include="..\PowerForgeStudio.Orchestrator\PowerForgeStudio.Orchestrator.csproj" />
+  </ItemGroup>
+</Project>

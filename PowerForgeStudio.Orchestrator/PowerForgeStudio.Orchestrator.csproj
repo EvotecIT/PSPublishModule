@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>PowerForgeStudio orchestration, discovery, and local state services.</Description>
+    <AssemblyName>PowerForgeStudio.Orchestrator</AssemblyName>
+    <RootNamespace>PowerForgeStudio.Orchestrator</RootNamespace>
+    <LangVersion>Latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj" />
+    <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
+  </ItemGroup>
+</Project>
+
