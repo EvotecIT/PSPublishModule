@@ -31,23 +31,59 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         var result = Assert.Single(results);
         Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
         Assert.Equal("0.26.0", result.InstalledVersion);
-        Assert.Equal("Exact version already installed", result.Message);
+        Assert.Equal("Exact required version 0.25.0 already present (latest installed: 0.26.0)", result.Message);
         Assert.Equal(0, runner.InstallCalls);
+    }
+
+    [Fact]
+    public void EnsureInstalled_ReportsProbeFailureForCurrentDependency_AndContinuesProcessing()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Preview.Module"] = "2.0.0",
+                ["Stable.Module"] = "1.0.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
+            failingExactVersions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Preview.Module"] = "1.0.0-preview"
+            });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(new[]
+        {
+            new ModuleDependency("Preview.Module", requiredVersion: "1.0.0-preview"),
+            new ModuleDependency("Stable.Module", requiredVersion: "1.0.0")
+        });
+
+        Assert.Equal(2, results.Count);
+
+        var failed = Assert.Single(results, r => string.Equals(r.Name, "Preview.Module", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(ModuleDependencyInstallStatus.Failed, failed.Status);
+        Assert.Contains("Get-Module -ListAvailable failed", failed.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        var satisfied = Assert.Single(results, r => string.Equals(r.Name, "Stable.Module", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, satisfied.Status);
+        Assert.Equal("Exact version already installed", satisfied.Message);
     }
 
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;
         private readonly IReadOnlyDictionary<string, HashSet<string>> _installedExactVersions;
+        private readonly IReadOnlyDictionary<string, string> _failingExactVersions;
 
         public int InstallCalls { get; private set; }
 
         public StubPowerShellRunner(
             IReadOnlyDictionary<string, string?> latestInstalledVersions,
-            IReadOnlyDictionary<string, HashSet<string>> installedExactVersions)
+            IReadOnlyDictionary<string, HashSet<string>> installedExactVersions,
+            IReadOnlyDictionary<string, string>? failingExactVersions = null)
         {
             _latestInstalledVersions = latestInstalledVersions;
             _installedExactVersions = installedExactVersions;
+            _failingExactVersions = failingExactVersions ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
@@ -70,6 +106,12 @@ public sealed class ModuleDependencyInstallerExactVersionTests
             {
                 var name = request.Arguments[0];
                 var requiredVersion = request.Arguments[1];
+                if (_failingExactVersions.TryGetValue(name, out var failingVersion) &&
+                    string.Equals(failingVersion, requiredVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new PowerShellRunResult(1, "PFMODLOC::ERROR::" + Encode("Cannot parse required version"), string.Empty, "pwsh.exe");
+                }
+
                 var found = _installedExactVersions.TryGetValue(name, out var versions) && versions.Contains(requiredVersion);
                 if (!found)
                     return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");

@@ -69,6 +69,68 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
         }
     }
 
+    [Fact]
+    public void Plan_ResolvesGuidAutoFromRepository_WhenVersionIsInstalledButGuidIsMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSSharedGoods";
+            const string dependencyGuid = "66666666-7777-8888-9999-000000000000";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "0.25.0",
+                            Guid = "Auto"
+                        }
+                    }
+                }
+            };
+
+            var logger = new CollectingLogger();
+            var runner = new StubPowerShellRunner(
+                installedModules: new Dictionary<string, (string? Version, string? Guid, string? ModuleBasePath)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("0.25.0", null, @"C:\Modules\PSSharedGoods\0.25.0")
+                },
+                repositoryModules: new Dictionary<string, (string Version, string Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("0.30.0", dependencyGuid)
+                });
+
+            var plan = new ModulePipelineRunner(logger, runner).Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal("0.25.0", required.ModuleVersion);
+            Assert.Equal(dependencyGuid, required.Guid);
+            Assert.DoesNotContain(logger.Warnings, warning =>
+                warning.Contains("Guid=Auto", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains(dependencyName, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static void WriteMinimalModule(string rootPath, string moduleName, string moduleVersion)
     {
         File.WriteAllText(Path.Combine(rootPath, moduleName + ".psm1"), "function Test-Example { 'ok' }");

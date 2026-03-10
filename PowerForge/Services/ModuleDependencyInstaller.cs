@@ -65,37 +65,47 @@ public sealed class ModuleDependencyInstaller
                 continue;
             }
 
-            var decision = Decide(dep, installedBefore, force);
-            if (!force &&
-                decision.NeedsInstall &&
-                !string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
-                HasInstalledRequiredVersion(dep.Name, dep.RequiredVersion!))
+            Decision? decision = null;
+            try
+            {
+                decision = Decide(dep, installedBefore, force);
+                if (!force &&
+                    decision.Value.NeedsInstall &&
+                    !string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+                    HasInstalledRequiredVersion(dep.Name, dep.RequiredVersion))
+                {
+                    var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, dep.RequiredVersion, StringComparison.OrdinalIgnoreCase)
+                        ? $"Exact required version {dep.RequiredVersion} already installed"
+                        : $"Exact required version {dep.RequiredVersion} already present (latest installed: {installedBefore})";
+                    actions.Add(new ActionItem(
+                        dep.Name,
+                        installedBefore,
+                        dep.RequiredVersion,
+                        ModuleDependencyInstallStatus.Satisfied,
+                        installer: null,
+                        message: exactMessage));
+                    continue;
+                }
+
+                if (!decision.Value.NeedsInstall)
+                {
+                    actions.Add(new ActionItem(dep.Name, installedBefore, decision.Value.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: decision.Value.Reason));
+                    continue;
+                }
+
+                var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
+                var usedInstaller = TryInstall(dep, decision.Value.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
+                actions.Add(new ActionItem(dep.Name, installedBefore, decision.Value.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Value.Reason));
+            }
+            catch (Exception ex)
             {
                 actions.Add(new ActionItem(
                     dep.Name,
                     installedBefore,
-                    dep.RequiredVersion,
-                    ModuleDependencyInstallStatus.Satisfied,
+                    decision?.RequestedVersion ?? dep.RequiredVersion ?? dep.MinimumVersion,
+                    ModuleDependencyInstallStatus.Failed,
                     installer: null,
-                    message: "Exact version already installed"));
-                continue;
-            }
-
-            if (!decision.NeedsInstall)
-            {
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: decision.Reason));
-                continue;
-            }
-
-            try
-            {
-                var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Reason));
-            }
-            catch (Exception ex)
-            {
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, ModuleDependencyInstallStatus.Failed, installer: null, message: ex.Message));
+                    message: ex.Message));
             }
         }
 

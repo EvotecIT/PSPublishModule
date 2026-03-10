@@ -134,10 +134,11 @@ public sealed partial class ModulePipelineRunner
                 }
 
                 installed.TryGetValue(d.ModuleName, out var info);
-                if (!string.IsNullOrWhiteSpace(info?.Version)) continue;
-
                 var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
-                if (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource) || IsAutoGuid(d.Guid))
+                var needsVersionLookup = string.IsNullOrWhiteSpace(info?.Version) &&
+                                         (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource));
+                var needsGuidLookup = string.IsNullOrWhiteSpace(info?.Guid) && IsAutoGuid(d.Guid);
+                if (needsVersionLookup || needsGuidLookup)
                     candidates.Add(d.ModuleName);
             }
 
