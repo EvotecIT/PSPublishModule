@@ -283,6 +283,10 @@ public sealed class PowerForgeStudioRepositoryPortfolioFocusServiceTests
                 OpenPullRequestCount: gitHubStatus == RepositoryGitHubInboxStatus.Attention ? 2 : 0,
                 LatestWorkflowFailed: gitHubStatus == RepositoryGitHubInboxStatus.Attention,
                 LatestReleaseTag: "v0.2.0",
+                DefaultBranch: "main",
+                ProbedBranch: "main",
+                IsDefaultBranch: true,
+                BranchProtectionEnabled: gitHubStatus == RepositoryGitHubInboxStatus.Attention ? true : (bool?)false,
                 Summary: "GitHub status sample.",
                 Detail: "GitHub detail sample.");
 

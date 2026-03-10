@@ -5,20 +5,35 @@ using PowerForgeStudio.Domain.Portfolio;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
 
-public sealed class GitHubInboxService
+public sealed class GitHubInboxService : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly IGitRemoteResolver _gitRemoteResolver;
+    private readonly bool _ownsHttpClient;
 
     public GitHubInboxService()
-        : this(CreateHttpClient(), new GitRemoteResolver()) {
+        : this(CreateHttpClient(), new GitRemoteResolver(), ownsHttpClient: true) {
     }
 
     internal GitHubInboxService(HttpClient httpClient, IGitRemoteResolver gitRemoteResolver)
+        : this(httpClient, gitRemoteResolver, ownsHttpClient: false)
+    {
+    }
+
+    internal GitHubInboxService(HttpClient httpClient, IGitRemoteResolver gitRemoteResolver, bool ownsHttpClient)
     {
         _httpClient = httpClient;
         _gitRemoteResolver = gitRemoteResolver;
+        _ownsHttpClient = ownsHttpClient;
+    }
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 
     public async Task<IReadOnlyList<RepositoryPortfolioItem>> PopulateInboxAsync(
@@ -42,6 +57,10 @@ public sealed class GitHubInboxService
                         OpenPullRequestCount: null,
                         LatestWorkflowFailed: null,
                         LatestReleaseTag: null,
+                        DefaultBranch: null,
+                        ProbedBranch: null,
+                        IsDefaultBranch: null,
+                        BranchProtectionEnabled: null,
                         Summary: "GitHub inbox deferred.",
                         Detail: $"Only the first {maxRepositories} repositories are probed during this refresh.")
                 });
@@ -67,6 +86,10 @@ public sealed class GitHubInboxService
                 OpenPullRequestCount: null,
                 LatestWorkflowFailed: null,
                 LatestReleaseTag: null,
+                DefaultBranch: null,
+                ProbedBranch: null,
+                IsDefaultBranch: null,
+                BranchProtectionEnabled: null,
                 Summary: "GitHub origin not detected.",
                 Detail: string.IsNullOrWhiteSpace(originUrl)
                     ? "The repository does not expose an origin remote yet."
@@ -75,9 +98,30 @@ public sealed class GitHubInboxService
 
         try
         {
+            var repositoryMetadata = await GetRepositoryMetadataAsync(owner, repo, cancellationToken).ConfigureAwait(false);
+            var probedBranch = ResolveGovernanceBranch(item.Git.BranchName, repositoryMetadata.DefaultBranch);
             var openPullRequests = await GetOpenPullRequestCountAsync(owner, repo, cancellationToken).ConfigureAwait(false);
             var latestReleaseTag = await GetLatestReleaseTagAsync(owner, repo, cancellationToken).ConfigureAwait(false);
             var latestWorkflow = await GetLatestWorkflowStatusAsync(owner, repo, item.Git.BranchName, cancellationToken).ConfigureAwait(false);
+            var branchProtectionEnabled = await GetBranchProtectionStatusAsync(owner, repo, probedBranch, cancellationToken).ConfigureAwait(false);
+            var isDefaultBranch = !string.IsNullOrWhiteSpace(probedBranch)
+                && !string.IsNullOrWhiteSpace(repositoryMetadata.DefaultBranch)
+                && string.Equals(probedBranch, repositoryMetadata.DefaultBranch, StringComparison.OrdinalIgnoreCase);
+            if (openPullRequests is null)
+            {
+                return new RepositoryGitHubInbox(
+                    RepositoryGitHubInboxStatus.Unavailable,
+                    RepositorySlug: $"{owner}/{repo}",
+                    OpenPullRequestCount: null,
+                    LatestWorkflowFailed: latestWorkflow,
+                    LatestReleaseTag: latestReleaseTag,
+                    DefaultBranch: repositoryMetadata.DefaultBranch,
+                    ProbedBranch: probedBranch,
+                    IsDefaultBranch: isDefaultBranch,
+                    BranchProtectionEnabled: branchProtectionEnabled,
+                    Summary: "GitHub pull request probe unavailable.",
+                    Detail: "GitHub did not allow PowerForgeStudio to enumerate open pull requests for this repository. The remote may be inaccessible, renamed, or require a different token scope.");
+            }
 
             var status = DetermineStatus(openPullRequests, latestWorkflow, item.Git.AheadCount);
             return new RepositoryGitHubInbox(
@@ -86,8 +130,12 @@ public sealed class GitHubInboxService
                 OpenPullRequestCount: openPullRequests,
                 LatestWorkflowFailed: latestWorkflow,
                 LatestReleaseTag: latestReleaseTag,
-                Summary: BuildSummary(openPullRequests, latestWorkflow, latestReleaseTag, item.Git.AheadCount),
-                Detail: BuildDetail(item, latestReleaseTag, latestWorkflow));
+                DefaultBranch: repositoryMetadata.DefaultBranch,
+                ProbedBranch: probedBranch,
+                IsDefaultBranch: isDefaultBranch,
+                BranchProtectionEnabled: branchProtectionEnabled,
+                Summary: BuildSummary(openPullRequests, latestWorkflow, latestReleaseTag, item.Git.AheadCount, repositoryMetadata.DefaultBranch, probedBranch, branchProtectionEnabled),
+                Detail: BuildDetail(item, latestReleaseTag, latestWorkflow, repositoryMetadata.DefaultBranch, probedBranch, branchProtectionEnabled));
         }
         catch (HttpRequestException exception)
         {
@@ -97,6 +145,10 @@ public sealed class GitHubInboxService
                 OpenPullRequestCount: null,
                 LatestWorkflowFailed: null,
                 LatestReleaseTag: null,
+                DefaultBranch: null,
+                ProbedBranch: null,
+                IsDefaultBranch: null,
+                BranchProtectionEnabled: null,
                 Summary: "GitHub probe unavailable.",
                 Detail: FirstLine(exception.Message) ?? "HTTP probe failed.");
         }
@@ -108,6 +160,10 @@ public sealed class GitHubInboxService
                 OpenPullRequestCount: null,
                 LatestWorkflowFailed: null,
                 LatestReleaseTag: null,
+                DefaultBranch: null,
+                ProbedBranch: null,
+                IsDefaultBranch: null,
+                BranchProtectionEnabled: null,
                 Summary: "GitHub probe timed out.",
                 Detail: "The GitHub inbox request timed out before a response was received.");
         }
@@ -119,26 +175,62 @@ public sealed class GitHubInboxService
                 OpenPullRequestCount: null,
                 LatestWorkflowFailed: null,
                 LatestReleaseTag: null,
+                DefaultBranch: null,
+                ProbedBranch: null,
+                IsDefaultBranch: null,
+                BranchProtectionEnabled: null,
                 Summary: "GitHub probe returned unexpected data.",
                 Detail: FirstLine(exception.Message) ?? "JSON parsing failed.");
         }
     }
 
-    private async Task<int> GetOpenPullRequestCountAsync(string owner, string repo, CancellationToken cancellationToken)
+    private async Task<RepositoryMetadata> GetRepositoryMetadataAsync(string owner, string repo, CancellationToken cancellationToken)
     {
-        using var request = CreateRequest($"/repos/{owner}/{repo}/pulls?state=open&per_page=100");
+        using var request = CreateRequest($"/repos/{owner}/{repo}");
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return 0;
+            return new RepositoryMetadata(DefaultBranch: null);
         }
 
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         using var document = JsonDocument.Parse(json);
-        return document.RootElement.ValueKind == JsonValueKind.Array
-            ? document.RootElement.GetArrayLength()
-            : 0;
+        return new RepositoryMetadata(
+            DefaultBranch: document.RootElement.TryGetProperty("default_branch", out var defaultBranch)
+                ? defaultBranch.GetString()
+                : null);
+    }
+
+    private async Task<int?> GetOpenPullRequestCountAsync(string owner, string repo, CancellationToken cancellationToken)
+    {
+        var total = 0;
+        for (var page = 1; page <= 10; page++)
+        {
+            using var request = CreateRequest($"/repos/{owner}/{repo}/pulls?state=open&per_page=100&page={page}");
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return total;
+            }
+
+            var pageCount = document.RootElement.GetArrayLength();
+            total += pageCount;
+            if (pageCount < 100)
+            {
+                return total;
+            }
+        }
+
+        return total;
     }
 
     private async Task<string?> GetLatestReleaseTagAsync(string owner, string repo, CancellationToken cancellationToken)
@@ -194,7 +286,29 @@ public sealed class GitHubInboxService
                && !string.Equals(conclusion, "skipped", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static RepositoryGitHubInboxStatus DetermineStatus(int openPullRequests, bool? latestWorkflowFailed, int localAheadCount)
+    private async Task<bool?> GetBranchProtectionStatusAsync(string owner, string repo, string? branchName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(branchName))
+        {
+            return null;
+        }
+
+        using var request = CreateRequest($"/repos/{owner}/{repo}/branches/{Uri.EscapeDataString(branchName)}");
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("protected", out var protectedProperty)
+            ? protectedProperty.GetBoolean()
+            : null;
+    }
+
+    private static RepositoryGitHubInboxStatus DetermineStatus(int? openPullRequests, bool? latestWorkflowFailed, int localAheadCount)
     {
         if (openPullRequests > 0 || latestWorkflowFailed == true || localAheadCount > 0)
         {
@@ -204,12 +318,36 @@ public sealed class GitHubInboxService
         return RepositoryGitHubInboxStatus.Ready;
     }
 
-    private static string BuildSummary(int openPullRequests, bool? latestWorkflowFailed, string? latestReleaseTag, int localAheadCount)
+    private static string BuildSummary(
+        int? openPullRequests,
+        bool? latestWorkflowFailed,
+        string? latestReleaseTag,
+        int localAheadCount,
+        string? defaultBranch,
+        string? probedBranch,
+        bool? branchProtectionEnabled)
     {
         var parts = new List<string>();
-        parts.Add(openPullRequests == 0 ? "No open PRs" : $"{openPullRequests} open PR(s)");
+        parts.Add(openPullRequests switch
+        {
+            null => "PR status unavailable",
+            0 => "No open PRs",
+            _ => $"{openPullRequests} open PR(s)"
+        });
         parts.Add(latestWorkflowFailed == true ? "latest workflow failed" : latestWorkflowFailed == false ? "latest workflow passed" : "workflow status unavailable");
         parts.Add(string.IsNullOrWhiteSpace(latestReleaseTag) ? "no release tag detected" : $"latest release {latestReleaseTag}");
+        if (!string.IsNullOrWhiteSpace(defaultBranch))
+        {
+            parts.Add($"default branch {defaultBranch}");
+        }
+        if (!string.IsNullOrWhiteSpace(probedBranch))
+        {
+            parts.Add(branchProtectionEnabled == true
+                ? $"{probedBranch} protected"
+                : branchProtectionEnabled == false
+                    ? $"{probedBranch} not protected"
+                    : $"{probedBranch} protection unknown");
+        }
 
         if (localAheadCount > 0)
         {
@@ -219,7 +357,13 @@ public sealed class GitHubInboxService
         return string.Join(", ", parts);
     }
 
-    private static string BuildDetail(RepositoryPortfolioItem item, string? latestReleaseTag, bool? latestWorkflowFailed)
+    private static string BuildDetail(
+        RepositoryPortfolioItem item,
+        string? latestReleaseTag,
+        bool? latestWorkflowFailed,
+        string? defaultBranch,
+        string? probedBranch,
+        bool? branchProtectionEnabled)
     {
         var detailParts = new List<string> {
             item.Git.IsDirty
@@ -237,6 +381,20 @@ public sealed class GitHubInboxService
             detailParts.Add($"Latest detected release tag is {latestReleaseTag}.");
         }
 
+        if (!string.IsNullOrWhiteSpace(defaultBranch))
+        {
+            detailParts.Add($"GitHub reports {defaultBranch} as the default branch.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(probedBranch))
+        {
+            detailParts.Add(branchProtectionEnabled == true
+                ? $"GitHub confirms {probedBranch} is protected."
+                : branchProtectionEnabled == false
+                    ? $"GitHub does not mark {probedBranch} as protected."
+                    : $"GitHub branch protection could not be confirmed for {probedBranch}.");
+        }
+
         if (latestWorkflowFailed == true)
         {
             detailParts.Add("The latest workflow run for the current branch reported a failure.");
@@ -244,6 +402,11 @@ public sealed class GitHubInboxService
 
         return string.Join(" ", detailParts);
     }
+
+    private static string? ResolveGovernanceBranch(string? branchName, string? defaultBranch)
+        => string.IsNullOrWhiteSpace(branchName) || string.Equals(branchName, "-", StringComparison.OrdinalIgnoreCase)
+            ? defaultBranch
+            : branchName;
 
     private HttpRequestMessage CreateRequest(string relativePath)
     {
@@ -344,4 +507,6 @@ public sealed class GitHubInboxService
             .Select(line => line.Trim())
             .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
     }
+
+    private sealed record RepositoryMetadata(string? DefaultBranch);
 }

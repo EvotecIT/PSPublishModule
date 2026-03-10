@@ -9,11 +9,11 @@ namespace PowerForgeStudio.Tests;
 [Trait("Category", "Smoke")]
 public sealed class PowerForgeStudioSmokeHarnessTests
 {
-    [Fact]
+    private static readonly SemaphoreSlim SmokeEnvironmentLock = new(1, 1);
+
+    [Fact(Skip = "Live smoke harness is opt-in; use Build/Smoke-ReleaseOpsStudio.ps1 with explicit environment flags.")]
     public async Task LocalSmokePath_ExercisesBuildAndRetryStages()
     {
-        EnsureSmokeEnabled();
-
         var repositoryRoot = ResolveRepositoryRoot();
         var repositoryIdentity = ResolveRepositoryIdentity(repositoryRoot);
         var buildService = new ReleaseBuildExecutionService();
@@ -47,120 +47,120 @@ public sealed class PowerForgeStudioSmokeHarnessTests
                 .Set("RELEASE_OPS_STUDIO_SIGN_TIMESTAMP_URL", null);
         }
 
-        using var _ = environmentScope;
-
-        var buildResult = await buildService.ExecuteAsync(repositoryRoot);
-
-        Assert.Contains(buildResult.AdapterResults, result => result.Succeeded);
-        Assert.NotEmpty(buildResult.AdapterResults);
-        Assert.Contains(buildResult.AdapterResults, result => result.ArtifactFiles.Count > 0 || result.ArtifactDirectories.Count > 0);
-
-        var buildCheckpointJson = JsonSerializer.Serialize(buildResult);
-        var signingQueueItem = CreateQueueItem(
-            repositoryIdentity,
-            repositoryRoot,
-            ReleaseQueueStage.Sign,
-            ReleaseQueueItemStatus.WaitingApproval,
-            "sign.waiting.usb",
-            buildCheckpointJson,
-            "Smoke build completed.");
-
-        var signingManifest = checkpointReader.BuildSigningManifest([signingQueueItem]);
-        Assert.NotEmpty(signingManifest);
-
-        var signingResult = await signingService.ExecuteAsync(signingQueueItem);
-        ReleaseSigningExecutionResult publishSigningResult;
-        if (realSigningEnabled)
+        await SmokeEnvironmentLock.WaitAsync();
+        try
         {
-            Assert.True(signingResult.Succeeded, DescribeSigningResult(signingResult));
-            Assert.Contains(signingResult.Receipts, receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
-            publishSigningResult = signingResult;
-        }
-        else
-        {
-            Assert.False(signingResult.Succeeded);
-            Assert.Contains("RELEASE_OPS_STUDIO_SIGN_THUMBPRINT", signingResult.Summary, StringComparison.OrdinalIgnoreCase);
+            using var _ = environmentScope;
 
-            var signingFailedSession = CreateSession(signingQueueItem);
-            var signingFailureTransition = queueRunner.FailSigning(signingFailedSession, repositoryRoot, signingResult);
-            Assert.True(signingFailureTransition.Changed);
+            var buildResult = await buildService.ExecuteAsync(repositoryRoot);
 
-            var signingRetryTransition = queueRunner.RetryFailedItem(signingFailureTransition.Session);
-            Assert.True(signingRetryTransition.Changed);
-            Assert.Equal(ReleaseQueueStage.Sign, signingRetryTransition.Session.Items[0].Stage);
-            Assert.Equal(ReleaseQueueItemStatus.WaitingApproval, signingRetryTransition.Session.Items[0].Status);
-            Assert.Equal(buildCheckpointJson, signingRetryTransition.Session.Items[0].CheckpointStateJson);
+            Assert.Contains(buildResult.AdapterResults, result => result.Succeeded);
+            Assert.NotEmpty(buildResult.AdapterResults);
+            Assert.Contains(buildResult.AdapterResults, result => result.ArtifactFiles.Count > 0 || result.ArtifactDirectories.Count > 0);
 
-            publishSigningResult = new ReleaseSigningExecutionResult(
-                RootPath: repositoryRoot,
-                Succeeded: true,
-                Summary: $"Smoke signing simulation captured {signingManifest.Count} artifact(s).",
-                SourceCheckpointStateJson: buildCheckpointJson,
-                Receipts: signingManifest.Select(artifact => new ReleaseSigningReceipt(
+            var buildCheckpointJson = JsonSerializer.Serialize(buildResult);
+            var signingQueueItem = CreateQueueItem(
+                repositoryIdentity,
+                repositoryRoot,
+                ReleaseQueueStage.Sign,
+                ReleaseQueueItemStatus.WaitingApproval,
+                "sign.waiting.usb",
+                buildCheckpointJson,
+                "Smoke build completed.");
+
+            var signingManifest = checkpointReader.BuildSigningManifest([signingQueueItem]);
+            Assert.NotEmpty(signingManifest);
+
+            var signingResult = await signingService.ExecuteAsync(signingQueueItem);
+            ReleaseSigningExecutionResult publishSigningResult;
+            if (realSigningEnabled)
+            {
+                Assert.True(signingResult.Succeeded, DescribeSigningResult(signingResult));
+                Assert.Contains(signingResult.Receipts, receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
+                publishSigningResult = signingResult;
+            }
+            else
+            {
+                Assert.False(signingResult.Succeeded);
+                Assert.Contains("RELEASE_OPS_STUDIO_SIGN_THUMBPRINT", signingResult.Summary, StringComparison.OrdinalIgnoreCase);
+
+                var signingFailedSession = CreateSession(signingQueueItem);
+                var signingFailureTransition = queueRunner.FailSigning(signingFailedSession, repositoryRoot, signingResult);
+                Assert.True(signingFailureTransition.Changed);
+
+                var signingRetryTransition = queueRunner.RetryFailedItem(signingFailureTransition.Session);
+                Assert.True(signingRetryTransition.Changed);
+                Assert.Equal(ReleaseQueueStage.Sign, signingRetryTransition.Session.Items[0].Stage);
+                Assert.Equal(ReleaseQueueItemStatus.WaitingApproval, signingRetryTransition.Session.Items[0].Status);
+                Assert.Equal(buildCheckpointJson, signingRetryTransition.Session.Items[0].CheckpointStateJson);
+
+                publishSigningResult = new ReleaseSigningExecutionResult(
                     RootPath: repositoryRoot,
-                    RepositoryName: repositoryIdentity.RepositoryName,
-                    AdapterKind: artifact.AdapterKind.ToString(),
-                    ArtifactPath: artifact.ArtifactPath,
-                    ArtifactKind: artifact.ArtifactKind,
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Smoke path treats captured build artifacts as signed inputs for publish gating.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)).ToList());
+                    Succeeded: true,
+                    Summary: $"Smoke signing simulation captured {signingManifest.Count} artifact(s).",
+                    SourceCheckpointStateJson: buildCheckpointJson,
+                    Receipts: signingManifest.Select(artifact => new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: repositoryIdentity.RepositoryName,
+                        AdapterKind: artifact.AdapterKind,
+                        ArtifactPath: artifact.ArtifactPath,
+                        ArtifactKind: artifact.ArtifactKind,
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Smoke path treats captured build artifacts as signed inputs for publish gating.",
+                        SignedAtUtc: DateTimeOffset.UtcNow)).ToList());
+            }
+
+            var publishQueueItem = CreateQueueItem(
+                repositoryIdentity,
+                repositoryRoot,
+                ReleaseQueueStage.Publish,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "publish.ready",
+                JsonSerializer.Serialize(publishSigningResult),
+                "Smoke signing stage completed.");
+
+            var publishResult = await publishService.ExecuteAsync(publishQueueItem);
+            Assert.False(publishResult.Succeeded);
+            Assert.NotEmpty(publishResult.Receipts);
+            Assert.Contains("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", publishResult.Summary, StringComparison.OrdinalIgnoreCase);
+
+            var publishFailedSession = CreateSession(publishQueueItem);
+            var publishFailureTransition = queueRunner.FailPublish(publishFailedSession, repositoryRoot, publishResult);
+            Assert.True(publishFailureTransition.Changed);
+
+            var publishRetryTransition = queueRunner.RetryFailedItem(publishFailureTransition.Session);
+            Assert.True(publishRetryTransition.Changed);
+            Assert.Equal(ReleaseQueueStage.Publish, publishRetryTransition.Session.Items[0].Stage);
+            Assert.Equal(ReleaseQueueItemStatus.ReadyToRun, publishRetryTransition.Session.Items[0].Status);
+            Assert.Equal(JsonSerializer.Serialize(publishSigningResult), publishRetryTransition.Session.Items[0].CheckpointStateJson);
+
+            var verificationQueueItem = CreateQueueItem(
+                repositoryIdentity,
+                repositoryRoot,
+                ReleaseQueueStage.Verify,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "verify.ready",
+                JsonSerializer.Serialize(publishResult),
+                "Smoke publish stage completed.");
+
+            var verificationResult = await verificationService.ExecuteAsync(verificationQueueItem);
+            Assert.False(verificationResult.Succeeded);
+            Assert.NotEmpty(verificationResult.Receipts);
+            Assert.Contains(verificationResult.Receipts, receipt => receipt.Summary.Contains("Publish receipt status", StringComparison.OrdinalIgnoreCase));
+
+            var verificationFailedSession = CreateSession(verificationQueueItem);
+            var verificationFailureTransition = queueRunner.FailVerification(verificationFailedSession, repositoryRoot, verificationResult);
+            Assert.True(verificationFailureTransition.Changed);
+
+            var verificationRetryTransition = queueRunner.RetryFailedItem(verificationFailureTransition.Session);
+            Assert.True(verificationRetryTransition.Changed);
+            Assert.Equal(ReleaseQueueStage.Verify, verificationRetryTransition.Session.Items[0].Stage);
+            Assert.Equal(ReleaseQueueItemStatus.ReadyToRun, verificationRetryTransition.Session.Items[0].Status);
+            Assert.Equal(JsonSerializer.Serialize(publishResult), verificationRetryTransition.Session.Items[0].CheckpointStateJson);
         }
-
-        var publishQueueItem = CreateQueueItem(
-            repositoryIdentity,
-            repositoryRoot,
-            ReleaseQueueStage.Publish,
-            ReleaseQueueItemStatus.ReadyToRun,
-            "publish.ready",
-            JsonSerializer.Serialize(publishSigningResult),
-            "Smoke signing stage completed.");
-
-        var publishResult = await publishService.ExecuteAsync(publishQueueItem);
-        Assert.False(publishResult.Succeeded);
-        Assert.NotEmpty(publishResult.Receipts);
-        Assert.Contains("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", publishResult.Summary, StringComparison.OrdinalIgnoreCase);
-
-        var publishFailedSession = CreateSession(publishQueueItem);
-        var publishFailureTransition = queueRunner.FailPublish(publishFailedSession, repositoryRoot, publishResult);
-        Assert.True(publishFailureTransition.Changed);
-
-        var publishRetryTransition = queueRunner.RetryFailedItem(publishFailureTransition.Session);
-        Assert.True(publishRetryTransition.Changed);
-        Assert.Equal(ReleaseQueueStage.Publish, publishRetryTransition.Session.Items[0].Stage);
-        Assert.Equal(ReleaseQueueItemStatus.ReadyToRun, publishRetryTransition.Session.Items[0].Status);
-        Assert.Equal(JsonSerializer.Serialize(publishSigningResult), publishRetryTransition.Session.Items[0].CheckpointStateJson);
-
-        var verificationQueueItem = CreateQueueItem(
-            repositoryIdentity,
-            repositoryRoot,
-            ReleaseQueueStage.Verify,
-            ReleaseQueueItemStatus.ReadyToRun,
-            "verify.ready",
-            JsonSerializer.Serialize(publishResult),
-            "Smoke publish stage completed.");
-
-        var verificationResult = await verificationService.ExecuteAsync(verificationQueueItem);
-        Assert.False(verificationResult.Succeeded);
-        Assert.NotEmpty(verificationResult.Receipts);
-        Assert.Contains(verificationResult.Receipts, receipt => receipt.Summary.Contains("Publish receipt status", StringComparison.OrdinalIgnoreCase));
-
-        var verificationFailedSession = CreateSession(verificationQueueItem);
-        var verificationFailureTransition = queueRunner.FailVerification(verificationFailedSession, repositoryRoot, verificationResult);
-        Assert.True(verificationFailureTransition.Changed);
-
-        var verificationRetryTransition = queueRunner.RetryFailedItem(verificationFailureTransition.Session);
-        Assert.True(verificationRetryTransition.Changed);
-        Assert.Equal(ReleaseQueueStage.Verify, verificationRetryTransition.Session.Items[0].Stage);
-        Assert.Equal(ReleaseQueueItemStatus.ReadyToRun, verificationRetryTransition.Session.Items[0].Status);
-        Assert.Equal(JsonSerializer.Serialize(publishResult), verificationRetryTransition.Session.Items[0].CheckpointStateJson);
-    }
-
-    private static void EnsureSmokeEnabled()
-    {
-        if (!string.Equals(Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_RUN_LIVE_SMOKE"), "true", StringComparison.OrdinalIgnoreCase))
+        finally
         {
-            throw new InvalidOperationException("Set RELEASE_OPS_STUDIO_RUN_LIVE_SMOKE=true before running the live smoke harness.");
+            SmokeEnvironmentLock.Release();
         }
     }
 

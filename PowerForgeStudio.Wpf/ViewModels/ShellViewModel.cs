@@ -1,5 +1,6 @@
 using System.IO;
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Input;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
@@ -8,11 +9,13 @@ using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Domain.Verification;
+using PowerForgeStudio.Domain.Workspace;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.PowerShell;
 using PowerForgeStudio.Orchestrator.Queue;
 using PowerForgeStudio.Orchestrator.Storage;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Wpf.ViewModels;
 
@@ -24,22 +27,20 @@ public sealed class ShellViewModel : ViewModelBase
     private readonly RepositoryWorkspaceFamilyService _workspaceFamilyService = new();
     private readonly RepositoryReleaseInboxService _releaseInboxService = new();
     private readonly RepositoryDetailService _repositoryDetailService = new();
+    private readonly RepositoryGitQuickActionExecutionService _gitQuickActionExecutionService = new();
+    private readonly IWorkspaceSnapshotService _workspaceSnapshotService = new WorkspaceSnapshotService();
     private readonly GitHubInboxService _gitHubInboxService = new();
     private readonly RepositoryReleaseDriftService _releaseDriftService = new();
     private readonly RepositoryPlanPreviewService _planPreviewService = new();
-    private readonly ReleaseQueuePlanner _queuePlanner = new();
-    private readonly ReleaseQueueRunner _queueRunner = new();
-    private readonly ReleaseBuildExecutionService _buildExecutionService = new();
-    private readonly ReleaseBuildCheckpointReader _buildCheckpointReader = new();
-    private readonly ReleaseSigningExecutionService _signingExecutionService = new();
-    private readonly ReleasePublishExecutionService _publishExecutionService = new();
-    private readonly ReleaseVerificationExecutionService _verificationExecutionService = new();
+    private readonly ReleaseStationProjectionService _stationProjectionService = new();
+    private readonly IReleaseQueueCommandService _queueCommandService = new ReleaseQueueCommandService();
     private CancellationTokenSource? _portfolioViewSaveCts;
     private bool _isInitialized;
     private bool _isBusy;
     private bool _isRestoringPortfolioViewState;
     private ReleaseQueueSession? _activeQueueSession;
     private IReadOnlyList<RepositoryPortfolioItem> _portfolioSnapshot = [];
+    private IReadOnlyDictionary<string, RepositoryGitQuickActionReceipt> _gitQuickActionReceiptLookup = new Dictionary<string, RepositoryGitQuickActionReceipt>(StringComparer.OrdinalIgnoreCase);
     private PSPublishModuleResolution _buildEngineResolution = PSPublishModuleLocator.Resolve();
     private RepositoryPortfolioItem? _selectedRepository;
     private string _statusText = "Ready to scan the workspace.";
@@ -69,6 +70,12 @@ public sealed class ShellViewModel : ViewModelBase
     private string _repositoryDetailReason = "Select a managed repository to inspect its contract, queue state, and adapter evidence.";
     private string _repositoryDetailPath = "No repository path selected.";
     private string _repositoryDetailBranch = "Branch information unavailable";
+    private string _repositoryDetailGitDiagnostics = "No git diagnostics yet.";
+    private string _repositoryDetailGitDiagnosticsDetail = "Git preflight guidance will appear here once the shell inspects a repository.";
+    private string _repositoryDetailLastGitAction = "No git action recorded yet.";
+    private string _repositoryDetailLastGitActionSummary = "Quick-action results will appear here after you run a git action from the repository detail pane.";
+    private string _repositoryDetailLastGitActionOutput = "No output captured yet.";
+    private string _repositoryDetailLastGitActionError = "No error captured yet.";
     private string _repositoryDetailBuildContract = "No build contract selected.";
     private string _repositoryDetailQueueLane = "No queue state selected.";
     private string _repositoryDetailQueueCheckpoint = "No checkpoint selected.";
@@ -113,6 +120,8 @@ public sealed class ShellViewModel : ViewModelBase
         ApplyRepositoryFamilyCommand = new DelegateCommand<RepositoryWorkspaceFamilySnapshot>(ApplyRepositoryFamily, family => family is not null);
         ApplyRepositoryFamilyLaneItemCommand = new DelegateCommand<RepositoryWorkspaceFamilyLaneItem>(ApplyRepositoryFamilyLaneItem, item => item is not null);
         ApplyReleaseInboxItemCommand = new DelegateCommand<RepositoryReleaseInboxItem>(ApplyReleaseInboxItem, item => item is not null);
+        CopyGitRemediationCommand = new DelegateCommand<RepositoryGitRemediationStep>(CopyGitRemediation, step => step is not null && !string.IsNullOrWhiteSpace(step.CommandText));
+        ExecuteGitQuickActionCommand = new DelegateCommand<RepositoryGitQuickAction>(ExecuteGitQuickAction, action => action is not null);
 
         PortfolioFocusModes = new ObservableCollection<PortfolioFocusOption> {
             new(RepositoryPortfolioFocusMode.All, "All", "Show every managed repository in the current portfolio snapshot."),
@@ -140,8 +149,8 @@ public sealed class ShellViewModel : ViewModelBase
         };
 
         NextSlices = new ObservableCollection<string> {
-            "Persist named triage layouts instead of only restoring the last-used view state.",
-            "Add family-level batch execution previews so a family lane can show what would run next before you commit to a scoped queue."
+            "Add remote branch-governance probes so GitHub API signals can confirm branch protection and default-branch policy instead of relying only on local heuristics.",
+            "Add git remediation actions and guidance for common cases like creating a PR branch, setting upstream, or recovering from detached HEAD."
         };
 
         ApplyBuildEngine(_buildEngineResolution);
@@ -175,6 +184,10 @@ public sealed class ShellViewModel : ViewModelBase
 
     public ObservableCollection<RepositoryAdapterEvidence> SelectedRepositoryEvidence { get; } = [];
 
+    public ObservableCollection<RepositoryGitRemediationStep> SelectedRepositoryGitRemediationSteps { get; } = [];
+
+    public ObservableCollection<RepositoryGitQuickAction> SelectedRepositoryGitQuickActions { get; } = [];
+
     public ObservableCollection<RepositoryReleaseInboxItem> ReleaseInboxItems { get; } = [];
 
     public ObservableCollection<RepositoryPortfolioItem> GitHubInboxItems { get; } = [];
@@ -203,6 +216,10 @@ public sealed class ShellViewModel : ViewModelBase
     public ICommand ApplyRepositoryFamilyLaneItemCommand { get; }
 
     public ICommand ApplyReleaseInboxItemCommand { get; }
+
+    public ICommand CopyGitRemediationCommand { get; }
+
+    public ICommand ExecuteGitQuickActionCommand { get; }
 
     public ObservableCollection<string> PipelineStages { get; }
 
@@ -408,6 +425,42 @@ public sealed class ShellViewModel : ViewModelBase
         private set => SetProperty(ref _repositoryDetailBranch, value);
     }
 
+    public string RepositoryDetailGitDiagnostics
+    {
+        get => _repositoryDetailGitDiagnostics;
+        private set => SetProperty(ref _repositoryDetailGitDiagnostics, value);
+    }
+
+    public string RepositoryDetailGitDiagnosticsDetail
+    {
+        get => _repositoryDetailGitDiagnosticsDetail;
+        private set => SetProperty(ref _repositoryDetailGitDiagnosticsDetail, value);
+    }
+
+    public string RepositoryDetailLastGitAction
+    {
+        get => _repositoryDetailLastGitAction;
+        private set => SetProperty(ref _repositoryDetailLastGitAction, value);
+    }
+
+    public string RepositoryDetailLastGitActionSummary
+    {
+        get => _repositoryDetailLastGitActionSummary;
+        private set => SetProperty(ref _repositoryDetailLastGitActionSummary, value);
+    }
+
+    public string RepositoryDetailLastGitActionOutput
+    {
+        get => _repositoryDetailLastGitActionOutput;
+        private set => SetProperty(ref _repositoryDetailLastGitActionOutput, value);
+    }
+
+    public string RepositoryDetailLastGitActionError
+    {
+        get => _repositoryDetailLastGitActionError;
+        private set => SetProperty(ref _repositoryDetailLastGitActionError, value);
+    }
+
     public string RepositoryDetailBuildContract
     {
         get => _repositoryDetailBuildContract;
@@ -604,51 +657,47 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            var buildEngineResolution = PSPublishModuleLocator.Resolve();
             StatusText = $"Scanning {WorkspaceRoot}...";
 
-            var entries = _catalogScanner.Scan(WorkspaceRoot);
-            var managedEntries = entries.Where(entry => entry.IsReleaseManaged).ToList();
-            var portfolioItems = _portfolioService.BuildPortfolio(managedEntries);
-            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
-
-            await stateDatabase.InitializeAsync(cancellationToken);
-            var savedPortfolioView = await stateDatabase.LoadPortfolioViewStateAsync(cancellationToken: cancellationToken);
-            ApplySavedPortfolioView(savedPortfolioView);
-
             StatusText = $"Running plan preview for up to 12 repositories...";
-            var planEnrichedPortfolio = await _planPreviewService.PopulatePlanPreviewAsync(portfolioItems, new PlanPreviewOptions {
-                MaxRepositories = 12
-            }, cancellationToken);
-            var inboxEnrichedPortfolio = await _gitHubInboxService.PopulateInboxAsync(planEnrichedPortfolio, new GitHubInboxOptions {
-                MaxRepositories = 15
-            }, cancellationToken);
-            var driftEnrichedPortfolio = _releaseDriftService.PopulateReleaseDrift(inboxEnrichedPortfolio);
-            var familyAnnotatedPortfolio = _workspaceFamilyService.AnnotateFamilies(driftEnrichedPortfolio);
-            await stateDatabase.PersistPortfolioSnapshotAsync(familyAnnotatedPortfolio, cancellationToken);
-            await stateDatabase.PersistPlanSnapshotsAsync(familyAnnotatedPortfolio, cancellationToken);
-            var persistedPortfolio = _workspaceFamilyService.AnnotateFamilies(await stateDatabase.LoadPortfolioSnapshotAsync(cancellationToken));
-            var summary = _portfolioService.BuildSummary(persistedPortfolio);
-            var draftQueue = _queuePlanner.CreateDraftQueue(WorkspaceRoot, persistedPortfolio);
-            await stateDatabase.PersistQueueSessionAsync(draftQueue, cancellationToken);
-            var persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken) ?? draftQueue;
-            var persistedReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId, cancellationToken);
-            var persistedPublishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId, cancellationToken);
-            var persistedVerificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId, cancellationToken);
+            var snapshot = await _workspaceSnapshotService.RefreshAsync(
+                WorkspaceRoot,
+                DatabasePath,
+                new WorkspaceRefreshOptions(
+                    MaxPlanRepositories: 12,
+                    MaxGitHubRepositories: 15,
+                    PersistState: true),
+                cancellationToken).ConfigureAwait(true);
 
-            _buildEngineResolution = buildEngineResolution;
+            ApplySavedPortfolioView(snapshot.SavedPortfolioView);
+
+            var persistedPortfolio = snapshot.PortfolioItems;
+            var summary = snapshot.Summary;
+            var persistedQueue = snapshot.QueueSession;
+            _gitQuickActionReceiptLookup = snapshot.GitQuickActionReceipts
+                .GroupBy(receipt => receipt.RootPath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.OrderByDescending(receipt => receipt.ExecutedAtUtc).First(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            _buildEngineResolution = snapshot.BuildEngineResolution;
             _activeQueueSession = persistedQueue;
             ApplyPortfolio(persistedPortfolio, summary);
-            ApplyReleaseInbox(persistedPortfolio, persistedQueue);
+            ApplyReleaseInboxItems(snapshot.ReleaseInboxItems);
             ApplyGitHubInbox(persistedPortfolio, summary);
             ApplyReleaseDrift(persistedPortfolio, summary);
-            ApplyBuildEngine(buildEngineResolution);
+            ApplyBuildEngine(snapshot.BuildEngineResolution);
             ApplyQueue(persistedQueue);
-            ApplySigningReceipts(persistedReceipts);
-            ApplyPublishStation(persistedQueue);
-            ApplyPublishReceipts(persistedPublishReceipts);
-            ApplyVerificationStation(persistedQueue);
-            ApplyVerificationReceipts(persistedVerificationReceipts);
+            ApplyPortfolioDashboardSnapshots(snapshot.DashboardCards);
+            ApplyRepositoryFamiliesSnapshot(snapshot.RepositoryFamilies);
+            ApplyRepositoryFamilyLaneSnapshots(snapshot.RepositoryFamilyLanes);
+            ApplySigningStationSnapshot(snapshot.SigningStation);
+            ApplySigningReceiptBatch(snapshot.SigningReceiptBatch);
+            ApplyPublishStationSnapshot(snapshot.PublishStation);
+            ApplyPublishReceiptBatch(snapshot.PublishReceiptBatch);
+            ApplyVerificationStationSnapshot(snapshot.VerificationStation);
+            ApplyVerificationReceiptBatch(snapshot.VerificationReceiptBatch);
             StatusText = $"Portfolio ready. Persisted {persistedPortfolio.Count} portfolio rows, remote inbox signals, plan previews, and draft queue state to {DatabasePath}.";
         }
         finally
@@ -662,74 +711,9 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
-            await stateDatabase.InitializeAsync();
-
-            var currentSession = await stateDatabase.LoadLatestQueueSessionAsync();
-            if (currentSession is null)
-            {
-                StatusText = "Queue state is not available yet. Prepare the queue first.";
-                return;
-            }
-
-            var nextReadyItem = currentSession.Items.FirstOrDefault(item => item.Status == ReleaseQueueItemStatus.ReadyToRun);
-            if (nextReadyItem is null)
-            {
-                StatusText = "No queue item is currently ready to run.";
-                return;
-            }
-
-            ReleaseQueueTransitionResult result;
-            if (nextReadyItem.Stage == ReleaseQueueStage.Build)
-            {
-                StatusText = $"Running real build for {nextReadyItem.RepositoryName} with publish/install disabled...";
-                var buildResult = await _buildExecutionService.ExecuteAsync(nextReadyItem.RootPath);
-                result = buildResult.Succeeded
-                    ? _queueRunner.CompleteBuild(currentSession, nextReadyItem.RootPath, buildResult)
-                    : _queueRunner.FailBuild(currentSession, nextReadyItem.RootPath, buildResult);
-            }
-            else if (nextReadyItem.Stage == ReleaseQueueStage.Publish)
-            {
-                StatusText = $"Publishing release targets for {nextReadyItem.RepositoryName}...";
-                var publishResult = await _publishExecutionService.ExecuteAsync(nextReadyItem);
-                await stateDatabase.PersistPublishReceiptsAsync(currentSession.SessionId, publishResult.Receipts);
-                result = publishResult.Succeeded
-                    ? _queueRunner.CompletePublish(currentSession, nextReadyItem.RootPath, publishResult)
-                    : _queueRunner.FailPublish(currentSession, nextReadyItem.RootPath, publishResult);
-            }
-            else if (nextReadyItem.Stage == ReleaseQueueStage.Verify)
-            {
-                StatusText = $"Verifying published targets for {nextReadyItem.RepositoryName}...";
-                var verificationResult = await _verificationExecutionService.ExecuteAsync(nextReadyItem);
-                await stateDatabase.PersistVerificationReceiptsAsync(currentSession.SessionId, verificationResult.Receipts);
-                result = verificationResult.Succeeded
-                    ? _queueRunner.CompleteVerification(currentSession, nextReadyItem.RootPath, verificationResult)
-                    : _queueRunner.FailVerification(currentSession, nextReadyItem.RootPath, verificationResult);
-            }
-            else
-            {
-                result = _queueRunner.AdvanceNextReadyItem(currentSession);
-            }
-
-            if (!result.Changed)
-            {
-                StatusText = result.Message;
-                return;
-            }
-
-            await stateDatabase.PersistQueueSessionAsync(result.Session);
-            var persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync() ?? result.Session;
-            _activeQueueSession = persistedQueue;
-            ApplyQueue(persistedQueue);
-            var persistedReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId);
-            var persistedPublishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId);
-            var persistedVerificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId);
-            ApplySigningReceipts(persistedReceipts);
-            ApplyPublishStation(persistedQueue);
-            ApplyPublishReceipts(persistedPublishReceipts);
-            ApplyVerificationStation(persistedQueue);
-            ApplyVerificationReceipts(persistedVerificationReceipts);
-            StatusText = result.Message;
+            StatusText = "Running the next reusable queue step...";
+            var result = await _queueCommandService.RunNextReadyItemAsync(DatabasePath).ConfigureAwait(true);
+            ApplyQueueCommandResult(result);
         }
         finally
         {
@@ -742,50 +726,9 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
-            await stateDatabase.InitializeAsync();
-
-            var currentSession = await stateDatabase.LoadLatestQueueSessionAsync();
-            if (currentSession is null)
-            {
-                StatusText = "Queue state is not available yet. Prepare the queue first.";
-                return;
-            }
-
-            var waitingItem = currentSession.Items.FirstOrDefault(item => item.Stage == ReleaseQueueStage.Sign && item.Status == ReleaseQueueItemStatus.WaitingApproval);
-            if (waitingItem is null)
-            {
-                StatusText = "No queue item is currently waiting on USB approval.";
-                return;
-            }
-
-            StatusText = $"Signing artifacts for {waitingItem.RepositoryName}...";
-            var signingResult = await _signingExecutionService.ExecuteAsync(waitingItem);
-            await stateDatabase.PersistSigningReceiptsAsync(currentSession.SessionId, signingResult.Receipts);
-
-            var result = signingResult.Succeeded
-                ? _queueRunner.CompleteSigning(currentSession, waitingItem.RootPath, signingResult)
-                : _queueRunner.FailSigning(currentSession, waitingItem.RootPath, signingResult);
-
-            if (!result.Changed)
-            {
-                StatusText = result.Message;
-                return;
-            }
-
-            await stateDatabase.PersistQueueSessionAsync(result.Session);
-            var persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync() ?? result.Session;
-            _activeQueueSession = persistedQueue;
-            var persistedReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId);
-            var persistedPublishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId);
-            var persistedVerificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId);
-            ApplyQueue(persistedQueue);
-            ApplySigningReceipts(persistedReceipts);
-            ApplyPublishStation(persistedQueue);
-            ApplyPublishReceipts(persistedPublishReceipts);
-            ApplyVerificationStation(persistedQueue);
-            ApplyVerificationReceipts(persistedVerificationReceipts);
-            StatusText = result.Message;
+            StatusText = "Approving the reusable USB signing step...";
+            var result = await _queueCommandService.ApproveUsbAsync(DatabasePath).ConfigureAwait(true);
+            ApplyQueueCommandResult(result);
         }
         finally
         {
@@ -793,8 +736,19 @@ public sealed class ShellViewModel : ViewModelBase
         }
     }
 
-    private Task RetryFailedAsync()
-        => UpdateQueueSessionAsync(_queueRunner.RetryFailedItem);
+    private async Task RetryFailedAsync()
+    {
+        IsBusy = true;
+        try
+        {
+            var result = await _queueCommandService.RetryFailedAsync(DatabasePath).ConfigureAwait(true);
+            ApplyQueueCommandResult(result);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     private async Task PrepareSelectedFamilyQueueAsync()
     {
@@ -818,25 +772,13 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
-            await stateDatabase.InitializeAsync();
-
-            var queueSession = _queuePlanner.CreateDraftQueue(
+            var result = await _queueCommandService.PrepareQueueAsync(
+                DatabasePath,
                 WorkspaceRoot,
                 familyItems,
                 scopeKey: family.FamilyKey,
-                scopeDisplayName: family.DisplayName);
-
-            await stateDatabase.PersistQueueSessionAsync(queueSession);
-            var persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync() ?? queueSession;
-            _activeQueueSession = persistedQueue;
-            ApplyQueue(persistedQueue);
-            ApplySigningReceipts(await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId));
-            ApplyPublishStation(persistedQueue);
-            ApplyPublishReceipts(await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId));
-            ApplyVerificationStation(persistedQueue);
-            ApplyVerificationReceipts(await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId));
-            StatusText = $"Prepared a family-scoped queue for {family.DisplayName} with {familyItems.Length} repository row(s).";
+                scopeDisplayName: family.DisplayName).ConfigureAwait(true);
+            ApplyQueueCommandResult(result);
         }
         finally
         {
@@ -844,13 +786,13 @@ public sealed class ShellViewModel : ViewModelBase
         }
     }
 
-    private Task RetrySelectedFamilyFailedAsync()
+    private async Task RetrySelectedFamilyFailedAsync()
     {
         var family = ResolveSelectedFamily();
         if (family is null)
         {
             StatusText = "Select a repository family first, then retry failed items for that family.";
-            return Task.CompletedTask;
+            return;
         }
 
         var familyRootPaths = _portfolioSnapshot
@@ -858,49 +800,41 @@ public sealed class ShellViewModel : ViewModelBase
             .Select(item => item.RootPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return UpdateQueueSessionAsync(session => _queueRunner.RetryFailedItems(session, item => familyRootPaths.Contains(item.RootPath)));
-    }
-
-    private async Task UpdateQueueSessionAsync(Func<ReleaseQueueSession, ReleaseQueueTransitionResult> transition)
-    {
         IsBusy = true;
         try
         {
-            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
-            await stateDatabase.InitializeAsync();
-
-            var currentSession = await stateDatabase.LoadLatestQueueSessionAsync();
-            if (currentSession is null)
-            {
-                StatusText = "Queue state is not available yet. Prepare the queue first.";
-                return;
-            }
-
-            var result = transition(currentSession);
-            if (!result.Changed)
-            {
-                StatusText = result.Message;
-                return;
-            }
-
-            await stateDatabase.PersistQueueSessionAsync(result.Session);
-            var persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync() ?? result.Session;
-            _activeQueueSession = persistedQueue;
-            var persistedReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId);
-            var persistedPublishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId);
-            var persistedVerificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId);
-            ApplyQueue(persistedQueue);
-            ApplySigningReceipts(persistedReceipts);
-            ApplyPublishStation(persistedQueue);
-            ApplyPublishReceipts(persistedPublishReceipts);
-            ApplyVerificationStation(persistedQueue);
-            ApplyVerificationReceipts(persistedVerificationReceipts);
-            StatusText = result.Message;
+            var result = await _queueCommandService.RetryFailedAsync(
+                DatabasePath,
+                item => familyRootPaths.Contains(item.RootPath)).ConfigureAwait(true);
+            ApplyQueueCommandResult(result);
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyQueueCommandResult(ReleaseQueueCommandResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (result.QueueSession is not null)
+        {
+            _activeQueueSession = result.QueueSession;
+            ApplyQueue(result.QueueSession);
+            ApplySigningStationSnapshot(_stationProjectionService.BuildSigningStation(result.QueueSession));
+            ApplySigningReceiptBatch(_stationProjectionService.BuildSigningReceipts(result.SigningReceipts));
+            ApplyPublishStationSnapshot(_stationProjectionService.BuildPublishStation(result.QueueSession));
+            ApplyPublishReceiptBatch(_stationProjectionService.BuildPublishReceipts(result.PublishReceipts));
+            ApplyVerificationStationSnapshot(_stationProjectionService.BuildVerificationStation(result.QueueSession));
+            ApplyVerificationReceiptBatch(_stationProjectionService.BuildVerificationReceipts(result.VerificationReceipts));
+            ApplyReleaseInbox(_portfolioSnapshot, result.QueueSession);
+            ApplyRepositoryFamilies();
+            ApplyPortfolioFocus();
+            ApplyPortfolioDashboardCards();
+        }
+
+        StatusText = result.Message;
     }
 
     private void ApplyPortfolio(IReadOnlyList<RepositoryPortfolioItem> portfolioItems, RepositoryPortfolioSummary summary)
@@ -916,7 +850,12 @@ public sealed class ShellViewModel : ViewModelBase
 
     private void ApplyReleaseInbox(IReadOnlyList<RepositoryPortfolioItem> portfolioItems, ReleaseQueueSession? queueSession)
     {
-        var inboxItems = _releaseInboxService.BuildInbox(portfolioItems, queueSession);
+        var inboxItems = _releaseInboxService.BuildInbox(portfolioItems, queueSession, _gitQuickActionReceiptLookup);
+        ApplyReleaseInboxItems(inboxItems);
+    }
+
+    private void ApplyReleaseInboxItems(IReadOnlyList<RepositoryReleaseInboxItem> inboxItems)
+    {
         ReleaseInboxItems.Clear();
         foreach (var item in inboxItems)
         {
@@ -931,14 +870,20 @@ public sealed class ShellViewModel : ViewModelBase
         }
 
         var failedCount = inboxItems.Count(item => item.Badge == "Failed");
+        var gitActionFailedCount = inboxItems.Count(item => item.Badge == "Git Action Failed");
         var usbCount = inboxItems.Count(item => item.Badge == "USB Waiting");
-        ReleaseInboxHeadline = $"{inboxItems.Count} action item(s), {failedCount} failed, {usbCount} USB waiting";
-        ReleaseInboxDetails = "This inbox ranks real blockers first, then queues up release work that is ready to move, so you can start at the top instead of scanning the whole shell.";
+        ReleaseInboxHeadline = $"{inboxItems.Count} action item(s), {failedCount} queue failed, {gitActionFailedCount} git-action failed, {usbCount} USB waiting";
+        ReleaseInboxDetails = "This inbox ranks queue failures, failed git quick actions, git guard issues, USB pauses, and release-ready work first, so you can start at the top instead of scanning the whole shell.";
     }
 
     private void ApplyRepositoryFamilies()
     {
-        var families = _workspaceFamilyService.BuildFamilies(_portfolioSnapshot, _activeQueueSession);
+        var families = _workspaceFamilyService.BuildFamilies(_portfolioSnapshot, _activeQueueSession, _gitQuickActionReceiptLookup);
+        ApplyRepositoryFamiliesSnapshot(families);
+    }
+
+    private void ApplyRepositoryFamiliesSnapshot(IReadOnlyList<RepositoryWorkspaceFamilySnapshot> families)
+    {
         RepositoryFamilies.Clear();
 
         RepositoryFamilies.Add(new RepositoryWorkspaceFamilySnapshot(
@@ -977,7 +922,7 @@ public sealed class ShellViewModel : ViewModelBase
         RepositoryFamilyHeadline = $"{selectedFamily.DisplayName}: {selectedFamily.TotalMembers} member(s), {selectedFamily.WorktreeMembers} worktree(s)";
         RepositoryFamilyDetails = $"{selectedFamily.MemberSummary}. Attention: {selectedFamily.AttentionMembers}, ready: {selectedFamily.ReadyMembers}, queue-active: {selectedFamily.QueueActiveMembers}.";
         RepositoryFamilyActionHeadline = $"Family actions target {selectedFamily.DisplayName}. Prepare a scoped queue or retry failed items only inside this family.";
-        ApplyRepositoryFamilyLane(_workspaceFamilyService.BuildFamilyLane(_portfolioSnapshot, _activeQueueSession, selectedFamily.FamilyKey));
+        ApplyRepositoryFamilyLane(_workspaceFamilyService.BuildFamilyLane(_portfolioSnapshot, _activeQueueSession, selectedFamily.FamilyKey, _gitQuickActionReceiptLookup));
         RaiseCommandStates();
     }
 
@@ -999,6 +944,15 @@ public sealed class ShellViewModel : ViewModelBase
 
         RepositoryFamilyLaneHeadline = lane.Headline;
         RepositoryFamilyLaneDetails = lane.Details;
+    }
+
+    private void ApplyRepositoryFamilyLaneSnapshots(IReadOnlyList<RepositoryWorkspaceFamilyLaneSnapshot> lanes)
+    {
+        var familyKey = _selectedRepositoryFamilyKey ?? SelectedRepository?.FamilyKey;
+        var selectedLane = string.IsNullOrWhiteSpace(familyKey)
+            ? null
+            : lanes.FirstOrDefault(lane => string.Equals(lane.FamilyKey, familyKey, StringComparison.OrdinalIgnoreCase));
+        ApplyRepositoryFamilyLane(selectedLane);
     }
 
     private void ApplyPortfolioFocus()
@@ -1037,10 +991,30 @@ public sealed class ShellViewModel : ViewModelBase
     private void ApplyPortfolioDashboardCards()
     {
         var dashboardCards = BuildPortfolioDashboardCards();
+        ApplyPortfolioDashboardSnapshots(dashboardCards.Select(card =>
+            new PortfolioDashboardSnapshot(
+                card.Key,
+                card.Title,
+                card.CountDisplay,
+                card.Detail,
+                card.FocusMode,
+                card.SearchText,
+                card.PresetKey)).ToArray());
+    }
+
+    private void ApplyPortfolioDashboardSnapshots(IReadOnlyList<PortfolioDashboardSnapshot> dashboardCards)
+    {
         PortfolioDashboardCards.Clear();
         foreach (var card in dashboardCards)
         {
-            PortfolioDashboardCards.Add(card);
+            PortfolioDashboardCards.Add(new PortfolioDashboardCard(
+                card.Key,
+                card.Title,
+                card.CountDisplay,
+                card.Detail,
+                card.FocusMode,
+                card.SearchText,
+                card.PresetKey));
         }
     }
 
@@ -1233,6 +1207,76 @@ public sealed class ShellViewModel : ViewModelBase
         PortfolioViewMemory = $"Release inbox item applied: {item.Badge} for {item.RepositoryName}.";
     }
 
+    private void CopyGitRemediation(RepositoryGitRemediationStep? step)
+    {
+        if (step is null || string.IsNullOrWhiteSpace(step.CommandText))
+        {
+            return;
+        }
+
+        Clipboard.SetText(step.CommandText);
+        StatusText = $"Copied git command: {step.Title}.";
+    }
+
+    private void ExecuteGitQuickAction(RepositoryGitQuickAction? action)
+    {
+        if (action is null)
+        {
+            return;
+        }
+
+        _ = ExecuteGitQuickActionAsync(action);
+    }
+
+    private async Task ExecuteGitQuickActionAsync(RepositoryGitQuickAction action)
+    {
+        var repository = SelectedRepository;
+        if (repository is null)
+        {
+            StatusText = "Select a repository first.";
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var result = await _gitQuickActionExecutionService.ExecuteAsync(repository.RootPath, action).ConfigureAwait(true);
+            var receipt = new RepositoryGitQuickActionReceipt(
+                RootPath: repository.RootPath,
+                ActionTitle: action.Title,
+                ActionKind: action.Kind,
+                Payload: action.Payload,
+                Succeeded: result.Succeeded,
+                Summary: result.Summary,
+                OutputTail: result.OutputTail,
+                ErrorTail: result.ErrorTail,
+                ExecutedAtUtc: DateTimeOffset.UtcNow);
+            var stateDatabase = new ReleaseStateDatabase(DatabasePath);
+            await stateDatabase.InitializeAsync().ConfigureAwait(true);
+            await stateDatabase.PersistGitQuickActionReceiptAsync(receipt).ConfigureAwait(true);
+            var updatedLookup = new Dictionary<string, RepositoryGitQuickActionReceipt>(_gitQuickActionReceiptLookup, StringComparer.OrdinalIgnoreCase) {
+                [repository.RootPath] = receipt
+            };
+            _gitQuickActionReceiptLookup = updatedLookup;
+            var tail = string.IsNullOrWhiteSpace(result.ErrorTail)
+                ? result.OutputTail
+                : result.ErrorTail;
+            StatusText = string.IsNullOrWhiteSpace(tail)
+                ? result.Summary
+                : $"{result.Summary} {tail}";
+            ApplyRepositoryDetail();
+
+            if (result.Succeeded && action.Kind == RepositoryGitQuickActionKind.GitCommand)
+            {
+                await RefreshAsync(forceRefresh: true).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private PortfolioQuickPreset? ResolvePortfolioPreset(string? presetKey, RepositoryPortfolioFocusMode focusMode, string searchText)
     {
         if (!string.IsNullOrWhiteSpace(presetKey))
@@ -1286,16 +1330,19 @@ public sealed class ShellViewModel : ViewModelBase
         ApplyRepositoryFamilies();
         ApplyPortfolioDashboardCards();
         ApplyReleaseInbox(_portfolioSnapshot, queueSession);
-        ApplySigningStation(queueSession);
-        ApplyPublishStation(queueSession);
-        ApplyVerificationStation(queueSession);
+        ApplySigningStationSnapshot(_stationProjectionService.BuildSigningStation(queueSession));
+        ApplyPublishStationSnapshot(_stationProjectionService.BuildPublishStation(queueSession));
+        ApplyVerificationStationSnapshot(_stationProjectionService.BuildVerificationStation(queueSession));
         ApplyRepositoryDetail();
         RaiseCommandStates();
     }
 
     private void ApplyRepositoryDetail()
     {
-        var snapshot = _repositoryDetailService.CreateDetail(SelectedRepository, _activeQueueSession, _buildEngineResolution);
+        var quickActionReceipt = SelectedRepository is null
+            ? null
+            : _gitQuickActionReceiptLookup.GetValueOrDefault(SelectedRepository.RootPath);
+        var snapshot = _repositoryDetailService.CreateDetail(SelectedRepository, _activeQueueSession, _buildEngineResolution, quickActionReceipt);
 
         RepositoryDetailHeadline = snapshot.RepositoryName;
         RepositoryDetailBadge = snapshot.RepositoryBadge;
@@ -1303,6 +1350,12 @@ public sealed class ShellViewModel : ViewModelBase
         RepositoryDetailReason = snapshot.ReadinessReason;
         RepositoryDetailPath = snapshot.RootPath;
         RepositoryDetailBranch = snapshot.BranchDisplay;
+        RepositoryDetailGitDiagnostics = snapshot.GitDiagnosticsDisplay;
+        RepositoryDetailGitDiagnosticsDetail = snapshot.GitDiagnosticsDetail;
+        RepositoryDetailLastGitAction = snapshot.LastGitActionDisplay;
+        RepositoryDetailLastGitActionSummary = snapshot.LastGitActionSummary;
+        RepositoryDetailLastGitActionOutput = snapshot.LastGitActionOutput;
+        RepositoryDetailLastGitActionError = snapshot.LastGitActionError;
         RepositoryDetailBuildContract = snapshot.BuildContractDisplay;
         RepositoryDetailQueueLane = snapshot.QueueLaneDisplay;
         RepositoryDetailQueueCheckpoint = snapshot.QueueCheckpointDisplay;
@@ -1318,6 +1371,18 @@ public sealed class ShellViewModel : ViewModelBase
         foreach (var evidence in snapshot.AdapterEvidence)
         {
             SelectedRepositoryEvidence.Add(evidence);
+        }
+
+        SelectedRepositoryGitRemediationSteps.Clear();
+        foreach (var step in snapshot.GitRemediationSteps)
+        {
+            SelectedRepositoryGitRemediationSteps.Add(step);
+        }
+
+        SelectedRepositoryGitQuickActions.Clear();
+        foreach (var action in snapshot.GitQuickActions)
+        {
+            SelectedRepositoryGitQuickActions.Add(action);
         }
 
         ApplyRepositoryFamilies();
@@ -1348,134 +1413,70 @@ public sealed class ShellViewModel : ViewModelBase
         ReleaseDriftDetails = "Release drift is a first-pass signal: it highlights repos that appear ahead of their latest detected GitHub release boundary, have open PR pressure, or have local changes that move them beyond the last release marker.";
     }
 
-    private void ApplySigningStation(ReleaseQueueSession queueSession)
+    private void ApplySigningStationSnapshot(StationSnapshot<ReleaseSigningArtifact> snapshot)
     {
-        var manifest = _buildCheckpointReader.BuildSigningManifest(queueSession.Items);
-
         SigningArtifacts.Clear();
-        foreach (var artifact in manifest.Take(12))
+        foreach (var artifact in snapshot.Items.Take(12))
         {
             SigningArtifacts.Add(artifact);
         }
-
-        var waitingItems = queueSession.Items.Count(item => item.Stage == ReleaseQueueStage.Sign && item.Status == ReleaseQueueItemStatus.WaitingApproval);
-        if (waitingItems == 0)
-        {
-            SigningHeadline = "No signing batch waiting.";
-            SigningDetails = "Build outputs that require the USB token will appear here once the queue reaches the signing gate.";
-            return;
-        }
-
-        SigningHeadline = $"{waitingItems} repo(s) waiting for USB approval, {manifest.Count} artifact target(s) collected";
-        SigningDetails = "This is the signing handoff surface: approve when the USB token is ready, then move the batch into publish.";
+        SigningHeadline = snapshot.Headline;
+        SigningDetails = snapshot.Details;
     }
 
-    private void ApplySigningReceipts(IReadOnlyList<ReleaseSigningReceipt> receipts)
+    private void ApplySigningReceiptBatch(ReceiptBatchSnapshot<ReleaseSigningReceipt> batch)
     {
         SigningReceipts.Clear();
-        foreach (var receipt in receipts.Take(12))
+        foreach (var receipt in batch.Items.Take(12))
         {
             SigningReceipts.Add(receipt);
         }
-
-        if (receipts.Count == 0)
-        {
-            ReceiptHeadline = "No signing receipts yet.";
-            ReceiptDetails = "Signing outcomes will be stored through DbaClientX.SQLite before publish unlocks.";
-            return;
-        }
-
-        var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
-        var skipped = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Skipped);
-        var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
-        ReceiptHeadline = $"{signed} signed, {skipped} skipped, {failed} failed";
-        ReceiptDetails = "The latest signing batch is persisted so publish does not unlock on memory alone.";
+        ReceiptHeadline = batch.Headline;
+        ReceiptDetails = batch.Details;
     }
 
-    private void ApplyPublishStation(ReleaseQueueSession queueSession)
+    private void ApplyPublishStationSnapshot(StationSnapshot<ReleasePublishTarget> snapshot)
     {
-        var manifest = _publishExecutionService.BuildPendingTargets(queueSession.Items);
-
         PublishTargets.Clear();
-        foreach (var target in manifest.Take(12))
+        foreach (var target in snapshot.Items.Take(12))
         {
             PublishTargets.Add(target);
         }
-
-        if (manifest.Count == 0)
-        {
-            PublishHeadline = "No publish batch ready.";
-            PublishDetails = "Publish targets will appear here after signing succeeds and before verify unlocks.";
-            return;
-        }
-
-        PublishHeadline = $"{manifest.Count} publish target(s) ready";
-        PublishDetails = "This station is the final external boundary: publish only runs when RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true.";
+        PublishHeadline = snapshot.Headline;
+        PublishDetails = snapshot.Details;
     }
 
-    private void ApplyPublishReceipts(IReadOnlyList<ReleasePublishReceipt> receipts)
+    private void ApplyPublishReceiptBatch(ReceiptBatchSnapshot<ReleasePublishReceipt> batch)
     {
         PublishReceipts.Clear();
-        foreach (var receipt in receipts.Take(12))
+        foreach (var receipt in batch.Items.Take(12))
         {
             PublishReceipts.Add(receipt);
         }
-
-        if (receipts.Count == 0)
-        {
-            PublishReceiptHeadline = "No publish receipts yet.";
-            PublishReceiptDetails = "Publish outcomes will be stored through DbaClientX.SQLite before verification closes the queue item.";
-            return;
-        }
-
-        var published = receipts.Count(receipt => receipt.Status == ReleasePublishReceiptStatus.Published);
-        var skipped = receipts.Count(receipt => receipt.Status == ReleasePublishReceiptStatus.Skipped);
-        var failed = receipts.Count(receipt => receipt.Status == ReleasePublishReceiptStatus.Failed);
-        PublishReceiptHeadline = $"{published} published, {skipped} skipped, {failed} failed";
-        PublishReceiptDetails = "The latest publish batch is persisted so verification is grounded in recorded external outcomes.";
+        PublishReceiptHeadline = batch.Headline;
+        PublishReceiptDetails = batch.Details;
     }
 
-    private void ApplyVerificationStation(ReleaseQueueSession queueSession)
+    private void ApplyVerificationStationSnapshot(StationSnapshot<ReleaseVerificationTarget> snapshot)
     {
-        var manifest = _verificationExecutionService.BuildPendingTargets(queueSession.Items);
-
         VerificationTargets.Clear();
-        foreach (var target in manifest.Take(12))
+        foreach (var target in snapshot.Items.Take(12))
         {
             VerificationTargets.Add(target);
         }
-
-        if (manifest.Count == 0)
-        {
-            VerificationHeadline = "No verification batch ready.";
-            VerificationDetails = "Verification checks will appear here once publish succeeds and evidence is ready to confirm.";
-            return;
-        }
-
-        VerificationHeadline = $"{manifest.Count} verification check(s) ready";
-        VerificationDetails = "This station closes the queue on evidence: release URLs, package presence, and repository publish checks where we can confirm them.";
+        VerificationHeadline = snapshot.Headline;
+        VerificationDetails = snapshot.Details;
     }
 
-    private void ApplyVerificationReceipts(IReadOnlyList<ReleaseVerificationReceipt> receipts)
+    private void ApplyVerificationReceiptBatch(ReceiptBatchSnapshot<ReleaseVerificationReceipt> batch)
     {
         VerificationReceipts.Clear();
-        foreach (var receipt in receipts.Take(12))
+        foreach (var receipt in batch.Items.Take(12))
         {
             VerificationReceipts.Add(receipt);
         }
-
-        if (receipts.Count == 0)
-        {
-            VerificationReceiptHeadline = "No verification receipts yet.";
-            VerificationReceiptDetails = "Verification outcomes will be stored through DbaClientX.SQLite before a queue item is marked completed.";
-            return;
-        }
-
-        var verified = receipts.Count(receipt => receipt.Status == ReleaseVerificationReceiptStatus.Verified);
-        var skipped = receipts.Count(receipt => receipt.Status == ReleaseVerificationReceiptStatus.Skipped);
-        var failed = receipts.Count(receipt => receipt.Status == ReleaseVerificationReceiptStatus.Failed);
-        VerificationReceiptHeadline = $"{verified} verified, {skipped} skipped, {failed} failed";
-        VerificationReceiptDetails = "The latest verification batch is persisted so completion reflects recorded checks, not just queue advancement.";
+        VerificationReceiptHeadline = batch.Headline;
+        VerificationReceiptDetails = batch.Details;
     }
 
     private void RaiseCommandStates()
@@ -1548,7 +1549,7 @@ public sealed class ShellViewModel : ViewModelBase
         return RepositoryFamilies.FirstOrDefault(family =>
             !string.IsNullOrWhiteSpace(family.FamilyKey)
             && string.Equals(family.FamilyKey, familyKey, StringComparison.OrdinalIgnoreCase))
-            ?? _workspaceFamilyService.BuildFamilies(_portfolioSnapshot, _activeQueueSession).FirstOrDefault(family =>
+            ?? _workspaceFamilyService.BuildFamilies(_portfolioSnapshot, _activeQueueSession, _gitQuickActionReceiptLookup).FirstOrDefault(family =>
                 string.Equals(family.FamilyKey, familyKey, StringComparison.OrdinalIgnoreCase));
     }
 

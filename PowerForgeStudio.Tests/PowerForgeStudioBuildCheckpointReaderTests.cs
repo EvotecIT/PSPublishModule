@@ -42,10 +42,49 @@ public sealed class PowerForgeStudioBuildCheckpointReaderTests
         var reader = new ReleaseBuildCheckpointReader();
         var manifest = reader.BuildSigningManifest([queueItem]);
 
-        Assert.Single(manifest);
-        Assert.Equal("DbaClientX", manifest[0].RepositoryName);
-        Assert.Equal("DbaClientX.Core.0.2.0.nupkg", manifest[0].DisplayName);
-        Assert.Equal("File", manifest[0].ArtifactKind);
+        Assert.Equal(2, manifest.Count);
+        Assert.Contains(manifest, artifact => artifact.RepositoryName == "DbaClientX" && artifact.DisplayName == "DbaClientX.Core.0.2.0.nupkg" && artifact.ArtifactKind == "File");
+        Assert.Contains(manifest, artifact => artifact.RepositoryName == "DbaClientX" && artifact.DisplayName == "ProjectBuild" && artifact.ArtifactKind == "Directory");
+    }
+
+    [Fact]
+    public void BuildSigningManifest_IncludesDirectoriesEvenWhenFilesWereCaptured()
+    {
+        var buildResult = new ReleaseBuildExecutionResult(
+            RootPath: @"C:\Support\GitHub\PSWriteHTML",
+            Succeeded: true,
+            Summary: "Build completed safely.",
+            DurationSeconds: 8.4,
+            AdapterResults: [
+                new ReleaseBuildAdapterResult(
+                    ReleaseBuildAdapterKind.ModuleBuild,
+                    true,
+                    "Module build completed.",
+                    0,
+                    8.4,
+                    [@"C:\Support\GitHub\PSWriteHTML\Artefacts\Packed"],
+                    [@"C:\Support\GitHub\PSWriteHTML\Artefacts\Packed\PSWriteHTML.1.0.0.nupkg"])
+            ]);
+
+        var queueItem = new ReleaseQueueItem(
+            RootPath: buildResult.RootPath,
+            RepositoryName: "PSWriteHTML",
+            RepositoryKind: ReleaseRepositoryKind.Module,
+            WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+            QueueOrder: 1,
+            Stage: ReleaseQueueStage.Sign,
+            Status: ReleaseQueueItemStatus.WaitingApproval,
+            Summary: "USB approval required.",
+            CheckpointKey: "sign.waiting.usb",
+            CheckpointStateJson: JsonSerializer.Serialize(buildResult),
+            UpdatedAtUtc: DateTimeOffset.UtcNow);
+
+        var reader = new ReleaseBuildCheckpointReader();
+        var manifest = reader.BuildSigningManifest([queueItem]);
+
+        Assert.Equal(2, manifest.Count);
+        Assert.Contains(manifest, artifact => artifact.ArtifactKind == "File");
+        Assert.Contains(manifest, artifact => artifact.ArtifactKind == "Directory");
     }
 }
 

@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.35027.167
@@ -24,6 +24,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Wpf", "PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj", "{C80B0159-4DDB-41A6-B911-98D594102466}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Tests", "PowerForgeStudio.Tests\PowerForgeStudio.Tests.csproj", "{E29D1629-5000-4F24-AB59-FEAC26C10C07}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Cli", "PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj", "{D0D8322F-B0B4-454C-8669-5D89F7789DA0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -167,6 +169,18 @@ Global
 		{E29D1629-5000-4F24-AB59-FEAC26C10C07}.Release|x64.Build.0 = Release|Any CPU
 		{E29D1629-5000-4F24-AB59-FEAC26C10C07}.Release|x86.ActiveCfg = Release|Any CPU
 		{E29D1629-5000-4F24-AB59-FEAC26C10C07}.Release|x86.Build.0 = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|x64.Build.0 = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Debug|x86.Build.0 = Debug|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|x64.ActiveCfg = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|x64.Build.0 = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|x86.ActiveCfg = Release|Any CPU
+		{D0D8322F-B0B4-454C-8669-5D89F7789DA0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -175,4 +189,3 @@ Global
 		SolutionGuid = {FBCF2ABB-4092-4C5F-98E4-8E4B05BB6029}
 	EndGlobalSection
 EndGlobal
-

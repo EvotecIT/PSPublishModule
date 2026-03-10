@@ -7,14 +7,18 @@ namespace PowerForgeStudio.Orchestrator.Portfolio;
 public sealed class RepositoryPortfolioService
 {
     private readonly GitRepositoryInspector _gitRepositoryInspector;
+    private readonly RepositoryGitPreflightService _gitPreflightService;
 
     public RepositoryPortfolioService()
-        : this(new GitRepositoryInspector()) {
+        : this(new GitRepositoryInspector(), new RepositoryGitPreflightService()) {
     }
 
-    public RepositoryPortfolioService(GitRepositoryInspector gitRepositoryInspector)
+    public RepositoryPortfolioService(
+        GitRepositoryInspector gitRepositoryInspector,
+        RepositoryGitPreflightService gitPreflightService)
     {
         _gitRepositoryInspector = gitRepositoryInspector;
+        _gitPreflightService = gitPreflightService;
     }
 
     public IReadOnlyList<RepositoryPortfolioItem> BuildPortfolio(IEnumerable<RepositoryCatalogEntry> entries)
@@ -23,6 +27,10 @@ public sealed class RepositoryPortfolioService
         foreach (var entry in entries)
         {
             var gitSnapshot = _gitRepositoryInspector.Inspect(entry.RootPath);
+            var gitDiagnostics = _gitPreflightService.Assess(entry, gitSnapshot);
+            gitSnapshot = gitSnapshot with {
+                Diagnostics = gitDiagnostics
+            };
             var readiness = AssessReadiness(entry, gitSnapshot);
             items.Add(new RepositoryPortfolioItem(entry, gitSnapshot, readiness));
         }
@@ -58,26 +66,16 @@ public sealed class RepositoryPortfolioService
             return new RepositoryReadiness(RepositoryReadinessKind.Blocked, "Git metadata unavailable.");
         }
 
-        if (string.IsNullOrWhiteSpace(gitSnapshot.BranchName) || string.Equals(gitSnapshot.BranchName, "(detached)", StringComparison.OrdinalIgnoreCase))
+        var blockedDiagnostic = gitSnapshot.GitDiagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == RepositoryGitDiagnosticSeverity.Blocked);
+        if (blockedDiagnostic is not null)
         {
-            return new RepositoryReadiness(RepositoryReadinessKind.Attention, "Detached HEAD or missing branch name.");
+            return new RepositoryReadiness(RepositoryReadinessKind.Blocked, blockedDiagnostic.Summary);
         }
 
-        if (gitSnapshot.IsDirty)
+        var attentionDiagnostic = gitSnapshot.GitDiagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == RepositoryGitDiagnosticSeverity.Attention);
+        if (attentionDiagnostic is not null)
         {
-            return new RepositoryReadiness(
-                RepositoryReadinessKind.Attention,
-                $"{gitSnapshot.TrackedChangeCount} tracked and {gitSnapshot.UntrackedChangeCount} untracked local changes.");
-        }
-
-        if (gitSnapshot.BehindCount > 0)
-        {
-            return new RepositoryReadiness(RepositoryReadinessKind.Attention, $"Behind upstream by {gitSnapshot.BehindCount} commit(s).");
-        }
-
-        if (string.IsNullOrWhiteSpace(gitSnapshot.UpstreamBranch))
-        {
-            return new RepositoryReadiness(RepositoryReadinessKind.Attention, "No upstream branch configured.");
+            return new RepositoryReadiness(RepositoryReadinessKind.Attention, attentionDiagnostic.Summary);
         }
 
         if (gitSnapshot.AheadCount > 0)

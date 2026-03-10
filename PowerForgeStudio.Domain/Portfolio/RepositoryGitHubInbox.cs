@@ -6,6 +6,10 @@ public sealed record RepositoryGitHubInbox(
     int? OpenPullRequestCount,
     bool? LatestWorkflowFailed,
     string? LatestReleaseTag,
+    string? DefaultBranch,
+    string? ProbedBranch,
+    bool? IsDefaultBranch,
+    bool? BranchProtectionEnabled,
     string Summary,
     string Detail)
 {
@@ -19,5 +23,13 @@ public sealed record RepositoryGitHubInbox(
     };
 
     public string PullRequestDisplay => OpenPullRequestCount is null ? "-" : OpenPullRequestCount.Value.ToString();
+
+    public string GovernanceSummary => BranchProtectionEnabled switch
+    {
+        true when !string.IsNullOrWhiteSpace(ProbedBranch) => $"{ProbedBranch} is protected on GitHub.",
+        false when !string.IsNullOrWhiteSpace(ProbedBranch) => $"{ProbedBranch} is not marked protected on GitHub.",
+        _ when !string.IsNullOrWhiteSpace(DefaultBranch) => $"Default branch is {DefaultBranch}.",
+        _ => "Branch governance not confirmed remotely."
+    };
 }
 

@@ -1,12 +1,12 @@
-namespace PowerForgeStudio.Orchestrator.Queue;
+namespace PowerForgeStudio.Domain.Signing;
 
 public sealed record ReleaseSigningArtifact(
     string RepositoryName,
-    ReleaseBuildAdapterKind AdapterKind,
+    string AdapterKind,
     string ArtifactPath,
     string ArtifactKind)
 {
     public string DisplayName => Path.GetFileName(ArtifactPath);
 
-    public string AdapterDisplay => AdapterKind.ToString();
+    public string AdapterDisplay => AdapterKind;
 }

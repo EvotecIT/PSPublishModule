@@ -45,6 +45,10 @@ public sealed class PowerForgeStudioStateDatabaseTests
                     OpenPullRequestCount: 2,
                     LatestWorkflowFailed: true,
                     LatestReleaseTag: "v0.2.0",
+                    DefaultBranch: "main",
+                    ProbedBranch: "main",
+                    IsDefaultBranch: true,
+                    BranchProtectionEnabled: true,
                     Summary: "2 open PR(s), latest workflow failed, latest release v0.2.0, 1 local commit(s) ahead",
                     Detail: "Current branch is ahead."),
                 ReleaseDrift: new RepositoryReleaseDrift(
@@ -64,7 +68,10 @@ public sealed class PowerForgeStudioStateDatabaseTests
         Assert.Equal(2, reloaded.GitHubInbox.OpenPullRequestCount);
         Assert.True(reloaded.GitHubInbox.LatestWorkflowFailed);
         Assert.Equal("v0.2.0", reloaded.GitHubInbox.LatestReleaseTag);
+        Assert.Equal("main", reloaded.GitHubInbox.DefaultBranch);
+        Assert.True(reloaded.GitHubInbox.BranchProtectionEnabled);
         Assert.Equal(RepositoryReleaseDriftStatus.Attention, reloaded.ReleaseDrift!.Status);
+        Assert.Equal(RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow, reloaded.Git.PrimaryActionableDiagnostic?.Code);
         Assert.Single(reloaded.PlanResults!);
     }
 
@@ -164,6 +171,86 @@ public sealed class PowerForgeStudioStateDatabaseTests
         var receipt = Assert.Single(receipts);
         Assert.Equal(@"C:\Temp\DbaClientX.1.2.3.nupkg", receipt.SourcePath);
         Assert.Equal("https://api.nuget.org/v3/index.json", receipt.Destination);
+    }
+
+    [Fact]
+    public async Task PersistGitQuickActionReceiptAsync_RoundTripsLatestAction()
+    {
+        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
+        Directory.CreateDirectory(testDirectory);
+        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
+        var stateDatabase = new ReleaseStateDatabase(databasePath);
+        await stateDatabase.InitializeAsync();
+
+        await stateDatabase.PersistGitQuickActionReceiptAsync(
+            new RepositoryGitQuickActionReceipt(
+                RootPath: @"C:\Support\GitHub\PSPublishModule",
+                ActionTitle: "Create PR branch",
+                ActionKind: RepositoryGitQuickActionKind.GitCommand,
+                Payload: "git switch -c codex/pspublishmodule-release-flow",
+                Succeeded: true,
+                Summary: "Create PR branch completed successfully.",
+                OutputTail: "Switched to a new branch 'codex/pspublishmodule-release-flow'",
+                ErrorTail: null,
+                ExecutedAtUtc: DateTimeOffset.UtcNow));
+
+        var receipts = await stateDatabase.LoadGitQuickActionReceiptsAsync();
+
+        var receipt = Assert.Single(receipts);
+        Assert.Equal("Create PR branch", receipt.ActionTitle);
+        Assert.True(receipt.Succeeded);
+        Assert.Contains("Switched to a new branch", receipt.OutputTail);
+    }
+
+    [Fact]
+    public async Task PersistPortfolioSnapshotAsync_RollsBackWhenSnapshotWriteFails()
+    {
+        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
+        Directory.CreateDirectory(testDirectory);
+        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
+        var stateDatabase = new ReleaseStateDatabase(databasePath);
+        await stateDatabase.InitializeAsync();
+
+        var originalPortfolio = new[] {
+            CreatePortfolioItem(
+                rootPath: @"C:\Support\GitHub\DbaClientX",
+                repositoryName: "DbaClientX",
+                readinessKind: RepositoryReadinessKind.Ready,
+                readinessReason: "Original snapshot.")
+        };
+
+        await stateDatabase.PersistPortfolioSnapshotAsync(originalPortfolio);
+
+        var duplicateRoot = @"C:\Support\GitHub\PSPublishModule";
+        var conflictingPortfolio = new[] {
+            CreatePortfolioItem(duplicateRoot, "PSPublishModule", RepositoryReadinessKind.Attention, "First duplicate row."),
+            CreatePortfolioItem(duplicateRoot, "PSPublishModule-duplicate", RepositoryReadinessKind.Blocked, "Second duplicate row should fail.")
+        };
+
+        await Assert.ThrowsAsync<DBAClientX.DbaQueryExecutionException>(() => stateDatabase.PersistPortfolioSnapshotAsync(conflictingPortfolio));
+
+        var reloaded = await stateDatabase.LoadPortfolioSnapshotAsync();
+
+        var snapshot = Assert.Single(reloaded);
+        Assert.Equal("DbaClientX", snapshot.Name);
+        Assert.Equal(@"C:\Support\GitHub\DbaClientX", snapshot.RootPath);
+        Assert.Equal("Original snapshot.", snapshot.ReadinessReason);
+    }
+
+    private static RepositoryPortfolioItem CreatePortfolioItem(string rootPath, string repositoryName, RepositoryReadinessKind readinessKind, string readinessReason)
+    {
+        return new RepositoryPortfolioItem(
+            new RepositoryCatalogEntry(
+                Name: repositoryName,
+                RootPath: rootPath,
+                RepositoryKind: ReleaseRepositoryKind.Library,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                ModuleBuildScriptPath: null,
+                ProjectBuildScriptPath: Path.Combine(rootPath, "Build", "Build-Project.ps1"),
+                IsWorktree: false,
+                HasWebsiteSignals: false),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0),
+            new RepositoryReadiness(readinessKind, readinessReason));
     }
 }
 

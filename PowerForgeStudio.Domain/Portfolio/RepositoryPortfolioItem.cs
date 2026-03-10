@@ -40,6 +40,10 @@ public sealed record RepositoryPortfolioItem(
         ? $"{Git.TrackedChangeCount} tracked / {Git.UntrackedChangeCount} untracked"
         : "Clean";
 
+    public string GitGuardStatus => Git.DiagnosticStatus;
+
+    public string GitGuardSummary => Git.DiagnosticSummary;
+
     public RepositoryReadinessKind ReadinessKind => Readiness.Kind;
 
     public string ReadinessReason => Readiness.Reason;

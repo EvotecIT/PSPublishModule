@@ -7,11 +7,30 @@ namespace PowerForgeStudio.Orchestrator.Portfolio;
 
 public sealed class RepositoryDetailService
 {
+    private readonly RepositoryGitRemediationService _gitRemediationService;
+    private readonly RepositoryGitQuickActionService _gitQuickActionService;
+
+    public RepositoryDetailService()
+        : this(new RepositoryGitRemediationService(), new RepositoryGitQuickActionService()) {
+    }
+
+    public RepositoryDetailService(
+        RepositoryGitRemediationService gitRemediationService,
+        RepositoryGitQuickActionService gitQuickActionService)
+    {
+        _gitRemediationService = gitRemediationService;
+        _gitQuickActionService = gitQuickActionService;
+    }
+
     public RepositoryDetailSnapshot CreateDetail(
         RepositoryPortfolioItem? repository,
         ReleaseQueueSession? queueSession,
-        PSPublishModuleResolution buildEngineResolution)
+        PSPublishModuleResolution buildEngineResolution,
+        RepositoryGitQuickActionReceipt? gitQuickActionReceipt = null)
     {
+        var remediationSteps = _gitRemediationService.BuildSteps(repository);
+        var quickActions = _gitQuickActionService.BuildActions(repository, remediationSteps);
+
         if (repository is null)
         {
             return new RepositoryDetailSnapshot(
@@ -21,6 +40,14 @@ public sealed class RepositoryDetailService
                 ReadinessReason: "Select a managed repository to inspect its contract, queue state, and adapter evidence.",
                 RootPath: "No repository path selected.",
                 BranchDisplay: "Branch information unavailable",
+                GitDiagnosticsDisplay: "No git diagnostics yet.",
+                GitDiagnosticsDetail: "Git preflight guidance will appear here once a managed repository is selected.",
+                GitRemediationSteps: remediationSteps,
+                GitQuickActions: quickActions,
+                LastGitActionDisplay: "No git action recorded yet.",
+                LastGitActionSummary: "Quick-action results will appear here after you run a git action from the repository detail pane.",
+                LastGitActionOutput: "No output captured yet.",
+                LastGitActionError: "No error captured yet.",
                 BuildContractDisplay: "No build contract selected.",
                 QueueLaneDisplay: "No queue state selected.",
                 QueueCheckpointDisplay: "No checkpoint selected.",
@@ -68,6 +95,16 @@ public sealed class RepositoryDetailService
             ReadinessReason: repository.ReadinessReason,
             RootPath: repository.RootPath,
             BranchDisplay: $"{repository.BranchName} ({repository.UpstreamBranch})",
+            GitDiagnosticsDisplay: repository.Git.DiagnosticStatus,
+            GitDiagnosticsDetail: repository.Git.DiagnosticDetail,
+            GitRemediationSteps: remediationSteps,
+            GitQuickActions: quickActions,
+            LastGitActionDisplay: gitQuickActionReceipt is null
+                ? "No git action recorded yet."
+                : $"{gitQuickActionReceipt.ActionTitle} ({gitQuickActionReceipt.StatusDisplay})",
+            LastGitActionSummary: gitQuickActionReceipt?.Summary ?? "Quick-action results will appear here after you run a git action from the repository detail pane.",
+            LastGitActionOutput: FormatTail(gitQuickActionReceipt?.OutputTail, "No output captured yet."),
+            LastGitActionError: FormatTail(gitQuickActionReceipt?.ErrorTail, "No error captured yet."),
             BuildContractDisplay: buildContractDisplay,
             QueueLaneDisplay: queueLaneDisplay,
             QueueCheckpointDisplay: queueCheckpointDisplay,

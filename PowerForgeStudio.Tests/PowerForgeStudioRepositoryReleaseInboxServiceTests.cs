@@ -84,12 +84,100 @@ public sealed class PowerForgeStudioRepositoryReleaseInboxServiceTests
             });
     }
 
+    [Fact]
+    public void BuildInbox_IncludesGitGuardItemsWhenQueueIsNotAlreadyBlocking()
+    {
+        var prFlow = CreateRepository(
+            name: "MainBranchRepo",
+            rootPath: @"C:\Support\GitHub\MainBranchRepo",
+            readinessKind: RepositoryReadinessKind.Attention,
+            gitDiagnostics: [
+                new RepositoryGitDiagnostic(
+                    RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow,
+                    RepositoryGitDiagnosticSeverity.Attention,
+                    "PR branch required",
+                    "Local commits are sitting on main; direct push is likely blocked.",
+                    "Use a PR branch instead of pushing directly to main.")
+            ]);
+
+        var service = new RepositoryReleaseInboxService();
+        var inbox = service.BuildInbox([prFlow], queueSession: null);
+
+        var item = Assert.Single(inbox);
+        Assert.Equal("PR Flow", item.Badge);
+        Assert.Contains("direct push is likely blocked", item.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildInbox_UsesProtectedBranchBadgeWhenGitHubConfirmsProtection()
+    {
+        var protectedBranch = CreateRepository(
+            name: "ProtectedMainRepo",
+            rootPath: @"C:\Support\GitHub\ProtectedMainRepo",
+            readinessKind: RepositoryReadinessKind.Attention,
+            gitHubStatus: RepositoryGitHubInboxStatus.Attention,
+            gitDiagnostics: [
+                new RepositoryGitDiagnostic(
+                    RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow,
+                    RepositoryGitDiagnosticSeverity.Attention,
+                    "PR branch required",
+                    "Local commits are sitting on main; direct push is likely blocked.",
+                    "Use a PR branch instead of pushing directly to main.")
+            ]);
+
+        var service = new RepositoryReleaseInboxService();
+        var inbox = service.BuildInbox([protectedBranch], queueSession: null);
+
+        var item = Assert.Single(inbox);
+        Assert.Equal("Protected Branch", item.Badge);
+        Assert.Contains("protected on GitHub", item.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildInbox_IncludesFailedGitQuickActionBeforeGenericGitGuardSignals()
+    {
+        var repository = CreateRepository(
+            name: "ActionRepo",
+            rootPath: @"C:\Support\GitHub\ActionRepo",
+            readinessKind: RepositoryReadinessKind.Attention,
+            gitDiagnostics: [
+                new RepositoryGitDiagnostic(
+                    RepositoryGitDiagnosticCode.NoUpstream,
+                    RepositoryGitDiagnosticSeverity.Attention,
+                    "No upstream configured",
+                    "This repo does not have an upstream branch configured yet.",
+                    "Set upstream before you try to publish from this branch.")
+            ]);
+
+        var receipts = new Dictionary<string, RepositoryGitQuickActionReceipt>(StringComparer.OrdinalIgnoreCase) {
+            [repository.RootPath] = new(
+                RootPath: repository.RootPath,
+                ActionTitle: "Pull --rebase",
+                ActionKind: RepositoryGitQuickActionKind.GitCommand,
+                Payload: "git pull --rebase",
+                Succeeded: false,
+                Summary: "Pull --rebase failed with exit code 1.",
+                OutputTail: "Auto-merging file",
+                ErrorTail: "CONFLICT (content): Merge conflict in README.md",
+                ExecutedAtUtc: DateTimeOffset.UtcNow)
+        };
+
+        var service = new RepositoryReleaseInboxService();
+        var inbox = service.BuildInbox([repository], queueSession: null, receipts);
+
+        var item = Assert.Single(inbox);
+        Assert.Equal("Git Action Failed", item.Badge);
+        Assert.Contains("Pull --rebase failed", item.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Pull --rebase", item.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static RepositoryPortfolioItem CreateRepository(
         string name,
         string rootPath,
         RepositoryReadinessKind readinessKind,
         RepositoryGitHubInboxStatus gitHubStatus = RepositoryGitHubInboxStatus.NotProbed,
-        IReadOnlyList<RepositoryPlanResult>? planResults = null)
+        IReadOnlyList<RepositoryPlanResult>? planResults = null,
+        IReadOnlyList<RepositoryGitDiagnostic>? gitDiagnostics = null)
     {
         var inbox = gitHubStatus == RepositoryGitHubInboxStatus.NotProbed
             ? null
@@ -99,6 +187,10 @@ public sealed class PowerForgeStudioRepositoryReleaseInboxServiceTests
                 OpenPullRequestCount: 2,
                 LatestWorkflowFailed: true,
                 LatestReleaseTag: "v0.2.0",
+                DefaultBranch: "main",
+                ProbedBranch: "main",
+                IsDefaultBranch: true,
+                BranchProtectionEnabled: true,
                 Summary: "GitHub attention.",
                 Detail: "GitHub detail.");
 
@@ -112,7 +204,7 @@ public sealed class PowerForgeStudioRepositoryReleaseInboxServiceTests
                 ProjectBuildScriptPath: Path.Combine(rootPath, "Build", "Build-Project.ps1"),
                 IsWorktree: false,
                 HasWebsiteSignals: false),
-            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0, gitDiagnostics),
             new RepositoryReadiness(readinessKind, readinessKind.ToString()),
             planResults,
             inbox,

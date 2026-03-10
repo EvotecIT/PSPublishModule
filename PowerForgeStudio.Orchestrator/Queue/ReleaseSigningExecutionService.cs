@@ -8,7 +8,7 @@ using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed class ReleaseSigningExecutionService
+public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionService
 {
     private static readonly string[] AuthenticodeDirectoryIncludes = ["*.ps1", "*.psm1", "*.psd1", "*.dll", "*.exe", "*.cat"];
     private readonly ReleaseBuildCheckpointReader _checkpointReader = new();
@@ -40,7 +40,7 @@ public sealed class ReleaseSigningExecutionService
                 Receipts: manifest.Select(artifact => new ReleaseSigningReceipt(
                     RootPath: queueItem.RootPath,
                     RepositoryName: artifact.RepositoryName,
-                    AdapterKind: artifact.AdapterKind.ToString(),
+                    AdapterKind: artifact.AdapterKind,
                     ArtifactPath: artifact.ArtifactPath,
                     ArtifactKind: artifact.ArtifactKind,
                     Status: ReleaseSigningReceiptStatus.Failed,
@@ -115,7 +115,7 @@ public sealed class ReleaseSigningExecutionService
             return new ReleaseSigningReceipt(
                 RootPath: rootPath,
                 RepositoryName: artifact.RepositoryName,
-                AdapterKind: artifact.AdapterKind.ToString(),
+                AdapterKind: artifact.AdapterKind,
                 ArtifactPath: artifact.ArtifactPath,
                 ArtifactKind: artifact.ArtifactKind,
                 Status: packageResult.Succeeded ? ReleaseSigningReceiptStatus.Signed : ReleaseSigningReceiptStatus.Failed,
@@ -126,7 +126,7 @@ public sealed class ReleaseSigningExecutionService
         return new ReleaseSigningReceipt(
             RootPath: rootPath,
             RepositoryName: artifact.RepositoryName,
-            AdapterKind: artifact.AdapterKind.ToString(),
+            AdapterKind: artifact.AdapterKind,
             ArtifactPath: artifact.ArtifactPath,
             ArtifactKind: artifact.ArtifactKind,
             Status: ReleaseSigningReceiptStatus.Skipped,
@@ -158,7 +158,7 @@ public sealed class ReleaseSigningExecutionService
         return new ReleaseSigningReceipt(
             RootPath: rootPath,
             RepositoryName: artifact.RepositoryName,
-            AdapterKind: artifact.AdapterKind.ToString(),
+            AdapterKind: artifact.AdapterKind,
             ArtifactPath: artifact.ArtifactPath,
             ArtifactKind: artifact.ArtifactKind,
             Status: succeeded ? ReleaseSigningReceiptStatus.Signed : ReleaseSigningReceiptStatus.Failed,
@@ -168,12 +168,11 @@ public sealed class ReleaseSigningExecutionService
 
     private static string BuildRegisterCertificateScript(string signingPath, IReadOnlyList<string> includePatterns, SigningSettings settings)
     {
-        var includes = string.Join(", ", includePatterns.Select(pattern => QuoteLiteral(pattern)));
+        var includes = string.Join(", ", includePatterns.Select(pattern => PowerShellScriptEscaping.QuoteLiteral(pattern)));
         return string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
-            "$WarningPreference = 'Stop'",
             BuildModuleImportClause(settings.ModulePath),
-            $"Register-Certificate -Path {QuoteLiteral(signingPath)} -LocalStore {settings.StoreName} -Thumbprint {QuoteLiteral(settings.Thumbprint!)} -TimeStampServer {QuoteLiteral(settings.TimeStampServer)} -Include @({includes}) -Confirm:$false -WarningAction Stop -ErrorAction Stop | Out-Null"
+            $"Register-Certificate -Path {PowerShellScriptEscaping.QuoteLiteral(signingPath)} -LocalStore {settings.StoreName} -Thumbprint {PowerShellScriptEscaping.QuoteLiteral(settings.Thumbprint!)} -TimeStampServer {PowerShellScriptEscaping.QuoteLiteral(settings.TimeStampServer)} -Include @({includes}) -Confirm:$false -WarningAction Stop -ErrorAction Stop | Out-Null"
         });
     }
 
@@ -244,7 +243,7 @@ public sealed class ReleaseSigningExecutionService
         return new ReleaseSigningReceipt(
             RootPath: rootPath,
             RepositoryName: artifact.RepositoryName,
-            AdapterKind: artifact.AdapterKind.ToString(),
+            AdapterKind: artifact.AdapterKind,
             ArtifactPath: artifact.ArtifactPath,
             ArtifactKind: artifact.ArtifactKind,
             Status: ReleaseSigningReceiptStatus.Failed,
@@ -308,14 +307,11 @@ public sealed class ReleaseSigningExecutionService
     {
         if (File.Exists(modulePath))
         {
-            return $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
+            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
         }
 
         return "Import-Module PSPublishModule -Force -ErrorAction Stop";
     }
-
-    private static string QuoteLiteral(string value)
-        => "'" + value.Replace("'", "''") + "'";
 
     private static string? FirstLine(string? value)
     {

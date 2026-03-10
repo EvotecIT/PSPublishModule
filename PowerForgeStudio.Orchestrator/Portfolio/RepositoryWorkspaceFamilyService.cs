@@ -36,7 +36,8 @@ public sealed class RepositoryWorkspaceFamilyService
 
     public IReadOnlyList<RepositoryWorkspaceFamilySnapshot> BuildFamilies(
         IReadOnlyList<RepositoryPortfolioItem> portfolioItems,
-        ReleaseQueueSession? queueSession)
+        ReleaseQueueSession? queueSession,
+        IReadOnlyDictionary<string, RepositoryGitQuickActionReceipt>? gitQuickActionReceipts = null)
     {
         ArgumentNullException.ThrowIfNull(portfolioItems);
 
@@ -53,7 +54,7 @@ public sealed class RepositoryWorkspaceFamilyService
                 var primaryMember = orderedMembers.FirstOrDefault(member => member.WorkspaceKind == ReleaseWorkspaceKind.PrimaryRepository)
                     ?? orderedMembers[0];
                 var worktreeMembers = orderedMembers.Count(member => member.WorkspaceKind == ReleaseWorkspaceKind.Worktree);
-                var attentionMembers = orderedMembers.Count(member => IsAttention(member, queueLookup.GetValueOrDefault(member.RootPath)));
+                var attentionMembers = orderedMembers.Count(member => IsAttention(member, queueLookup.GetValueOrDefault(member.RootPath), gitQuickActionReceipts?.GetValueOrDefault(member.RootPath)));
                 var readyMembers = orderedMembers.Count(member => IsReady(member, queueLookup.GetValueOrDefault(member.RootPath)));
                 var queueActiveMembers = orderedMembers.Count(member => IsQueueActive(queueLookup.GetValueOrDefault(member.RootPath)));
 
@@ -82,7 +83,8 @@ public sealed class RepositoryWorkspaceFamilyService
     public RepositoryWorkspaceFamilyLaneSnapshot? BuildFamilyLane(
         IReadOnlyList<RepositoryPortfolioItem> portfolioItems,
         ReleaseQueueSession? queueSession,
-        string? familyKey)
+        string? familyKey,
+        IReadOnlyDictionary<string, RepositoryGitQuickActionReceipt>? gitQuickActionReceipts = null)
     {
         ArgumentNullException.ThrowIfNull(portfolioItems);
 
@@ -106,7 +108,7 @@ public sealed class RepositoryWorkspaceFamilyService
         var queueLookup = (queueSession?.Items ?? [])
             .ToDictionary(item => item.RootPath, StringComparer.OrdinalIgnoreCase);
         var laneItems = members
-            .Select(item => BuildLaneItem(item, queueLookup.GetValueOrDefault(item.RootPath)))
+            .Select(item => BuildLaneItem(item, queueLookup.GetValueOrDefault(item.RootPath), gitQuickActionReceipts?.GetValueOrDefault(item.RootPath)))
             .OrderBy(item => item.SortOrder)
             .ThenBy(item => item.WorkspaceKind != ReleaseWorkspaceKind.PrimaryRepository)
             .ThenBy(item => item.WorkspaceKind)
@@ -118,14 +120,14 @@ public sealed class RepositoryWorkspaceFamilyService
         var usbWaitingCount = laneItems.Count(item => item.LaneKey == "usb-waiting");
         var publishReadyCount = laneItems.Count(item => item.LaneKey == "publish-ready");
         var verifyReadyCount = laneItems.Count(item => item.LaneKey == "verify-ready");
-        var failedCount = laneItems.Count(item => item.LaneKey == "failed");
+        var failedCount = laneItems.Count(item => item.LaneKey is "failed" or "git-action-failed");
         var completedCount = laneItems.Count(item => item.LaneKey == "completed");
 
         return new RepositoryWorkspaceFamilyLaneSnapshot(
             FamilyKey: members[0].FamilyKey,
             DisplayName: displayName,
             Headline: $"{displayName}: {laneItems.Length} member(s) mapped into the release lane board",
-            Details: $"{readyCount} ready, {usbWaitingCount} waiting on USB, {publishReadyCount} ready to publish, {verifyReadyCount} ready to verify, {failedCount} blocked or failed, {completedCount} completed.",
+            Details: $"{readyCount} ready, {usbWaitingCount} waiting on USB, {publishReadyCount} ready to publish, {verifyReadyCount} ready to verify, {failedCount} blocked, failed, or git-stuck, {completedCount} completed.",
             ReadyCount: readyCount,
             UsbWaitingCount: usbWaitingCount,
             PublishReadyCount: publishReadyCount,
@@ -133,6 +135,20 @@ public sealed class RepositoryWorkspaceFamilyService
             FailedCount: failedCount,
             CompletedCount: completedCount,
             Members: laneItems);
+    }
+
+    public IReadOnlyList<RepositoryWorkspaceFamilyLaneSnapshot> BuildFamilyLanes(
+        IReadOnlyList<RepositoryPortfolioItem> portfolioItems,
+        ReleaseQueueSession? queueSession,
+        IReadOnlyDictionary<string, RepositoryGitQuickActionReceipt>? gitQuickActionReceipts = null)
+    {
+        ArgumentNullException.ThrowIfNull(portfolioItems);
+
+        return BuildFamilies(portfolioItems, queueSession, gitQuickActionReceipts)
+            .Select(family => BuildFamilyLane(portfolioItems, queueSession, family.FamilyKey, gitQuickActionReceipts))
+            .Where(lane => lane is not null)
+            .Cast<RepositoryWorkspaceFamilyLaneSnapshot>()
+            .ToArray();
     }
 
     private static RepositoryWorkspaceFamilyIdentity ResolveFamily(RepositoryPortfolioItem item, IReadOnlyList<string> primaryRepositoryNames)
@@ -228,9 +244,14 @@ public sealed class RepositoryWorkspaceFamilyService
         return $"{primaryCount} primary | {worktreeCount} worktree | {reviewCount} review | {temporaryCount} temp";
     }
 
-    private static bool IsAttention(RepositoryPortfolioItem item, ReleaseQueueItem? queueItem)
+    private static bool IsAttention(RepositoryPortfolioItem item, ReleaseQueueItem? queueItem, RepositoryGitQuickActionReceipt? gitQuickActionReceipt)
     {
         if (item.ReadinessKind is RepositoryReadinessKind.Attention or RepositoryReadinessKind.Blocked)
+        {
+            return true;
+        }
+
+        if (gitQuickActionReceipt is { Succeeded: false })
         {
             return true;
         }
@@ -277,7 +298,7 @@ public sealed class RepositoryWorkspaceFamilyService
             or ReleaseQueueItemStatus.Failed;
     }
 
-    private static RepositoryWorkspaceFamilyLaneItem BuildLaneItem(RepositoryPortfolioItem item, ReleaseQueueItem? queueItem)
+    private static RepositoryWorkspaceFamilyLaneItem BuildLaneItem(RepositoryPortfolioItem item, ReleaseQueueItem? queueItem, RepositoryGitQuickActionReceipt? gitQuickActionReceipt)
     {
         var readinessDisplay = $"{item.ReadinessKind}: {item.ReadinessReason}";
 
@@ -301,7 +322,7 @@ public sealed class RepositoryWorkspaceFamilyService
             return new RepositoryWorkspaceFamilyLaneItem(item.RootPath, item.Name, item.WorkspaceKind, "verify-ready", "Verify Ready", queueItem.Summary, readinessDisplay, 3);
         }
 
-        if (queueItem is { Stage: ReleaseQueueStage.Verify, Status: ReleaseQueueItemStatus.Succeeded })
+        if (queueItem is { Stage: ReleaseQueueStage.Completed, Status: ReleaseQueueItemStatus.Succeeded })
         {
             return new RepositoryWorkspaceFamilyLaneItem(item.RootPath, item.Name, item.WorkspaceKind, "completed", "Completed", queueItem.Summary, readinessDisplay, 5);
         }
@@ -309,6 +330,19 @@ public sealed class RepositoryWorkspaceFamilyService
         if (queueItem is { Stage: ReleaseQueueStage.Build, Status: ReleaseQueueItemStatus.ReadyToRun })
         {
             return new RepositoryWorkspaceFamilyLaneItem(item.RootPath, item.Name, item.WorkspaceKind, "build-ready", "Build Ready", queueItem.Summary, readinessDisplay, 2);
+        }
+
+        if (gitQuickActionReceipt is { Succeeded: false })
+        {
+            return new RepositoryWorkspaceFamilyLaneItem(
+                item.RootPath,
+                item.Name,
+                item.WorkspaceKind,
+                "git-action-failed",
+                "Git Action Failed",
+                gitQuickActionReceipt.Summary,
+                readinessDisplay,
+                1);
         }
 
         if (queueItem is { Stage: ReleaseQueueStage.Prepare, Status: ReleaseQueueItemStatus.Pending })

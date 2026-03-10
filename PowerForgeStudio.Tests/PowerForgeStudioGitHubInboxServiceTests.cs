@@ -60,7 +60,12 @@ public sealed class PowerForgeStudioGitHubInboxServiceTests
         Assert.Equal(2, inbox.OpenPullRequestCount);
         Assert.True(inbox.LatestWorkflowFailed);
         Assert.Equal("v0.2.0", inbox.LatestReleaseTag);
+        Assert.Equal("main", inbox.DefaultBranch);
+        Assert.Equal("main", inbox.ProbedBranch);
+        Assert.True(inbox.IsDefaultBranch);
+        Assert.True(inbox.BranchProtectionEnabled);
         Assert.Contains("2 open PR(s)", inbox.Summary);
+        Assert.Contains("main protected", inbox.Summary, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -93,6 +98,37 @@ public sealed class PowerForgeStudioGitHubInboxServiceTests
         Assert.Contains("not a supported GitHub URL", inbox.Detail);
     }
 
+    [Fact]
+    public async Task PopulateInboxAsync_PullRequestProbeReturnsNotFound_MarksInboxUnavailable()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(request => CreatePullProbeUnavailableResponse(request.RequestUri))) {
+            BaseAddress = new Uri("https://api.github.com")
+        };
+        var repository = new RepositoryPortfolioItem(
+            new RepositoryCatalogEntry(
+                Name: "DbaClientX",
+                RootPath: @"C:\Support\GitHub\DbaClientX",
+                RepositoryKind: ReleaseRepositoryKind.Mixed,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                ModuleBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Module.ps1",
+                ProjectBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Project.ps1",
+                IsWorktree: false,
+                HasWebsiteSignals: false),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0),
+            new RepositoryReadiness(RepositoryReadinessKind.Ready, "Clean and ready."));
+
+        var service = new GitHubInboxService(httpClient, new StubGitRemoteResolver("https://github.com/EvotecIT/DbaClientX.git"));
+        var result = await service.PopulateInboxAsync([repository], new GitHubInboxOptions {
+            MaxRepositories = 5
+        });
+
+        var inbox = Assert.Single(result).GitHubInbox;
+        Assert.NotNull(inbox);
+        Assert.Equal(RepositoryGitHubInboxStatus.Unavailable, inbox.Status);
+        Assert.Null(inbox.OpenPullRequestCount);
+        Assert.Contains("pull request probe unavailable", inbox.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static HttpResponseMessage CreateResponse(Uri? uri)
     {
         var pathAndQuery = uri?.PathAndQuery ?? string.Empty;
@@ -101,9 +137,19 @@ public sealed class PowerForgeStudioGitHubInboxServiceTests
             return Json("""[{ "number": 1 }, { "number": 2 }]""");
         }
 
+        if (string.Equals(pathAndQuery, "/repos/EvotecIT/DbaClientX", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "default_branch": "main" }""");
+        }
+
         if (pathAndQuery.Contains("/releases/latest", StringComparison.OrdinalIgnoreCase))
         {
             return Json("""{ "tag_name": "v0.2.0" }""");
+        }
+
+        if (pathAndQuery.Contains("/branches/main", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "name": "main", "protected": true }""");
         }
 
         if (pathAndQuery.Contains("/actions/runs?", StringComparison.OrdinalIgnoreCase))
@@ -118,6 +164,37 @@ public sealed class PowerForgeStudioGitHubInboxServiceTests
         => new(HttpStatusCode.OK) {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+
+    private static HttpResponseMessage CreatePullProbeUnavailableResponse(Uri? uri)
+    {
+        var pathAndQuery = uri?.PathAndQuery ?? string.Empty;
+        if (pathAndQuery.Contains("/pulls?", StringComparison.OrdinalIgnoreCase))
+        {
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+
+        if (string.Equals(pathAndQuery, "/repos/EvotecIT/DbaClientX", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "default_branch": "main" }""");
+        }
+
+        if (pathAndQuery.Contains("/releases/latest", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "tag_name": "v0.2.0" }""");
+        }
+
+        if (pathAndQuery.Contains("/branches/main", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "name": "main", "protected": true }""");
+        }
+
+        if (pathAndQuery.Contains("/actions/runs?", StringComparison.OrdinalIgnoreCase))
+        {
+            return Json("""{ "workflow_runs": [ { "conclusion": "success" } ] }""");
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.NotFound);
+    }
 
     private sealed class StubGitRemoteResolver(string? originUrl) : IGitRemoteResolver
     {

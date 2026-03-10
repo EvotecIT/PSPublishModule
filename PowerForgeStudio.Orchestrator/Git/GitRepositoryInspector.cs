@@ -6,6 +6,9 @@ namespace PowerForgeStudio.Orchestrator.Git;
 public sealed class GitRepositoryInspector
 {
     public RepositoryGitSnapshot Inspect(string repositoryRoot)
+        => InspectAsync(repositoryRoot, CancellationToken.None).GetAwaiter().GetResult();
+
+    public async Task<RepositoryGitSnapshot> InspectAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
@@ -14,9 +17,12 @@ public sealed class GitRepositoryInspector
             return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
         }
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+
+        using var process = new Process();
         try
         {
-            using var process = new Process();
             process.StartInfo = new ProcessStartInfo {
                 FileName = "git",
                 Arguments = "status --porcelain=2 --branch",
@@ -27,10 +33,16 @@ public sealed class GitRepositoryInspector
                 CreateNoWindow = true
             };
 
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd();
-            var _ = process.StandardError.ReadToEnd();
-            process.WaitForExit();
+            if (!process.Start())
+            {
+                return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
+            }
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            var output = await outputTask.ConfigureAwait(false);
+            _ = await errorTask.ConfigureAwait(false);
 
             if (process.ExitCode != 0)
             {
@@ -39,9 +51,35 @@ public sealed class GitRepositoryInspector
 
             return Parse(output);
         }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            TryKill(process);
+            return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
+        }
         catch
         {
             return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
+        }
+    }
+
+    private static void TryKill(Process? process)
+    {
+        if (process is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(1000);
+            }
+        }
+        catch
+        {
+            // Best effort cleanup only.
         }
     }
 

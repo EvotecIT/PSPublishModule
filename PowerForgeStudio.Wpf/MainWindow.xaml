@@ -454,6 +454,8 @@
                                 <GridViewColumn Width="140" Header="Family" DisplayMemberBinding="{Binding FamilyDisplayName}" />
                                 <GridViewColumn Width="110" Header="Readiness" DisplayMemberBinding="{Binding ReadinessKind}" />
                                 <GridViewColumn Width="200" Header="Reason" DisplayMemberBinding="{Binding ReadinessReason}" />
+                                <GridViewColumn Width="110" Header="Git Guard" DisplayMemberBinding="{Binding GitGuardStatus}" />
+                                <GridViewColumn Width="280" Header="Git Summary" DisplayMemberBinding="{Binding GitGuardSummary}" />
                                 <GridViewColumn Width="110" Header="Plan" DisplayMemberBinding="{Binding PlanStatus}" />
                                 <GridViewColumn Width="320" Header="Plan Summary" DisplayMemberBinding="{Binding PlanSummary}" />
                                 <GridViewColumn Width="110" Header="GitHub" DisplayMemberBinding="{Binding GitHubStatus}" />
@@ -523,6 +525,158 @@
                                        TextWrapping="Wrap"
                                        Style="{StaticResource MutedTextStyle}"
                                        Text="{Binding RepositoryDetailBranch}" />
+                            <TextBlock Margin="0,12,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Git Preflight" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Foreground="{StaticResource AppAccentDeepBrush}"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding RepositoryDetailGitDiagnostics}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding RepositoryDetailGitDiagnosticsDetail}" />
+                            <TextBlock Margin="0,12,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Suggested Commands" />
+                            <ItemsControl Margin="0,8,0,0"
+                                          ItemsSource="{Binding SelectedRepositoryGitRemediationSteps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,10"
+                                                Padding="10"
+                                                Background="#FFFFFF"
+                                                BorderBrush="{StaticResource AppBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Left"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Title}" />
+                                                    <TextBlock DockPanel.Dock="Right"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource AppTextMutedBrush}"
+                                                               Text="{Binding IsPrimary, StringFormat=Primary: {0}}" />
+                                                </DockPanel>
+                                                <TextBlock Margin="0,6,0,0"
+                                                           TextWrapping="Wrap"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding Summary}" />
+                                                <Border Margin="0,8,0,0"
+                                                        Padding="8"
+                                                        Background="{StaticResource AppSurfaceAltBrush}"
+                                                        CornerRadius="10">
+                                                    <TextBlock FontFamily="Consolas"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               Text="{Binding CommandText}" />
+                                                </Border>
+                                                <Button Margin="0,8,0,0"
+                                                        Width="130"
+                                                        HorizontalAlignment="Left"
+                                                        Padding="10,4"
+                                                        Background="#FFFFFF"
+                                                        BorderBrush="{StaticResource AppBorderBrush}"
+                                                        BorderThickness="1"
+                                                        Command="{Binding DataContext.CopyGitRemediationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="Copy Command" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,12,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Quick Actions" />
+                            <ItemsControl Margin="0,8,0,0"
+                                          ItemsSource="{Binding SelectedRepositoryGitQuickActions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,10"
+                                                Padding="10"
+                                                Background="#FFFFFF"
+                                                BorderBrush="{StaticResource AppBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="12">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Left"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Title}" />
+                                                    <TextBlock DockPanel.Dock="Right"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource AppTextMutedBrush}"
+                                                               Text="{Binding KindDisplay}" />
+                                                </DockPanel>
+                                                <TextBlock Margin="0,6,0,0"
+                                                           TextWrapping="Wrap"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding Summary}" />
+                                                <Border Margin="0,8,0,0"
+                                                        Padding="8"
+                                                        Background="{StaticResource AppSurfaceAltBrush}"
+                                                        CornerRadius="10">
+                                                    <TextBlock FontFamily="Consolas"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               Text="{Binding Payload}" />
+                                                </Border>
+                                                <Button Margin="0,8,0,0"
+                                                        Width="130"
+                                                        HorizontalAlignment="Left"
+                                                        Padding="10,4"
+                                                        Background="#FFFFFF"
+                                                        BorderBrush="{StaticResource AppBorderBrush}"
+                                                        BorderThickness="1"
+                                                        Command="{Binding DataContext.ExecuteGitQuickActionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="{Binding ExecuteLabel}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,12,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Last Git Action" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Foreground="{StaticResource AppAccentDeepBrush}"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding RepositoryDetailLastGitAction}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding RepositoryDetailLastGitActionSummary}" />
+                            <TextBlock Margin="0,10,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Output Tail" />
+                            <Border Margin="0,4,0,0"
+                                    Padding="8"
+                                    Background="#FFFFFF"
+                                    BorderBrush="{StaticResource AppBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+                                <TextBlock FontFamily="Consolas"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding RepositoryDetailLastGitActionOutput}" />
+                            </Border>
+                            <TextBlock Margin="0,10,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="Error Tail" />
+                            <Border Margin="0,4,0,0"
+                                    Padding="8"
+                                    Background="#FFFFFF"
+                                    BorderBrush="{StaticResource AppBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+                                <TextBlock FontFamily="Consolas"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding RepositoryDetailLastGitActionError}" />
+                            </Border>
                             <TextBlock Margin="0,12,0,0"
                                        FontWeight="SemiBold"
                                        Text="Build Contract" />

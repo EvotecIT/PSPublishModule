@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Domain.Signing;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -47,26 +48,24 @@ public sealed class ReleaseBuildCheckpointReader
                 {
                     artifacts.Add(new ReleaseSigningArtifact(
                         RepositoryName: item.RepositoryName,
-                        AdapterKind: adapterResult.AdapterKind,
+                        AdapterKind: adapterResult.AdapterKind.ToString(),
                         ArtifactPath: artifactFile,
                         ArtifactKind: "File"));
                 }
 
-                if (adapterResult.ArtifactFiles.Count == 0)
+                foreach (var artifactDirectory in adapterResult.ArtifactDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    foreach (var artifactDirectory in adapterResult.ArtifactDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
-                    {
-                        artifacts.Add(new ReleaseSigningArtifact(
-                            RepositoryName: item.RepositoryName,
-                            AdapterKind: adapterResult.AdapterKind,
-                            ArtifactPath: artifactDirectory,
-                            ArtifactKind: "Directory"));
-                    }
+                    artifacts.Add(new ReleaseSigningArtifact(
+                        RepositoryName: item.RepositoryName,
+                        AdapterKind: adapterResult.AdapterKind.ToString(),
+                        ArtifactPath: artifactDirectory,
+                        ArtifactKind: "Directory"));
                 }
             }
         }
 
         return artifacts
+            .DistinctBy(artifact => $"{artifact.AdapterKind}|{artifact.ArtifactKind}|{artifact.ArtifactPath}", StringComparer.OrdinalIgnoreCase)
             .OrderBy(artifact => artifact.RepositoryName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(artifact => artifact.ArtifactPath, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -34,6 +34,10 @@ public sealed class PowerForgeStudioRepositoryReleaseDriftServiceTests
                 OpenPullRequestCount: 0,
                 LatestWorkflowFailed: false,
                 LatestReleaseTag: "v0.2.0",
+                DefaultBranch: "main",
+                ProbedBranch: "main",
+                IsDefaultBranch: true,
+                BranchProtectionEnabled: true,
                 Summary: "No open PRs, latest workflow passed, latest release v0.2.0, 3 local commit(s) ahead",
                 Detail: "Current branch is ahead."));
 
@@ -66,6 +70,10 @@ public sealed class PowerForgeStudioRepositoryReleaseDriftServiceTests
                 OpenPullRequestCount: 0,
                 LatestWorkflowFailed: false,
                 LatestReleaseTag: "v1.0.0",
+                DefaultBranch: "main",
+                ProbedBranch: "main",
+                IsDefaultBranch: true,
+                BranchProtectionEnabled: true,
                 Summary: "No open PRs, latest workflow passed, latest release v1.0.0",
                 Detail: "Local workspace is clean."));
 

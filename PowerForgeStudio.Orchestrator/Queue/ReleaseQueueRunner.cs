@@ -39,6 +39,8 @@ public sealed class ReleaseQueueRunner
                 };
                 message = $"Advanced {item.RepositoryName} from Build to Sign and paused for USB approval.";
                 break;
+            case ReleaseQueueStage.Sign:
+                return new ReleaseQueueTransitionResult(session, false, $"{item.RepositoryName} is marked Sign/ReadyToRun, but signing requires the USB approval gate before execution can continue.");
             case ReleaseQueueStage.Publish:
                 updatedItem = item with {
                     Stage = ReleaseQueueStage.Verify,

@@ -61,6 +61,29 @@ public sealed class PowerForgeStudioQueueRunnerTests
     }
 
     [Fact]
+    public void AdvanceNextReadyItem_SignReady_ReturnsSpecificUsbGateMessage()
+    {
+        var session = CreateSession(new ReleaseQueueItem(
+            RootPath: @"C:\Support\GitHub\OfficeIMO",
+            RepositoryName: "OfficeIMO",
+            RepositoryKind: ReleaseRepositoryKind.Library,
+            WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+            QueueOrder: 1,
+            Stage: ReleaseQueueStage.Sign,
+            Status: ReleaseQueueItemStatus.ReadyToRun,
+            Summary: "Incorrectly marked ready.",
+            CheckpointKey: "sign.ready",
+            CheckpointStateJson: "{}",
+            UpdatedAtUtc: DateTimeOffset.UtcNow));
+
+        var runner = new ReleaseQueueRunner();
+        var result = runner.AdvanceNextReadyItem(session);
+
+        Assert.False(result.Changed);
+        Assert.Contains("USB approval gate", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CompleteBuild_BuildResult_MovesItemToSigningGateAndStoresCheckpoint()
     {
         var session = CreateSession(new ReleaseQueueItem(

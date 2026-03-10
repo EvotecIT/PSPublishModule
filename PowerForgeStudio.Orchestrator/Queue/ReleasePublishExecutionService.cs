@@ -10,10 +10,12 @@ using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed partial class ReleasePublishExecutionService
+public sealed partial class ReleasePublishExecutionService : IReleasePublishExecutionService
 {
     private readonly RepositoryCatalogScanner _catalogScanner = new();
     private readonly PowerShellCommandRunner _commandRunner = new();
+    private const string GitHubPublishTokenEnvironmentVariable = "POWERFORGESTUDIO_GITHUB_RELEASE_TOKEN";
+    private const string NuGetPushResponseDirectoryName = "nuget-push";
     private static readonly JsonSerializerOptions JsonOptions = new() {
         PropertyNameCaseInsensitive = true
     };
@@ -163,36 +165,80 @@ public sealed partial class ReleasePublishExecutionService
 {
     private async Task<(bool Succeeded, string? ErrorMessage)> PublishNugetPackageAsync(string packagePath, string apiKey, string source, CancellationToken cancellationToken)
     {
+        var responseFilePath = await CreateNuGetPushResponseFileAsync(packagePath, apiKey, source, cancellationToken).ConfigureAwait(false);
         using var process = new Process();
-        process.StartInfo = new ProcessStartInfo {
+        try
+        {
+            process.StartInfo = new ProcessStartInfo {
             FileName = "dotnet",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        process.StartInfo.ArgumentList.Add("nuget");
-        process.StartInfo.ArgumentList.Add("push");
-        process.StartInfo.ArgumentList.Add(packagePath);
-        process.StartInfo.ArgumentList.Add("--api-key");
-        process.StartInfo.ArgumentList.Add(apiKey);
-        process.StartInfo.ArgumentList.Add("--source");
-        process.StartInfo.ArgumentList.Add(source);
-        process.StartInfo.ArgumentList.Add("--skip-duplicate");
+            process.StartInfo.ArgumentList.Add($"@{responseFilePath}");
 
-        process.Start();
-        var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var stdOut = await stdOutTask;
-        var stdErr = await stdErrTask;
+            process.Start();
+            var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            var stdOut = await stdOutTask.ConfigureAwait(false);
+            var stdErr = await stdErrTask.ConfigureAwait(false);
 
-        if (process.ExitCode == 0)
-        {
-            return (true, null);
+            if (process.ExitCode == 0)
+            {
+                return (true, null);
+            }
+
+            return (false, FirstLine(stdErr) ?? FirstLine(stdOut) ?? $"dotnet nuget push failed with exit code {process.ExitCode}.");
         }
+        finally
+        {
+            TryDeleteFile(responseFilePath);
+        }
+    }
 
-        return (false, FirstLine(stdErr) ?? FirstLine(stdOut) ?? $"dotnet nuget push failed with exit code {process.ExitCode}.");
+    private static async Task<string> CreateNuGetPushResponseFileAsync(string packagePath, string apiKey, string source, CancellationToken cancellationToken)
+    {
+        var runtimeDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PowerForgeStudio",
+            "runtime",
+            NuGetPushResponseDirectoryName);
+        Directory.CreateDirectory(runtimeDirectory);
+
+        var responseFilePath = Path.Combine(runtimeDirectory, $"nuget-push-{Guid.NewGuid():N}.rsp");
+        var content = string.Join(Environment.NewLine, new[] {
+            "nuget",
+            "push",
+            QuoteResponseFileValue(packagePath),
+            "--api-key",
+            QuoteResponseFileValue(apiKey),
+            "--source",
+            QuoteResponseFileValue(source),
+            "--skip-duplicate"
+        });
+
+        await File.WriteAllTextAsync(responseFilePath, content, cancellationToken).ConfigureAwait(false);
+        return responseFilePath;
+    }
+
+    private static string QuoteResponseFileValue(string value)
+        => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup for temporary response files.
+        }
     }
 
     private async Task<GitHubReleaseExecutionResult> PublishGitHubReleaseAsync(
@@ -210,11 +256,19 @@ public sealed partial class ReleasePublishExecutionService
         var script = string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
             BuildModuleImportClause(ResolvePSPublishModulePath()),
-            $"$result = Send-GitHubRelease -GitHubUsername {QuoteLiteral(owner)} -GitHubRepositoryName {QuoteLiteral(repo)} -GitHubAccessToken {QuoteLiteral(token)} -TagName {QuoteLiteral(tag)} -ReleaseName {QuoteLiteral(releaseName)} -AssetFilePaths @({string.Join(", ", assetPaths.Select(QuoteLiteral))}) -GenerateReleaseNotes:${generateReleaseNotes.ToString().ToLowerInvariant()} -IsPreRelease:${isPreRelease.ToString().ToLowerInvariant()} -ReuseExistingReleaseOnConflict:$true",
+            $"$gitHubToken = $env:{GitHubPublishTokenEnvironmentVariable}",
+            "if ([string]::IsNullOrWhiteSpace($gitHubToken)) { throw 'GitHub access token was not provided to the publish process.' }",
+            $"$result = Send-GitHubRelease -GitHubUsername {PowerShellScriptEscaping.QuoteLiteral(owner)} -GitHubRepositoryName {PowerShellScriptEscaping.QuoteLiteral(repo)} -GitHubAccessToken $gitHubToken -TagName {PowerShellScriptEscaping.QuoteLiteral(tag)} -ReleaseName {PowerShellScriptEscaping.QuoteLiteral(releaseName)} -AssetFilePaths @({string.Join(", ", assetPaths.Select(PowerShellScriptEscaping.QuoteLiteral))}) -GenerateReleaseNotes:${generateReleaseNotes.ToString().ToLowerInvariant()} -IsPreRelease:${isPreRelease.ToString().ToLowerInvariant()} -ReuseExistingReleaseOnConflict:$true",
             "$result | ConvertTo-Json -Compress"
         });
 
-        var execution = await _commandRunner.RunCommandAsync(repositoryRoot, script, cancellationToken);
+        var execution = await _commandRunner.RunCommandAsync(
+            repositoryRoot,
+            script,
+            new Dictionary<string, string?> {
+                [GitHubPublishTokenEnvironmentVariable] = token
+            },
+            cancellationToken);
         if (execution.ExitCode != 0)
         {
             return new GitHubReleaseExecutionResult(false, null, FirstLine(execution.StandardError) ?? FirstLine(execution.StandardOutput) ?? "GitHub publish failed.");
@@ -342,16 +396,16 @@ public sealed partial class ReleasePublishExecutionService
     private static string BuildProjectPlanScript(string repositoryRoot, string planPath, string? configPath, string modulePath)
     {
         var command = new StringBuilder();
-        command.Append("Invoke-ProjectBuild -Plan:$true -PlanPath ").Append(QuoteLiteral(planPath));
+        command.Append("Invoke-ProjectBuild -Plan:$true -PlanPath ").Append(PowerShellScriptEscaping.QuoteLiteral(planPath));
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            command.Append(" -ConfigPath ").Append(QuoteLiteral(configPath));
+            command.Append(" -ConfigPath ").Append(PowerShellScriptEscaping.QuoteLiteral(configPath));
         }
 
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
             BuildModuleImportClause(modulePath),
-            $"Set-Location -LiteralPath {QuoteLiteral(repositoryRoot)}",
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(repositoryRoot)}",
             command.ToString()
         });
     }
@@ -361,9 +415,9 @@ public sealed partial class ReleasePublishExecutionService
         var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
-            $"$targetJson = {QuoteLiteral(outputPath)}",
+            $"$targetJson = {PowerShellScriptEscaping.QuoteLiteral(outputPath)}",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
             "  param(",
@@ -412,7 +466,7 @@ public sealed partial class ReleasePublishExecutionService
             "  }",
             "}",
             "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
-            $". {QuoteLiteral(scriptPath)}"
+            $". {PowerShellScriptEscaping.QuoteLiteral(scriptPath)}"
         });
     }
 
@@ -420,10 +474,10 @@ public sealed partial class ReleasePublishExecutionService
     {
         var publishPsResource = string.Join("; ", new[] {
             "$cmd = Get-Command -Name Publish-PSResource -ErrorAction SilentlyContinue",
-            "if ($null -ne $cmd) { Publish-PSResource -Path " + QuoteLiteral(packagePath) + " -Repository " + QuoteLiteral(repositoryName) + " -ApiKey " + QuoteLiteral(apiKey) + " -SkipDependencyCheck -ErrorAction Stop | Out-Null; exit 0 }"
+            "if ($null -ne $cmd) { Publish-PSResource -Path " + PowerShellScriptEscaping.QuoteLiteral(packagePath) + " -Repository " + PowerShellScriptEscaping.QuoteLiteral(repositoryName) + " -ApiKey " + PowerShellScriptEscaping.QuoteLiteral(apiKey) + " -SkipDependencyCheck -ErrorAction Stop | Out-Null; exit 0 }"
         });
 
-        var publishPowerShellGet = $"Publish-Module -Path {QuoteLiteral(packagePath)} -Repository {QuoteLiteral(repositoryName)} -NuGetApiKey {QuoteLiteral(apiKey)} -ErrorAction Stop | Out-Null";
+        var publishPowerShellGet = $"Publish-Module -Path {PowerShellScriptEscaping.QuoteLiteral(packagePath)} -Repository {PowerShellScriptEscaping.QuoteLiteral(repositoryName)} -NuGetApiKey {PowerShellScriptEscaping.QuoteLiteral(apiKey)} -ErrorAction Stop | Out-Null";
         return string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
             tool.Equals("PowerShellGet", StringComparison.OrdinalIgnoreCase)
@@ -463,7 +517,7 @@ public sealed partial class ReleasePublishExecutionService
 
     private static string BuildModuleImportClause(string modulePath)
         => File.Exists(modulePath)
-            ? $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}"
+            ? $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}"
             : "Import-Module PSPublishModule -Force -ErrorAction Stop";
 
     private static string ResolvePSPublishModulePath()
@@ -471,15 +525,13 @@ public sealed partial class ReleasePublishExecutionService
         return PSPublishModuleLocator.ResolveModulePath();
     }
 
-    private static string QuoteLiteral(string value)
-        => "'" + value.Replace("'", "''") + "'";
-
     private static string SanitizePathSegment(string value)
     {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(value.Length);
         foreach (var character in value)
         {
-            builder.Append(Path.GetInvalidFileNameChars().Contains(character) ? '_' : character);
+            builder.Append(invalidCharacters.Contains(character) ? '_' : character);
         }
 
         return builder.ToString();
@@ -716,7 +768,7 @@ public sealed partial class ReleasePublishExecutionService
     {
         var script = string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"$manifest = Import-PowerShellDataFile -Path {QuoteLiteral(manifestPath)}",
+            $"$manifest = Import-PowerShellDataFile -Path {PowerShellScriptEscaping.QuoteLiteral(manifestPath)}",
             "$preRelease = $null",
             "if ($manifest.ContainsKey('PrivateData') -and $manifest.PrivateData -and $manifest.PrivateData.PSData) { $preRelease = $manifest.PrivateData.PSData.Prerelease }",
             "@{ ModuleName = $manifest.RootModule; ModuleVersion = $manifest.ModuleVersion.ToString(); PreRelease = $preRelease } | ConvertTo-Json -Compress"

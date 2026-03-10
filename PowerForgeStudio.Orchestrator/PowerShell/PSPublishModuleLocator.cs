@@ -5,8 +5,6 @@ namespace PowerForgeStudio.Orchestrator.PowerShell;
 
 public static class PSPublishModuleLocator
 {
-    private const string DefaultRepoPath = @"C:\Support\GitHub\PSPublishModule\Module\PSPublishModule.psd1";
-
     public static string ResolveModulePath()
     {
         return Resolve().ManifestPath;
@@ -15,7 +13,8 @@ public static class PSPublishModuleLocator
     public static PSPublishModuleResolution Resolve()
     {
         var configuredPath = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_PSPUBLISHMODULE_PATH");
-        return Resolve(configuredPath, DefaultRepoPath, GetCandidateModuleRoots());
+        var repositoryManifest = ResolveRepositoryManifestPath();
+        return Resolve(configuredPath, repositoryManifest ?? string.Empty, GetCandidateModuleRoots());
     }
 
     internal static PSPublishModuleResolution Resolve(
@@ -80,6 +79,63 @@ public static class PSPublishModuleLocator
         }
 
         return roots;
+    }
+
+    private static string? ResolveRepositoryManifestPath()
+    {
+        foreach (var candidateRoot in GetRepositoryRootCandidates())
+        {
+            var manifestPath = Path.Combine(candidateRoot, "Module", "PSPublishModule.psd1");
+            if (File.Exists(manifestPath))
+            {
+                return manifestPath;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> GetRepositoryRootCandidates()
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddRootAndParents(candidates, Environment.GetEnvironmentVariable("POWERFORGE_ROOT"));
+        AddRootAndParents(candidates, Environment.CurrentDirectory);
+        AddRootAndParents(candidates, AppContext.BaseDirectory);
+        return candidates;
+    }
+
+    private static void AddRootAndParents(ISet<string> candidates, string? startPath)
+    {
+        if (string.IsNullOrWhiteSpace(startPath))
+        {
+            return;
+        }
+
+        DirectoryInfo? current;
+        try
+        {
+            current = new DirectoryInfo(startPath);
+            if (!current.Exists && current.Parent is not null)
+            {
+                current = current.Parent;
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        while (current is not null)
+        {
+            candidates.Add(current.FullName);
+            var sibling = Path.Combine(current.FullName, "PSPublishModule");
+            if (Directory.Exists(sibling))
+            {
+                candidates.Add(sibling);
+            }
+
+            current = current.Parent;
+        }
     }
 
     private static bool IsUsable(string? manifestPath)

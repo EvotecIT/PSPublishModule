@@ -47,7 +47,15 @@ public sealed class PowerForgeStudioRepositoryDetailServiceTests
                 AheadCount: 1,
                 BehindCount: 0,
                 TrackedChangeCount: 2,
-                UntrackedChangeCount: 1),
+                UntrackedChangeCount: 1,
+                Diagnostics: [
+                    new RepositoryGitDiagnostic(
+                        RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow,
+                        RepositoryGitDiagnosticSeverity.Attention,
+                        "PR branch required",
+                        "Local commits are sitting on main; direct push is likely blocked.",
+                        "Protected GitHub branches commonly reject direct pushes to main when required checks or PR review policies are enabled.")
+                ]),
             new RepositoryReadiness(RepositoryReadinessKind.Attention, "Plan preview has a failed adapter."),
             [
                 new RepositoryPlanResult(
@@ -100,15 +108,31 @@ public sealed class PowerForgeStudioRepositoryDetailServiceTests
             "3.0.0",
             true,
             "Installed module can lag behind repo DSL changes.");
+        var gitReceipt = new RepositoryGitQuickActionReceipt(
+            RootPath: repository.RootPath,
+            ActionTitle: "Create PR branch",
+            ActionKind: RepositoryGitQuickActionKind.GitCommand,
+            Payload: "git switch -c codex/dbaclientx-release-flow",
+            Succeeded: true,
+            Summary: "Create PR branch completed successfully.",
+            OutputTail: "Switched to a new branch 'codex/dbaclientx-release-flow'",
+            ErrorTail: null,
+            ExecutedAtUtc: DateTimeOffset.UtcNow);
 
         var service = new RepositoryDetailService();
-        var detail = service.CreateDetail(repository, queueSession, resolution);
+        var detail = service.CreateDetail(repository, queueSession, resolution, gitReceipt);
 
         Assert.Equal("DbaClientX", detail.RepositoryName);
         Assert.Equal("Mixed / PrimaryRepository", detail.RepositoryBadge);
         Assert.Equal("Sign / Waiting", detail.QueueLaneDisplay);
         Assert.Equal("sign.waiting.usb", detail.QueueCheckpointDisplay);
         Assert.Contains("\"signingMode\": \"usb\"", detail.QueueCheckpointPayload);
+        Assert.Equal("Attention", detail.GitDiagnosticsDisplay);
+        Assert.Contains("direct push is likely blocked", detail.GitDiagnosticsDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(detail.GitRemediationSteps, step => step.CommandText == "git switch -c codex/dbaclientx-release-flow");
+        Assert.Contains(detail.GitQuickActions, action => action.Payload == "git switch -c codex/dbaclientx-release-flow");
+        Assert.Contains("Create PR branch", detail.LastGitActionDisplay);
+        Assert.Contains("Switched to a new branch", detail.LastGitActionOutput);
         Assert.Equal(2, detail.AdapterEvidence.Count);
         Assert.Equal("ProjectPlan", detail.AdapterEvidence[0].AdapterDisplay);
         Assert.Contains("NETSearchClass", detail.AdapterEvidence[0].Detail);

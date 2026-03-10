@@ -8,6 +8,7 @@ public sealed class RepositoryReleaseInboxService
     public IReadOnlyList<RepositoryReleaseInboxItem> BuildInbox(
         IReadOnlyList<RepositoryPortfolioItem> portfolioItems,
         ReleaseQueueSession? queueSession,
+        IReadOnlyDictionary<string, RepositoryGitQuickActionReceipt>? gitQuickActionReceipts = null,
         int maxItems = 10)
     {
         ArgumentNullException.ThrowIfNull(portfolioItems);
@@ -74,7 +75,38 @@ public sealed class RepositoryReleaseInboxService
 
         foreach (var repository in portfolioItems.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
         {
-            if (repository.GitHubInbox?.Status == RepositoryGitHubInboxStatus.Attention)
+            if (gitQuickActionReceipts?.TryGetValue(repository.RootPath, out var gitQuickActionReceipt) == true
+                && !gitQuickActionReceipt.Succeeded)
+            {
+                candidates.Add(new RepositoryReleaseInboxItem(
+                    RootPath: repository.RootPath,
+                    RepositoryName: repository.Name,
+                    Title: repository.Name,
+                    Detail: $"{gitQuickActionReceipt.Summary} Last action: {gitQuickActionReceipt.ActionTitle}.",
+                    Badge: "Git Action Failed",
+                    FocusMode: RepositoryPortfolioFocusMode.Attention,
+                    SearchText: string.Empty,
+                    PresetKey: "attention",
+                    Priority: 4));
+            }
+            else if (repository.Git.PrimaryActionableDiagnostic is { } gitDiagnostic)
+            {
+                var detail = gitDiagnostic.Code == RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow
+                             && repository.GitHubInbox?.BranchProtectionEnabled == true
+                    ? $"{gitDiagnostic.Summary} {repository.GitHubInbox.GovernanceSummary}"
+                    : gitDiagnostic.Summary;
+                candidates.Add(new RepositoryReleaseInboxItem(
+                    RootPath: repository.RootPath,
+                    RepositoryName: repository.Name,
+                    Title: repository.Name,
+                    Detail: detail,
+                    Badge: GetGitBadge(gitDiagnostic, repository.GitHubInbox),
+                    FocusMode: RepositoryPortfolioFocusMode.Attention,
+                    SearchText: string.Empty,
+                    PresetKey: "attention",
+                    Priority: 5));
+            }
+            else if (repository.GitHubInbox?.Status == RepositoryGitHubInboxStatus.Attention)
             {
                 candidates.Add(new RepositoryReleaseInboxItem(
                     RootPath: repository.RootPath,
@@ -85,7 +117,7 @@ public sealed class RepositoryReleaseInboxService
                     FocusMode: RepositoryPortfolioFocusMode.Attention,
                     SearchText: string.Empty,
                     PresetKey: "attention",
-                    Priority: 4));
+                    Priority: 6));
             }
             else if (repository.ReleaseDrift?.Status == RepositoryReleaseDriftStatus.Attention)
             {
@@ -98,7 +130,7 @@ public sealed class RepositoryReleaseInboxService
                     FocusMode: RepositoryPortfolioFocusMode.Attention,
                     SearchText: string.Empty,
                     PresetKey: "attention",
-                    Priority: 5));
+                    Priority: 7));
             }
             else if (repository.ReadinessKind == RepositoryReadinessKind.Ready
                      && (repository.PlanResults?.Count ?? 0) > 0
@@ -113,7 +145,7 @@ public sealed class RepositoryReleaseInboxService
                     FocusMode: RepositoryPortfolioFocusMode.Ready,
                     SearchText: string.Empty,
                     PresetKey: "ready-today",
-                    Priority: 6));
+                    Priority: 8));
             }
         }
 
@@ -128,4 +160,11 @@ public sealed class RepositoryReleaseInboxService
             .Take(maxItems)
             .ToArray();
     }
+
+    private static string GetGitBadge(RepositoryGitDiagnostic diagnostic, RepositoryGitHubInbox? gitHubInbox)
+        => diagnostic.Code == RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow && gitHubInbox?.BranchProtectionEnabled == true
+            ? "Protected Branch"
+            : diagnostic.Code == RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow
+                ? "PR Flow"
+            : "Git Guard";
 }

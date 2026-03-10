@@ -122,6 +122,7 @@ public sealed class RepositoryPortfolioFocusService
                || Contains(item.RootPath, searchText)
                || Contains(item.BranchName, searchText)
                || Contains(item.ReadinessReason, searchText)
+               || Contains(item.GitGuardSummary, searchText)
                || Contains(item.PlanSummary, searchText)
                || Contains(item.GitHubInbox?.RepositorySlug, searchText)
                || Contains(item.GitHubSummary, searchText)

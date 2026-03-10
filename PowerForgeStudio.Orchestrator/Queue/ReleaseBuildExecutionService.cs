@@ -7,7 +7,7 @@ using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed class ReleaseBuildExecutionService
+public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 {
     private readonly RepositoryCatalogScanner _catalogScanner = new();
     private readonly PowerShellCommandRunner _commandRunner = new();
@@ -109,14 +109,14 @@ public sealed class ReleaseBuildExecutionService
         var parts = new List<string> {
             "$ErrorActionPreference = 'Stop'",
             BuildModuleImportClause(modulePath),
-            $"Set-Location -LiteralPath {QuoteLiteral(repositoryRoot)}"
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(repositoryRoot)}"
         };
 
         var command = new StringBuilder();
         command.Append("Invoke-ProjectBuild -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false");
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            command.Append(" -ConfigPath ").Append(QuoteLiteral(configPath));
+            command.Append(" -ConfigPath ").Append(PowerShellScriptEscaping.QuoteLiteral(configPath));
         }
 
         parts.Add(command.ToString());
@@ -128,7 +128,7 @@ public sealed class ReleaseBuildExecutionService
         var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
             "function New-ConfigurationBuild {",
             "  param([Parameter(ValueFromRemainingArguments = $true)][object[]]$RemainingArgs)",
@@ -143,7 +143,7 @@ public sealed class ReleaseBuildExecutionService
             "  }",
             "  & $cmd @RemainingArgs -SignModule:$false",
             "}",
-            $". {QuoteLiteral(scriptPath)}"
+            $". {PowerShellScriptEscaping.QuoteLiteral(scriptPath)}"
         });
     }
 
@@ -277,7 +277,7 @@ public sealed class ReleaseBuildExecutionService
     {
         if (File.Exists(modulePath))
         {
-            return $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
+            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
         }
 
         return "Import-Module PSPublishModule -Force -ErrorAction Stop";
@@ -288,15 +288,13 @@ public sealed class ReleaseBuildExecutionService
         return PSPublishModuleLocator.ResolveModulePath();
     }
 
-    private static string QuoteLiteral(string value)
-        => "'" + value.Replace("'", "''") + "'";
-
     private static string SanitizePathSegment(string value)
     {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(value.Length);
         foreach (var character in value)
         {
-            builder.Append(Path.GetInvalidFileNameChars().Contains(character) ? '_' : character);
+            builder.Append(invalidCharacters.Contains(character) ? '_' : character);
         }
 
         return builder.ToString();

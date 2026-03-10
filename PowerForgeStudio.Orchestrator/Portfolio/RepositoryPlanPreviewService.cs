@@ -82,7 +82,8 @@ public sealed class RepositoryPlanPreviewService
     {
         var modulePath = ResolvePSPublishModulePath();
         var outputPath = BuildPlanOutputPath(item.Name, RepositoryPlanAdapterKind.ProjectPlan, "project.plan.json");
-        var script = BuildProjectScript(item.Repository.RootPath, outputPath, modulePath);
+        var configPath = ResolveProjectConfigPath(item.Repository.ProjectBuildScriptPath!, item.Repository.RootPath);
+        var script = BuildProjectScript(item.Repository.RootPath, outputPath, modulePath, configPath);
         var execution = await _commandRunner.RunCommandAsync(item.Repository.RootPath, script, cancellationToken);
 
         return BuildResult(
@@ -125,14 +126,42 @@ public sealed class RepositoryPlanPreviewService
         return Path.Combine(root, fileName);
     }
 
-    private static string BuildProjectScript(string repositoryRoot, string outputPath, string modulePath)
+    internal static string? ResolveProjectConfigPath(string projectBuildScriptPath, string repositoryRoot)
     {
-        return string.Join(Environment.NewLine, new[] {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectBuildScriptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
+
+        var buildDirectory = Path.GetDirectoryName(projectBuildScriptPath);
+        if (!string.IsNullOrWhiteSpace(buildDirectory))
+        {
+            var siblingConfig = Path.Combine(buildDirectory, "project.build.json");
+            if (File.Exists(siblingConfig))
+            {
+                return siblingConfig;
+            }
+        }
+
+        var rootConfig = Path.Combine(repositoryRoot, "Build", "project.build.json");
+        return File.Exists(rootConfig) ? rootConfig : null;
+    }
+
+    private static string BuildProjectScript(string repositoryRoot, string outputPath, string modulePath, string? configPath)
+    {
+        var lines = new List<string> {
             "$ErrorActionPreference = 'Stop'",
             BuildModuleImportClause(modulePath),
-            $"Set-Location -LiteralPath {QuoteLiteral(repositoryRoot)}",
-            $"Invoke-ProjectBuild -ConfigPath {QuoteLiteral(Path.Combine(repositoryRoot, "Build", "project.build.json"))} -Plan:$true -PlanPath {QuoteLiteral(outputPath)}"
-        });
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(repositoryRoot)}"
+        };
+
+        var command = new StringBuilder("Invoke-ProjectBuild -Plan:$true -PlanPath ");
+        command.Append(PowerShellScriptEscaping.QuoteLiteral(outputPath));
+        if (!string.IsNullOrWhiteSpace(configPath))
+        {
+            command.Append(" -ConfigPath ").Append(PowerShellScriptEscaping.QuoteLiteral(configPath));
+        }
+
+        lines.Add(command.ToString());
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static string BuildModuleScript(string repositoryRoot, string scriptPath, string outputPath, string modulePath)
@@ -140,9 +169,9 @@ public sealed class RepositoryPlanPreviewService
         var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
+            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
-            $"$targetJson = {QuoteLiteral(outputPath)}",
+            $"$targetJson = {PowerShellScriptEscaping.QuoteLiteral(outputPath)}",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
             "  param(",
@@ -199,7 +228,7 @@ public sealed class RepositoryPlanPreviewService
             "  }",
             "}",
             "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
-            $". {QuoteLiteral(scriptPath)}"
+            $". {PowerShellScriptEscaping.QuoteLiteral(scriptPath)}"
         });
     }
 
@@ -207,7 +236,7 @@ public sealed class RepositoryPlanPreviewService
     {
         if (File.Exists(modulePath))
         {
-            return $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
+            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
         }
 
         return "Import-Module PSPublishModule -Force -ErrorAction Stop";
@@ -218,15 +247,13 @@ public sealed class RepositoryPlanPreviewService
         return PSPublishModuleLocator.ResolveModulePath();
     }
 
-    private static string QuoteLiteral(string value)
-        => "'" + value.Replace("'", "''") + "'";
-
     private static string SanitizePathSegment(string value)
     {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(value.Length);
         foreach (var character in value)
         {
-            builder.Append(Path.GetInvalidFileNameChars().Contains(character) ? '_' : character);
+            builder.Append(invalidCharacters.Contains(character) ? '_' : character);
         }
 
         return builder.ToString();

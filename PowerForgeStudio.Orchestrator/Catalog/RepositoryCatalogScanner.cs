@@ -122,10 +122,9 @@ public sealed class RepositoryCatalogScanner
 
     private static ReleaseWorkspaceKind DetermineWorkspaceKind(string directoryPath)
     {
-        var normalized = directoryPath.Replace('/', '\\');
-        var leafName = Path.GetFileName(normalized);
+        var leafName = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
-        if (IsWorktree(normalized))
+        if (IsWorktree(directoryPath))
         {
             return ReleaseWorkspaceKind.Worktree;
         }
@@ -147,11 +146,12 @@ public sealed class RepositoryCatalogScanner
 
     private static bool IsWorktree(string directoryPath)
     {
-        var normalized = directoryPath.Replace('/', '\\');
-        return normalized.Contains("\\_worktrees\\", StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains("\\_wt\\", StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains("\\.wt-", StringComparison.OrdinalIgnoreCase)
-               || Path.GetFileName(normalized).StartsWith(".wt-", StringComparison.OrdinalIgnoreCase);
+        var normalized = directoryPath.Replace('\\', '/');
+        var leafName = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return normalized.Contains("/_worktrees/", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("/_wt/", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("/.wt-", StringComparison.OrdinalIgnoreCase)
+               || leafName.StartsWith(".wt-", StringComparison.OrdinalIgnoreCase);
     }
 }
 

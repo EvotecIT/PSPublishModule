@@ -1,4 +1,7 @@
 using DBAClientX;
+using System.Security.Cryptography;
+using System.Text;
+using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Domain.Publish;
@@ -10,9 +13,30 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed class ReleaseStateDatabase
 {
+    private const string CurrentSchemaVersion = "15";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AllowedSchemaColumns =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase) {
+            ["release_portfolio_view_state"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["preset_key"] = "TEXT NULL",
+                ["family_key"] = "TEXT NULL"
+            },
+            ["release_queue_session"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["scope_key"] = "TEXT NULL",
+                ["scope_display_name"] = "TEXT NULL"
+            },
+            ["release_portfolio_signal_snapshot"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["github_default_branch"] = "TEXT NULL",
+                ["github_probed_branch"] = "TEXT NULL",
+                ["github_is_default_branch"] = "INTEGER NULL",
+                ["github_branch_protection_enabled"] = "INTEGER NULL"
+            },
+            ["release_publish_receipt"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["source_path"] = "TEXT NULL"
+            }
+        };
 
     public ReleaseStateDatabase(string databasePath)
     {
@@ -26,6 +50,36 @@ public sealed class ReleaseStateDatabase
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(localAppData, "PowerForgeStudio", "releaseops.db");
+    }
+
+    public static async ValueTask<IAsyncDisposable> AcquireExclusiveAccessAsync(
+        string databasePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+
+        var semaphore = new Semaphore(initialCount: 1, maximumCount: 1, name: BuildMutexName(databasePath));
+        var acquired = false;
+
+        try
+        {
+            while (!acquired)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                acquired = semaphore.WaitOne(TimeSpan.FromMilliseconds(250));
+            }
+
+            return new AsyncSemaphoreHandle(semaphore);
+        }
+        catch
+        {
+            if (!acquired)
+            {
+                semaphore.Dispose();
+            }
+
+            throw;
+        }
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -44,9 +98,6 @@ public sealed class ReleaseStateDatabase
                 value TEXT NOT NULL,
                 updated_at_utc TEXT NOT NULL
             );
-            """,
-            """
-            DROP TABLE IF EXISTS release_catalog_snapshot;
             """,
             """
             CREATE TABLE IF NOT EXISTS release_portfolio_snapshot (
@@ -82,6 +133,10 @@ public sealed class ReleaseStateDatabase
                 github_open_pr_count INTEGER NULL,
                 github_latest_workflow_failed INTEGER NULL,
                 github_latest_release_tag TEXT NULL,
+                github_default_branch TEXT NULL,
+                github_probed_branch TEXT NULL,
+                github_is_default_branch INTEGER NULL,
+                github_branch_protection_enabled INTEGER NULL,
                 github_summary TEXT NULL,
                 github_detail TEXT NULL,
                 drift_status TEXT NULL,
@@ -211,6 +266,19 @@ public sealed class ReleaseStateDatabase
             """
             CREATE INDEX IF NOT EXISTS idx_release_verification_receipt_session
             ON release_verification_receipt(session_id, root_path, status);
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS release_git_quick_action_receipt (
+                root_path TEXT PRIMARY KEY,
+                action_title TEXT NOT NULL,
+                action_kind TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                succeeded INTEGER NOT NULL,
+                summary TEXT NOT NULL,
+                output_tail TEXT NULL,
+                error_tail TEXT NULL,
+                executed_at_utc TEXT NOT NULL
+            );
             """
         };
 
@@ -244,6 +312,30 @@ public sealed class ReleaseStateDatabase
             cancellationToken).ConfigureAwait(false);
 
         await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_signal_snapshot",
+            columnName: "github_default_branch",
+            columnDefinition: "TEXT NULL",
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_signal_snapshot",
+            columnName: "github_probed_branch",
+            columnDefinition: "TEXT NULL",
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_signal_snapshot",
+            columnName: "github_is_default_branch",
+            columnDefinition: "INTEGER NULL",
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_signal_snapshot",
+            columnName: "github_branch_protection_enabled",
+            columnDefinition: "INTEGER NULL",
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(
             tableName: "release_publish_receipt",
             columnName: "source_path",
             columnDefinition: "TEXT NULL",
@@ -260,14 +352,46 @@ public sealed class ReleaseStateDatabase
             """,
             new Dictionary<string, object?> {
                 ["@Key"] = "schema_version",
-                ["@Value"] = "12",
+                ["@Value"] = CurrentSchemaVersion,
                 ["@UpdatedAtUtc"] = DateTime.UtcNow.ToString("O")
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    private static string BuildMutexName(string databasePath)
+    {
+        var normalizedPath = Path.GetFullPath(databasePath).ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
+        return $@"Global\PowerForgeStudio.ReleaseState.{hash}";
+    }
+
+    private sealed class AsyncSemaphoreHandle : IAsyncDisposable
+    {
+        private readonly Semaphore _semaphore;
+        private bool _disposed;
+
+        public AsyncSemaphoreHandle(Semaphore semaphore)
+        {
+            _semaphore = semaphore;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            _disposed = true;
+            _semaphore.Release();
+            _semaphore.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private async Task EnsureColumnExistsAsync(string tableName, string columnName, string columnDefinition, CancellationToken cancellationToken)
     {
+        ValidateSchemaColumn(tableName, columnName, columnDefinition);
         var existingColumns = await _sqlite.QueryReadOnlyAsListAsync(
             DatabasePath,
             $"PRAGMA table_info({tableName});",
@@ -283,6 +407,20 @@ public sealed class ReleaseStateDatabase
             DatabasePath,
             $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition};",
             cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateSchemaColumn(string tableName, string columnName, string columnDefinition)
+    {
+        if (!AllowedSchemaColumns.TryGetValue(tableName, out var allowedColumns) ||
+            !allowedColumns.TryGetValue(columnName, out var expectedDefinition))
+        {
+            throw new InvalidOperationException($"Schema migration for {tableName}.{columnName} is not allowlisted.");
+        }
+
+        if (!string.Equals(expectedDefinition, columnDefinition, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Schema migration definition mismatch for {tableName}.{columnName}.");
+        }
     }
 
     public async Task PersistPortfolioViewStateAsync(RepositoryPortfolioViewState state, string viewId = "default", CancellationToken cancellationToken = default)
@@ -368,129 +506,160 @@ public sealed class ReleaseStateDatabase
 
     public async Task PersistPortfolioSnapshotAsync(IEnumerable<RepositoryPortfolioItem> items, CancellationToken cancellationToken = default)
     {
+        var materializedItems = items.ToArray();
         var scannedAtUtc = DateTime.UtcNow.ToString("O");
-
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_portfolio_snapshot;",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_portfolio_signal_snapshot;",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var item in items)
+        await _sqlite.BeginTransactionAsync(DatabasePath, cancellationToken).ConfigureAwait(false);
+        try
         {
             await _sqlite.ExecuteNonQueryAsync(
                 DatabasePath,
-                """
-                INSERT INTO release_portfolio_snapshot(
-                    root_path,
-                    name,
-                    repository_kind,
-                    workspace_kind,
-                    module_build_script_path,
-                    project_build_script_path,
-                    is_worktree,
-                    has_website_signals,
-                    is_git_repository,
-                    branch_name,
-                    upstream_branch,
-                    ahead_count,
-                    behind_count,
-                    tracked_change_count,
-                    untracked_change_count,
-                    readiness_kind,
-                    readiness_reason,
-                    scanned_at_utc)
-                VALUES (
-                    @RootPath,
-                    @Name,
-                    @RepositoryKind,
-                    @WorkspaceKind,
-                    @ModuleBuildScriptPath,
-                    @ProjectBuildScriptPath,
-                    @IsWorktree,
-                    @HasWebsiteSignals,
-                    @IsGitRepository,
-                    @BranchName,
-                    @UpstreamBranch,
-                    @AheadCount,
-                    @BehindCount,
-                    @TrackedChangeCount,
-                    @UntrackedChangeCount,
-                    @ReadinessKind,
-                    @ReadinessReason,
-                    @ScannedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@RootPath"] = item.RootPath,
-                    ["@Name"] = item.Name,
-                    ["@RepositoryKind"] = item.RepositoryKind.ToString(),
-                    ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
-                    ["@ModuleBuildScriptPath"] = item.Repository.ModuleBuildScriptPath,
-                    ["@ProjectBuildScriptPath"] = item.Repository.ProjectBuildScriptPath,
-                    ["@IsWorktree"] = item.Repository.IsWorktree ? 1 : 0,
-                    ["@HasWebsiteSignals"] = item.Repository.HasWebsiteSignals ? 1 : 0,
-                    ["@IsGitRepository"] = item.Git.IsGitRepository ? 1 : 0,
-                    ["@BranchName"] = item.Git.BranchName,
-                    ["@UpstreamBranch"] = item.Git.UpstreamBranch,
-                    ["@AheadCount"] = item.Git.AheadCount,
-                    ["@BehindCount"] = item.Git.BehindCount,
-                    ["@TrackedChangeCount"] = item.Git.TrackedChangeCount,
-                    ["@UntrackedChangeCount"] = item.Git.UntrackedChangeCount,
-                    ["@ReadinessKind"] = item.Readiness.Kind.ToString(),
-                    ["@ReadinessReason"] = item.Readiness.Reason,
-                    ["@ScannedAtUtc"] = scannedAtUtc
-                },
+                "DELETE FROM release_portfolio_snapshot;",
+                useTransaction: true,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             await _sqlite.ExecuteNonQueryAsync(
                 DatabasePath,
-                """
-                INSERT INTO release_portfolio_signal_snapshot(
-                    root_path,
-                    github_repository_slug,
-                    github_status,
-                    github_open_pr_count,
-                    github_latest_workflow_failed,
-                    github_latest_release_tag,
-                    github_summary,
-                    github_detail,
-                    drift_status,
-                    drift_summary,
-                    drift_detail,
-                    scanned_at_utc)
-                VALUES (
-                    @RootPath,
-                    @GitHubRepositorySlug,
-                    @GitHubStatus,
-                    @GitHubOpenPullRequestCount,
-                    @GitHubLatestWorkflowFailed,
-                    @GitHubLatestReleaseTag,
-                    @GitHubSummary,
-                    @GitHubDetail,
-                    @DriftStatus,
-                    @DriftSummary,
-                    @DriftDetail,
-                    @ScannedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@RootPath"] = item.RootPath,
-                    ["@GitHubRepositorySlug"] = item.GitHubInbox?.RepositorySlug,
-                    ["@GitHubStatus"] = item.GitHubInbox?.Status.ToString(),
-                    ["@GitHubOpenPullRequestCount"] = item.GitHubInbox?.OpenPullRequestCount,
-                    ["@GitHubLatestWorkflowFailed"] = item.GitHubInbox?.LatestWorkflowFailed is null ? null : item.GitHubInbox.LatestWorkflowFailed.Value ? 1 : 0,
-                    ["@GitHubLatestReleaseTag"] = item.GitHubInbox?.LatestReleaseTag,
-                    ["@GitHubSummary"] = item.GitHubInbox?.Summary,
-                    ["@GitHubDetail"] = item.GitHubInbox?.Detail,
-                    ["@DriftStatus"] = item.ReleaseDrift?.Status.ToString(),
-                    ["@DriftSummary"] = item.ReleaseDrift?.Summary,
-                    ["@DriftDetail"] = item.ReleaseDrift?.Detail,
-                    ["@ScannedAtUtc"] = scannedAtUtc
-                },
+                "DELETE FROM release_portfolio_signal_snapshot;",
+                useTransaction: true,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            foreach (var item in materializedItems)
+            {
+                await _sqlite.ExecuteNonQueryAsync(
+                    DatabasePath,
+                    """
+                    INSERT INTO release_portfolio_snapshot(
+                        root_path,
+                        name,
+                        repository_kind,
+                        workspace_kind,
+                        module_build_script_path,
+                        project_build_script_path,
+                        is_worktree,
+                        has_website_signals,
+                        is_git_repository,
+                        branch_name,
+                        upstream_branch,
+                        ahead_count,
+                        behind_count,
+                        tracked_change_count,
+                        untracked_change_count,
+                        readiness_kind,
+                        readiness_reason,
+                        scanned_at_utc)
+                    VALUES (
+                        @RootPath,
+                        @Name,
+                        @RepositoryKind,
+                        @WorkspaceKind,
+                        @ModuleBuildScriptPath,
+                        @ProjectBuildScriptPath,
+                        @IsWorktree,
+                        @HasWebsiteSignals,
+                        @IsGitRepository,
+                        @BranchName,
+                        @UpstreamBranch,
+                        @AheadCount,
+                        @BehindCount,
+                        @TrackedChangeCount,
+                        @UntrackedChangeCount,
+                        @ReadinessKind,
+                        @ReadinessReason,
+                        @ScannedAtUtc);
+                    """,
+                    new Dictionary<string, object?> {
+                        ["@RootPath"] = item.RootPath,
+                        ["@Name"] = item.Name,
+                        ["@RepositoryKind"] = item.RepositoryKind.ToString(),
+                        ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
+                        ["@ModuleBuildScriptPath"] = item.Repository.ModuleBuildScriptPath,
+                        ["@ProjectBuildScriptPath"] = item.Repository.ProjectBuildScriptPath,
+                        ["@IsWorktree"] = item.Repository.IsWorktree ? 1 : 0,
+                        ["@HasWebsiteSignals"] = item.Repository.HasWebsiteSignals ? 1 : 0,
+                        ["@IsGitRepository"] = item.Git.IsGitRepository ? 1 : 0,
+                        ["@BranchName"] = item.Git.BranchName,
+                        ["@UpstreamBranch"] = item.Git.UpstreamBranch,
+                        ["@AheadCount"] = item.Git.AheadCount,
+                        ["@BehindCount"] = item.Git.BehindCount,
+                        ["@TrackedChangeCount"] = item.Git.TrackedChangeCount,
+                        ["@UntrackedChangeCount"] = item.Git.UntrackedChangeCount,
+                        ["@ReadinessKind"] = item.Readiness.Kind.ToString(),
+                        ["@ReadinessReason"] = item.Readiness.Reason,
+                        ["@ScannedAtUtc"] = scannedAtUtc
+                    },
+                    useTransaction: true,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                await _sqlite.ExecuteNonQueryAsync(
+                    DatabasePath,
+                    """
+                    INSERT INTO release_portfolio_signal_snapshot(
+                        root_path,
+                        github_repository_slug,
+                        github_status,
+                        github_open_pr_count,
+                        github_latest_workflow_failed,
+                        github_latest_release_tag,
+                        github_default_branch,
+                        github_probed_branch,
+                        github_is_default_branch,
+                        github_branch_protection_enabled,
+                        github_summary,
+                        github_detail,
+                        drift_status,
+                        drift_summary,
+                        drift_detail,
+                        scanned_at_utc)
+                    VALUES (
+                        @RootPath,
+                        @GitHubRepositorySlug,
+                        @GitHubStatus,
+                        @GitHubOpenPullRequestCount,
+                        @GitHubLatestWorkflowFailed,
+                        @GitHubLatestReleaseTag,
+                        @GitHubDefaultBranch,
+                        @GitHubProbedBranch,
+                        @GitHubIsDefaultBranch,
+                        @GitHubBranchProtectionEnabled,
+                        @GitHubSummary,
+                        @GitHubDetail,
+                        @DriftStatus,
+                        @DriftSummary,
+                        @DriftDetail,
+                        @ScannedAtUtc);
+                    """,
+                    new Dictionary<string, object?> {
+                        ["@RootPath"] = item.RootPath,
+                        ["@GitHubRepositorySlug"] = item.GitHubInbox?.RepositorySlug,
+                        ["@GitHubStatus"] = item.GitHubInbox?.Status.ToString(),
+                        ["@GitHubOpenPullRequestCount"] = item.GitHubInbox?.OpenPullRequestCount,
+                        ["@GitHubLatestWorkflowFailed"] = item.GitHubInbox?.LatestWorkflowFailed is null ? null : item.GitHubInbox.LatestWorkflowFailed.Value ? 1 : 0,
+                        ["@GitHubLatestReleaseTag"] = item.GitHubInbox?.LatestReleaseTag,
+                        ["@GitHubDefaultBranch"] = item.GitHubInbox?.DefaultBranch,
+                        ["@GitHubProbedBranch"] = item.GitHubInbox?.ProbedBranch,
+                        ["@GitHubIsDefaultBranch"] = item.GitHubInbox?.IsDefaultBranch is null ? null : item.GitHubInbox.IsDefaultBranch.Value ? 1 : 0,
+                        ["@GitHubBranchProtectionEnabled"] = item.GitHubInbox?.BranchProtectionEnabled is null ? null : item.GitHubInbox.BranchProtectionEnabled.Value ? 1 : 0,
+                        ["@GitHubSummary"] = item.GitHubInbox?.Summary,
+                        ["@GitHubDetail"] = item.GitHubInbox?.Detail,
+                        ["@DriftStatus"] = item.ReleaseDrift?.Status.ToString(),
+                        ["@DriftSummary"] = item.ReleaseDrift?.Summary,
+                        ["@DriftDetail"] = item.ReleaseDrift?.Detail,
+                        ["@ScannedAtUtc"] = scannedAtUtc
+                    },
+                    useTransaction: true,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            await _sqlite.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (_sqlite.IsInTransaction)
+            {
+                await _sqlite.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            throw;
         }
     }
 
@@ -574,6 +743,10 @@ public sealed class ReleaseStateDatabase
                    github_open_pr_count,
                    github_latest_workflow_failed,
                    github_latest_release_tag,
+                   github_default_branch,
+                   github_probed_branch,
+                   github_is_default_branch,
+                   github_branch_protection_enabled,
                    github_summary,
                    github_detail,
                    drift_status,
@@ -588,11 +761,15 @@ public sealed class ReleaseStateDatabase
                 GitHubOpenPullRequestCount: reader.IsDBNull(3) ? null : reader.GetInt32(3),
                 GitHubLatestWorkflowFailed: reader.IsDBNull(4) ? null : reader.GetInt32(4) == 1,
                 GitHubLatestReleaseTag: reader.IsDBNull(5) ? null : reader.GetString(5),
-                GitHubSummary: reader.IsDBNull(6) ? null : reader.GetString(6),
-                GitHubDetail: reader.IsDBNull(7) ? null : reader.GetString(7),
-                DriftStatus: reader.IsDBNull(8) ? null : reader.GetString(8),
-                DriftSummary: reader.IsDBNull(9) ? null : reader.GetString(9),
-                DriftDetail: reader.IsDBNull(10) ? null : reader.GetString(10)),
+                GitHubDefaultBranch: reader.IsDBNull(6) ? null : reader.GetString(6),
+                GitHubProbedBranch: reader.IsDBNull(7) ? null : reader.GetString(7),
+                GitHubIsDefaultBranch: reader.IsDBNull(8) ? null : reader.GetInt32(8) == 1,
+                GitHubBranchProtectionEnabled: reader.IsDBNull(9) ? null : reader.GetInt32(9) == 1,
+                GitHubSummary: reader.IsDBNull(10) ? null : reader.GetString(10),
+                GitHubDetail: reader.IsDBNull(11) ? null : reader.GetString(11),
+                DriftStatus: reader.IsDBNull(12) ? null : reader.GetString(12),
+                DriftSummary: reader.IsDBNull(13) ? null : reader.GetString(13),
+                DriftDetail: reader.IsDBNull(14) ? null : reader.GetString(14)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var planLookup = planRows
@@ -613,28 +790,34 @@ public sealed class ReleaseStateDatabase
                 StringComparer.OrdinalIgnoreCase);
 
         var signalLookup = signalRows.ToDictionary(row => row.RootPath, StringComparer.OrdinalIgnoreCase);
+        var gitPreflightService = new RepositoryGitPreflightService();
 
         return portfolioRows
             .Select(row => {
                 var hasSignal = signalLookup.TryGetValue(row.RootPath, out var signal);
+                var repositoryEntry = new RepositoryCatalogEntry(
+                    Name: row.Name,
+                    RootPath: row.RootPath,
+                    RepositoryKind: Enum.Parse<ReleaseRepositoryKind>(row.RepositoryKind, ignoreCase: true),
+                    WorkspaceKind: Enum.Parse<ReleaseWorkspaceKind>(row.WorkspaceKind, ignoreCase: true),
+                    ModuleBuildScriptPath: row.ModuleBuildScriptPath,
+                    ProjectBuildScriptPath: row.ProjectBuildScriptPath,
+                    IsWorktree: row.IsWorktree,
+                    HasWebsiteSignals: row.HasWebsiteSignals);
+                var gitSnapshot = new RepositoryGitSnapshot(
+                    IsGitRepository: row.IsGitRepository,
+                    BranchName: row.BranchName,
+                    UpstreamBranch: row.UpstreamBranch,
+                    AheadCount: row.AheadCount,
+                    BehindCount: row.BehindCount,
+                    TrackedChangeCount: row.TrackedChangeCount,
+                    UntrackedChangeCount: row.UntrackedChangeCount);
+                gitSnapshot = gitSnapshot with {
+                    Diagnostics = gitPreflightService.Assess(repositoryEntry, gitSnapshot)
+                };
                 return new RepositoryPortfolioItem(
-                    Repository: new RepositoryCatalogEntry(
-                        Name: row.Name,
-                        RootPath: row.RootPath,
-                        RepositoryKind: Enum.Parse<ReleaseRepositoryKind>(row.RepositoryKind, ignoreCase: true),
-                        WorkspaceKind: Enum.Parse<ReleaseWorkspaceKind>(row.WorkspaceKind, ignoreCase: true),
-                        ModuleBuildScriptPath: row.ModuleBuildScriptPath,
-                        ProjectBuildScriptPath: row.ProjectBuildScriptPath,
-                        IsWorktree: row.IsWorktree,
-                        HasWebsiteSignals: row.HasWebsiteSignals),
-                    Git: new RepositoryGitSnapshot(
-                        IsGitRepository: row.IsGitRepository,
-                        BranchName: row.BranchName,
-                        UpstreamBranch: row.UpstreamBranch,
-                        AheadCount: row.AheadCount,
-                        BehindCount: row.BehindCount,
-                        TrackedChangeCount: row.TrackedChangeCount,
-                        UntrackedChangeCount: row.UntrackedChangeCount),
+                    Repository: repositoryEntry,
+                    Git: gitSnapshot,
                     Readiness: new RepositoryReadiness(
                         Enum.Parse<RepositoryReadinessKind>(row.ReadinessKind, ignoreCase: true),
                         row.ReadinessReason),
@@ -647,6 +830,10 @@ public sealed class ReleaseStateDatabase
                             OpenPullRequestCount: signal.GitHubOpenPullRequestCount,
                             LatestWorkflowFailed: signal.GitHubLatestWorkflowFailed,
                             LatestReleaseTag: signal.GitHubLatestReleaseTag,
+                            DefaultBranch: signal.GitHubDefaultBranch,
+                            ProbedBranch: signal.GitHubProbedBranch,
+                            IsDefaultBranch: signal.GitHubIsDefaultBranch,
+                            BranchProtectionEnabled: signal.GitHubBranchProtectionEnabled,
                             Summary: signal.GitHubSummary ?? "GitHub inbox snapshot loaded.",
                             Detail: signal.GitHubDetail ?? "No GitHub detail persisted."),
                     ReleaseDrift: !hasSignal || string.IsNullOrWhiteSpace(signal.DriftStatus)
@@ -1183,6 +1370,87 @@ public sealed class ReleaseStateDatabase
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task PersistGitQuickActionReceiptAsync(RepositoryGitQuickActionReceipt receipt, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(receipt);
+
+        await _sqlite.ExecuteNonQueryAsync(
+            DatabasePath,
+            """
+            INSERT INTO release_git_quick_action_receipt(
+                root_path,
+                action_title,
+                action_kind,
+                payload,
+                succeeded,
+                summary,
+                output_tail,
+                error_tail,
+                executed_at_utc)
+            VALUES (
+                @RootPath,
+                @ActionTitle,
+                @ActionKind,
+                @Payload,
+                @Succeeded,
+                @Summary,
+                @OutputTail,
+                @ErrorTail,
+                @ExecutedAtUtc)
+            ON CONFLICT(root_path) DO UPDATE SET
+                action_title = excluded.action_title,
+                action_kind = excluded.action_kind,
+                payload = excluded.payload,
+                succeeded = excluded.succeeded,
+                summary = excluded.summary,
+                output_tail = excluded.output_tail,
+                error_tail = excluded.error_tail,
+                executed_at_utc = excluded.executed_at_utc;
+            """,
+            new Dictionary<string, object?> {
+                ["@RootPath"] = receipt.RootPath,
+                ["@ActionTitle"] = receipt.ActionTitle,
+                ["@ActionKind"] = receipt.ActionKind.ToString(),
+                ["@Payload"] = receipt.Payload,
+                ["@Succeeded"] = receipt.Succeeded ? 1 : 0,
+                ["@Summary"] = receipt.Summary,
+                ["@OutputTail"] = receipt.OutputTail,
+                ["@ErrorTail"] = receipt.ErrorTail,
+                ["@ExecutedAtUtc"] = receipt.ExecutedAtUtc.ToString("O")
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<RepositoryGitQuickActionReceipt>> LoadGitQuickActionReceiptsAsync(CancellationToken cancellationToken = default)
+    {
+        return await _sqlite.QueryReadOnlyAsListAsync(
+            DatabasePath,
+            """
+            SELECT root_path,
+                   action_title,
+                   action_kind,
+                   payload,
+                   succeeded,
+                   summary,
+                   output_tail,
+                   error_tail,
+                   executed_at_utc
+            FROM release_git_quick_action_receipt
+            ORDER BY executed_at_utc DESC;
+            """,
+            reader => new RepositoryGitQuickActionReceipt(
+                RootPath: reader.GetString(0),
+                ActionTitle: reader.GetString(1),
+                ActionKind: Enum.Parse<RepositoryGitQuickActionKind>(reader.GetString(2), ignoreCase: true),
+                Payload: reader.GetString(3),
+                Succeeded: reader.GetInt32(4) == 1,
+                Summary: reader.GetString(5),
+                OutputTail: reader.IsDBNull(6) ? null : reader.GetString(6),
+                ErrorTail: reader.IsDBNull(7) ? null : reader.GetString(7),
+                ExecutedAtUtc: DateTimeOffset.Parse(reader.GetString(8))),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
     private readonly record struct QueueSessionRow(
         string SessionId,
         string WorkspaceRoot,
@@ -1233,6 +1501,10 @@ public sealed class ReleaseStateDatabase
         int? GitHubOpenPullRequestCount,
         bool? GitHubLatestWorkflowFailed,
         string? GitHubLatestReleaseTag,
+        string? GitHubDefaultBranch,
+        string? GitHubProbedBranch,
+        bool? GitHubIsDefaultBranch,
+        bool? GitHubBranchProtectionEnabled,
         string? GitHubSummary,
         string? GitHubDetail,
         string? DriftStatus,

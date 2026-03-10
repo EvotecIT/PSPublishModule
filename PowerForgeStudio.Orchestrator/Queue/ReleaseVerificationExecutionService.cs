@@ -8,10 +8,11 @@ using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Portfolio;
+using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed class ReleaseVerificationExecutionService
+public sealed class ReleaseVerificationExecutionService : IReleaseVerificationExecutionService, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new() {
         PropertyNameCaseInsensitive = true
@@ -20,25 +21,43 @@ public sealed class ReleaseVerificationExecutionService
     private readonly HttpClient _httpClient;
     private readonly PowerShellCommandRunner _powerShellCommandRunner = new();
     private readonly Func<string, string, CancellationToken, Task<PowerShellExecutionResult>> _runPowerShellAsync;
+    private readonly bool _ownsHttpClient;
 
     public ReleaseVerificationExecutionService()
         : this(new HttpClient(new HttpClientHandler {
             AllowAutoRedirect = true
         }) {
             Timeout = TimeSpan.FromSeconds(20)
-        }, null)
+        }, null, ownsHttpClient: true)
     {
     }
 
     internal ReleaseVerificationExecutionService(
         HttpClient httpClient,
         Func<string, string, CancellationToken, Task<PowerShellExecutionResult>>? runPowerShellAsync)
+        : this(httpClient, runPowerShellAsync, ownsHttpClient: false)
+    {
+    }
+
+    internal ReleaseVerificationExecutionService(
+        HttpClient httpClient,
+        Func<string, string, CancellationToken, Task<PowerShellExecutionResult>>? runPowerShellAsync,
+        bool ownsHttpClient)
     {
         _httpClient = httpClient;
         _runPowerShellAsync = runPowerShellAsync ?? ((workingDirectory, script, cancellationToken) => _powerShellCommandRunner.RunCommandAsync(workingDirectory, script, cancellationToken));
+        _ownsHttpClient = ownsHttpClient;
         if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
         {
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForgeStudio/0.1");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
         }
     }
 
@@ -154,12 +173,13 @@ public sealed class ReleaseVerificationExecutionService
         }
 
         var response = await SendProbeAsync(uri, cancellationToken);
-        if (response is null)
+        if (!response.Succeeded)
         {
             return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind, publishReceipt.TargetName, publishReceipt.Destination, "GitHub release probe did not return a success status.", publishReceipt.TargetKind);
         }
 
-        return VerifiedReceipt(publishReceipt, $"GitHub release probe succeeded with {(int)response.StatusCode} {response.StatusCode}.");
+        var statusCode = response.StatusCode.GetValueOrDefault();
+        return VerifiedReceipt(publishReceipt, $"GitHub release probe succeeded with {(int)statusCode} {statusCode}.");
     }
 
     private async Task<ReleaseVerificationReceipt> VerifyNuGetAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
@@ -187,7 +207,7 @@ public sealed class ReleaseVerificationExecutionService
         }
 
         var response = await SendProbeAsync(probeUri, cancellationToken);
-        if (response is null)
+        if (!response.Succeeded)
         {
             return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind, publishReceipt.TargetName, publishReceipt.Destination, $"Package probe failed for {identity.Id} {identity.Version} against {probeUri.Host}.", publishReceipt.TargetKind);
         }
@@ -221,7 +241,7 @@ public sealed class ReleaseVerificationExecutionService
             var galleryVersion = moduleInfo.VersionWithPreRelease;
             var url = new Uri($"https://www.powershellgallery.com/packages/{moduleInfo.ModuleName}/{galleryVersion}");
             var galleryResponse = await SendProbeAsync(url, cancellationToken);
-            if (galleryResponse is null)
+            if (!galleryResponse.Succeeded)
             {
                 return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind, publishReceipt.TargetName, publishReceipt.Destination, $"PSGallery probe failed for {moduleInfo.ModuleName} {galleryVersion}.", publishReceipt.TargetKind);
             }
@@ -245,7 +265,7 @@ public sealed class ReleaseVerificationExecutionService
         }
 
         var probeResponse = await SendProbeAsync(probeUri, cancellationToken);
-        if (probeResponse is null)
+        if (!probeResponse.Succeeded)
         {
             return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind, publishReceipt.TargetName, publishReceipt.Destination, $"Repository probe failed for {moduleInfo.ModuleName} {moduleInfo.VersionWithPreRelease} against {probeUri.Host}.", publishReceipt.TargetKind);
         }
@@ -352,7 +372,7 @@ public sealed class ReleaseVerificationExecutionService
 
         var script = string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"$name = {QuoteLiteral(repositoryName)}",
+            $"$name = {PowerShellScriptEscaping.QuoteLiteral(repositoryName)}",
             "$psResourceRepo = Get-Command -Name Get-PSResourceRepository -ErrorAction SilentlyContinue",
             "if ($null -ne $psResourceRepo) {",
             "  $repo = Get-PSResourceRepository -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1",
@@ -400,15 +420,15 @@ public sealed class ReleaseVerificationExecutionService
         return new Uri(builder.ToString(), UriKind.Absolute);
     }
 
-    private async Task<HttpResponseMessage?> SendProbeAsync(Uri uri, CancellationToken cancellationToken)
+    private async Task<ProbeResponse> SendProbeAsync(Uri uri, CancellationToken cancellationToken)
     {
         using var headRequest = new HttpRequestMessage(HttpMethod.Head, uri);
         try
         {
-            var headResponse = await _httpClient.SendAsync(headRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var headResponse = await _httpClient.SendAsync(headRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if ((int)headResponse.StatusCode < 400)
             {
-                return headResponse;
+                return new ProbeResponse(true, headResponse.StatusCode);
             }
         }
         catch
@@ -419,12 +439,14 @@ public sealed class ReleaseVerificationExecutionService
         using var getRequest = new HttpRequestMessage(HttpMethod.Get, uri);
         try
         {
-            var getResponse = await _httpClient.SendAsync(getRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            return (int)getResponse.StatusCode < 400 ? getResponse : null;
+            using var getResponse = await _httpClient.SendAsync(getRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            return (int)getResponse.StatusCode < 400
+                ? new ProbeResponse(true, getResponse.StatusCode)
+                : ProbeResponse.Failed;
         }
         catch
         {
-            return null;
+            return ProbeResponse.Failed;
         }
     }
 
@@ -459,7 +481,7 @@ public sealed class ReleaseVerificationExecutionService
     {
         var script = string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
-            $"$manifest = Import-PowerShellDataFile -Path {QuoteLiteral(manifestPath)}",
+            $"$manifest = Import-PowerShellDataFile -Path {PowerShellScriptEscaping.QuoteLiteral(manifestPath)}",
             "$preRelease = $null",
             "if ($null -ne $manifest.PrivateData -and $null -ne $manifest.PrivateData.PSData) { $preRelease = $manifest.PrivateData.PSData.Prerelease }",
             "@{ ModuleName = [System.IO.Path]::GetFileNameWithoutExtension($manifest.RootModule); ModuleVersion = $manifest.ModuleVersion.ToString(); PreRelease = $preRelease } | ConvertTo-Json -Compress"
@@ -528,10 +550,12 @@ public sealed class ReleaseVerificationExecutionService
             Summary: summary,
             VerifiedAtUtc: DateTimeOffset.UtcNow);
 
-    private static string QuoteLiteral(string value)
-        => "'" + value.Replace("'", "''") + "'";
-
     private sealed record NuGetPackageIdentity(string Id, string Version);
+
+    private readonly record struct ProbeResponse(bool Succeeded, HttpStatusCode? StatusCode)
+    {
+        public static ProbeResponse Failed => new(false, null);
+    }
 
     private sealed class ModuleManifestInfo
     {
