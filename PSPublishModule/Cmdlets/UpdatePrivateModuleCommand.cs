@@ -159,7 +159,10 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 
             if (!registration.RegistrationPerformed)
+            {
+                WriteWarning($"Repository '{registration.RepositoryName}' was not refreshed because the operation was skipped. Module update was not attempted.");
                 return;
+            }
 
             PrivateGalleryCommandSupport.WriteRegistrationSummary(this, registration);
             WriteVerbose($"Repository '{registration.RepositoryName}' is ready for update.");
@@ -180,14 +183,13 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
         }
         else
         {
-            credential = PrivateGalleryCommandSupport.ResolveCredential(
+            credential = PrivateGalleryCommandSupport.ResolveOptionalCredential(
                 this,
                 repositoryName,
-                PrivateGalleryBootstrapMode.Auto,
                 CredentialUserName,
                 CredentialSecret,
                 CredentialSecretFilePath,
-                PromptForCredential).Credential;
+                PromptForCredential);
         }
 
         if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", "Update private modules"))

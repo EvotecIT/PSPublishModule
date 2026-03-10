@@ -104,6 +104,8 @@ Relevant Microsoft documentation:
 - [Azure DevOps Sprint 257 Update: New Microsoft Entra OAuth scopes for PAT lifecycle APIs](https://learn.microsoft.com/en-us/azure/devops/release-notes/2025/general/sprint-257-update)
 - [PAT Lifecycle Management API](https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats?view=azure-devops-rest-7.1)
 
+The practical takeaway from the [Azure DevOps retirement notice for global PATs](https://learn.microsoft.com/en-us/azure/devops/release-notes/2026/sprint-270-update) and the [PAT lifecycle API documentation](https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats?view=azure-devops-rest-7.1) is that PATs are now something to minimize and govern, not the primary UX we should ask every admin to manage manually.
+
 This has two practical consequences for `PSPublishModule`:
 
 1. We should avoid designing our approval proposal around "users create PATs manually forever".
@@ -126,6 +128,11 @@ Reasons:
 - MFA and Conditional Access policies are common and often mandatory.
 - PAT lifecycle APIs are now governed through Microsoft Entra delegated scopes, which means "simple credentials in, PAT out" is not the clean model to build against.
 - Even if a workaround exists in one tenant today, it is likely to be brittle across tenants and security policies.
+
+This is consistent with Microsoft's broader guidance to reduce PAT usage across Azure DevOps and move toward Microsoft Entra-backed auth flows:
+
+- [Reduce PAT usage across Azure DevOps](https://devblogs.microsoft.com/devops/reducing-pat-usage-across-azure-devops/)
+- [Use the Azure Artifacts Credential Provider with Azure Artifacts feeds](https://learn.microsoft.com/en-us/powershell/gallery/powershellget/how-to/use-credential-provider-with-azure-artifacts?view=powershellget-3.x)
 
 For approval and architecture purposes, the correct statement is:
 
@@ -158,6 +165,8 @@ Two Microsoft details are especially important here:
 
 - PSResourceGet now recognizes Azure Artifacts feed URLs and can automatically assign the `AzArtifacts` credential provider for `pkgs.dev.azure.com` repositories.
 - The Azure Artifacts Credential Provider is the Microsoft-supported way to smooth over authentication for authenticated NuGet-backed feeds.
+
+That is why this proposal recommends an interactive bootstrap and credential-provider model rather than asking users to create, copy, and rotate PATs themselves.
 
 ## Recommended User Experience
 

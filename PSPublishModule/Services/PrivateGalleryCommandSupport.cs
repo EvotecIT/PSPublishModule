@@ -368,6 +368,44 @@ internal static class PrivateGalleryCommandSupport
             CredentialSource: PrivateGalleryCredentialSource.Prompt);
     }
 
+    internal static RepositoryCredential? ResolveOptionalCredential(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        string? credentialUserName,
+        string? credentialSecret,
+        string? credentialSecretFilePath,
+        SwitchParameter promptForCredential)
+    {
+        var hasCredentialUser = !string.IsNullOrWhiteSpace(credentialUserName);
+        var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
+        var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
+
+        if (!promptForCredential.IsPresent &&
+            !hasCredentialUser &&
+            !hasCredentialSecret &&
+            !hasCredentialSecretFile)
+        {
+            return null;
+        }
+
+        if (!promptForCredential.IsPresent &&
+            hasCredentialUser &&
+            !hasCredentialSecret &&
+            !hasCredentialSecretFile)
+        {
+            throw new PSArgumentException("CredentialSecret/CredentialSecretFilePath or PromptForCredential is required when CredentialUserName is provided.");
+        }
+
+        return ResolveCredential(
+            cmdlet,
+            repositoryName,
+            PrivateGalleryBootstrapMode.CredentialPrompt,
+            credentialUserName,
+            credentialSecret,
+            credentialSecretFilePath,
+            promptForCredential).Credential;
+    }
+
     internal static ModuleRepositoryRegistrationResult EnsureAzureArtifactsRepositoryRegistered(
         PSCmdlet cmdlet,
         string azureDevOpsOrganization,

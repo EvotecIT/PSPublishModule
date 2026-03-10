@@ -43,6 +43,7 @@ try {
     }
     Set-PSRepository -Name 'PSGallery' -InstallationPolicy $policy -ErrorAction Stop | Out-Null
   } else {
+    $restoreParams = $null
     $params = @{
       Name = $Name
       SourceLocation = $SourceUri
@@ -53,13 +54,37 @@ try {
     if ($null -ne $credential) { $params.Credential = $credential }
 
     if ($existing) {
-      Unregister-PSRepository -Name $Name -ErrorAction SilentlyContinue | Out-Null
-      Unregister-PackageSource -Name $Name -ProviderName NuGet -Force -ErrorAction SilentlyContinue | Out-Null
+      $restoreParams = @{
+        Name = $existing.Name
+        SourceLocation = $existing.SourceLocation
+        PublishLocation = $existing.PublishLocation
+        InstallationPolicy = $existing.InstallationPolicy
+        ErrorAction = 'Stop'
+      }
     } else {
       $created = $true
     }
 
-    Register-PSRepository @params | Out-Null
+    try {
+      if ($existing) {
+        Unregister-PSRepository -Name $Name -ErrorAction SilentlyContinue | Out-Null
+        Unregister-PackageSource -Name $Name -ProviderName NuGet -Force -ErrorAction SilentlyContinue | Out-Null
+      }
+
+      Register-PSRepository @params | Out-Null
+    } catch {
+      $originalMessage = $_.Exception.Message
+
+      if ($null -ne $restoreParams) {
+        try {
+          Register-PSRepository @restoreParams | Out-Null
+        } catch {
+          $originalMessage = $originalMessage + ' Existing repository restore failed: ' + $_.Exception.Message
+        }
+      }
+
+      throw $originalMessage
+    }
   }
 
   Write-Output ('PFPWSGET::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))

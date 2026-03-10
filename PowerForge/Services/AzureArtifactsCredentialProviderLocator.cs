@@ -142,10 +142,11 @@ public static class AzureArtifactsCredentialProviderLocator
 
     private static void AddDelimitedPaths(ISet<string> output, string? value)
     {
-        if (output is null || string.IsNullOrWhiteSpace(value))
+        var delimitedValue = value;
+        if (output is null || string.IsNullOrWhiteSpace(delimitedValue))
             return;
 
-        foreach (var item in value.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var item in delimitedValue.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = item.Trim().Trim('"');
             if (!string.IsNullOrWhiteSpace(trimmed))

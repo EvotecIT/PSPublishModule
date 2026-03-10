@@ -164,7 +164,10 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 
             if (!registration.RegistrationPerformed)
+            {
+                WriteWarning($"Repository '{registration.RepositoryName}' was not registered because the operation was skipped. Module installation was not attempted.");
                 return;
+            }
 
             PrivateGalleryCommandSupport.WriteRegistrationSummary(this, registration);
             WriteVerbose($"Repository '{registration.RepositoryName}' is ready for installation.");
@@ -185,14 +188,13 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
         }
         else
         {
-            credential = PrivateGalleryCommandSupport.ResolveCredential(
+            credential = PrivateGalleryCommandSupport.ResolveOptionalCredential(
                 this,
                 repositoryName,
-                PrivateGalleryBootstrapMode.Auto,
                 CredentialUserName,
                 CredentialSecret,
                 CredentialSecretFilePath,
-                PromptForCredential).Credential;
+                PromptForCredential);
         }
 
         if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", Force.IsPresent ? "Install or reinstall private modules" : "Install private modules"))
