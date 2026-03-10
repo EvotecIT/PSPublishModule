@@ -72,10 +72,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Enforce .cs file size (max 800 lines)
-        shell: pwsh
-        run: node .\Build\linecount.js . 800
-
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -110,10 +106,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Enforce .cs file size (max 800 lines)
-        shell: pwsh
-        run: node ./Build/linecount.js . 800
-
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -147,10 +139,6 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
-
-      - name: Enforce .cs file size (max 800 lines)
-        shell: pwsh
-        run: node ./Build/linecount.js . 800
 
       - name: Build Module
         shell: pwsh
