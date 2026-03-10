@@ -74,7 +74,7 @@ internal sealed class BinaryConflictDetectionService
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? normalizedCurrentModuleName = null;
         if (!string.IsNullOrWhiteSpace(currentModuleName))
-            normalizedCurrentModuleName = currentModuleName.Trim();
+            normalizedCurrentModuleName = currentModuleName!.Trim();
 
         void AnalyzeInstalledAssembly(string installedAssemblyPath, InstalledModuleInfo moduleInfo)
         {
