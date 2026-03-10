@@ -9,6 +9,9 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineRequiredModulesResolutionTests
 {
+    private const string InstalledModuleInfoMarker = "PFMODINFO::ITEM::";
+    private const string RepositoryInfoMarker = "PFPSRG::ITEM::";
+
     [Fact]
     public void Plan_ResolvesGuidAutoFromRepository_WhenModuleIsNotInstalled()
     {
@@ -166,13 +169,13 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
         {
             var script = File.ReadAllText(request.ScriptPath);
 
-            if (script.Contains("PFMODINFO::ITEM::", StringComparison.Ordinal))
+            if (script.Contains(InstalledModuleInfoMarker, StringComparison.Ordinal))
             {
                 var names = DecodeLines(request.Arguments[0]);
                 var lines = names.Select(name =>
                 {
                     _installedModules.TryGetValue(name, out var module);
-                    return "PFMODINFO::ITEM::" +
+                    return InstalledModuleInfoMarker +
                            Encode(name) + "::" +
                            Encode(module.Version ?? string.Empty) + "::" +
                            Encode(module.Guid ?? string.Empty) + "::" +
@@ -182,7 +185,7 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
                 return new PowerShellRunResult(0, string.Join(Environment.NewLine, lines), string.Empty, "pwsh.exe");
             }
 
-            if (script.Contains("PFPSRG::ITEM::", StringComparison.Ordinal))
+            if (script.Contains(RepositoryInfoMarker, StringComparison.Ordinal))
             {
                 var names = DecodeLines(request.Arguments[0]);
                 var lines = names
@@ -190,7 +193,7 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
                     .Select(name =>
                     {
                         var module = _repositoryModules[name];
-                        return "PFPSRG::ITEM::" +
+                        return RepositoryInfoMarker +
                                Encode(name) + "::" +
                                Encode(module.Version) + "::" +
                                Encode("PSGallery") + "::" +

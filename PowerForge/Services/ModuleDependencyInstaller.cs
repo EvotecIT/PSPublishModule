@@ -11,6 +11,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleDependencyInstaller
 {
+    private static readonly TimeSpan ModuleLookupTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ExactVersionProbeTimeout = TimeSpan.FromSeconds(30);
+
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
@@ -69,8 +72,9 @@ public sealed class ModuleDependencyInstaller
             try
             {
                 decision = Decide(dep, installedBefore, force);
+                var currentDecision = decision.Value;
                 if (!force &&
-                    decision.Value.NeedsInstall &&
+                    currentDecision.NeedsInstall &&
                     !string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
                     HasInstalledRequiredVersion(dep.Name, dep.RequiredVersion))
                 {
@@ -87,15 +91,15 @@ public sealed class ModuleDependencyInstaller
                     continue;
                 }
 
-                if (!decision.Value.NeedsInstall)
+                if (!currentDecision.NeedsInstall)
                 {
-                    actions.Add(new ActionItem(dep.Name, installedBefore, decision.Value.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: decision.Value.Reason));
+                    actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: currentDecision.Reason));
                     continue;
                 }
 
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, decision.Value.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.Value.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Value.Reason));
+                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
+                actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, installStatus, installer: usedInstaller, message: currentDecision.Reason));
             }
             catch (Exception ex)
             {
@@ -137,7 +141,7 @@ public sealed class ModuleDependencyInstaller
             string.Empty
         };
 
-        var result = RunScript(script, args, TimeSpan.FromMinutes(2));
+        var result = RunScript(script, args, ExactVersionProbeTimeout);
         if (result.ExitCode != 0)
         {
             var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
@@ -267,7 +271,7 @@ public sealed class ModuleDependencyInstaller
     {
         var script = BuildGetInstalledVersionsScript();
         var args = new List<string>(1) { EncodeLines(names) };
-        var result = RunScript(script, args, TimeSpan.FromMinutes(2));
+        var result = RunScript(script, args, ModuleLookupTimeout);
         if (result.ExitCode != 0)
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;
@@ -394,17 +398,17 @@ public sealed class ModuleDependencyInstaller
     private static string BuildGetInstalledVersionsScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
-}
+    }
 
     private static string BuildFindInstalledModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
-}
+    }
 
     private static string BuildInstallModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Install-Module.ps1");
-}
+    }
 
     private readonly struct Decision
     {

@@ -9,6 +9,12 @@ namespace PowerForge.Tests;
 
 public sealed class ModuleDependencyInstallerExactVersionTests
 {
+    private const string InstalledVersionsMarker = "PFMOD::ITEM::";
+    private const string ExactVersionProbeMarker = "PFMODLOC::FOUND::";
+    private const string PsResourceInstallMarker = "PFPSRG::INSTALL::OK";
+    private const string PowerShellGetInstallMarker = "PFMOD::INSTALL::OK";
+    private const string LocatorErrorMarker = "PFMODLOC::ERROR::";
+
     [Fact]
     public void EnsureInstalled_DoesNotInstall_WhenExactRequiredVersionAlreadyExistsBesideNewerVersion()
     {
@@ -90,26 +96,26 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         {
             var script = File.ReadAllText(request.ScriptPath);
 
-            if (script.Contains("PFMOD::ITEM::", StringComparison.Ordinal))
+            if (script.Contains(InstalledVersionsMarker, StringComparison.Ordinal))
             {
                 var names = DecodeLines(request.Arguments[0]);
                 var lines = names.Select(name =>
                 {
                     _latestInstalledVersions.TryGetValue(name, out var version);
-                    return "PFMOD::ITEM::" + Encode(name) + "::" + Encode(version ?? string.Empty);
+                    return InstalledVersionsMarker + Encode(name) + "::" + Encode(version ?? string.Empty);
                 });
 
                 return new PowerShellRunResult(0, string.Join(Environment.NewLine, lines), string.Empty, "pwsh.exe");
             }
 
-            if (script.Contains("PFMODLOC::FOUND::", StringComparison.Ordinal))
+            if (script.Contains(ExactVersionProbeMarker, StringComparison.Ordinal))
             {
                 var name = request.Arguments[0];
                 var requiredVersion = request.Arguments[1];
                 if (_failingExactVersions.TryGetValue(name, out var failingVersion) &&
                     string.Equals(failingVersion, requiredVersion, StringComparison.OrdinalIgnoreCase))
                 {
-                    return new PowerShellRunResult(1, "PFMODLOC::ERROR::" + Encode("Cannot parse required version"), string.Empty, "pwsh.exe");
+                    return new PowerShellRunResult(1, LocatorErrorMarker + Encode("Cannot parse required version"), string.Empty, "pwsh.exe");
                 }
 
                 var found = _installedExactVersions.TryGetValue(name, out var versions) && versions.Contains(requiredVersion);
@@ -117,15 +123,15 @@ public sealed class ModuleDependencyInstallerExactVersionTests
                     return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
 
                 var modulePath = Path.Combine(@"C:\Modules", name, requiredVersion);
-                var stdout = "PFMODLOC::FOUND::" + Encode(requiredVersion) + "::" + Encode(modulePath);
+                var stdout = ExactVersionProbeMarker + Encode(requiredVersion) + "::" + Encode(modulePath);
                 return new PowerShellRunResult(0, stdout, string.Empty, "pwsh.exe");
             }
 
-            if (script.Contains("PFPSRG::INSTALL::OK", StringComparison.Ordinal) ||
-                script.Contains("PFMOD::INSTALL::OK", StringComparison.Ordinal))
+            if (script.Contains(PsResourceInstallMarker, StringComparison.Ordinal) ||
+                script.Contains(PowerShellGetInstallMarker, StringComparison.Ordinal))
             {
                 InstallCalls++;
-                return new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe");
+                return new PowerShellRunResult(0, PsResourceInstallMarker, string.Empty, "pwsh.exe");
             }
 
             throw new InvalidOperationException("Unexpected script invocation in test.");
