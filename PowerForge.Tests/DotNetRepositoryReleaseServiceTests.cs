@@ -106,4 +106,28 @@ public sealed class DotNetRepositoryReleaseServiceTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void ClassifyNuGetPushOutcome_ReturnsSkippedDuplicate_WhenDotNetReportsExistingPackage()
+    {
+        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(
+            exitCode: 0,
+            skipDuplicate: true,
+            stdErr: string.Empty,
+            stdOut: "Package 'DbaClientX.SqlServer.0.1.0.nupkg' already exists and cannot be modified. The server returned 409 (Conflict).");
+
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, result.Outcome);
+    }
+
+    [Fact]
+    public void ClassifyNuGetPushOutcome_ReturnsPublished_WhenDotNetReportsSuccessfulUpload()
+    {
+        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(
+            exitCode: 0,
+            skipDuplicate: true,
+            stdErr: string.Empty,
+            stdOut: "Your package was pushed.");
+
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
+    }
 }
