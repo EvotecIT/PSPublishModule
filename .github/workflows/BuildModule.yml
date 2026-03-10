@@ -76,10 +76,14 @@ jobs:
 
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
+            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
+              Where-Object { $_ -like '*.cs' } |
+              Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -129,10 +133,14 @@ jobs:
 
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
+            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
+              Where-Object { $_ -like '*.cs' } |
+              Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -182,10 +190,14 @@ jobs:
 
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
+            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
+              Where-Object { $_ -like '*.cs' } |
+              Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
