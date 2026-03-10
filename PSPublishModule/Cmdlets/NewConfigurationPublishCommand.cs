@@ -225,9 +225,10 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
 
         if (!isAzureArtifacts && anyRepositoryUriProvided)
         {
-            if (string.IsNullOrWhiteSpace(RepositoryName))
+            var resolvedRepositoryName = RepositoryName?.Trim();
+            if (string.IsNullOrWhiteSpace(resolvedRepositoryName))
                 throw new PSArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
-            if (string.Equals(RepositoryName!.Trim(), PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
                 throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
         }
 
