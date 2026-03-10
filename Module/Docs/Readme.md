@@ -10,6 +10,9 @@ Locale: en-US
 Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
 
 ## PSPublishModule Cmdlets
+### [Connect-ModuleRepository](Connect-ModuleRepository.md)
+Registers an Azure Artifacts repository if needed and validates authenticated access for the selected bootstrap mode.
+
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
 
@@ -36,6 +39,9 @@ Provides comprehensive analysis of encoding and line ending consistency across a
 
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
 Retrieves project version information from .csproj, .psd1, and build scripts.
+
+### [Install-PrivateModule](Install-PrivateModule.md)
+Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
 
 ### [Invoke-DotNetPublish](Invoke-DotNetPublish.md)
 Executes DotNet publish engine from DSL settings or an existing JSON config.
@@ -149,7 +155,7 @@ Provides a way to ignore certain commands or modules during build process and co
 Helps define custom placeholders replacing content within a script or module during the build process.
 
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)
-Provides a way to configure publishing to PowerShell Gallery or GitHub.
+Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
 Configures running Pester tests as part of the build.
@@ -172,6 +178,9 @@ Pushes NuGet packages to a feed using dotnet nuget push.
 ### [Register-Certificate](Register-Certificate.md)
 Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 
+### [Register-ModuleRepository](Register-ModuleRepository.md)
+Registers an Azure Artifacts feed as a private PowerShell module repository for PowerShellGet and/or PSResourceGet.
+
 ### [Remove-Comments](Remove-Comments.md)
 Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
@@ -186,4 +195,10 @@ Updates version numbers across multiple project files.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
+
+### [Update-ModuleRepository](Update-ModuleRepository.md)
+Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.
+
+### [Update-PrivateModule](Update-PrivateModule.md)
+Updates one or more modules from a private repository, optionally refreshing Azure Artifacts registration first.
 

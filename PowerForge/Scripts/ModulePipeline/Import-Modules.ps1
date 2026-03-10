@@ -55,25 +55,25 @@ function Reset-PSModulePathForEdition {
     $documents = [Environment]::GetFolderPath('UserProfile')
   }
 
-  $userModules = if ($PSVersionTable.PSEdition -eq 'Core') {
+  $userModules = @(
     Join-Path $documents 'PowerShell\Modules'
-  } else {
     Join-Path $documents 'WindowsPowerShell\Modules'
-  }
+  )
 
   $programFiles = $env:ProgramFiles
-  $sharedModules = if ($PSVersionTable.PSEdition -eq 'Core') {
+  $sharedModules = @(
     Join-Path $programFiles 'PowerShell\Modules'
-  } else {
     Join-Path $programFiles 'WindowsPowerShell\Modules'
-  }
+  )
 
   $psHomeModules = Join-Path $PSHOME 'Modules'
   $paths = @(
     $userModules
     $sharedModules
     $psHomeModules
-  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+  ) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
 
   if ($paths.Count -gt 0) {
     $env:PSModulePath = ($paths -join [IO.Path]::PathSeparator)

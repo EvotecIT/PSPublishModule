@@ -116,6 +116,25 @@ public sealed class PowerShellGetSaveOptions
 /// </summary>
 public sealed class PowerShellGetClient
 {
+    /// <summary>Availability details for the PowerShellGet module.</summary>
+    public sealed class AvailabilityInfo
+    {
+        /// <summary>
+        /// Gets or sets a value indicating whether PowerShellGet is available in the current PowerShell host.
+        /// </summary>
+        public bool Available { get; set; }
+
+        /// <summary>
+        /// Gets or sets the detected PowerShellGet version when available.
+        /// </summary>
+        public string? Version { get; set; }
+
+        /// <summary>
+        /// Gets or sets the probe message returned when availability detection fails.
+        /// </summary>
+        public string? Message { get; set; }
+    }
+
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
@@ -126,6 +145,38 @@ public sealed class PowerShellGetClient
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>
+    /// Checks whether <c>PowerShellGet</c> is available in the current PowerShell environment.
+    /// </summary>
+    public bool IsAvailable(out string? message, TimeSpan? timeout = null)
+    {
+        var info = GetAvailability(timeout);
+        message = info.Message;
+        return info.Available;
+    }
+
+    /// <summary>
+    /// Gets PowerShellGet availability details, including the discovered module version when available.
+    /// </summary>
+    public AvailabilityInfo GetAvailability(TimeSpan? timeout = null)
+    {
+        var result = RunScript(BuildAvailabilityScript(), Array.Empty<string>(), timeout ?? TimeSpan.FromMinutes(1));
+        if (result.ExitCode == 0)
+        {
+            return new AvailabilityInfo
+            {
+                Available = ParseAvailability(result.StdOut),
+                Version = ParseAvailabilityVersion(result.StdOut)
+            };
+        }
+
+        return new AvailabilityInfo
+        {
+            Available = false,
+            Message = TryExtractError(result.StdOut) ?? result.StdErr
+        };
     }
 
     /// <summary>
@@ -255,19 +306,27 @@ public sealed class PowerShellGetClient
     /// <summary>
     /// Ensures the given repository is registered with PowerShellGet and returns true when it was created by this call.
     /// </summary>
-    public bool EnsureRepositoryRegistered(string name, string sourceUri, string publishUri, bool trusted = true, TimeSpan? timeout = null)
+    public bool EnsureRepositoryRegistered(
+        string name,
+        string sourceUri,
+        string publishUri,
+        bool trusted = true,
+        RepositoryCredential? credential = null,
+        TimeSpan? timeout = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
         if (string.IsNullOrWhiteSpace(sourceUri)) throw new ArgumentException("SourceUri is required.", nameof(sourceUri));
         if (string.IsNullOrWhiteSpace(publishUri)) throw new ArgumentException("PublishUri is required.", nameof(publishUri));
 
         var script = BuildEnsureRepositoryScript();
-        var args = new List<string>(4)
+        var args = new List<string>(6)
         {
             name.Trim(),
             sourceUri.Trim(),
             publishUri.Trim(),
-            trusted ? "1" : "0"
+            trusted ? "1" : "0",
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
@@ -408,26 +467,55 @@ public sealed class PowerShellGetClient
     private static string BuildFindScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Find-Module.ps1");
-}
+    }
+
+    private static string BuildAvailabilityScript()
+    {
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Test-Availability.ps1");
+    }
 
     private static string BuildPublishScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1");
-}
+    }
 
     private static string BuildSaveScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Save-Module.ps1");
-}
+    }
 
     private static string BuildEnsureRepositoryScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Ensure-Repository.ps1");
-}
+    }
 
     private static string BuildUnregisterRepositoryScript()
     {
         return EmbeddedScripts.Load("Scripts/PowerShellGet/Unregister-Repository.ps1");
-}
+    }
+
+    private static bool ParseAvailability(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPWSGET::AVAILABLE::", StringComparison.Ordinal)) continue;
+            var flag = line.Substring("PFPWSGET::AVAILABLE::".Length);
+            return string.Equals(flag, "1", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static string? ParseAvailabilityVersion(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPWSGET::VERSION::", StringComparison.Ordinal)) continue;
+            var value = Decode(line.Substring("PFPWSGET::VERSION::".Length));
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        return null;
+    }
 }
 

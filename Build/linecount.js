@@ -9,11 +9,13 @@ function parseArgs(argv) {
   //   --max <n>
   //   --ext <.cs,.ps1> (comma/semicolon separated; accepts with or without leading dot)
   //   --exclude <bin,obj,.git,.nuget> (directory names; comma/semicolon separated)
+  //   --files-from <path> (newline-delimited relative/absolute file paths to check)
   const out = {
     root: null,
     max: null,
     exts: null,
     exclude: null,
+    filesFrom: null,
   };
 
   const args = argv.slice();
@@ -33,6 +35,10 @@ function parseArgs(argv) {
     }
     if (a === '--exclude') {
       out.exclude = args[++i];
+      continue;
+    }
+    if (a === '--files-from') {
+      out.filesFrom = args[++i];
       continue;
     }
   }
@@ -77,6 +83,17 @@ function countLines(filePath) {
   return txt.split(/\r\n|\r|\n/).length;
 }
 
+function loadExplicitFiles(rootDir, filesFromPath) {
+  const fullPath = path.resolve(rootDir, filesFromPath);
+  if (!fs.existsSync(fullPath)) return [];
+
+  return fs.readFileSync(fullPath, 'utf8')
+    .split(/\r\n|\r|\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((filePath) => path.isAbsolute(filePath) ? filePath : path.resolve(rootDir, filePath));
+}
+
 const parsed = parseArgs(process.argv.slice(2));
 const root = parsed.root ? path.resolve(parsed.root) : process.cwd();
 const max = Number(parsed.max || 800);
@@ -92,12 +109,23 @@ if (excludeDirs.size === 0) {
 }
 
 const rows = [];
-walk(root, (p) => {
-  if (!exts.has(path.extname(p))) return;
-  const rel = path.relative(root, p).replaceAll('\\', '/');
-  const n = countLines(p);
-  if (n > max) rows.push([n, rel]);
-}, excludeDirs);
+const explicitFiles = parsed.filesFrom ? loadExplicitFiles(root, parsed.filesFrom) : null;
+if (explicitFiles && explicitFiles.length > 0) {
+  for (const fullPath of explicitFiles) {
+    if (!fs.existsSync(fullPath)) continue;
+    if (!exts.has(path.extname(fullPath))) continue;
+    const rel = path.relative(root, fullPath).replaceAll('\\', '/');
+    const n = countLines(fullPath);
+    if (n > max) rows.push([n, rel]);
+  }
+} else {
+  walk(root, (p) => {
+    if (!exts.has(path.extname(p))) return;
+    const rel = path.relative(root, p).replaceAll('\\', '/');
+    const n = countLines(p);
+    if (n > max) rows.push([n, rel]);
+  }, excludeDirs);
+}
 
 rows.sort((a, b) => b[0] - a[0] || a[1].localeCompare(b[1]));
 for (const [n, rel] of rows) {

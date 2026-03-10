@@ -36,6 +36,7 @@ public sealed class ModuleDependencyInstaller
         string? repository = null,
         RepositoryCredential? credential = null,
         bool prerelease = false,
+        bool preferPowerShellGet = false,
         TimeSpan? timeoutPerModule = null)
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
@@ -103,7 +104,7 @@ public sealed class ModuleDependencyInstaller
                 }
 
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
+                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
                 actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, installStatus, installer: usedInstaller, message: currentDecision.Reason));
             }
             catch (Exception ex)
@@ -156,6 +157,94 @@ public sealed class ModuleDependencyInstaller
         }
 
         return SplitLines(result.StdOut).Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Ensures that all <paramref name="dependencies"/> are updated when already installed, and installed when missing.
+    /// </summary>
+    public IReadOnlyList<ModuleDependencyInstallResult> EnsureUpdated(
+        IEnumerable<ModuleDependency> dependencies,
+        IEnumerable<string>? skipModules = null,
+        string? repository = null,
+        RepositoryCredential? credential = null,
+        bool prerelease = false,
+        bool preferPowerShellGet = false,
+        TimeSpan? timeoutPerModule = null)
+    {
+        var list = (dependencies ?? Array.Empty<ModuleDependency>())
+            .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.Name))
+            .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (list.Length == 0) return Array.Empty<ModuleDependencyInstallResult>();
+
+        var skip = new HashSet<string>(
+            (skipModules ?? Array.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var names = list.Select(d => d.Name).ToArray();
+        var before = GetLatestInstalledModuleVersions(names);
+
+        var actions = new List<ActionItem>(list.Length);
+        var perModuleTimeout = timeoutPerModule ?? TimeSpan.FromMinutes(5);
+
+        foreach (var dep in list)
+        {
+            var installedBefore = before.TryGetValue(dep.Name, out var v) ? v : null;
+            if (skip.Contains(dep.Name))
+            {
+                actions.Add(new ActionItem(dep.Name, installedBefore, requestedVersion: null, ModuleDependencyInstallStatus.Skipped, installer: null, message: "Skipped"));
+                continue;
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(installedBefore))
+                {
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
+                }
+                else
+                {
+                    var updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
+                }
+            }
+            catch (Exception ex)
+            {
+                actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Failed, installer: null, message: ex.Message));
+            }
+        }
+
+        var after = GetLatestInstalledModuleVersions(names);
+        return actions
+            .Select(a =>
+            {
+                var resolvedVersion = after.TryGetValue(a.Name, out var av) ? av : null;
+                var status = a.Status;
+                var message = a.Message;
+
+                if (a.Status == ModuleDependencyInstallStatus.Updated &&
+                    VersionsEquivalent(a.InstalledBefore, resolvedVersion))
+                {
+                    status = ModuleDependencyInstallStatus.Satisfied;
+                    message = "Already up to date";
+                }
+
+                return new ModuleDependencyInstallResult(
+                    name: a.Name,
+                    installedVersion: a.InstalledBefore,
+                    resolvedVersion: resolvedVersion,
+                    requestedVersion: a.RequestedVersion,
+                    status: status,
+                    installer: a.Installer,
+                    message: message);
+            })
+            .ToArray();
     }
 
     private static Decision Decide(ModuleDependency dep, string? installedVersion, bool force)
@@ -225,8 +314,22 @@ public sealed class ModuleDependencyInstaller
         RepositoryCredential? credential,
         bool prerelease,
         bool force,
+        bool preferPowerShellGet,
         TimeSpan timeout)
     {
+        if (preferPowerShellGet)
+        {
+            try
+            {
+                InstallWithPowerShellGet(dep, repository, credential, timeout);
+                return "PowerShellGet";
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+            }
+        }
+
         // Prefer PSResourceGet (out-of-process).
         try
         {
@@ -254,6 +357,52 @@ public sealed class ModuleDependencyInstaller
         }
     }
 
+    private string? TryUpdate(
+        ModuleDependency dep,
+        string installedVersion,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease,
+        bool preferPowerShellGet,
+        TimeSpan timeout)
+    {
+        if (preferPowerShellGet)
+        {
+            try
+            {
+                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Update-PSResource for '{dep.Name}'.");
+            }
+        }
+
+        try
+        {
+            UpdateWithPSResourceGet(dep, repository, credential, prerelease, timeout);
+            return "PSResourceGet";
+        }
+        catch (PowerShellToolNotAvailableException)
+        {
+            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'.");
+            return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.Warn($"Update-PSResource failed for '{dep.Name}'; trying PowerShellGet Update-Module fallback. {ex.Message}");
+            try
+            {
+                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+            }
+            catch (Exception fallbackEx) when (fallbackEx is PowerShellToolNotAvailableException or InvalidOperationException)
+            {
+                throw new InvalidOperationException(
+                    $"Update-PSResource failed for '{dep.Name}' and PowerShellGet fallback also failed. PSResourceGet: {ex.Message} PowerShellGet: {fallbackEx.Message}");
+            }
+        }
+    }
+
     private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
     {
         var script = BuildInstallModuleScript();
@@ -270,8 +419,91 @@ public sealed class ModuleDependencyInstaller
         if (result.ExitCode != 0)
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;
-            throw new InvalidOperationException($"Install-Module failed (exit {result.ExitCode}). {msg}".Trim());
+            var full = $"Install-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PowerShellGet", full);
+            throw new InvalidOperationException(full);
         }
+    }
+
+    private void UpdateWithPSResourceGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        var script = BuildUpdatePSResourceScript();
+        var args = new List<string>(5)
+        {
+            dep.Name,
+            repository ?? string.Empty,
+            prerelease ? "1" : "0",
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
+        };
+        var result = RunScript(script, args, timeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Update-PSResource failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
+            throw new InvalidOperationException(full);
+        }
+    }
+
+    private string? UpdateWithPowerShellGet(ModuleDependency dep, string installedVersion, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        if (!string.IsNullOrWhiteSpace(repository))
+        {
+            var scopedRepository = repository!;
+            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep.Name, scopedRepository, credential, prerelease, timeout);
+            if (string.IsNullOrWhiteSpace(latestRepositoryVersion))
+                throw new InvalidOperationException($"Unable to find module '{dep.Name}' in repository '{scopedRepository}' for PowerShellGet update fallback.");
+
+            if (VersionsEquivalent(installedVersion, latestRepositoryVersion))
+                return null;
+
+            if (CompareVersionStrings(latestRepositoryVersion, installedVersion) <= 0)
+                return null;
+
+            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion), scopedRepository, credential, timeout);
+            return "PowerShellGet";
+        }
+
+        var script = BuildUpdateModuleScript();
+        var args = new List<string>(4)
+        {
+            dep.Name,
+            prerelease ? "1" : "0",
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
+        };
+        var result = RunScript(script, args, timeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Update-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PowerShellGet", full);
+            throw new InvalidOperationException(full);
+        }
+
+        return "PowerShellGet";
+    }
+
+    private string? GetLatestPowerShellGetRepositoryVersion(string moduleName, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        var client = new PowerShellGetClient(_runner, _logger);
+        var items = client.Find(
+            new PowerShellGetFindOptions(
+                names: new[] { moduleName },
+                prerelease: prerelease,
+                repositories: new[] { repository },
+                credential: credential),
+            timeout);
+
+        return items
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Version))
+            .OrderByDescending(static item => item.Version, Comparer<string>.Create(CompareVersionStrings))
+            .Select(static item => item.Version)
+            .FirstOrDefault();
     }
 
     private Dictionary<string, string?> GetLatestInstalledModuleVersions(IReadOnlyList<string> names)
@@ -362,6 +594,197 @@ public sealed class ModuleDependencyInstaller
         return false;
     }
 
+    private static bool VersionsEquivalent(string? left, string? right)
+    {
+        if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+            return parsedLeft == parsedRight;
+
+        return false;
+    }
+
+    private static int CompareVersionStrings(string? left, string? right)
+    {
+        if (VersionsEquivalent(left, right))
+            return 0;
+
+        if (TryCompareSemanticVersions(left, right, out var semanticComparison))
+            return semanticComparison;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+            return parsedLeft.CompareTo(parsedRight);
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryCompareSemanticVersions(string? left, string? right, out int comparison)
+    {
+        if (!TryParseSemanticVersion(left, out var parsedLeft) ||
+            !TryParseSemanticVersion(right, out var parsedRight))
+        {
+            comparison = 0;
+            return false;
+        }
+
+        comparison = parsedLeft.CompareTo(parsedRight);
+        return true;
+    }
+
+    private static bool TryParseSemanticVersion(string? text, out SemanticVersionParts version)
+    {
+        version = default;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var value = text!.Trim();
+        if (value.StartsWith("v", StringComparison.OrdinalIgnoreCase)) value = value.Substring(1);
+
+        var buildMetadataSeparator = value.IndexOf('+');
+        if (buildMetadataSeparator >= 0) value = value.Substring(0, buildMetadataSeparator);
+
+        var prereleaseSeparator = value.IndexOf('-');
+        var coreVersion = prereleaseSeparator >= 0 ? value.Substring(0, prereleaseSeparator) : value;
+        var prerelease = prereleaseSeparator >= 0 ? value.Substring(prereleaseSeparator + 1) : string.Empty;
+
+        var coreParts = coreVersion.Split('.');
+        if (coreParts.Length < 2 || coreParts.Length > 3)
+            return false;
+
+        if (!int.TryParse(coreParts[0], out var major) ||
+            !int.TryParse(coreParts[1], out var minor))
+            return false;
+
+        var patch = 0;
+        if (coreParts.Length == 3 && !int.TryParse(coreParts[2], out patch))
+            return false;
+
+        var prereleaseIdentifiers = string.IsNullOrWhiteSpace(prerelease)
+            ? Array.Empty<string>()
+            : prerelease.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+
+        version = new SemanticVersionParts(major, minor, patch, prereleaseIdentifiers);
+        return true;
+    }
+
+    private readonly struct SemanticVersionParts : IComparable<SemanticVersionParts>
+    {
+        internal SemanticVersionParts(int major, int minor, int patch, string[] prereleaseIdentifiers)
+        {
+            Major = major;
+            Minor = minor;
+            Patch = patch;
+            PrereleaseIdentifiers = prereleaseIdentifiers;
+        }
+
+        internal int Major { get; }
+        internal int Minor { get; }
+        internal int Patch { get; }
+        internal string[] PrereleaseIdentifiers { get; }
+
+        public int CompareTo(SemanticVersionParts other)
+        {
+            var comparison = Major.CompareTo(other.Major);
+            if (comparison != 0)
+                return comparison;
+
+            comparison = Minor.CompareTo(other.Minor);
+            if (comparison != 0)
+                return comparison;
+
+            comparison = Patch.CompareTo(other.Patch);
+            if (comparison != 0)
+                return comparison;
+
+            var isStable = PrereleaseIdentifiers.Length == 0;
+            var otherIsStable = other.PrereleaseIdentifiers.Length == 0;
+            if (isStable && otherIsStable)
+                return 0;
+            if (isStable)
+                return 1;
+            if (otherIsStable)
+                return -1;
+
+            var count = Math.Min(PrereleaseIdentifiers.Length, other.PrereleaseIdentifiers.Length);
+            for (var i = 0; i < count; i++)
+            {
+                var leftPart = PrereleaseIdentifiers[i];
+                var rightPart = other.PrereleaseIdentifiers[i];
+                var leftIsNumeric = int.TryParse(leftPart, out var leftNumeric);
+                var rightIsNumeric = int.TryParse(rightPart, out var rightNumeric);
+
+                if (leftIsNumeric && rightIsNumeric)
+                {
+                    comparison = leftNumeric.CompareTo(rightNumeric);
+                    if (comparison != 0)
+                        return comparison;
+
+                    continue;
+                }
+
+                if (leftIsNumeric != rightIsNumeric)
+                    return leftIsNumeric ? -1 : 1;
+
+                comparison = CompareMixedPrereleaseIdentifier(leftPart, rightPart);
+                if (comparison != 0)
+                    return comparison;
+            }
+
+            return PrereleaseIdentifiers.Length.CompareTo(other.PrereleaseIdentifiers.Length);
+        }
+
+        private static int CompareMixedPrereleaseIdentifier(string left, string right)
+        {
+            var leftIndex = 0;
+            var rightIndex = 0;
+
+            while (leftIndex < left.Length && rightIndex < right.Length)
+            {
+                var leftDigits = char.IsDigit(left[leftIndex]);
+                var rightDigits = char.IsDigit(right[rightIndex]);
+                if (leftDigits != rightDigits)
+                    return leftDigits ? -1 : 1;
+
+                var leftStart = leftIndex;
+                while (leftIndex < left.Length && char.IsDigit(left[leftIndex]) == leftDigits)
+                    leftIndex++;
+
+                var rightStart = rightIndex;
+                while (rightIndex < right.Length && char.IsDigit(right[rightIndex]) == rightDigits)
+                    rightIndex++;
+
+                var leftPart = left.Substring(leftStart, leftIndex - leftStart);
+                var rightPart = right.Substring(rightStart, rightIndex - rightStart);
+
+                var comparison = leftDigits
+                    ? CompareNumericStrings(leftPart, rightPart)
+                    : string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+
+                if (comparison != 0)
+                    return comparison;
+            }
+
+            return left.Length.CompareTo(right.Length);
+        }
+
+        private static int CompareNumericStrings(string left, string right)
+        {
+            var trimmedLeft = left.TrimStart('0');
+            var trimmedRight = right.TrimStart('0');
+            if (trimmedLeft.Length == 0)
+                trimmedLeft = "0";
+            if (trimmedRight.Length == 0)
+                trimmedRight = "0";
+
+            var comparison = trimmedLeft.Length.CompareTo(trimmedRight.Length);
+            if (comparison != 0)
+                return comparison;
+
+            return string.Compare(trimmedLeft, trimmedRight, StringComparison.Ordinal);
+        }
+    }
+
     private static IEnumerable<string> SplitLines(string? text)
         => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -406,7 +829,6 @@ public sealed class ModuleDependencyInstaller
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
     }
-
     private static string BuildFindInstalledModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
@@ -415,6 +837,16 @@ public sealed class ModuleDependencyInstaller
     private static string BuildInstallModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Install-Module.ps1");
+    }
+
+    private static string BuildUpdateModuleScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Update-Module.ps1");
+    }
+
+    private static string BuildUpdatePSResourceScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Update-PSResource.ps1");
     }
 
     private readonly struct Decision

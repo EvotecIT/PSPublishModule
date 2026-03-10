@@ -27,6 +27,64 @@ public enum PublishTool
 }
 
 /// <summary>
+/// Tool selection used when registering repositories for end users.
+/// </summary>
+public enum RepositoryRegistrationTool
+{
+    /// <summary>
+    /// Prefer PSResourceGet first, then fall back to PowerShellGet when one of the tools is unavailable.
+    /// </summary>
+    Auto,
+    /// <summary>Register the PSResourceGet repository only.</summary>
+    PSResourceGet,
+    /// <summary>Register the PowerShellGet repository only.</summary>
+    PowerShellGet,
+    /// <summary>Register both PowerShellGet and PSResourceGet repositories.</summary>
+    Both
+}
+
+/// <summary>
+/// Private gallery provider used by end-user repository bootstrap commands.
+/// </summary>
+public enum PrivateGalleryProvider
+{
+    /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
+    AzureArtifacts
+}
+
+/// <summary>
+/// Bootstrap/authentication mode used by private gallery onboarding commands.
+/// </summary>
+public enum PrivateGalleryBootstrapMode
+{
+    /// <summary>
+    /// Choose the best available path: use explicit/prompted credentials when requested, otherwise prefer ExistingSession when Azure Artifacts prerequisites are ready and fall back to CredentialPrompt when they are not.
+    /// </summary>
+    Auto,
+    /// <summary>
+    /// Rely on an existing session or credential-provider flow without collecting credentials in the cmdlet.
+    /// </summary>
+    ExistingSession,
+    /// <summary>
+    /// Use credentials supplied to the cmdlet or prompt interactively for them.
+    /// </summary>
+    CredentialPrompt
+}
+
+/// <summary>
+/// Source of the credential used by a private gallery bootstrap command.
+/// </summary>
+public enum PrivateGalleryCredentialSource
+{
+    /// <summary>No credential was supplied to the cmdlet.</summary>
+    None,
+    /// <summary>A credential or token was supplied directly to the cmdlet.</summary>
+    Supplied,
+    /// <summary>A credential was collected by prompting the user.</summary>
+    Prompt
+}
+
+/// <summary>
 /// Tool/provider used when downloading PowerShell modules (Save-PSResource/Save-Module).
 /// </summary>
 public enum ModuleSaveTool

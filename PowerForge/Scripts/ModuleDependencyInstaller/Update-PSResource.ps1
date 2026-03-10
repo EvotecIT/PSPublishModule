@@ -1,8 +1,7 @@
-﻿param(
+param(
   [string]$Name,
-  [string]$RequiredVersion,
-  [string]$MinimumVersion,
   [string]$Repository,
+  [string]$PrereleaseFlag,
   [string]$CredentialUser,
   [string]$CredentialSecret
 )
@@ -14,9 +13,9 @@ function Enc([string]$s) {
 }
 
 try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
+  Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
 } catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
+  $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
   $b64 = Enc $msg
   Write-Output ('PFMOD::ERROR::' + $b64)
   exit 3
@@ -27,20 +26,21 @@ try {
     Name = $Name
     Force = $true
     ErrorAction = 'Stop'
-    SkipPublisherCheck = $true
     Scope = 'CurrentUser'
+    TrustRepository = $true
+    SkipDependencyCheck = $false
     AcceptLicense = $true
+    Quiet = $true
   }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
-  elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
   }
 
-  Install-Module @params | Out-Null
-  Write-Output 'PFMOD::INSTALL::OK'
+  Update-PSResource @params | Out-Null
+  Write-Output 'PFMOD::UPDATE::OK'
   exit 0
 } catch {
   $msg = $_.Exception.Message

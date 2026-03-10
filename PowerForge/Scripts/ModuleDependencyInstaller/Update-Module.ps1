@@ -1,8 +1,6 @@
-﻿param(
+param(
   [string]$Name,
-  [string]$RequiredVersion,
-  [string]$MinimumVersion,
-  [string]$Repository,
+  [string]$PrereleaseFlag,
   [string]$CredentialUser,
   [string]$CredentialSecret
 )
@@ -27,20 +25,17 @@ try {
     Name = $Name
     Force = $true
     ErrorAction = 'Stop'
-    SkipPublisherCheck = $true
     Scope = 'CurrentUser'
     AcceptLicense = $true
   }
-  if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
-  elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  if ($PrereleaseFlag -eq '1') { $params.AllowPrerelease = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
   }
 
-  Install-Module @params | Out-Null
-  Write-Output 'PFMOD::INSTALL::OK'
+  Update-Module @params | Out-Null
+  Write-Output 'PFMOD::UPDATE::OK'
   exit 0
 } catch {
   $msg = $_.Exception.Message
