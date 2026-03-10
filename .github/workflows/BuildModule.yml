@@ -77,12 +77,26 @@ jobs:
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
-              Where-Object { $_ -like '*.cs' } |
+            $headers = @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+            $files = @()
+            $page = 1
+            do {
+              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
+              $files += $response
+              $page++
+            } while ($response.Count -eq 100)
+
+            $files |
+              Where-Object { $_.filename -like '*.cs' } |
+              ForEach-Object { $_.filename } |
               Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
@@ -134,12 +148,26 @@ jobs:
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
-              Where-Object { $_ -like '*.cs' } |
+            $headers = @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+            $files = @()
+            $page = 1
+            do {
+              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
+              $files += $response
+              $page++
+            } while ($response.Count -eq 100)
+
+            $files |
+              Where-Object { $_.filename -like '*.cs' } |
+              ForEach-Object { $_.filename } |
               Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
@@ -191,12 +219,26 @@ jobs:
       - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[] | .filename' |
-              Where-Object { $_ -like '*.cs' } |
+            $headers = @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+            $files = @()
+            $page = 1
+            do {
+              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
+              $files += $response
+              $page++
+            } while ($response.Count -eq 100)
+
+            $files |
+              Where-Object { $_.filename -like '*.cs' } |
+              ForEach-Object { $_.filename } |
               Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
