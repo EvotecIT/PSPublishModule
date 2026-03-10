@@ -108,7 +108,7 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
             AzureArtifactsFeed,
             Name);
         var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-        var allowInteractivePrompt = !MyInvocation.BoundParameters.ContainsKey("WhatIf");
+        var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
 
         var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
             this,

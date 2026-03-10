@@ -132,7 +132,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 AzureArtifactsFeed,
                 RepositoryName);
             var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-            var allowInteractivePrompt = !MyInvocation.BoundParameters.ContainsKey("WhatIf");
+            var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
 
             repositoryName = endpoint.RepositoryName;
             var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
@@ -192,6 +192,14 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
         }
         else
         {
+            credential = null;
+        }
+
+        if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", Force.IsPresent ? "Install or reinstall private modules" : "Install private modules"))
+            return;
+
+        if (ParameterSetName == ParameterSetRepository)
+        {
             credential = PrivateGalleryCommandSupport.ResolveOptionalCredential(
                 this,
                 repositoryName,
@@ -200,9 +208,6 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 CredentialSecretFilePath,
                 PromptForCredential);
         }
-
-        if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", Force.IsPresent ? "Install or reinstall private modules" : "Install private modules"))
-            return;
 
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var installer = new ModuleDependencyInstaller(new PowerShellRunner(), logger);

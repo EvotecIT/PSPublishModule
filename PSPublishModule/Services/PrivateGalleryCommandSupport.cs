@@ -105,6 +105,13 @@ internal static partial class PrivateGalleryCommandSupport
             throw new PSArgumentException($"Provider '{provider}' is not supported yet. Supported value: AzureArtifacts.");
     }
 
+    internal static bool IsWhatIfRequested(PSCmdlet cmdlet)
+    {
+        return cmdlet.MyInvocation.BoundParameters.TryGetValue("WhatIf", out var whatIfValue) &&
+               whatIfValue is SwitchParameter switchParameter &&
+               switchParameter.IsPresent;
+    }
+
     internal static CredentialResolutionResult ResolveCredential(
         PSCmdlet cmdlet,
         string repositoryName,
