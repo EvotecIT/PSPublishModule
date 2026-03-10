@@ -1,6 +1,6 @@
 # PSPublishModule Private Gallery Proposal
 
-Last updated: 2026-03-09
+Last updated: 2026-03-10
 
 ## Purpose
 
@@ -17,7 +17,7 @@ The immediate business goal is simple:
 The recommended direction is:
 
 1. Keep private-gallery publishing support in `New-ConfigurationPublish`.
-2. Add a simple end-user bootstrap flow that signs the user in interactively and registers the repository locally.
+2. Add a simple end-user bootstrap flow that signs the user in interactively, registers the repository locally, and validates access.
 3. Prefer Microsoft Entra-based interactive authentication and Azure Artifacts Credential Provider integration over a manual PAT workflow.
 4. Treat manual PAT creation as a fallback only, not the main product story.
 5. Expose a very small, high-level command surface intended for administrators who are installing internal modules, not building them.
@@ -26,12 +26,12 @@ The recommended direction is:
 The proposed end-user experience should look like this:
 
 ```powershell
-Register-ModuleRepository -Provider AzureArtifacts `
+Connect-ModuleRepository -Provider AzureArtifacts `
     -Name 'Company' `
     -Organization 'contoso' `
     -Project 'Platform' `
     -Feed 'Modules' `
-    -Interactive
+    -InstallPrerequisites
 
 Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
 ```
@@ -50,13 +50,13 @@ Install-PrivateModule -Name 'ModuleA', 'ModuleB' `
     -Organization 'contoso' `
     -Project 'Platform' `
     -Feed 'Modules' `
-    -Interactive
+    -InstallPrerequisites
 ```
 
 In that flow, the module should:
 
 - install any missing prerequisites,
-- trigger browser or device-code sign-in,
+- trigger browser or device-code sign-in when the ExistingSession path is available, or prompt for credentials as the fallback path,
 - register the private repository,
 - validate access,
 - and then install the requested modules.
@@ -175,12 +175,12 @@ The user should run one command that:
 Proposed experience:
 
 ```powershell
-Register-ModuleRepository -Provider AzureArtifacts `
+Connect-ModuleRepository -Provider AzureArtifacts `
     -Name 'Company' `
     -Organization 'contoso' `
     -Project 'Platform' `
     -Feed 'Modules' `
-    -Interactive
+    -InstallPrerequisites
 ```
 
 What the user should see conceptually:
@@ -191,6 +191,8 @@ What the user should see conceptually:
 - "Registering repository Company"
 - "Validating repository access"
 - "Done. You can now use Install-PSResource or Install-PrivateModule"
+
+`Register-ModuleRepository` should still exist, but as the explicit setup/repair cmdlet. `Connect-ModuleRepository` is the better primary admin-facing verb because it conveys the actual outcome we care about: not just "a repository entry exists", but "the feed is reachable with the chosen auth path".
 
 ### Install modules after bootstrap
 
@@ -213,16 +215,93 @@ If authentication later expires or the environment changes, the user should not 
 They should have one obvious command:
 
 ```powershell
-Update-ModuleRepository -Repository Company
+Connect-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
 ```
 
 or:
 
 ```powershell
-Register-ModuleRepository -Name Company -Interactive -Force
+Update-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
 ```
 
 The important part is not the exact command name. The important part is that the user can recover with one familiar, documented action.
+
+## User Workflows
+
+The feature should be documented around a few concrete user workflows rather than one generic story.
+
+### Workflow 1: Preferred first-time onboarding
+
+This is the recommended path for most administrators:
+
+```powershell
+Connect-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
+Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
+```
+
+Expected behavior:
+
+- install missing prerequisites if needed,
+- register the repository,
+- validate that authentication actually works,
+- and then let the user install modules with either wrapper or native commands.
+
+### Workflow 2: Explicit setup followed by later install
+
+This is useful for runbooks and automation where the repository bootstrap step is kept separate from installation:
+
+```powershell
+Register-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
+Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
+```
+
+### Workflow 3: One-command install bootstrap
+
+This is the shortest support-desk story:
+
+```powershell
+Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -InstallPrerequisites
+```
+
+This should be supported, but it is still useful to document `Connect-ModuleRepository` separately because that gives operators an easy diagnostic and recovery command.
+
+### Workflow 4: Day-2 module maintenance
+
+Once the repository is configured:
+
+```powershell
+Update-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
+```
+
+### Workflow 5: Repair or reconnect after auth problems
+
+When the feed stops working because prerequisites changed, sign-in expired, or the repository needs refresh:
+
+```powershell
+Connect-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
+```
+
+or, for the more explicit lower-level path:
+
+```powershell
+Update-ModuleRepository -Organization 'contoso' -Project 'Platform' -Feed 'Modules' -Name 'Company' -InstallPrerequisites
+```
+
+### Workflow 6: Native commands after bootstrap
+
+After successful bootstrap, native commands should work when the chosen path is actually ready:
+
+```powershell
+Install-PSResource -Name ModuleA -Repository Company
+```
+
+or, when the real working path is PowerShellGet compatibility:
+
+```powershell
+Install-Module -Name ModuleA -Repository Company
+```
+
+`PSPublishModule` should continue to guide the user toward the wrapper commands first, because they can repair or compensate for broken bootstrap/auth states more gracefully than the raw native commands.
 
 ## Recommended Command Surface
 
@@ -247,6 +326,7 @@ This fits the current DSL and is consistent with how the module already models b
 
 Recommended public naming:
 
+- `Connect-ModuleRepository`
 - `Register-ModuleRepository`
 - `Install-PrivateModule`
 - `Update-PrivateModule`
@@ -254,6 +334,7 @@ Recommended public naming:
 
 Why this naming is recommended:
 
+- `Connect-ModuleRepository` is the clearest human-facing onboarding verb when the cmdlet both registers and validates access.
 - `Register-ModuleRepository` maps cleanly to the underlying PowerShell concept of a repository.
 - It is still understandable by administrators who do not know PowerShell internals.
 - It avoids overloading the word "Gallery" too broadly.
@@ -272,7 +353,8 @@ Reasons:
 
 Recommendation:
 
-- Use `Register-ModuleRepository` as the primary cmdlet name.
+- Use `Connect-ModuleRepository` as the primary end-user onboarding command.
+- Use `Register-ModuleRepository` as the explicit repository-management and setup cmdlet.
 - Optionally provide `Register-Gallery` as an alias if we want a softer end-user command.
 
 ### Why Both Module And Repository Commands Are Needed
@@ -294,15 +376,70 @@ That means we should support both:
   - `Install-PrivateModule`
   - `Update-PrivateModule`
 - repository lifecycle wrappers:
+  - `Connect-ModuleRepository`
   - `Register-ModuleRepository`
   - `Update-ModuleRepository`
 
 This gives administrators a simple mental model:
 
 - first-time setup: register
+- first-time validation/login: connect
 - first-time consumption: install
 - later consumption: update
 - if auth breaks: update the repository
+
+## Persistence And Prompting Behavior
+
+One of the most important approval questions is whether the user has to keep re-entering credentials all day long.
+
+The answer is: **the repository registration and prerequisite installation survive reboots; the authentication prompt frequency depends on which bootstrap mode is actually being used**.
+
+### What persists
+
+The following state is expected to persist across PowerShell sessions and machine reboots:
+
+- repository registration created through `Register-PSRepository` / `Register-PSResourceRepository`
+- Azure Artifacts Credential Provider installation under the user profile NuGet plugin location
+- installed PowerShell modules in the user module path
+
+This means the user should not need to re-register the repository after every reboot.
+
+### ExistingSession path
+
+When `ExistingSession` is available, this is the preferred user experience:
+
+- the repository remains registered,
+- the credential provider remains installed,
+- and authentication is typically reused through the underlying Azure / credential-provider token cache until that session expires.
+
+In practice, that means the user should **not** be prompted on every install/update command.
+
+However, prompts can legitimately reappear after:
+
+- a reboot or sign-out that invalidates cached session state,
+- token expiration,
+- MFA revalidation,
+- Conditional Access changes,
+- or tenant policy requiring a fresh sign-in.
+
+So the correct product promise is:
+
+> The setup survives reboot, but interactive sign-in may still be required again when the underlying Microsoft authentication session expires or policy demands it.
+
+### CredentialPrompt fallback path
+
+When the environment cannot use the ExistingSession path and we fall back to `CredentialPrompt`:
+
+- the repository still remains registered,
+- but the credential itself is not treated as a durable long-term single sign-on session by `PSPublishModule`.
+
+In that fallback mode, the user may be prompted again on later install or update operations unless they:
+
+- rerun `Connect-ModuleRepository`,
+- provide explicit credential input again,
+- or use a credential file / supported automation path.
+
+That is another reason the ExistingSession + credential-provider flow should be the primary supported experience.
 
 ## Dependencies And Prerequisites
 
@@ -341,7 +478,7 @@ This matters because `PSResourceGet` can interact with repository `CredentialInf
 
 ### Recommended bootstrap behavior
 
-`Register-ModuleRepository` should:
+`Connect-ModuleRepository` should:
 
 1. Detect whether `PSResourceGet` is available.
 2. Install or update `PSResourceGet` if it is missing or too old.
@@ -350,6 +487,8 @@ This matters because `PSResourceGet` can interact with repository `CredentialInf
 5. Trigger interactive sign-in.
 6. Register the repository.
 7. Validate access with a repository query.
+
+`Register-ModuleRepository` should provide the same endpoint/prerequisite/registration logic, but it should be positioned as the explicit setup/repair command rather than the main human-facing happy path.
 
 `Install-PrivateModule` and `Update-PrivateModule` should:
 
@@ -368,6 +507,7 @@ Scope:
 - Azure Artifacts preset support in `New-ConfigurationPublish`
 - repository endpoint generation for Azure Artifacts
 - `Register-ModuleRepository` for Azure Artifacts
+- `Connect-ModuleRepository` for Azure Artifacts
 - prerequisite checks for `PSResourceGet` and credential provider
 - interactive sign-in bootstrap
 - repository validation
@@ -500,6 +640,7 @@ Approve the feature in this form:
 Recommended primary names:
 
 - `New-ConfigurationPublish`
+- `Connect-ModuleRepository`
 - `Register-ModuleRepository`
 - `Install-PrivateModule`
 - `Update-PrivateModule`
@@ -512,7 +653,8 @@ Optional convenience alias:
 If we want the shortest recommendation possible:
 
 - keep `New-ConfigurationPublish` for authors,
-- ship `Register-ModuleRepository` for onboarding,
+- ship `Connect-ModuleRepository` for onboarding,
+- keep `Register-ModuleRepository` for explicit setup,
 - ship `Install-PrivateModule` and `Update-PrivateModule` for day-to-day use,
 - ship `Update-ModuleRepository` for repair and reconnect.
 
