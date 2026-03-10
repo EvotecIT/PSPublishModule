@@ -1036,9 +1036,14 @@ public static partial class WebApiDocsGenerator
         if (!string.IsNullOrWhiteSpace(helpDir) && Directory.Exists(helpDir))
         {
             roots.Add(Path.GetFullPath(helpDir));
-            var parent = Directory.GetParent(helpDir);
-            if (parent is not null && parent.Exists)
-                roots.Add(parent.FullName);
+
+            var helpDirName = Path.GetFileName(helpDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (!string.IsNullOrWhiteSpace(helpDirName) && CultureFolderRegex.IsMatch(helpDirName))
+            {
+                var parent = Directory.GetParent(helpDir);
+                if (parent is not null && parent.Exists)
+                    roots.Add(parent.FullName);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(manifestPath))

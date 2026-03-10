@@ -11,6 +11,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleDependencyInstaller
 {
+    private static readonly TimeSpan ModuleLookupTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ExactVersionProbeTimeout = TimeSpan.FromSeconds(30);
+
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
@@ -65,22 +68,53 @@ public sealed class ModuleDependencyInstaller
                 continue;
             }
 
-            var decision = Decide(dep, installedBefore, force);
-            if (!decision.NeedsInstall)
-            {
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: decision.Reason));
-                continue;
-            }
-
+            Decision? decision = null;
             try
             {
+                decision = Decide(dep, installedBefore, force);
+                var currentDecision = decision.Value;
+                var requiredVersion = dep.RequiredVersion;
+                string? exactRequiredVersion = null;
+                if (!string.IsNullOrWhiteSpace(requiredVersion))
+                    exactRequiredVersion = requiredVersion!.Trim();
+                if (!force &&
+                    currentDecision.NeedsInstall &&
+                    !string.IsNullOrWhiteSpace(installedBefore) &&
+                    exactRequiredVersion is not null &&
+                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
+                {
+                    var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, exactRequiredVersion, StringComparison.OrdinalIgnoreCase)
+                        ? $"Exact required version {exactRequiredVersion} already installed"
+                        : $"Exact required version {exactRequiredVersion} already present (latest installed: {installedBefore})";
+                    actions.Add(new ActionItem(
+                        dep.Name,
+                        installedBefore,
+                        exactRequiredVersion,
+                        ModuleDependencyInstallStatus.Satisfied,
+                        installer: null,
+                        message: exactMessage));
+                    continue;
+                }
+
+                if (!currentDecision.NeedsInstall)
+                {
+                    actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: currentDecision.Reason));
+                    continue;
+                }
+
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Reason));
+                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
+                actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, installStatus, installer: usedInstaller, message: currentDecision.Reason));
             }
             catch (Exception ex)
             {
-                actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, ModuleDependencyInstallStatus.Failed, installer: null, message: ex.Message));
+                actions.Add(new ActionItem(
+                    dep.Name,
+                    installedBefore,
+                    decision?.RequestedVersion ?? dep.RequiredVersion ?? dep.MinimumVersion,
+                    ModuleDependencyInstallStatus.Failed,
+                    installer: null,
+                    message: ex.Message));
             }
         }
 
@@ -96,6 +130,32 @@ public sealed class ModuleDependencyInstaller
                     installer: a.Installer,
                     message: a.Message))
             .ToArray();
+    }
+
+    private bool HasInstalledRequiredVersion(string name, string requiredVersion)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(requiredVersion))
+            return false;
+
+        var script = BuildFindInstalledModuleScript();
+        var args = new List<string>(4)
+        {
+            name.Trim(),
+            requiredVersion.Trim(),
+            // The shared locator script expects positional Required/Minimum/Maximum values.
+            // Keep blank placeholders here so the exact-version probe stays aligned with that signature.
+            string.Empty,
+            string.Empty
+        };
+
+        var result = RunScript(script, args, ExactVersionProbeTimeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
+            throw new InvalidOperationException($"Get-Module -ListAvailable failed (exit {result.ExitCode}). {msg}".Trim());
+        }
+
+        return SplitLines(result.StdOut).Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
     }
 
     private static Decision Decide(ModuleDependency dep, string? installedVersion, bool force)
@@ -218,7 +278,7 @@ public sealed class ModuleDependencyInstaller
     {
         var script = BuildGetInstalledVersionsScript();
         var args = new List<string>(1) { EncodeLines(names) };
-        var result = RunScript(script, args, TimeSpan.FromMinutes(2));
+        var result = RunScript(script, args, ModuleLookupTimeout);
         if (result.ExitCode != 0)
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;
@@ -330,15 +390,32 @@ public sealed class ModuleDependencyInstaller
         return null;
     }
 
+    private static string? TryExtractModuleLocatorError(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFMODLOC::ERROR::", StringComparison.Ordinal)) continue;
+            var b64 = line.Substring("PFMODLOC::ERROR::".Length);
+            var msg = Decode(b64);
+            return string.IsNullOrWhiteSpace(msg) ? null : msg;
+        }
+        return null;
+    }
+
     private static string BuildGetInstalledVersionsScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
-}
+    }
+
+    private static string BuildFindInstalledModuleScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
+    }
 
     private static string BuildInstallModuleScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Install-Module.ps1");
-}
+    }
 
     private readonly struct Decision
     {
@@ -376,4 +453,3 @@ public sealed class ModuleDependencyInstaller
         }
     }
 }
-
