@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>ReleaseOpsStudio orchestration, discovery, and local state services.</Description>
+    <AssemblyName>ReleaseOpsStudio.Orchestrator</AssemblyName>
+    <RootNamespace>ReleaseOpsStudio.Orchestrator</RootNamespace>
+    <LangVersion>Latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj" />
+    <ProjectReference Include="..\ReleaseOpsStudio.Domain\ReleaseOpsStudio.Domain.csproj" />
+  </ItemGroup>
+</Project>

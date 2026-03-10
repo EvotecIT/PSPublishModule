@@ -1,0 +1,6 @@
+namespace ReleaseOpsStudio.Orchestrator.Portfolio;
+
+public sealed record GitHubInboxOptions
+{
+    public int MaxRepositories { get; init; } = 15;
+}
