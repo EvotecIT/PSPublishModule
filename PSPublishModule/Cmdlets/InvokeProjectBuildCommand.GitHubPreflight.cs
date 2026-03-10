@@ -133,6 +133,8 @@ public sealed partial class InvokeProjectBuildCommand
             config.GitHubRepositoryName!,
             gitHubToken,
             tag);
+        if (!string.IsNullOrWhiteSpace(existingRelease.ErrorMessage))
+            return existingRelease.ErrorMessage;
         if (!existingRelease.Exists)
             return existingRelease.ErrorMessage;
 
