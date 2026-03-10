@@ -78,8 +78,10 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.False(ManifestEditor.TryGetPsDataStringArray(manifestPath, "Tags", out _));
 
             Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out var requiredModules));
-            Assert.NotNull(requiredModules);
-            Assert.Empty(requiredModules!);
+            var required = Assert.Single(requiredModules!);
+            Assert.Equal("LegacyOnly", required.ModuleName);
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
+            Assert.Equal(new[] { "Old.External" }, externalModules);
 
             var content = File.ReadAllText(manifestPath);
             Assert.DoesNotContain("CommandModuleDependencies", content, StringComparison.Ordinal);
