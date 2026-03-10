@@ -176,11 +176,35 @@ Describe 'Private gallery command metadata' {
         } | Should -Throw "*RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.*"
     }
 
+    It 'rejects Azure Artifacts feeds that resolve to PSGallery' {
+        {
+            New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'PSGallery' -Enabled
+        } | Should -Throw "*RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.*"
+    }
+
     It 'returns a registration result for Connect-ModuleRepository -WhatIf' {
         $result = Connect-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode ExistingSession -WhatIf -WarningAction SilentlyContinue
 
         $result | Should -Not -BeNullOrEmpty
         $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
         $result.RegistrationPerformed | Should -BeFalse
+    }
+
+    It 'does not prompt for credentials during Register-ModuleRepository -WhatIf' {
+        $result = Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode CredentialPrompt -WhatIf -WarningAction SilentlyContinue
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
+        $result.RegistrationPerformed | Should -BeFalse
+        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+    }
+
+    It 'does not prompt for credentials during Update-ModuleRepository -WhatIf' {
+        $result = Update-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode CredentialPrompt -WhatIf -WarningAction SilentlyContinue
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
+        $result.RegistrationPerformed | Should -BeFalse
+        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
     }
 }

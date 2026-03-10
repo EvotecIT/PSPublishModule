@@ -209,9 +209,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             !string.IsNullOrWhiteSpace(RepositorySourceUri) ||
             !string.IsNullOrWhiteSpace(RepositoryPublishUri);
 
+        var resolvedAzureArtifactsRepositoryName = string.IsNullOrWhiteSpace(RepositoryName)
+            ? AzureArtifactsFeed?.Trim()
+            : RepositoryName.Trim();
+
         if (isAzureArtifacts &&
-            !string.IsNullOrWhiteSpace(RepositoryName) &&
-            string.Equals(RepositoryName.Trim(), PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+            !string.IsNullOrWhiteSpace(resolvedAzureArtifactsRepositoryName) &&
+            string.Equals(resolvedAzureArtifactsRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
         {
             throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.");
         }
@@ -246,7 +250,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             repoConfig = AzureArtifactsRepositoryEndpoints.CreatePublishRepositoryConfiguration(
                 AzureDevOpsOrganization,
                 AzureDevOpsProject,
-                AzureArtifactsFeed,
+                AzureArtifactsFeed!,
                 repositoryName: RepositoryName,
                 trusted: RepositoryTrusted,
                 priority: RepositoryPriority,

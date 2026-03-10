@@ -150,7 +150,7 @@ public sealed class ModuleDependencyInstaller
                 }
                 else
                 {
-                    var updateStatus = TryUpdate(dep, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    var updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
                 }
             }
@@ -297,8 +297,9 @@ public sealed class ModuleDependencyInstaller
         }
     }
 
-    private string TryUpdate(
+    private string? TryUpdate(
         ModuleDependency dep,
+        string installedVersion,
         string? repository,
         RepositoryCredential? credential,
         bool prerelease,
@@ -309,8 +310,7 @@ public sealed class ModuleDependencyInstaller
         {
             try
             {
-                UpdateWithPowerShellGet(dep, credential, prerelease, timeout);
-                return "PowerShellGet";
+                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
             }
             catch (PowerShellToolNotAvailableException)
             {
@@ -326,8 +326,7 @@ public sealed class ModuleDependencyInstaller
         catch (PowerShellToolNotAvailableException)
         {
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'.");
-            UpdateWithPowerShellGet(dep, credential, prerelease, timeout);
-            return "PowerShellGet";
+            return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
         }
     }
 
@@ -376,8 +375,22 @@ public sealed class ModuleDependencyInstaller
         }
     }
 
-    private void UpdateWithPowerShellGet(ModuleDependency dep, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    private string? UpdateWithPowerShellGet(ModuleDependency dep, string installedVersion, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
+        if (!string.IsNullOrWhiteSpace(repository))
+        {
+            var scopedRepository = repository!;
+            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep.Name, scopedRepository, credential, prerelease, timeout);
+            if (string.IsNullOrWhiteSpace(latestRepositoryVersion))
+                throw new InvalidOperationException($"Unable to find module '{dep.Name}' in repository '{scopedRepository}' for PowerShellGet update fallback.");
+
+            if (VersionsEquivalent(installedVersion, latestRepositoryVersion))
+                return null;
+
+            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion), scopedRepository, credential, timeout);
+            return "PowerShellGet";
+        }
+
         var script = BuildUpdateModuleScript();
         var args = new List<string>(4)
         {
@@ -395,6 +408,26 @@ public sealed class ModuleDependencyInstaller
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
         }
+
+        return "PowerShellGet";
+    }
+
+    private string? GetLatestPowerShellGetRepositoryVersion(string moduleName, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    {
+        var client = new PowerShellGetClient(_runner, _logger);
+        var items = client.Find(
+            new PowerShellGetFindOptions(
+                names: new[] { moduleName },
+                prerelease: prerelease,
+                repositories: new[] { repository },
+                credential: credential),
+            timeout);
+
+        return items
+            .Where(static item => !string.IsNullOrWhiteSpace(item.Version))
+            .OrderByDescending(static item => item.Version, Comparer<string>.Create(CompareVersionStrings))
+            .Select(static item => item.Version)
+            .FirstOrDefault();
     }
 
     private Dictionary<string, string?> GetLatestInstalledModuleVersions(IReadOnlyList<string> names)
@@ -494,6 +527,17 @@ public sealed class ModuleDependencyInstaller
             return parsedLeft == parsedRight;
 
         return false;
+    }
+
+    private static int CompareVersionStrings(string? left, string? right)
+    {
+        if (VersionsEquivalent(left, right))
+            return 0;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+            return parsedLeft.CompareTo(parsedRight);
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<string> SplitLines(string? text)

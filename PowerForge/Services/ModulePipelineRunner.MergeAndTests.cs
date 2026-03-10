@@ -259,7 +259,14 @@ public sealed partial class ModulePipelineRunner
         }
 
         if (targets.Count == 0)
-            targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+        {
+            if (hasDesktop)
+                targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
+            if (hasCore)
+                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+            if (targets.Count == 0)
+                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+        }
 
         return targets.ToArray();
     }

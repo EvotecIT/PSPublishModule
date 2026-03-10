@@ -240,6 +240,7 @@ internal static class PrivateGalleryCommandSupport
 {
     private const string MinimumPSResourceGetVersion = "1.1.1";
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0-preview5";
+    internal const string ReservedPowerShellGalleryRepositoryName = "PSGallery";
 
     internal readonly record struct CredentialResolutionResult(
         RepositoryCredential? Credential,
@@ -282,7 +283,8 @@ internal static class PrivateGalleryCommandSupport
         string? credentialSecret,
         string? credentialSecretFilePath,
         SwitchParameter promptForCredential,
-        BootstrapPrerequisiteStatus? prerequisiteStatus = null)
+        BootstrapPrerequisiteStatus? prerequisiteStatus = null,
+        bool allowInteractivePrompt = true)
     {
         var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
         var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
@@ -326,7 +328,12 @@ internal static class PrivateGalleryCommandSupport
                 : GetRecommendedBootstrapMode(detectedPrerequisites);
 
             if (effectiveMode == PrivateGalleryBootstrapMode.Auto)
-                throw new InvalidOperationException(BuildBootstrapUnavailableMessage(repositoryName, detectedPrerequisites));
+            {
+                if (!allowInteractivePrompt)
+                    effectiveMode = PrivateGalleryBootstrapMode.CredentialPrompt;
+                else
+                    throw new InvalidOperationException(BuildBootstrapUnavailableMessage(repositoryName, detectedPrerequisites));
+            }
         }
 
         if (effectiveMode == PrivateGalleryBootstrapMode.ExistingSession)
@@ -347,6 +354,14 @@ internal static class PrivateGalleryCommandSupport
                 },
                 BootstrapModeUsed: PrivateGalleryBootstrapMode.CredentialPrompt,
                 CredentialSource: PrivateGalleryCredentialSource.Supplied);
+        }
+
+        if (!allowInteractivePrompt)
+        {
+            return new CredentialResolutionResult(
+                Credential: null,
+                BootstrapModeUsed: PrivateGalleryBootstrapMode.CredentialPrompt,
+                CredentialSource: PrivateGalleryCredentialSource.None);
         }
 
         var caption = cmdlet.MyInvocation.MyCommand.Name;

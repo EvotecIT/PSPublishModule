@@ -103,6 +103,7 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             AzureArtifactsFeed,
             Name);
         var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
+        var allowInteractivePrompt = !MyInvocation.BoundParameters.ContainsKey("WhatIf");
 
         var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
             this,
@@ -112,7 +113,8 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             CredentialSecret,
             CredentialSecretFilePath,
             PromptForCredential,
-            prerequisiteInstall.Status);
+            prerequisiteInstall.Status,
+            allowInteractivePrompt);
 
         var result = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
             this,

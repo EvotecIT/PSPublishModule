@@ -52,12 +52,46 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal("Update requested", result.Message);
     }
 
+    [Fact]
+    public void EnsureUpdated_UsesRepositoryScopedPowerShellGetFallback_WhenRequested()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildPowerShellGetFindStdOut(("ModuleA", "1.1.0", "Company")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMOD::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA") },
+            repository: "Company",
+            preferPowerShellGet: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PowerShellGet", result.Installer);
+        Assert.Equal("1.1.0", result.ResolvedVersion);
+    }
+
     private static string BuildInstalledVersionsStdOut(params (string Name, string Version)[] items)
     {
         var lines = new List<string>(items.Length);
         foreach (var item in items)
         {
             lines.Add($"PFMOD::ITEM::{Encode(item.Name)}::{Encode(item.Version)}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string BuildPowerShellGetFindStdOut(params (string Name, string Version, string Repository)[] items)
+    {
+        var lines = new List<string>(items.Length);
+        foreach (var item in items)
+        {
+            lines.Add($"PFPWSGET::ITEM::{Encode(item.Name)}::{Encode(item.Version)}::{Encode(item.Repository)}::{Encode(string.Empty)}");
         }
 
         return string.Join(Environment.NewLine, lines);

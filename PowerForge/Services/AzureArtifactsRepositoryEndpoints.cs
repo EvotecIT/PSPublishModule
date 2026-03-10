@@ -28,6 +28,9 @@ public static class AzureArtifactsRepositoryEndpoints
             ? normalizedFeed
             : repositoryName!.Trim();
 
+        if (string.Equals(resolvedName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Azure Artifacts repository name cannot resolve to 'PSGallery'.", nameof(repositoryName));
+
         var baseUri = string.IsNullOrWhiteSpace(normalizedProject)
             ? $"https://pkgs.dev.azure.com/{Uri.EscapeDataString(normalizedOrganization)}/_packaging/{Uri.EscapeDataString(normalizedFeed)}/nuget"
             : $"https://pkgs.dev.azure.com/{Uri.EscapeDataString(normalizedOrganization)}/{Uri.EscapeDataString(normalizedProject)}/_packaging/{Uri.EscapeDataString(normalizedFeed)}/nuget";
@@ -70,11 +73,14 @@ public static class AzureArtifactsRepositoryEndpoints
     {
         var endpoint = Create(organization, project, feed, repositoryName);
         var resolvedApiVersion = apiVersion == RepositoryApiVersion.Auto ? RepositoryApiVersion.V3 : apiVersion;
+        var repositoryUri = resolvedApiVersion == RepositoryApiVersion.V2
+            ? endpoint.PowerShellGetSourceUri
+            : endpoint.PSResourceGetUri;
 
         return new PublishRepositoryConfiguration
         {
             Name = endpoint.RepositoryName,
-            Uri = endpoint.PSResourceGetUri,
+            Uri = repositoryUri,
             SourceUri = endpoint.PowerShellGetSourceUri,
             PublishUri = endpoint.PowerShellGetPublishUri,
             Trusted = trusted,

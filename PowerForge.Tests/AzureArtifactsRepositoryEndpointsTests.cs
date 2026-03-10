@@ -48,4 +48,31 @@ public sealed class AzureArtifactsRepositoryEndpointsTests
         Assert.Equal("https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2", repository.PublishUri);
         Assert.Equal("https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json", repository.Uri);
     }
+
+    [Fact]
+    public void CreatePublishRepositoryConfiguration_UsesV2Uri_WhenRequested()
+    {
+        var repository = AzureArtifactsRepositoryEndpoints.CreatePublishRepositoryConfiguration(
+            organization: "contoso",
+            project: "Platform",
+            feed: "Modules",
+            apiVersion: RepositoryApiVersion.V2);
+
+        Assert.Equal(RepositoryApiVersion.V2, repository.ApiVersion);
+        Assert.Equal("https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2", repository.Uri);
+    }
+
+    [Theory]
+    [InlineData("PSGallery", null)]
+    [InlineData("Modules", "PSGallery")]
+    public void Create_RejectsResolvedPowerShellGalleryName(string feed, string? repositoryName)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => AzureArtifactsRepositoryEndpoints.Create(
+            organization: "contoso",
+            project: "Platform",
+            feed: feed,
+            repositoryName: repositoryName));
+
+        Assert.Contains("PSGallery", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

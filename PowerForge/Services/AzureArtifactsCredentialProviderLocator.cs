@@ -142,10 +142,10 @@ public static class AzureArtifactsCredentialProviderLocator
 
     private static void AddDelimitedPaths(ISet<string> output, string? value)
     {
-        var delimitedValue = value;
-        if (output is null || string.IsNullOrWhiteSpace(delimitedValue))
+        if (output is null || string.IsNullOrWhiteSpace(value))
             return;
 
+        var delimitedValue = value!;
         foreach (var item in delimitedValue.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = item.Trim().Trim('"');
@@ -160,8 +160,40 @@ public static class AzureArtifactsCredentialProviderLocator
             return;
 
         var visualStudioRoot = Path.Combine(programFilesRoot, "Microsoft Visual Studio");
-        if (Directory.Exists(visualStudioRoot))
-            output.Add(visualStudioRoot);
+        if (!Directory.Exists(visualStudioRoot))
+            return;
+
+        try
+        {
+            foreach (var yearDirectory in Directory.EnumerateDirectories(visualStudioRoot))
+            {
+                foreach (var editionDirectory in Directory.EnumerateDirectories(yearDirectory))
+                {
+                    var pluginsRoot = Path.Combine(
+                        editionDirectory,
+                        "Common7",
+                        "IDE",
+                        "CommonExtensions",
+                        "Microsoft",
+                        "NuGet",
+                        "Plugins");
+                    if (Directory.Exists(pluginsRoot))
+                        output.Add(pluginsRoot);
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Best effort discovery only.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best effort discovery only.
+        }
+        catch (SecurityException)
+        {
+            // Best effort discovery only.
+        }
     }
 
     private static bool IsCredentialProviderFile(string path)
