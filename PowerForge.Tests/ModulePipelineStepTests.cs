@@ -282,6 +282,97 @@ public sealed class ModulePipelineStepTests
         }
     }
 
+    [Fact]
+    public void Create_IncludesBinaryConflictAnalysisStep_WhenImportingRequiredModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration
+                        {
+                            RequiredModules = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxAnalysis = Array.FindIndex(steps, s => s.Key == "validate:binary-conflicts");
+            var idxImport = Array.FindIndex(steps, s => s.Key == "tests:import-modules");
+
+            Assert.True(idxAnalysis >= 0);
+            Assert.True(idxImport >= 0);
+            Assert.True(idxAnalysis < idxImport);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Create_OmitsBinaryConflictAnalysisStep_WhenSkipped()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration
+                        {
+                            RequiredModules = true,
+                            AnalyzeBinaryConflicts = false
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            Assert.DoesNotContain(steps, s => s.Key == "validate:binary-conflicts");
+            Assert.Contains(steps, s => s.Key == "tests:import-modules");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);

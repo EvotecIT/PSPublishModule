@@ -57,6 +57,7 @@ public sealed partial class ModulePipelineRunner
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
+        var binaryConflictAnalysisStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:binary-conflicts", StringComparison.OrdinalIgnoreCase));
         var binaryDependenciesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:binary-dependencies", StringComparison.OrdinalIgnoreCase));
         var importModulesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase));
         var testSteps = steps
@@ -207,6 +208,7 @@ public sealed partial class ModulePipelineRunner
             FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
             ModuleSigningResult? signingResult = null;
             ModuleValidationReport? validationReport = null;
+            BuildDiagnostic[] automaticBinaryConflictDiagnostics = Array.Empty<BuildDiagnostic>();
 
             if (plan.Formatting is not null)
             {
@@ -607,6 +609,23 @@ public sealed partial class ModulePipelineRunner
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
+            if (plan.ImportModules.RequiredModules == true &&
+                ShouldAnalyzeBinaryConflicts(plan.ImportModules, importRequired: true))
+            {
+                SafeStart(reporter, startedKeys, binaryConflictAnalysisStep);
+                try
+                {
+                    automaticBinaryConflictDiagnostics = AnalyzeAutomaticBinaryConflicts(plan, buildResult);
+                    LogAutomaticBinaryConflictDiagnostics(automaticBinaryConflictDiagnostics);
+                    SafeDone(reporter, binaryConflictAnalysisStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(reporter, binaryConflictAnalysisStep, ex);
+                    throw;
+                }
+            }
+
             if (plan.ImportModules.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true)
             {
                 SafeStart(reporter, startedKeys, binaryDependenciesStep);
@@ -764,6 +783,7 @@ public sealed partial class ModulePipelineRunner
             spec,
             plan,
             buildResult,
+            automaticBinaryConflictDiagnostics,
             installResult,
             documentationResult,
             fileConsistencyReport,
