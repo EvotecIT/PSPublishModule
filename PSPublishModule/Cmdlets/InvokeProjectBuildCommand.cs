@@ -208,6 +208,24 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
+        var gitHubToken = publishGitHub
+            ? ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir)
+            : null;
+        if (publishGitHub)
+        {
+            var gitHubPreflightError = ValidateGitHubPublishPreflight(config, plan, gitHubToken!, logger);
+            if (!string.IsNullOrWhiteSpace(gitHubPreflightError))
+            {
+                WriteObject(new ProjectBuildResult
+                {
+                    Success = false,
+                    ErrorMessage = gitHubPreflightError,
+                    Release = plan
+                });
+                return;
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(stagingPath))
             PrepareStaging(stagingPath!, config.CleanStaging ?? false, logger);
         EnsureDirectory(outputPath);
@@ -233,7 +251,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var gitHubToken = ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
+        gitHubToken ??= ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
         if (string.IsNullOrWhiteSpace(gitHubToken))
         {
             result.Success = false;
@@ -377,6 +395,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                     ok = gr.Succeeded;
                     releaseUrl = gr.ReleaseUrl;
                     errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                    WriteGitHubPublishNotes(logger, tag, gr);
                 }
                 else if (status is PSObject pso)
                 {
@@ -486,6 +505,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                 ok = gr.Succeeded;
                 releaseUrl = gr.ReleaseUrl;
                 errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                WriteGitHubPublishNotes(logger, tag, gr);
             }
             else if (status is PSObject pso)
             {

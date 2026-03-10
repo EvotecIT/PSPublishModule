@@ -57,4 +57,53 @@ public sealed class DotNetRepositoryReleaseServiceTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void Execute_PublishPreflight_UsesPublishSourceWhenVersionSourcesAreMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            File.WriteAllText(csprojPath, string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var publishSourceDir = Directory.CreateDirectory(Path.Combine(root.FullName, "PublishSource"));
+            File.WriteAllText(Path.Combine(publishSourceDir.FullName, "Sample.Package.1.2.3.nupkg"), "placeholder");
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "Artefacts", "packages"),
+                Pack = true,
+                Publish = true,
+                WhatIf = true,
+                PublishApiKey = "dummy",
+                PublishSource = publishSourceDir.FullName,
+                SkipDuplicate = false,
+                UpdateVersions = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.False(result.Success);
+            Assert.Contains("already exists", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Sample.Package version 1.2.3", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }
