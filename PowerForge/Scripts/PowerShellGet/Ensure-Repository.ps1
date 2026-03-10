@@ -1,8 +1,10 @@
-﻿param(
+param(
   [string]$Name,
   [string]$SourceUri,
   [string]$PublishUri,
-  [string]$TrustedFlag
+  [string]$TrustedFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -24,6 +26,11 @@ $existing = $null
 try { $existing = Get-PSRepository -Name $Name -ErrorAction SilentlyContinue } catch { $existing = $null }
 
 $policy = if ($TrustedFlag -eq '1') { 'Trusted' } else { 'Untrusted' }
+$credential = $null
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
 
 try {
   $created = $false
@@ -36,12 +43,23 @@ try {
     }
     Set-PSRepository -Name 'PSGallery' -InstallationPolicy $policy -ErrorAction Stop | Out-Null
   } else {
+    $params = @{
+      Name = $Name
+      SourceLocation = $SourceUri
+      PublishLocation = $PublishUri
+      InstallationPolicy = $policy
+      ErrorAction = 'Stop'
+    }
+    if ($null -ne $credential) { $params.Credential = $credential }
+
     if ($existing) {
-      Set-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
+      Unregister-PSRepository -Name $Name -ErrorAction SilentlyContinue | Out-Null
+      Unregister-PackageSource -Name $Name -ProviderName NuGet -Force -ErrorAction SilentlyContinue | Out-Null
     } else {
       $created = $true
-      Register-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
     }
+
+    Register-PSRepository @params | Out-Null
   }
 
   Write-Output ('PFPWSGET::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
@@ -52,4 +70,3 @@ try {
   Write-Output ('PFPWSGET::ERROR::' + $b64)
   exit 1
 }
-

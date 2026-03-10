@@ -513,6 +513,11 @@
           "SixLabors.ImageSharp": "2.1.5"
         }
       },
+      "Spectre.Console": {
+        "type": "Transitive",
+        "resolved": "0.54.0",
+        "contentHash": "StDXCFayfy0yB1xzUHT2tgEpV1/HFTiS4JgsAQS49EYTfMixSwwucaQs/bIOCwXjWwIQTMuxjUIxcB5XsJkFJA=="
+      },
       "System.CodeDom": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -848,6 +853,15 @@
         "type": "Project",
         "dependencies": {
           "PowerForge.Web": "[1.0.0, )"
+        }
+      },
+      "pspublishmodule": {
+        "type": "Project",
+        "dependencies": {
+          "PowerForge": "[1.0.0, )",
+          "Spectre.Console": "[0.54.0, )",
+          "System.IO.Packaging": "[10.0.1, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
         }
       }
     }

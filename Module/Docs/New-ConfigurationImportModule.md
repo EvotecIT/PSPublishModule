@@ -11,7 +11,7 @@ Creates a configuration for importing PowerShell modules.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-SkipBinaryDependencyCheck] [<CommonParameters>]
+New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-SkipBinaryConflictAnalysis] [-PreferBinaryConflictOrder] [-SkipBinaryDependencyCheck] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -52,6 +52,38 @@ Accept wildcard characters: True
 
 ### -ImportSelf
 Indicates whether to import the current module itself.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreferBinaryConflictOrder
+Reorders RequiredModules using a conflict-aware heuristic before manifest refresh and import validation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipBinaryConflictAnalysis
+Skips required-module and self-module binary conflict advisories during import validation.
 
 ```yaml
 Type: SwitchParameter

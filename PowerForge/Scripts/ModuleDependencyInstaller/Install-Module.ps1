@@ -14,6 +14,15 @@ function Enc([string]$s) {
 }
 
 try {
+  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
+  $b64 = Enc $msg
+  Write-Output ('PFMOD::ERROR::' + $b64)
+  exit 3
+}
+
+try {
   $params = @{
     Name = $Name
     Force = $true
@@ -39,4 +48,3 @@ try {
   Write-Output ('PFMOD::ERROR::' + $b64)
   exit 1
 }
-

@@ -33,6 +33,7 @@ public sealed class ModuleDependencyInstaller
         string? repository = null,
         RepositoryCredential? credential = null,
         bool prerelease = false,
+        bool preferPowerShellGet = false,
         TimeSpan? timeoutPerModule = null)
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
@@ -75,7 +76,7 @@ public sealed class ModuleDependencyInstaller
             try
             {
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
+                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
                 actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Reason));
             }
             catch (Exception ex)
@@ -165,8 +166,22 @@ public sealed class ModuleDependencyInstaller
         RepositoryCredential? credential,
         bool prerelease,
         bool force,
+        bool preferPowerShellGet,
         TimeSpan timeout)
     {
+        if (preferPowerShellGet)
+        {
+            try
+            {
+                InstallWithPowerShellGet(dep, repository, credential, timeout);
+                return "PowerShellGet";
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+            }
+        }
+
         // Prefer PSResourceGet (out-of-process).
         try
         {
@@ -210,7 +225,10 @@ public sealed class ModuleDependencyInstaller
         if (result.ExitCode != 0)
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;
-            throw new InvalidOperationException($"Install-Module failed (exit {result.ExitCode}). {msg}".Trim());
+            var full = $"Install-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PowerShellGet", full);
+            throw new InvalidOperationException(full);
         }
     }
 
@@ -376,4 +394,3 @@ public sealed class ModuleDependencyInstaller
         }
     }
 }
-
