@@ -79,7 +79,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -132,7 +132,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -185,7 +185,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1..HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
