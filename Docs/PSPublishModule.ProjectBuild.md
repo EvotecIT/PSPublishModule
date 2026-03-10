@@ -12,6 +12,8 @@ Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,
   packs and signs NuGet packages, and can publish to NuGet and GitHub.
 - A plan-only run can be produced with `PlanOnly` or `-Plan`, which writes the plan JSON without changing files.
+- `Invoke-ProjectBuild` now treats publish checks from the plan pass as blocking preflight.
+  NuGet and GitHub prechecks are evaluated before any real publish starts.
 
 Example configuration
 ```

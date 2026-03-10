@@ -196,34 +196,33 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
+        var preflightErrors = new List<string>();
+        if (!plan.Success)
+            preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
+
         var preflightError = ValidatePreflight(publishNuget, publishGitHub, createReleaseZip, publishApiKey, config, configDir);
         if (!string.IsNullOrWhiteSpace(preflightError))
-        {
-            WriteObject(new ProjectBuildResult
-            {
-                Success = false,
-                ErrorMessage = preflightError,
-                Release = plan
-            });
-            return;
-        }
+            preflightErrors.Add(preflightError!);
 
         var gitHubToken = publishGitHub
             ? ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir)
             : null;
-        if (publishGitHub)
+        if (publishGitHub && string.IsNullOrWhiteSpace(preflightError))
         {
             var gitHubPreflightError = ValidateGitHubPublishPreflight(config, plan, gitHubToken!, logger);
             if (!string.IsNullOrWhiteSpace(gitHubPreflightError))
+                preflightErrors.Add(gitHubPreflightError!);
+        }
+
+        if (preflightErrors.Count > 0)
+        {
+            WriteObject(new ProjectBuildResult
             {
-                WriteObject(new ProjectBuildResult
-                {
-                    Success = false,
-                    ErrorMessage = gitHubPreflightError,
-                    Release = plan
-                });
-                return;
-            }
+                Success = false,
+                ErrorMessage = string.Join(Environment.NewLine, preflightErrors),
+                Release = plan
+            });
+            return;
         }
 
         if (!string.IsNullOrWhiteSpace(stagingPath))
