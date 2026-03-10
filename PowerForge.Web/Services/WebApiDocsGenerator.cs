@@ -243,7 +243,10 @@ public static partial class WebApiDocsGenerator
     private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefTokenRegex = new("\\[\\[href:(?<url>[^|\\]]+)\\|(?<label>[^\\]]*)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AboutTokenRegex = new("\\babout_[A-Za-z0-9_.-]+\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, RegexTimeout);
-    private static readonly Regex CultureFolderRegex = new("^[a-z]{2,3}-[A-Z]{2,3}$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CultureFolderRegex = new(
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
     private static readonly Regex ParagraphSplitRegex = new("\\n\\s*\\n", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ParagraphLineBreakNormalizeRegex = new("\\s*\\n\\s*", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 

@@ -137,6 +137,8 @@ public sealed class ModuleDependencyInstaller
         {
             name.Trim(),
             requiredVersion.Trim(),
+            // The shared locator script expects positional Required/Minimum/Maximum values.
+            // Keep blank placeholders here so the exact-version probe stays aligned with that signature.
             string.Empty,
             string.Empty
         };

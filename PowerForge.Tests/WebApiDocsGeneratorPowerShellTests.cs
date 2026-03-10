@@ -367,6 +367,76 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_ImportsAboutTopicsFromCaseInsensitiveAndScriptCultureFolders()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-about-cultures-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-us", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>See about_LowerCaseTopic and about_ScriptTopic for more details.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+
+            var lowerCaseCulturePath = Path.Combine(root, "en-us");
+            var scriptCulturePath = Path.Combine(root, "zh-Hans");
+            Directory.CreateDirectory(scriptCulturePath);
+            File.WriteAllText(Path.Combine(lowerCaseCulturePath, "about_LowerCaseTopic.help.txt"),
+                """
+                # about_LowerCaseTopic
+
+                Loaded from a lowercase culture folder.
+                """);
+            File.WriteAllText(Path.Combine(scriptCulturePath, "about_ScriptTopic.help.txt"),
+                """
+                # about_ScriptTopic
+
+                Loaded from a script culture folder.
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "html"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(3, result.TypeCount);
+
+            using var lowerCaseJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-lowercasetopic.json")));
+            using var scriptJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-scripttopic.json")));
+            Assert.Equal("about_LowerCaseTopic", lowerCaseJson.RootElement.GetProperty("name").GetString());
+            Assert.Equal("about_ScriptTopic", scriptJson.RootElement.GetProperty("name").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_ParsesManifestMultilineExportsAndComments()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-manifest-parse-" + Guid.NewGuid().ToString("N"));

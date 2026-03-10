@@ -74,12 +74,38 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         Assert.Equal("Exact version already installed", satisfied.Message);
     }
 
+    [Fact]
+    public void EnsureInstalled_ForceBypassesExactVersionProbe()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
+            failingExactVersions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.25.0"
+            });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[] { new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0") },
+            force: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;
         private readonly IReadOnlyDictionary<string, HashSet<string>> _installedExactVersions;
         private readonly IReadOnlyDictionary<string, string> _failingExactVersions;
 
+        public int ExactProbeCalls { get; private set; }
         public int InstallCalls { get; private set; }
 
         public StubPowerShellRunner(
@@ -110,6 +136,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
 
             if (script.Contains(ExactVersionProbeMarker, StringComparison.Ordinal))
             {
+                ExactProbeCalls++;
                 var name = request.Arguments[0];
                 var requiredVersion = request.Arguments[1];
                 if (_failingExactVersions.TryGetValue(name, out var failingVersion) &&
