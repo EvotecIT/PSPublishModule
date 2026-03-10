@@ -66,6 +66,21 @@ public sealed class ModuleDependencyInstaller
             }
 
             var decision = Decide(dep, installedBefore, force);
+            if (!force &&
+                decision.NeedsInstall &&
+                !string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+                HasInstalledRequiredVersion(dep.Name, dep.RequiredVersion!))
+            {
+                actions.Add(new ActionItem(
+                    dep.Name,
+                    installedBefore,
+                    dep.RequiredVersion,
+                    ModuleDependencyInstallStatus.Satisfied,
+                    installer: null,
+                    message: "Exact version already installed"));
+                continue;
+            }
+
             if (!decision.NeedsInstall)
             {
                 actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: decision.Reason));
@@ -96,6 +111,30 @@ public sealed class ModuleDependencyInstaller
                     installer: a.Installer,
                     message: a.Message))
             .ToArray();
+    }
+
+    private bool HasInstalledRequiredVersion(string name, string requiredVersion)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(requiredVersion))
+            return false;
+
+        var script = BuildFindInstalledModuleScript();
+        var args = new List<string>(4)
+        {
+            name.Trim(),
+            requiredVersion.Trim(),
+            string.Empty,
+            string.Empty
+        };
+
+        var result = RunScript(script, args, TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
+            throw new InvalidOperationException($"Get-Module -ListAvailable failed (exit {result.ExitCode}). {msg}".Trim());
+        }
+
+        return SplitLines(result.StdOut).Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
     }
 
     private static Decision Decide(ModuleDependency dep, string? installedVersion, bool force)
@@ -330,9 +369,26 @@ public sealed class ModuleDependencyInstaller
         return null;
     }
 
+    private static string? TryExtractModuleLocatorError(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFMODLOC::ERROR::", StringComparison.Ordinal)) continue;
+            var b64 = line.Substring("PFMODLOC::ERROR::".Length);
+            var msg = Decode(b64);
+            return string.IsNullOrWhiteSpace(msg) ? null : msg;
+        }
+        return null;
+    }
+
     private static string BuildGetInstalledVersionsScript()
     {
         return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
+}
+
+    private static string BuildFindInstalledModuleScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
 }
 
     private static string BuildInstallModuleScript()
@@ -376,4 +432,3 @@ public sealed class ModuleDependencyInstaller
         }
     }
 }
-

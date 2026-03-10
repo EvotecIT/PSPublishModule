@@ -137,7 +137,7 @@ public sealed partial class ModulePipelineRunner
                 if (!string.IsNullOrWhiteSpace(info?.Version)) continue;
 
                 var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
-                if (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource))
+                if (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource) || IsAutoGuid(d.Guid))
                     candidates.Add(d.ModuleName);
             }
 
