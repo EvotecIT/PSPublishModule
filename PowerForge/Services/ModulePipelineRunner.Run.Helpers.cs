@@ -45,6 +45,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineSpec spec,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
+        BuildDiagnostic[] automaticBinaryConflictDiagnostics,
         ModuleInstallerResult? installResult,
         DocumentationBuildResult? documentationResult,
         ProjectConsistencyReport? fileConsistencyReport,
@@ -69,7 +70,7 @@ public sealed partial class ModulePipelineRunner
             projectRootFileConsistencyReport,
             compatibilityReport,
             validationReport));
-        diagnostics.AddRange(CreateAutomaticBinaryConflictDiagnostics(plan, buildResult));
+        diagnostics.AddRange(automaticBinaryConflictDiagnostics ?? Array.Empty<BuildDiagnostic>());
         diagnostics.AddRange(CreateBinaryConflictDiagnostics(spec.Diagnostics, plan, buildResult));
         var diagnosticsBaseline = BuildDiagnosticsBaselineStore.Evaluate(
             plan.ProjectRoot,

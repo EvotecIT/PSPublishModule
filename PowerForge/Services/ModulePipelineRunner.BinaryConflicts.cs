@@ -18,6 +18,43 @@ public sealed partial class ModulePipelineRunner
         return true;
     }
 
+    private BuildDiagnostic[] AnalyzeAutomaticBinaryConflicts(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        try
+        {
+            return CreateAutomaticBinaryConflictDiagnostics(plan, buildResult);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Binary conflict analysis skipped. {ex.Message}");
+            if (_logger.IsVerbose)
+                _logger.Verbose(ex.ToString());
+            return Array.Empty<BuildDiagnostic>();
+        }
+    }
+
+    private void LogAutomaticBinaryConflictDiagnostics(IEnumerable<BuildDiagnostic>? diagnostics)
+    {
+        foreach (var diagnostic in diagnostics ?? Array.Empty<BuildDiagnostic>())
+        {
+            if (diagnostic is null)
+                continue;
+
+            var message = diagnostic.Details;
+            if (!string.IsNullOrWhiteSpace(diagnostic.RecommendedAction))
+                message = string.IsNullOrWhiteSpace(message)
+                    ? diagnostic.RecommendedAction
+                    : message + " " + diagnostic.RecommendedAction;
+            if (!string.IsNullOrWhiteSpace(diagnostic.SuggestedCommand))
+                message += " Suggested command: " + diagnostic.SuggestedCommand;
+
+            if (string.IsNullOrWhiteSpace(message))
+                message = diagnostic.Summary;
+
+            _logger.Warn(message);
+        }
+    }
+
     private BuildDiagnostic[] CreateAutomaticBinaryConflictDiagnostics(ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
         var cfg = plan.ImportModules;
@@ -79,84 +116,6 @@ public sealed partial class ModulePipelineRunner
         }
 
         return reordered;
-    }
-
-    private void WarnOnImportModuleBinaryConflicts(ModulePipelinePlan plan, ModuleBuildResult buildResult)
-    {
-        var requiredModules = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
-        var installedModules = ResolveInstalledRequiredModuleReferences(requiredModules);
-        if (installedModules.Length == 0)
-            return;
-
-        var editions = GetBinaryConflictEditions(plan.CompatiblePSEditions);
-        WarnOnRequiredModuleBinaryConflicts(
-            requiredModules,
-            installedModules,
-            editions,
-            preferConflictOrder: plan.ImportModules?.PreferBinaryConflictOrder == true);
-
-        if (plan.ImportModules?.Self == true)
-            WarnOnBuiltModuleBinaryConflicts(plan, buildResult, installedModules, editions);
-    }
-
-    private void WarnOnRequiredModuleBinaryConflicts(
-        ManifestEditor.RequiredModule[] requiredModules,
-        InstalledModuleReference[] installedModules,
-        string[] editions,
-        bool preferConflictOrder)
-    {
-        if (installedModules.Length < 2)
-            return;
-
-        var declaredOrder = requiredModules
-            .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
-            .Select(static module => module.ModuleName!.Trim())
-            .ToArray();
-        var preferredOrder = BuildPreferredRequiredModuleOrder(declaredOrder, installedModules, editions);
-
-        if (preferredOrder.Length > 1 &&
-            !declaredOrder.SequenceEqual(preferredOrder, StringComparer.OrdinalIgnoreCase) &&
-            !preferConflictOrder)
-        {
-            _logger.Warn($"Binary conflict advisory: current RequiredModules order '{string.Join(", ", declaredOrder)}' may be suboptimal. Suggested order: '{string.Join(", ", preferredOrder)}'.");
-        }
-
-        var detector = new BinaryConflictDetectionService(_logger);
-        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var module in installedModules)
-        {
-            var otherModulePaths = installedModules
-                .Where(other => !string.Equals(other.Name, module.Name, StringComparison.OrdinalIgnoreCase))
-                .Select(other => other.ModuleBasePath!)
-                .ToArray();
-            if (otherModulePaths.Length == 0)
-                continue;
-
-            foreach (var edition in editions)
-            {
-                var result = detector.Analyze(
-                    module.ModuleBasePath!,
-                    edition,
-                    currentModuleName: module.Name,
-                    searchModulePaths: otherModulePaths);
-
-                foreach (var issue in result.Issues)
-                {
-                    var preferredFirst = issue.VersionComparison >= 0 ? module.Name : issue.InstalledModuleName;
-                    var preferredSecond = issue.VersionComparison >= 0 ? issue.InstalledModuleName : module.Name;
-                    var preferredVersion = issue.VersionComparison >= 0 ? issue.PayloadAssemblyVersion : issue.InstalledAssemblyVersion;
-                    var otherVersion = issue.VersionComparison >= 0 ? issue.InstalledAssemblyVersion : issue.PayloadAssemblyVersion;
-                    var key = string.Join("|", issue.PowerShellEdition, issue.AssemblyName, preferredFirst, preferredVersion, preferredSecond, otherVersion);
-                    if (!emitted.Add(key))
-                        continue;
-
-                    _logger.Warn(
-                        $"{issue.PowerShellEdition} binary conflict advisory: RequiredModules '{preferredFirst}' ({preferredVersion}) and '{preferredSecond}' ({otherVersion}) both ship '{issue.AssemblyName}'. Prefer importing '{preferredFirst}' before '{preferredSecond}' if the newer dependency is backward compatible.");
-                }
-            }
-        }
-
     }
 
     private BuildDiagnostic[] CreateRequiredModuleOrderDiagnostics(
@@ -298,41 +257,6 @@ public sealed partial class ModulePipelineRunner
         }
 
         return diagnostics.ToArray();
-    }
-
-    private void WarnOnBuiltModuleBinaryConflicts(
-        ModulePipelinePlan plan,
-        ModuleBuildResult buildResult,
-        InstalledModuleReference[] installedModules,
-        string[] editions)
-    {
-        var detector = new BinaryConflictDetectionService(_logger);
-        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var modulePaths = installedModules
-            .Select(module => module.ModuleBasePath!)
-            .ToArray();
-
-        foreach (var edition in editions)
-        {
-            var result = detector.Analyze(
-                buildResult.StagingPath,
-                edition,
-                currentModuleName: plan.ModuleName,
-                searchModulePaths: modulePaths);
-
-            foreach (var issue in result.Issues)
-            {
-                var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
-                    ? issue.InstalledModuleName
-                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
-                var key = string.Join("|", issue.PowerShellEdition, issue.AssemblyName, moduleLabel, issue.InstalledAssemblyVersion, issue.PayloadAssemblyVersion);
-                if (!emitted.Add(key))
-                    continue;
-
-                _logger.Warn(
-                    $"{issue.PowerShellEdition} binary conflict advisory: RequiredModule '{moduleLabel}' ships '{issue.AssemblyName}' {issue.InstalledAssemblyVersion}, while the module under build ships {issue.PayloadAssemblyVersion}. RequiredModules load before the module under build, so align the shared dependency version or preload it in the module bootstrapper.");
-            }
-        }
     }
 
     private string[] BuildPreferredRequiredModuleOrder(
