@@ -562,7 +562,7 @@ public sealed class ModuleDependencyInstaller
         if (string.IsNullOrWhiteSpace(text))
             return false;
 
-        var value = text.Trim();
+        var value = text!.Trim();
         if (value.StartsWith("v", StringComparison.OrdinalIgnoreCase)) value = value.Substring(1);
 
         var buildMetadataSeparator = value.IndexOf('+');
@@ -586,7 +586,7 @@ public sealed class ModuleDependencyInstaller
 
         var prereleaseIdentifiers = string.IsNullOrWhiteSpace(prerelease)
             ? Array.Empty<string>()
-            : prerelease.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            : prerelease.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
 
         version = new SemanticVersionParts(major, minor, patch, prereleaseIdentifiers);
         return true;

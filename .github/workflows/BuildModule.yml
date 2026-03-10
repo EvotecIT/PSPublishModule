@@ -31,6 +31,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -77,8 +79,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git fetch origin '${{ github.base_ref }}' --depth=1
-            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -109,6 +110,8 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -129,8 +132,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git fetch origin '${{ github.base_ref }}' --depth=1
-            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
@@ -161,6 +163,8 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -181,8 +185,7 @@ jobs:
         run: |
           $changedPath = Join-Path $PWD '.changed-cs.txt'
           if ('${{ github.event_name }}' -eq 'pull_request') {
-            git fetch origin '${{ github.base_ref }}' --depth=1
-            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+            git diff --name-only 'HEAD^1...HEAD^2' -- '*.cs' | Set-Content $changedPath
           } else {
             $commitCount = [int](git rev-list --count HEAD)
             $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
