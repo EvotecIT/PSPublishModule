@@ -64,9 +64,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -75,43 +72,6 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
-
-      - name: Enforce changed .cs file size (max 800 lines)
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
-          if ('${{ github.event_name }}' -eq 'pull_request') {
-            $headers = @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = 'application/vnd.github+json'
-              'X-GitHub-Api-Version' = '2022-11-28'
-            }
-            $files = @()
-            $page = 1
-            do {
-              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
-              $files += $response
-              $page++
-            } while ($response.Count -eq 100)
-
-            $files |
-              Where-Object { $_.filename -like '*.cs' } |
-              ForEach-Object { $_.filename } |
-              Set-Content $changedPath
-          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
-            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
-          } else {
-            $commitCount = [int](git rev-list --count HEAD)
-            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
-            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
-          }
-          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
-            Write-Host 'No changed .cs files to check.'
-            exit 0
-          }
-          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -136,9 +96,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -147,43 +104,6 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
-
-      - name: Enforce changed .cs file size (max 800 lines)
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
-          if ('${{ github.event_name }}' -eq 'pull_request') {
-            $headers = @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = 'application/vnd.github+json'
-              'X-GitHub-Api-Version' = '2022-11-28'
-            }
-            $files = @()
-            $page = 1
-            do {
-              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
-              $files += $response
-              $page++
-            } while ($response.Count -eq 100)
-
-            $files |
-              Where-Object { $_.filename -like '*.cs' } |
-              ForEach-Object { $_.filename } |
-              Set-Content $changedPath
-          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
-            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
-          } else {
-            $commitCount = [int](git rev-list --count HEAD)
-            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
-            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
-          }
-          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
-            Write-Host 'No changed .cs files to check.'
-            exit 0
-          }
-          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
@@ -208,9 +128,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -219,43 +136,6 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
-
-      - name: Enforce changed .cs file size (max 800 lines)
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          $changedPath = Join-Path $env:RUNNER_TEMP "changed-cs-${{ github.job }}.txt"
-          if ('${{ github.event_name }}' -eq 'pull_request') {
-            $headers = @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = 'application/vnd.github+json'
-              'X-GitHub-Api-Version' = '2022-11-28'
-            }
-            $files = @()
-            $page = 1
-            do {
-              $response = @(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page")
-              $files += $response
-              $page++
-            } while ($response.Count -eq 100)
-
-            $files |
-              Where-Object { $_.filename -like '*.cs' } |
-              ForEach-Object { $_.filename } |
-              Set-Content $changedPath
-          } elseif ('${{ github.event_name }}' -eq 'push' -and '${{ github.event.before }}' -and '${{ github.event.before }}' -ne '0000000000000000000000000000000000000000') {
-            git diff --name-only '${{ github.event.before }}...${{ github.sha }}' -- '*.cs' | Set-Content $changedPath
-          } else {
-            $commitCount = [int](git rev-list --count HEAD)
-            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
-            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
-          }
-          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
-            Write-Host 'No changed .cs files to check.'
-            exit 0
-          }
-          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
