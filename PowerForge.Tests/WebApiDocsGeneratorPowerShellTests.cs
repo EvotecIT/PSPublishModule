@@ -437,6 +437,66 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_ImportsRootAboutTopicsForNeutralCultureFolders()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-about-neutral-culture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpDirectory = Path.Combine(root, "en");
+            Directory.CreateDirectory(helpDirectory);
+            var helpPath = Path.Combine(helpDirectory, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>For more details, see about_RootTopic.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "about_RootTopic.help.txt"),
+                """
+                # about_RootTopic
+
+                Loaded from the module root while help XML lives in a neutral culture folder.
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "html"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(2, result.TypeCount);
+
+            using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-roottopic.json")));
+            Assert.Equal("about_RootTopic", aboutJson.RootElement.GetProperty("name").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_ParsesManifestMultilineExportsAndComments()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-manifest-parse-" + Guid.NewGuid().ToString("N"));
