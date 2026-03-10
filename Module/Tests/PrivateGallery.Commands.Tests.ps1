@@ -1,5 +1,6 @@
 Describe 'Private gallery command metadata' {
     BeforeAll {
+        $existingCommand = Get-Command Connect-ModuleRepository -ErrorAction SilentlyContinue
         $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
         $installedModule = Get-Module -ListAvailable PSPublishModule |
             Sort-Object Version -Descending |
@@ -10,7 +11,9 @@ Describe 'Private gallery command metadata' {
         $tfm = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
         $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "../../PSPublishModule/bin/Release/$tfm") -ChildPath 'PSPublishModule.dll'
 
-        if ($loadedModule) {
+        if ($existingCommand -and $existingCommand.Module) {
+            $script:PrivateGalleryTestModule = $existingCommand.Module
+        } elseif ($loadedModule) {
             $script:PrivateGalleryTestModule = $loadedModule
         } elseif ($installedModule) {
             $script:PrivateGalleryTestModule = Import-Module $installedModule.Path -Force -PassThru -ErrorAction Stop

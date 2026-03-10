@@ -101,10 +101,42 @@ try {
     Write-Color 'Running tests...' -Color Yellow
     Write-Color
 
-    $result = Invoke-Pester -Script (Join-Path $script:SourceRoot 'Tests') -Verbose -PassThru
+    $testsRoot = Join-Path $script:SourceRoot 'Tests'
+    $isolatedTestPath = Join-Path $testsRoot 'PrivateGallery.Commands.Tests.ps1'
+    $sharedTests = Get-ChildItem -Path $testsRoot -Filter '*.Tests.ps1' -File -ErrorAction Stop |
+        Where-Object { $_.FullName -ne $isolatedTestPath } |
+        Sort-Object FullName
+
+    $result = Invoke-Pester -Script $sharedTests.FullName -Verbose -PassThru
 
     if ($result.FailedCount -gt 0) {
         throw "$($result.FailedCount) tests failed."
+    }
+
+    if (Test-Path -LiteralPath $isolatedTestPath) {
+        $currentShellPath = (Get-Process -Id $PID).Path
+        $isolatedRunnerPath = Join-Path ([System.IO.Path]::GetTempPath()) ("{0}.ps1" -f [System.IO.Path]::GetRandomFileName())
+
+        @'
+param(
+    [Parameter(Mandatory)]
+    [string] $TestPath
+)
+
+$result = Invoke-Pester -Script $TestPath -Verbose -PassThru
+if ($result.FailedCount -gt 0) {
+    throw "$($result.FailedCount) tests failed."
+}
+'@ | Set-Content -LiteralPath $isolatedRunnerPath -Encoding UTF8
+
+        try {
+            & $currentShellPath -NoLogo -NoProfile -File $isolatedRunnerPath -TestPath $isolatedTestPath
+            if ($LASTEXITCODE -ne 0) {
+                throw "Isolated test run failed for $isolatedTestPath with exit code $LASTEXITCODE."
+            }
+        } finally {
+            Remove-Item -LiteralPath $isolatedRunnerPath -Force -ErrorAction SilentlyContinue
+        }
     }
 } finally {
     if ($script:CopiedSourceLib -and (Test-Path -LiteralPath $sourceLibRoot)) {
