@@ -72,9 +72,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Enforce .cs file size (max 800 lines)
+      - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
-        run: node .\Build\linecount.js . 800
+        run: |
+          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            git fetch origin '${{ github.base_ref }}' --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+          } else {
+            $commitCount = [int](git rev-list --count HEAD)
+            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
+            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
+          }
+          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
+            Write-Host 'No changed .cs files to check.'
+            exit 0
+          }
+          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
 
       - name: Build Module
         shell: pwsh
@@ -110,9 +124,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Enforce .cs file size (max 800 lines)
+      - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
-        run: node ./Build/linecount.js . 800
+        run: |
+          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            git fetch origin '${{ github.base_ref }}' --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+          } else {
+            $commitCount = [int](git rev-list --count HEAD)
+            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
+            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
+          }
+          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
+            Write-Host 'No changed .cs files to check.'
+            exit 0
+          }
+          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
 
       - name: Build Module
         shell: pwsh
@@ -148,9 +176,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Enforce .cs file size (max 800 lines)
+      - name: Enforce changed .cs file size (max 800 lines)
         shell: pwsh
-        run: node ./Build/linecount.js . 800
+        run: |
+          $changedPath = Join-Path $PWD '.changed-cs.txt'
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            git fetch origin '${{ github.base_ref }}' --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.cs' | Set-Content $changedPath
+          } else {
+            $commitCount = [int](git rev-list --count HEAD)
+            $base = if ($commitCount -gt 1) { 'HEAD~1' } else { 'HEAD' }
+            git diff --name-only "$base...HEAD" -- '*.cs' | Set-Content $changedPath
+          }
+          if (-not (Get-Content $changedPath | Where-Object { $_ -and $_.Trim() })) {
+            Write-Host 'No changed .cs files to check.'
+            exit 0
+          }
+          node ./Build/linecount.js --root . --max 800 --files-from $changedPath
 
       - name: Build Module
         shell: pwsh

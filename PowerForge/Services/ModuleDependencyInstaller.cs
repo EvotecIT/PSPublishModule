@@ -534,10 +534,179 @@ public sealed class ModuleDependencyInstaller
         if (VersionsEquivalent(left, right))
             return 0;
 
+        if (TryCompareSemanticVersions(left, right, out var semanticComparison))
+            return semanticComparison;
+
         if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
             return parsedLeft.CompareTo(parsedRight);
 
         return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryCompareSemanticVersions(string? left, string? right, out int comparison)
+    {
+        if (!TryParseSemanticVersion(left, out var parsedLeft) ||
+            !TryParseSemanticVersion(right, out var parsedRight))
+        {
+            comparison = 0;
+            return false;
+        }
+
+        comparison = parsedLeft.CompareTo(parsedRight);
+        return true;
+    }
+
+    private static bool TryParseSemanticVersion(string? text, out SemanticVersionParts version)
+    {
+        version = default;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var value = text.Trim();
+        if (value.StartsWith("v", StringComparison.OrdinalIgnoreCase)) value = value.Substring(1);
+
+        var buildMetadataSeparator = value.IndexOf('+');
+        if (buildMetadataSeparator >= 0) value = value.Substring(0, buildMetadataSeparator);
+
+        var prereleaseSeparator = value.IndexOf('-');
+        var coreVersion = prereleaseSeparator >= 0 ? value.Substring(0, prereleaseSeparator) : value;
+        var prerelease = prereleaseSeparator >= 0 ? value.Substring(prereleaseSeparator + 1) : string.Empty;
+
+        var coreParts = coreVersion.Split('.');
+        if (coreParts.Length < 2 || coreParts.Length > 3)
+            return false;
+
+        if (!int.TryParse(coreParts[0], out var major) ||
+            !int.TryParse(coreParts[1], out var minor))
+            return false;
+
+        var patch = 0;
+        if (coreParts.Length == 3 && !int.TryParse(coreParts[2], out patch))
+            return false;
+
+        var prereleaseIdentifiers = string.IsNullOrWhiteSpace(prerelease)
+            ? Array.Empty<string>()
+            : prerelease.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+        version = new SemanticVersionParts(major, minor, patch, prereleaseIdentifiers);
+        return true;
+    }
+
+    private readonly struct SemanticVersionParts : IComparable<SemanticVersionParts>
+    {
+        internal SemanticVersionParts(int major, int minor, int patch, string[] prereleaseIdentifiers)
+        {
+            Major = major;
+            Minor = minor;
+            Patch = patch;
+            PrereleaseIdentifiers = prereleaseIdentifiers;
+        }
+
+        internal int Major { get; }
+        internal int Minor { get; }
+        internal int Patch { get; }
+        internal string[] PrereleaseIdentifiers { get; }
+
+        public int CompareTo(SemanticVersionParts other)
+        {
+            var comparison = Major.CompareTo(other.Major);
+            if (comparison != 0)
+                return comparison;
+
+            comparison = Minor.CompareTo(other.Minor);
+            if (comparison != 0)
+                return comparison;
+
+            comparison = Patch.CompareTo(other.Patch);
+            if (comparison != 0)
+                return comparison;
+
+            var isStable = PrereleaseIdentifiers.Length == 0;
+            var otherIsStable = other.PrereleaseIdentifiers.Length == 0;
+            if (isStable && otherIsStable)
+                return 0;
+            if (isStable)
+                return 1;
+            if (otherIsStable)
+                return -1;
+
+            var count = Math.Min(PrereleaseIdentifiers.Length, other.PrereleaseIdentifiers.Length);
+            for (var i = 0; i < count; i++)
+            {
+                var leftPart = PrereleaseIdentifiers[i];
+                var rightPart = other.PrereleaseIdentifiers[i];
+                var leftIsNumeric = int.TryParse(leftPart, out var leftNumeric);
+                var rightIsNumeric = int.TryParse(rightPart, out var rightNumeric);
+
+                if (leftIsNumeric && rightIsNumeric)
+                {
+                    comparison = leftNumeric.CompareTo(rightNumeric);
+                    if (comparison != 0)
+                        return comparison;
+
+                    continue;
+                }
+
+                if (leftIsNumeric != rightIsNumeric)
+                    return leftIsNumeric ? -1 : 1;
+
+                comparison = CompareMixedPrereleaseIdentifier(leftPart, rightPart);
+                if (comparison != 0)
+                    return comparison;
+            }
+
+            return PrereleaseIdentifiers.Length.CompareTo(other.PrereleaseIdentifiers.Length);
+        }
+
+        private static int CompareMixedPrereleaseIdentifier(string left, string right)
+        {
+            var leftIndex = 0;
+            var rightIndex = 0;
+
+            while (leftIndex < left.Length && rightIndex < right.Length)
+            {
+                var leftDigits = char.IsDigit(left[leftIndex]);
+                var rightDigits = char.IsDigit(right[rightIndex]);
+                if (leftDigits != rightDigits)
+                    return leftDigits ? -1 : 1;
+
+                var leftStart = leftIndex;
+                while (leftIndex < left.Length && char.IsDigit(left[leftIndex]) == leftDigits)
+                    leftIndex++;
+
+                var rightStart = rightIndex;
+                while (rightIndex < right.Length && char.IsDigit(right[rightIndex]) == rightDigits)
+                    rightIndex++;
+
+                var leftPart = left.Substring(leftStart, leftIndex - leftStart);
+                var rightPart = right.Substring(rightStart, rightIndex - rightStart);
+
+                var comparison = leftDigits
+                    ? CompareNumericStrings(leftPart, rightPart)
+                    : string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+
+                if (comparison != 0)
+                    return comparison;
+            }
+
+            return left.Length.CompareTo(right.Length);
+        }
+
+        private static int CompareNumericStrings(string left, string right)
+        {
+            var trimmedLeft = left.TrimStart('0');
+            var trimmedRight = right.TrimStart('0');
+            if (trimmedLeft.Length == 0)
+                trimmedLeft = "0";
+            if (trimmedRight.Length == 0)
+                trimmedRight = "0";
+
+            var comparison = trimmedLeft.Length.CompareTo(trimmedRight.Length);
+            if (comparison != 0)
+                return comparison;
+
+            return string.Compare(trimmedLeft, trimmedRight, StringComparison.Ordinal);
+        }
     }
 
     private static IEnumerable<string> SplitLines(string? text)

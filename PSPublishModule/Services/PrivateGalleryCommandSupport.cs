@@ -7,267 +7,97 @@ using PowerForge;
 
 namespace PSPublishModule;
 
-/// <summary>
-/// Result returned when registering or refreshing a private module repository.
-/// </summary>
-public sealed class ModuleRepositoryRegistrationResult
-{
-    /// <summary>Repository name used for registration.</summary>
-    public string RepositoryName { get; set; } = string.Empty;
-
-    /// <summary>Provider used for registration.</summary>
-    public string Provider { get; set; } = "AzureArtifacts";
-
-    /// <summary>Bootstrap mode requested by the caller.</summary>
-    public PrivateGalleryBootstrapMode BootstrapModeRequested { get; set; }
-
-    /// <summary>Bootstrap mode actually used during registration.</summary>
-    public PrivateGalleryBootstrapMode BootstrapModeUsed { get; set; }
-
-    /// <summary>Source of the credential used during bootstrap.</summary>
-    public PrivateGalleryCredentialSource CredentialSource { get; set; }
-
-    /// <summary>Azure DevOps organization name.</summary>
-    public string AzureDevOpsOrganization { get; set; } = string.Empty;
-
-    /// <summary>Optional Azure DevOps project name.</summary>
-    public string? AzureDevOpsProject { get; set; }
-
-    /// <summary>Azure Artifacts feed name.</summary>
-    public string AzureArtifactsFeed { get; set; } = string.Empty;
-
-    /// <summary>Resolved PowerShellGet source URI.</summary>
-    public string PowerShellGetSourceUri { get; set; } = string.Empty;
-
-    /// <summary>Resolved PowerShellGet publish URI.</summary>
-    public string PowerShellGetPublishUri { get; set; } = string.Empty;
-
-    /// <summary>Resolved PSResourceGet URI.</summary>
-    public string PSResourceGetUri { get; set; } = string.Empty;
-
-    /// <summary>Selected repository registration tool.</summary>
-    public RepositoryRegistrationTool Tool { get; set; }
-
-    /// <summary>Repository registration strategy requested by the caller.</summary>
-    public RepositoryRegistrationTool ToolRequested { get; set; }
-
-    /// <summary>Repository registration path that completed successfully.</summary>
-    public RepositoryRegistrationTool ToolUsed { get; set; }
-
-    /// <summary>Whether PowerShellGet registration created the repository (false means it was updated).</summary>
-    public bool PowerShellGetCreated { get; set; }
-
-    /// <summary>Whether PSResourceGet registration created the repository (false means it was updated).</summary>
-    public bool PSResourceGetCreated { get; set; }
-
-    /// <summary>Whether the repository is trusted.</summary>
-    public bool Trusted { get; set; }
-
-    /// <summary>Whether a credential was supplied for registration.</summary>
-    public bool CredentialUsed { get; set; }
-
-    /// <summary>Whether the registration action was executed.</summary>
-    public bool RegistrationPerformed { get; set; }
-
-    /// <summary>Whether PSResourceGet registration completed successfully.</summary>
-    public bool PSResourceGetRegistered { get; set; }
-
-    /// <summary>Whether PowerShellGet registration completed successfully.</summary>
-    public bool PowerShellGetRegistered { get; set; }
-
-    /// <summary>Whether PSResourceGet is available locally for bootstrap/use.</summary>
-    public bool PSResourceGetAvailable { get; set; }
-
-    /// <summary>Detected PSResourceGet version when available.</summary>
-    public string? PSResourceGetVersion { get; set; }
-
-    /// <summary>Whether the detected PSResourceGet version satisfies the private-gallery minimum.</summary>
-    public bool PSResourceGetMeetsMinimumVersion { get; set; }
-
-    /// <summary>Whether the detected PSResourceGet version supports Azure Artifacts ExistingSession bootstrap.</summary>
-    public bool PSResourceGetSupportsExistingSessionBootstrap { get; set; }
-
-    /// <summary>Whether PowerShellGet is available locally for bootstrap/use.</summary>
-    public bool PowerShellGetAvailable { get; set; }
-
-    /// <summary>Detected PowerShellGet version when available.</summary>
-    public string? PowerShellGetVersion { get; set; }
-
-    /// <summary>Whether Azure Artifacts Credential Provider was detected from standard NuGet plugin locations.</summary>
-    public bool AzureArtifactsCredentialProviderDetected { get; set; }
-
-    /// <summary>Detected Azure Artifacts credential-provider file paths.</summary>
-    public string[] AzureArtifactsCredentialProviderPaths { get; set; } = Array.Empty<string>();
-
-    /// <summary>Detected Azure Artifacts credential-provider version when available.</summary>
-    public string? AzureArtifactsCredentialProviderVersion { get; set; }
-
-    /// <summary>Readiness/preflight messages collected before registration.</summary>
-    public string[] ReadinessMessages { get; set; } = Array.Empty<string>();
-
-    /// <summary>Names of prerequisites installed by the current command execution.</summary>
-    public string[] InstalledPrerequisites { get; set; } = Array.Empty<string>();
-
-    /// <summary>Messages emitted while installing prerequisites.</summary>
-    public string[] PrerequisiteInstallMessages { get; set; } = Array.Empty<string>();
-
-    /// <summary>Tool names skipped because they were not available locally.</summary>
-    public string[] UnavailableTools { get; set; } = Array.Empty<string>();
-
-    /// <summary>Non-fatal messages collected during repository registration.</summary>
-    public string[] Messages { get; set; } = Array.Empty<string>();
-
-    /// <summary>Whether an authenticated repository probe was attempted.</summary>
-    public bool AccessProbePerformed { get; set; }
-
-    /// <summary>Whether the authenticated repository probe succeeded.</summary>
-    public bool AccessProbeSucceeded { get; set; }
-
-    /// <summary>Tool used for the repository access probe.</summary>
-    public string? AccessProbeTool { get; set; }
-
-    /// <summary>Outcome message returned from the repository access probe.</summary>
-    public string? AccessProbeMessage { get; set; }
-
-    /// <summary>Whether the existing-session/device-login bootstrap path is ready for Azure Artifacts.</summary>
-    public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
-
-    /// <summary>Whether the credential-prompt bootstrap path is available.</summary>
-    public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;
-
-    /// <summary>Whether the repository bootstrap recommendation should include prerequisite installation.</summary>
-    public bool InstallPrerequisitesRecommended
-        => !PSResourceGetAvailable || !PSResourceGetMeetsMinimumVersion || !AzureArtifactsCredentialProviderDetected;
-
-    /// <summary>Suggested bootstrap mode based on detected prerequisites.</summary>
-    public PrivateGalleryBootstrapMode RecommendedBootstrapMode
-        => ExistingSessionBootstrapReady
-            ? PrivateGalleryBootstrapMode.ExistingSession
-            : CredentialPromptBootstrapReady
-                ? PrivateGalleryBootstrapMode.CredentialPrompt
-                : PrivateGalleryBootstrapMode.Auto;
-
-    /// <summary>Whether native Install-PSResource is ready to use with this repository.</summary>
-    public bool InstallPSResourceReady => PSResourceGetRegistered && ExistingSessionBootstrapReady;
-
-    /// <summary>Whether native Install-Module is ready to use with this repository.</summary>
-    public bool InstallModuleReady => PowerShellGetRegistered;
-
-    /// <summary>Names of the native commands that are ready for this repository.</summary>
-    public string[] ReadyCommands
-    {
-        get
-        {
-            var ready = new List<string>(2);
-            if (InstallPSResourceReady) ready.Add("Install-PSResource");
-            if (InstallModuleReady) ready.Add("Install-Module");
-            return ready.ToArray();
-        }
-    }
-
-    /// <summary>Preferred native install command for this repository.</summary>
-    public string PreferredInstallCommand
-        => InstallPSResourceReady
-            ? "Install-PSResource"
-            : InstallModuleReady
-                ? "Install-Module"
-                : string.Empty;
-
-    /// <summary>Recommended wrapper command for installing modules from this repository.</summary>
-    public string RecommendedWrapperInstallCommand
-        => string.IsNullOrWhiteSpace(RepositoryName)
-            ? "Install-PrivateModule -Name <ModuleName>"
-            : $"Install-PrivateModule -Name <ModuleName> -Repository '{RepositoryName}'";
-
-    /// <summary>Recommended native command for installing modules from this repository.</summary>
-    public string RecommendedNativeInstallCommand
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(RepositoryName) || string.IsNullOrWhiteSpace(PreferredInstallCommand))
-                return string.Empty;
-
-            return PreferredInstallCommand == "Install-PSResource"
-                ? $"Install-PSResource -Name <ModuleName> -Repository '{RepositoryName}'"
-                : $"Install-Module -Name <ModuleName> -Repository '{RepositoryName}'";
-        }
-    }
-
-    /// <summary>Recommended bootstrap command based on detected prerequisites.</summary>
-    public string RecommendedBootstrapCommand
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(AzureDevOpsOrganization) || string.IsNullOrWhiteSpace(AzureArtifactsFeed))
-                return string.Empty;
-
-            var parts = new List<string>
-            {
-                "Register-ModuleRepository",
-                $"-AzureDevOpsOrganization '{AzureDevOpsOrganization}'"
-            };
-
-            if (!string.IsNullOrWhiteSpace(AzureDevOpsProject))
-                parts.Add($"-AzureDevOpsProject '{AzureDevOpsProject}'");
-
-            parts.Add($"-AzureArtifactsFeed '{AzureArtifactsFeed}'");
-
-            if (!string.IsNullOrWhiteSpace(RepositoryName) &&
-                !string.Equals(RepositoryName, AzureArtifactsFeed, StringComparison.OrdinalIgnoreCase))
-            {
-                parts.Add($"-Name '{RepositoryName}'");
-            }
-
-            if (InstallPrerequisitesRecommended)
-                parts.Add("-InstallPrerequisites");
-
-            if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
-            {
-                parts.Add("-BootstrapMode ExistingSession");
-            }
-            else if (RecommendedBootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
-            {
-                parts.Add("-BootstrapMode CredentialPrompt");
-                parts.Add("-Interactive");
-            }
-
-            return string.Join(" ", parts);
-        }
-    }
-}
-
-internal static class PrivateGalleryCommandSupport
+internal static partial class PrivateGalleryCommandSupport
 {
     private const string MinimumPSResourceGetVersion = "1.1.1";
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0-preview5";
     internal const string ReservedPowerShellGalleryRepositoryName = "PSGallery";
 
-    internal readonly record struct CredentialResolutionResult(
-        RepositoryCredential? Credential,
-        PrivateGalleryBootstrapMode BootstrapModeUsed,
-        PrivateGalleryCredentialSource CredentialSource);
+    internal readonly struct CredentialResolutionResult
+    {
+        internal CredentialResolutionResult(
+            RepositoryCredential? Credential,
+            PrivateGalleryBootstrapMode BootstrapModeUsed,
+            PrivateGalleryCredentialSource CredentialSource)
+        {
+            this.Credential = Credential;
+            this.BootstrapModeUsed = BootstrapModeUsed;
+            this.CredentialSource = CredentialSource;
+        }
 
-    internal readonly record struct BootstrapPrerequisiteStatus(
-        bool PSResourceGetAvailable,
-        string? PSResourceGetVersion,
-        bool PSResourceGetMeetsMinimumVersion,
-        bool PSResourceGetSupportsExistingSessionBootstrap,
-        string? PSResourceGetMessage,
-        bool PowerShellGetAvailable,
-        string? PowerShellGetVersion,
-        string? PowerShellGetMessage,
-        AzureArtifactsCredentialProviderDetectionResult CredentialProviderDetection,
-        string[] ReadinessMessages);
+        internal RepositoryCredential? Credential { get; }
+        internal PrivateGalleryBootstrapMode BootstrapModeUsed { get; }
+        internal PrivateGalleryCredentialSource CredentialSource { get; }
+    }
 
-    internal readonly record struct BootstrapPrerequisiteInstallResult(
-        string[] InstalledPrerequisites,
-        string[] Messages,
-        BootstrapPrerequisiteStatus Status);
+    internal readonly struct BootstrapPrerequisiteStatus
+    {
+        internal BootstrapPrerequisiteStatus(
+            bool PSResourceGetAvailable,
+            string? PSResourceGetVersion,
+            bool PSResourceGetMeetsMinimumVersion,
+            bool PSResourceGetSupportsExistingSessionBootstrap,
+            string? PSResourceGetMessage,
+            bool PowerShellGetAvailable,
+            string? PowerShellGetVersion,
+            string? PowerShellGetMessage,
+            AzureArtifactsCredentialProviderDetectionResult CredentialProviderDetection,
+            string[] ReadinessMessages)
+        {
+            this.PSResourceGetAvailable = PSResourceGetAvailable;
+            this.PSResourceGetVersion = PSResourceGetVersion;
+            this.PSResourceGetMeetsMinimumVersion = PSResourceGetMeetsMinimumVersion;
+            this.PSResourceGetSupportsExistingSessionBootstrap = PSResourceGetSupportsExistingSessionBootstrap;
+            this.PSResourceGetMessage = PSResourceGetMessage;
+            this.PowerShellGetAvailable = PowerShellGetAvailable;
+            this.PowerShellGetVersion = PowerShellGetVersion;
+            this.PowerShellGetMessage = PowerShellGetMessage;
+            this.CredentialProviderDetection = CredentialProviderDetection;
+            this.ReadinessMessages = ReadinessMessages;
+        }
 
-    internal readonly record struct RepositoryAccessProbeResult(
-        bool Succeeded,
-        string Tool,
-        string? Message);
+        internal bool PSResourceGetAvailable { get; }
+        internal string? PSResourceGetVersion { get; }
+        internal bool PSResourceGetMeetsMinimumVersion { get; }
+        internal bool PSResourceGetSupportsExistingSessionBootstrap { get; }
+        internal string? PSResourceGetMessage { get; }
+        internal bool PowerShellGetAvailable { get; }
+        internal string? PowerShellGetVersion { get; }
+        internal string? PowerShellGetMessage { get; }
+        internal AzureArtifactsCredentialProviderDetectionResult CredentialProviderDetection { get; }
+        internal string[] ReadinessMessages { get; }
+    }
+
+    internal readonly struct BootstrapPrerequisiteInstallResult
+    {
+        internal BootstrapPrerequisiteInstallResult(
+            string[] InstalledPrerequisites,
+            string[] Messages,
+            BootstrapPrerequisiteStatus Status)
+        {
+            this.InstalledPrerequisites = InstalledPrerequisites;
+            this.Messages = Messages;
+            this.Status = Status;
+        }
+
+        internal string[] InstalledPrerequisites { get; }
+        internal string[] Messages { get; }
+        internal BootstrapPrerequisiteStatus Status { get; }
+    }
+
+    internal readonly struct RepositoryAccessProbeResult
+    {
+        internal RepositoryAccessProbeResult(bool Succeeded, string Tool, string? Message)
+        {
+            this.Succeeded = Succeeded;
+            this.Tool = Tool;
+            this.Message = Message;
+        }
+
+        internal bool Succeeded { get; }
+        internal string Tool { get; }
+        internal string? Message { get; }
+    }
 
     internal static void EnsureProviderSupported(PrivateGalleryProvider provider)
     {
@@ -915,167 +745,4 @@ internal static class PrivateGalleryCommandSupport
             readinessMessages.ToArray());
     }
 
-    private static PrivateGalleryBootstrapMode GetRecommendedBootstrapMode(BootstrapPrerequisiteStatus status)
-        => IsExistingSessionBootstrapReady(status)
-            ? PrivateGalleryBootstrapMode.ExistingSession
-            : IsCredentialPromptBootstrapReady(status)
-                ? PrivateGalleryBootstrapMode.CredentialPrompt
-                : PrivateGalleryBootstrapMode.Auto;
-
-    private static string BuildBootstrapUnavailableMessage(string repositoryName, BootstrapPrerequisiteStatus status)
-    {
-        var message = $"No supported private-gallery bootstrap path is ready for repository '{repositoryName}'.";
-        var reasons = status.ReadinessMessages
-            .Where(static item => !string.IsNullOrWhiteSpace(item))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (reasons.Length > 0)
-            message += " " + string.Join(" ", reasons);
-
-        message += " Install prerequisites with -InstallPrerequisites or ensure PowerShellGet/PSResourceGet availability before retrying.";
-        return message;
-    }
-
-    private static bool IsExistingSessionBootstrapReady(BootstrapPrerequisiteStatus status)
-        => status.PSResourceGetSupportsExistingSessionBootstrap && status.CredentialProviderDetection.IsDetected;
-
-    private static bool IsCredentialPromptBootstrapReady(BootstrapPrerequisiteStatus status)
-        => (status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion) || status.PowerShellGetAvailable;
-
-    private static string SelectAccessProbeTool(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
-    {
-        if (credential is null)
-        {
-            if (registration.InstallPSResourceReady)
-                return "PSResourceGet";
-            if (registration.InstallModuleReady)
-                return "PowerShellGet";
-
-            throw new InvalidOperationException(
-                $"Repository '{registration.RepositoryName}' does not currently have a native authenticated access path. {registration.RecommendedBootstrapCommand}".Trim());
-        }
-
-        if (registration.PSResourceGetRegistered)
-            return "PSResourceGet";
-        if (registration.PowerShellGetRegistered)
-            return "PowerShellGet";
-
-        throw new InvalidOperationException(
-            $"Repository '{registration.RepositoryName}' is not registered for PSResourceGet or PowerShellGet.");
-    }
-
-    internal static bool VersionMeetsMinimum(string? versionText, string minimumVersion)
-    {
-        if (string.IsNullOrWhiteSpace(versionText) || string.IsNullOrWhiteSpace(minimumVersion))
-            return false;
-
-        return TryParseVersionStamp(versionText, out var version) &&
-               TryParseVersionStamp(minimumVersion, out var minimum) &&
-               CompareVersionStamps(version, minimum) >= 0;
-    }
-
-    private static bool TryParseVersionStamp(string? versionText, out (Version Version, string[] PreRelease) version)
-    {
-        if (string.IsNullOrWhiteSpace(versionText))
-        {
-            version = (new Version(0, 0), Array.Empty<string>());
-            return false;
-        }
-
-        var raw = versionText!.Trim();
-        var plusIndex = raw.IndexOf('+');
-        if (plusIndex >= 0)
-            raw = raw.Substring(0, plusIndex);
-
-        string[] preRelease = Array.Empty<string>();
-        var dashIndex = raw.IndexOf('-');
-        if (dashIndex >= 0)
-        {
-            preRelease = raw.Substring(dashIndex + 1)
-                .Split(new[] { '.', '-' }, StringSplitOptions.RemoveEmptyEntries);
-            raw = raw.Substring(0, dashIndex);
-        }
-
-        if (Version.TryParse(raw, out var parsed) && parsed is not null)
-        {
-            version = (parsed, preRelease);
-            return true;
-        }
-
-        version = (new Version(0, 0), Array.Empty<string>());
-        return false;
-    }
-
-    private static int CompareVersionStamps((Version Version, string[] PreRelease) left, (Version Version, string[] PreRelease) right)
-    {
-        var versionCompare = left.Version.CompareTo(right.Version);
-        if (versionCompare != 0)
-            return versionCompare;
-
-        var leftHasPreRelease = left.PreRelease.Length > 0;
-        var rightHasPreRelease = right.PreRelease.Length > 0;
-        if (!leftHasPreRelease && !rightHasPreRelease)
-            return 0;
-        if (!leftHasPreRelease)
-            return 1;
-        if (!rightHasPreRelease)
-            return -1;
-
-        var count = Math.Max(left.PreRelease.Length, right.PreRelease.Length);
-        for (var index = 0; index < count; index++)
-        {
-            if (index >= left.PreRelease.Length)
-                return -1;
-            if (index >= right.PreRelease.Length)
-                return 1;
-
-            var segmentCompare = ComparePreReleaseSegment(left.PreRelease[index], right.PreRelease[index]);
-            if (segmentCompare != 0)
-                return segmentCompare;
-        }
-
-        return 0;
-    }
-
-    private static int ComparePreReleaseSegment(string left, string right)
-    {
-        if (TrySplitAlphaNumeric(left, out var leftPrefix, out var leftNumber) &&
-            TrySplitAlphaNumeric(right, out var rightPrefix, out var rightNumber))
-        {
-            var prefixCompare = string.Compare(leftPrefix, rightPrefix, StringComparison.OrdinalIgnoreCase);
-            if (prefixCompare != 0)
-                return prefixCompare;
-
-            return leftNumber.CompareTo(rightNumber);
-        }
-
-        var leftIsNumeric = int.TryParse(left, out var leftNumeric);
-        var rightIsNumeric = int.TryParse(right, out var rightNumeric);
-        if (leftIsNumeric && rightIsNumeric)
-            return leftNumeric.CompareTo(rightNumeric);
-        if (leftIsNumeric)
-            return -1;
-        if (rightIsNumeric)
-            return 1;
-
-        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TrySplitAlphaNumeric(string value, out string prefix, out int number)
-    {
-        prefix = string.Empty;
-        number = 0;
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        var index = value.Length;
-        while (index > 0 && char.IsDigit(value[index - 1]))
-            index--;
-
-        if (index <= 0 || index >= value.Length)
-            return false;
-
-        prefix = value.Substring(0, index);
-        return int.TryParse(value.Substring(index), out number);
-    }
 }

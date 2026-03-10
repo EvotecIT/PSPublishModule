@@ -75,6 +75,32 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Equal("1.1.0", result.ResolvedVersion);
     }
 
+    [Fact]
+    public void EnsureUpdated_UsesSemanticOrdering_ForPowerShellGetRepositoryFallback()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0-preview9")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildPowerShellGetFindStdOut(
+                ("ModuleA", "1.2.0-preview9", "Company"),
+                ("ModuleA", "1.2.0-preview10", "Company")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMOD::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.2.0-preview10")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA") },
+            repository: "Company",
+            prerelease: true,
+            preferPowerShellGet: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PowerShellGet", result.Installer);
+        Assert.Equal("1.2.0-preview10", result.ResolvedVersion);
+    }
+
     private static string BuildInstalledVersionsStdOut(params (string Name, string Version)[] items)
     {
         var lines = new List<string>(items.Length);
