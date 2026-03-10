@@ -12,6 +12,14 @@ namespace PSPublishModule;
 
 public sealed partial class InvokeProjectBuildCommand
 {
+    /// <summary>
+    /// Builds a preflight advisory when GitHub single-release reuse would publish a mixed-version asset set into an existing tag.
+    /// </summary>
+    /// <param name="tag">GitHub release tag being evaluated.</param>
+    /// <param name="projects">Packable projects participating in the release plan.</param>
+    /// <param name="plannedAssetNames">Asset names that would be published for the current plan.</param>
+    /// <param name="existingAssetNames">Asset names already attached to the existing GitHub release.</param>
+    /// <returns>An advisory message when the reuse is unsafe; otherwise <see langword="null"/>.</returns>
     internal static string? BuildGitHubSingleReleaseReuseAdvisory(
         string tag,
         IReadOnlyList<DotNetRepositoryProjectResult> projects,

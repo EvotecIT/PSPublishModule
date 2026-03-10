@@ -46,8 +46,10 @@ public sealed class ModulePipelineRegressionParityTests
             Assert.Equal("https://example.test/icon.png", plan.Manifest.IconUri);
             Assert.Equal("https://example.test/license", plan.Manifest.LicenseUri);
             Assert.Equal("preview1", plan.Manifest.Prerelease);
-            Assert.Empty(plan.ExternalModuleDependencies);
+            Assert.Contains("Microsoft.PowerShell.Utility", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Management", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
             Assert.Empty(plan.RequiredModules);
+            Assert.Empty(plan.RequiredModulesForPackaging);
         }
         finally
         {

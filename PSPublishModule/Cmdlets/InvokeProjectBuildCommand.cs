@@ -183,22 +183,21 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var runner = new DotNetRepositoryReleaseService(logger);
         spec.WhatIf = true;
         var plan = runner.Execute(spec);
+        var preflightErrors = new List<string>();
+        if (!plan.Success)
+            preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
 
         if (planOnly || !ShouldProcess(rootPath, "Build project repository"))
         {
             TryWritePlan(plan, planOutputPath, logger);
             WriteObject(new ProjectBuildResult
             {
-                Success = plan.Success,
-                ErrorMessage = plan.ErrorMessage,
+                Success = preflightErrors.Count == 0,
+                ErrorMessage = preflightErrors.Count == 0 ? null : string.Join(Environment.NewLine, preflightErrors),
                 Release = plan
             });
             return;
         }
-
-        var preflightErrors = new List<string>();
-        if (!plan.Success)
-            preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
 
         var preflightError = ValidatePreflight(publishNuget, publishGitHub, createReleaseZip, publishApiKey, config, configDir);
         if (!string.IsNullOrWhiteSpace(preflightError))

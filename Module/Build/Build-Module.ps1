@@ -4,7 +4,7 @@
 
 [CmdletBinding()] param(
     [switch] $JsonOnly,
-    [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json'),
+    [string] $JsonPath = (Join-Path $PSScriptRoot '../../powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [switch] $NoDotnetBuild,
     [string] $ModuleVersion = '3.0.X',
@@ -24,15 +24,18 @@
 )
 
 if (-not $JsonOnly) {
-    Remove-Item -Path (Join-Path $PSScriptRoot '..\Lib') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path (Join-Path $PSScriptRoot '../Lib') -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
-$sourceManifest = Join-Path -Path $PSScriptRoot -ChildPath '..\PSPublishModule.psd1'
-$sourceLibRoot = Join-Path -Path $PSScriptRoot -ChildPath '..\Lib'
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$artefactsRoot = Join-Path $moduleRoot 'Artefacts'
+$csproj = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule/PSPublishModule.csproj'
+$sourceManifest = Join-Path -Path $moduleRoot -ChildPath 'PSPublishModule.psd1'
+$sourceLibRoot = Join-Path -Path $moduleRoot -ChildPath 'Lib'
 $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
 $tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
-$binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
+$binaryModule = Join-Path -Path $repoRoot -ChildPath ("PSPublishModule/bin/{0}/{1}/PSPublishModule.dll" -f $Configuration, $tfm)
 
 if (-not $JsonOnly -and -not $NoDotnetBuild) {
     if (Test-Path -LiteralPath $csproj) {
@@ -126,7 +129,6 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
-    New-ConfigurationModule -Type RequiredModule -Name 'Microsoft.PowerShell.PSResourceGet' -Guid 'Auto' -Version 'Latest'
 
     # Add external module dependencies, using loop for simplicity
     New-ConfigurationModule -Type ExternalModule -Name @(
@@ -247,7 +249,7 @@ Invoke-ModuleBuild @buildParams -Settings {
         SkipBuiltinReplacements        = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                 = "$PSScriptRoot\..\..\PSPublishModule"
+        NETProjectPath                 = (Join-Path $repoRoot 'PSPublishModule')
         ResolveBinaryConflicts         = $true
         ResolveBinaryConflictsName     = 'PSPublishModule'
         NETProjectName                 = 'PSPublishModule'
@@ -260,6 +262,7 @@ Invoke-ModuleBuild @buildParams -Settings {
 
         VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
         VersionedInstallKeep           = 3                # how many versions to retain
+        InstallMissingModules          = $true
         KillLockersBeforeInstall       = $true
         KillLockersForce               = $true
     }
@@ -276,17 +279,17 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     New-ConfigurationBuild @newConfigurationBuildSplat
 
-    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>\Modules" -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>') -RequiredModulesPath (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>/Modules') -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'PackedWithModules') -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+    New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
 
     New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'

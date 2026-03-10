@@ -6,15 +6,17 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Provides a way to configure publishing to PowerShell Gallery or GitHub.
+/// Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.
 /// </summary>
 /// <remarks>
 /// <para>
 /// This cmdlet emits publish configuration consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
-/// Use <c>-Type</c> to choose a destination. For repository publishing, <c>-Tool</c> selects the provider (PowerShellGet/PSResourceGet/Auto).
+/// Use <c>-Type</c> to choose a destination. For repository publishing, <c>-Tool</c> selects the provider
+/// (PowerShellGet/PSResourceGet/Auto).
 /// </para>
 /// <para>
-/// For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.
+/// For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs
+/// and (optionally) credentials, or use the Azure Artifacts preset parameters to resolve those URIs automatically.
 /// To avoid secrets in source control, pass API keys/tokens via <c>-FilePath</c> or environment-specific tooling.
 /// </para>
 /// </remarks>
@@ -26,13 +28,32 @@ namespace PSPublishModule;
 /// <summary>Publish to GitHub Releases (token from file)</summary>
 /// <code>New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled</code>
 /// </example>
+/// <example>
+/// <summary>Publish to Azure Artifacts (private feed preset)</summary>
+/// <code>New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -RepositoryCredentialUserName 'user@contoso.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\azdo.pat" -Enabled</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {
+    private const string AzureArtifactsApiKeyPlaceholder = "AzureDevOps";
+    private const string PowerShellGalleryRepositoryName = "PSGallery";
+
     /// <summary>Choose between PowerShellGallery and GitHub.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
     public PowerForge.PublishDestination Type { get; set; }
+
+    /// <summary>Azure DevOps organization name for the Azure Artifacts preset.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = "AzureArtifacts")]
+    public string AzureDevOpsOrganization { get; set; } = string.Empty;
+
+    /// <summary>Optional Azure DevOps project name for project-scoped feeds.</summary>
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    public string? AzureDevOpsProject { get; set; }
+
+    /// <summary>Azure Artifacts feed name for the private gallery preset.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = "AzureArtifacts")]
+    public string AzureArtifactsFeed { get; set; } = string.Empty;
 
     /// <summary>API key to be used for publishing in clear text in a file.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
@@ -50,11 +71,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Repository name override (GitHub or PowerShell repository name).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public string? RepositoryName { get; set; }
 
     /// <summary>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public PowerForge.PublishTool Tool { get; set; } = PowerForge.PublishTool.Auto;
 
     /// <summary>Repository base URI (used for both source and publish unless overridden).</summary>
@@ -75,46 +98,55 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Whether to mark the repository as trusted (avoids prompts). Default: true.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public bool RepositoryTrusted { get; set; } = true;
 
     /// <summary>Repository priority for PSResourceGet (lower is higher priority).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public int? RepositoryPriority { get; set; }
 
     /// <summary>Repository API version for PSResourceGet registration (v2/v3).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public PowerForge.RepositoryApiVersion RepositoryApiVersion { get; set; } = PowerForge.RepositoryApiVersion.Auto;
 
     /// <summary>When true, registers/updates the repository before publishing. Default: true.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public bool EnsureRepositoryRegistered { get; set; } = true;
 
     /// <summary>When set, unregisters the repository after publish if it was created by this run.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public SwitchParameter UnregisterRepositoryAfterPublish { get; set; }
 
     /// <summary>Repository credential username (basic auth).</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public string? RepositoryCredentialUserName { get; set; }
 
     /// <summary>Repository credential secret (password/token) in clear text.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public string? RepositoryCredentialSecret { get; set; }
 
     /// <summary>Repository credential secret (password/token) in a clear-text file.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public string? RepositoryCredentialSecretFilePath { get; set; }
 
     /// <summary>Enable publishing to the chosen destination.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public SwitchParameter Enabled { get; set; }
 
     /// <summary>Override tag name used for GitHub publishing.</summary>
@@ -125,11 +157,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Allow publishing lower version of a module on a PowerShell repository.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public SwitchParameter Force { get; set; }
 
     /// <summary>Optional ID of the artefact used for publishing.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
     public string? ID { get; set; }
 
     /// <summary>Publish GitHub release as a release even if module prerelease is set.</summary>
@@ -142,14 +176,20 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     public SwitchParameter GenerateReleaseNotes { get; set; }
 
-    /// <summary>Emits publish configuration for the build pipeline.</summary>  
+    /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var apiKeyToUse = ParameterSetName == "ApiFromFile"
-            ? File.ReadAllText(FilePath).Trim()
-            : ApiKey;
+        var isAzureArtifacts = ParameterSetName == "AzureArtifacts";
+        var destination = isAzureArtifacts ? PowerForge.PublishDestination.PowerShellGallery : Type;
+        var apiKeyToUse = ParameterSetName switch
+        {
+            "ApiFromFile" => File.ReadAllText(FilePath).Trim(),
+            // Azure Artifacts accepts any non-empty API key placeholder for NuGet publish operations.
+            "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
+            _ => ApiKey
+        };
 
-        if (Type == PowerForge.PublishDestination.GitHub && string.IsNullOrWhiteSpace(UserName))
+        if (destination == PowerForge.PublishDestination.GitHub && string.IsNullOrWhiteSpace(UserName))
             throw new PSArgumentException("UserName is required for GitHub. Please fix New-ConfigurationPublish and provide UserName");
 
         var repositorySecret = string.Empty;
@@ -169,24 +209,66 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             !string.IsNullOrWhiteSpace(RepositorySourceUri) ||
             !string.IsNullOrWhiteSpace(RepositoryPublishUri);
 
-        if (anyRepositoryUriProvided)
+        var resolvedAzureArtifactsRepositoryName = string.IsNullOrWhiteSpace(RepositoryName)
+            ? AzureArtifactsFeed?.Trim()
+            : RepositoryName?.Trim();
+
+        if (isAzureArtifacts &&
+            !string.IsNullOrWhiteSpace(resolvedAzureArtifactsRepositoryName) &&
+            string.Equals(resolvedAzureArtifactsRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(RepositoryName))
+            throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.");
+        }
+
+        if (isAzureArtifacts && anyRepositoryUriProvided)
+            throw new PSArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.");
+
+        if (!isAzureArtifacts && anyRepositoryUriProvided)
+        {
+            var resolvedRepositoryName = RepositoryName?.Trim();
+            if (string.IsNullOrWhiteSpace(resolvedRepositoryName))
                 throw new PSArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
-            if (string.Equals(RepositoryName!.Trim(), "PSGallery", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
                 throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
         }
 
+        var hasRepoCredentialSecret = !string.IsNullOrWhiteSpace(repositorySecret);
+        if (hasRepoCredentialSecret && string.IsNullOrWhiteSpace(RepositoryCredentialUserName))
+            throw new PSArgumentException("RepositoryCredentialUserName is required when RepositoryCredentialSecret/RepositoryCredentialSecretFilePath is provided.");
+
         PublishRepositoryConfiguration? repoConfig = null;
-        var hasRepoCred = !string.IsNullOrWhiteSpace(RepositoryCredentialUserName) && !string.IsNullOrWhiteSpace(repositorySecret);
-        var hasRepoOptions = anyRepositoryUriProvided ||
+        var hasRepoCred = !string.IsNullOrWhiteSpace(RepositoryCredentialUserName) && hasRepoCredentialSecret;
+        var hasRepoOptions = isAzureArtifacts ||
+                             anyRepositoryUriProvided ||
                              hasRepoCred ||
                              MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryPriority)) ||
                              MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryApiVersion)) ||
                              MyInvocation.BoundParameters.ContainsKey(nameof(EnsureRepositoryRegistered)) ||
                              UnregisterRepositoryAfterPublish.IsPresent;
 
-        if (hasRepoOptions)
+        if (isAzureArtifacts)
+        {
+            repoConfig = AzureArtifactsRepositoryEndpoints.CreatePublishRepositoryConfiguration(
+                AzureDevOpsOrganization,
+                AzureDevOpsProject,
+                AzureArtifactsFeed!,
+                repositoryName: RepositoryName,
+                trusted: RepositoryTrusted,
+                priority: RepositoryPriority,
+                apiVersion: RepositoryApiVersion == PowerForge.RepositoryApiVersion.Auto ? PowerForge.RepositoryApiVersion.V3 : RepositoryApiVersion,
+                ensureRegistered: EnsureRepositoryRegistered,
+                unregisterAfterUse: UnregisterRepositoryAfterPublish.IsPresent,
+                credential: hasRepoCred
+                    ? new RepositoryCredential
+                    {
+                        UserName = RepositoryCredentialUserName!.Trim(),
+                        Secret = repositorySecret
+                    }
+                    : null);
+
+            RepositoryName = repoConfig.Name;
+        }
+        else if (hasRepoOptions)
         {
             repoConfig = new PublishRepositoryConfiguration
             {
@@ -211,7 +293,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
 
         var publish = new PublishConfiguration
         {
-            Destination = Type,
+            Destination = destination,
             Tool = Tool,
             ApiKey = apiKeyToUse,
             ID = ID,
@@ -223,7 +305,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             OverwriteTagName = OverwriteTagName,
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
-            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")       
+            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         };
 
         var settings = new ConfigurationPublishSegment
