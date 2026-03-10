@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -72,7 +73,7 @@ internal sealed class BinaryConflictDetectionService
 
         var issues = new List<BinaryConflictDetectionIssue>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var normalizedCurrentModuleName = string.IsNullOrWhiteSpace(currentModuleName) ? null : currentModuleName.Trim();
+        var normalizedCurrentModuleName = string.IsNullOrWhiteSpace(currentModuleName) ? null : currentModuleName?.Trim();
 
         void AnalyzeInstalledAssembly(string installedAssemblyPath, InstalledModuleInfo moduleInfo)
         {
@@ -185,7 +186,7 @@ internal sealed class BinaryConflictDetectionService
                 .ToArray();
         }
 
-        if (OperatingSystem.IsWindows())
+        if (IsWindowsPlatform())
         {
             var roots = new List<string>(2);
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -353,7 +354,7 @@ internal sealed class BinaryConflictDetectionService
     {
         try
         {
-            var relative = Path.GetRelativePath(searchRoot, assemblyPath);
+            var relative = GetRelativePathCompat(searchRoot, assemblyPath);
             if (string.IsNullOrWhiteSpace(relative))
                 return new InstalledModuleInfo("(unknown)", null, string.Empty);
 
@@ -379,7 +380,7 @@ internal sealed class BinaryConflictDetectionService
         try
         {
             var fullModulePath = Path.GetFullPath(modulePath);
-            var relative = Path.GetRelativePath(fullModulePath, assemblyPath)
+            var relative = GetRelativePathCompat(fullModulePath, assemblyPath)
                 .Replace(Path.DirectorySeparatorChar, '/');
 
             var directory = new DirectoryInfo(fullModulePath);
@@ -403,6 +404,45 @@ internal sealed class BinaryConflictDetectionService
         {
             return new InstalledModuleInfo("(unknown)", null, string.Empty);
         }
+    }
+
+    private static bool IsWindowsPlatform()
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+    private static string GetRelativePathCompat(string basePath, string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(basePath))
+            return fullPath ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(fullPath))
+            return string.Empty;
+
+        var normalizedBasePath = AppendDirectorySeparatorChar(Path.GetFullPath(basePath));
+        var normalizedFullPath = Path.GetFullPath(fullPath);
+
+        if (!Uri.TryCreate(normalizedBasePath, UriKind.Absolute, out var baseUri) ||
+            !Uri.TryCreate(normalizedFullPath, UriKind.Absolute, out var fullUri))
+        {
+            return normalizedFullPath;
+        }
+
+        if (!string.Equals(baseUri.Scheme, fullUri.Scheme, StringComparison.OrdinalIgnoreCase))
+            return normalizedFullPath;
+
+        var relativeUri = baseUri.MakeRelativeUri(fullUri);
+        var relativePath = Uri.UnescapeDataString(relativeUri.ToString());
+        return relativePath.Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static string AppendDirectorySeparatorChar(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        if (path[path.Length - 1] == Path.DirectorySeparatorChar || path[path.Length - 1] == Path.AltDirectorySeparatorChar)
+            return path;
+
+        return path + Path.DirectorySeparatorChar;
     }
 
     private struct DiscoveredAssembly

@@ -99,6 +99,23 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         Assert.Equal(1, runner.InstallCalls);
     }
 
+    [Fact]
+    public void EnsureInstalled_DoesNotProbeExactVersion_WhenModuleIsNotInstalled()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[] { new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0") });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;

@@ -73,18 +73,23 @@ public sealed class ModuleDependencyInstaller
             {
                 decision = Decide(dep, installedBefore, force);
                 var currentDecision = decision.Value;
+                var requiredVersion = dep.RequiredVersion;
+                string? exactRequiredVersion = null;
+                if (!string.IsNullOrWhiteSpace(requiredVersion))
+                    exactRequiredVersion = requiredVersion!.Trim();
                 if (!force &&
                     currentDecision.NeedsInstall &&
-                    !string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
-                    HasInstalledRequiredVersion(dep.Name, dep.RequiredVersion))
+                    !string.IsNullOrWhiteSpace(installedBefore) &&
+                    exactRequiredVersion is not null &&
+                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
                 {
-                    var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, dep.RequiredVersion, StringComparison.OrdinalIgnoreCase)
-                        ? $"Exact required version {dep.RequiredVersion} already installed"
-                        : $"Exact required version {dep.RequiredVersion} already present (latest installed: {installedBefore})";
+                    var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, exactRequiredVersion, StringComparison.OrdinalIgnoreCase)
+                        ? $"Exact required version {exactRequiredVersion} already installed"
+                        : $"Exact required version {exactRequiredVersion} already present (latest installed: {installedBefore})";
                     actions.Add(new ActionItem(
                         dep.Name,
                         installedBefore,
-                        dep.RequiredVersion,
+                        exactRequiredVersion,
                         ModuleDependencyInstallStatus.Satisfied,
                         installer: null,
                         message: exactMessage));

@@ -57,10 +57,13 @@ public sealed partial class ModulePipelineRunner
 
         var projectName = string.IsNullOrWhiteSpace(netProjectName) ? moduleName : netProjectName!.Trim();
         var rawPath = netProjectPath!.Trim().Trim('"');
+        var normalizedPath = rawPath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
 
-        var basePath = Path.IsPathRooted(rawPath)
-            ? Path.GetFullPath(rawPath)
-            : Path.GetFullPath(Path.Combine(projectRoot, rawPath));
+        var basePath = Path.IsPathRooted(normalizedPath)
+            ? Path.GetFullPath(normalizedPath)
+            : Path.GetFullPath(Path.Combine(projectRoot, normalizedPath));
 
         if (basePath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
             return basePath;
