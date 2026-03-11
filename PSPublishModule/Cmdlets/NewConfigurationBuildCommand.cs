@@ -221,174 +221,132 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var bound = MyInvocation.BoundParameters;
-
-        BuildModuleConfiguration? buildModule = null;
-        void EnsureBuildModule() => buildModule ??= new BuildModuleConfiguration();
-
-        // BuildModule
-        if (bound.ContainsKey(nameof(Enable))) { EnsureBuildModule(); buildModule!.Enable = Enable.IsPresent; }
-        if (bound.ContainsKey(nameof(DeleteTargetModuleBeforeBuild))) { EnsureBuildModule(); buildModule!.DeleteBefore = DeleteTargetModuleBeforeBuild.IsPresent; }
-        if (bound.ContainsKey(nameof(MergeModuleOnBuild))) { EnsureBuildModule(); buildModule!.Merge = MergeModuleOnBuild.IsPresent; }
-        if (bound.ContainsKey(nameof(MergeFunctionsFromApprovedModules))) { EnsureBuildModule(); buildModule!.MergeMissing = MergeFunctionsFromApprovedModules.IsPresent; }
-        if (bound.ContainsKey(nameof(SignModule))) { EnsureBuildModule(); buildModule!.SignMerged = SignModule.IsPresent; }
-        if (bound.ContainsKey(nameof(DotSourceClasses))) { EnsureBuildModule(); buildModule!.ClassesDotSource = DotSourceClasses.IsPresent; }
-        if (bound.ContainsKey(nameof(DotSourceLibraries))) { EnsureBuildModule(); buildModule!.LibraryDotSource = DotSourceLibraries.IsPresent; }
-        if (bound.ContainsKey(nameof(SeparateFileLibraries))) { EnsureBuildModule(); buildModule!.LibrarySeparateFile = SeparateFileLibraries.IsPresent; }
-        if (bound.ContainsKey(nameof(RefreshPSD1Only))) { EnsureBuildModule(); buildModule!.RefreshPSD1Only = RefreshPSD1Only.IsPresent; }
-        if (bound.ContainsKey(nameof(UseWildcardForFunctions))) { EnsureBuildModule(); buildModule!.UseWildcardForFunctions = UseWildcardForFunctions.IsPresent; }
-        if (bound.ContainsKey(nameof(LocalVersioning))) { EnsureBuildModule(); buildModule!.LocalVersion = LocalVersioning.IsPresent; }
-
-        if (bound.ContainsKey(nameof(VersionedInstallStrategy))) { EnsureBuildModule(); buildModule!.VersionedInstallStrategy = VersionedInstallStrategy; }
-        if (bound.ContainsKey(nameof(VersionedInstallKeep))) { EnsureBuildModule(); buildModule!.VersionedInstallKeep = VersionedInstallKeep; }
-        if (bound.ContainsKey(nameof(VersionedInstallLegacyFlatHandling))) { EnsureBuildModule(); buildModule!.LegacyFlatHandling = VersionedInstallLegacyFlatHandling; }
-        if (bound.ContainsKey(nameof(VersionedInstallPreserveVersions))) { EnsureBuildModule(); buildModule!.PreserveInstallVersions = VersionedInstallPreserveVersions; }
-
-        if (bound.ContainsKey(nameof(InstallMissingModules))) { EnsureBuildModule(); buildModule!.InstallMissingModules = InstallMissingModules.IsPresent; }
-        if (bound.ContainsKey(nameof(InstallMissingModulesForce))) { EnsureBuildModule(); buildModule!.InstallMissingModulesForce = InstallMissingModulesForce.IsPresent; }
-        if (bound.ContainsKey(nameof(InstallMissingModulesPrerelease))) { EnsureBuildModule(); buildModule!.InstallMissingModulesPrerelease = InstallMissingModulesPrerelease.IsPresent; }
-        if (bound.ContainsKey(nameof(ResolveMissingModulesOnline))) { EnsureBuildModule(); buildModule!.ResolveMissingModulesOnline = ResolveMissingModulesOnline.IsPresent; }
-        if (bound.ContainsKey(nameof(WarnIfRequiredModulesOutdated))) { EnsureBuildModule(); buildModule!.WarnIfRequiredModulesOutdated = WarnIfRequiredModulesOutdated.IsPresent; }
-        if (bound.ContainsKey(nameof(InstallMissingModulesRepository))) { EnsureBuildModule(); buildModule!.InstallMissingModulesRepository = InstallMissingModulesRepository; }
-
-        string? missingModulesSecret = null;
-        if (bound.ContainsKey(nameof(InstallMissingModulesCredentialSecretFilePath)) &&
-            !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialSecretFilePath))
+        var request = new BuildConfigurationRequest
         {
-            missingModulesSecret = File.ReadAllText(InstallMissingModulesCredentialSecretFilePath!).Trim();
+            EnableSpecified = bound.ContainsKey(nameof(Enable)),
+            Enable = Enable.IsPresent,
+            DeleteTargetModuleBeforeBuildSpecified = bound.ContainsKey(nameof(DeleteTargetModuleBeforeBuild)),
+            DeleteTargetModuleBeforeBuild = DeleteTargetModuleBeforeBuild.IsPresent,
+            MergeModuleOnBuildSpecified = bound.ContainsKey(nameof(MergeModuleOnBuild)),
+            MergeModuleOnBuild = MergeModuleOnBuild.IsPresent,
+            MergeFunctionsFromApprovedModulesSpecified = bound.ContainsKey(nameof(MergeFunctionsFromApprovedModules)),
+            MergeFunctionsFromApprovedModules = MergeFunctionsFromApprovedModules.IsPresent,
+            SignModuleSpecified = bound.ContainsKey(nameof(SignModule)),
+            SignModule = SignModule.IsPresent,
+            DotSourceClassesSpecified = bound.ContainsKey(nameof(DotSourceClasses)),
+            DotSourceClasses = DotSourceClasses.IsPresent,
+            DotSourceLibrariesSpecified = bound.ContainsKey(nameof(DotSourceLibraries)),
+            DotSourceLibraries = DotSourceLibraries.IsPresent,
+            SeparateFileLibrariesSpecified = bound.ContainsKey(nameof(SeparateFileLibraries)),
+            SeparateFileLibraries = SeparateFileLibraries.IsPresent,
+            RefreshPSD1OnlySpecified = bound.ContainsKey(nameof(RefreshPSD1Only)),
+            RefreshPSD1Only = RefreshPSD1Only.IsPresent,
+            UseWildcardForFunctionsSpecified = bound.ContainsKey(nameof(UseWildcardForFunctions)),
+            UseWildcardForFunctions = UseWildcardForFunctions.IsPresent,
+            LocalVersioningSpecified = bound.ContainsKey(nameof(LocalVersioning)),
+            LocalVersioning = LocalVersioning.IsPresent,
+            VersionedInstallStrategySpecified = bound.ContainsKey(nameof(VersionedInstallStrategy)),
+            VersionedInstallStrategy = VersionedInstallStrategy,
+            VersionedInstallKeepSpecified = bound.ContainsKey(nameof(VersionedInstallKeep)),
+            VersionedInstallKeep = VersionedInstallKeep,
+            VersionedInstallLegacyFlatHandlingSpecified = bound.ContainsKey(nameof(VersionedInstallLegacyFlatHandling)),
+            VersionedInstallLegacyFlatHandling = VersionedInstallLegacyFlatHandling,
+            VersionedInstallPreserveVersionsSpecified = bound.ContainsKey(nameof(VersionedInstallPreserveVersions)),
+            VersionedInstallPreserveVersions = VersionedInstallPreserveVersions,
+            InstallMissingModulesSpecified = bound.ContainsKey(nameof(InstallMissingModules)),
+            InstallMissingModules = InstallMissingModules.IsPresent,
+            InstallMissingModulesForceSpecified = bound.ContainsKey(nameof(InstallMissingModulesForce)),
+            InstallMissingModulesForce = InstallMissingModulesForce.IsPresent,
+            InstallMissingModulesPrereleaseSpecified = bound.ContainsKey(nameof(InstallMissingModulesPrerelease)),
+            InstallMissingModulesPrerelease = InstallMissingModulesPrerelease.IsPresent,
+            ResolveMissingModulesOnlineSpecified = bound.ContainsKey(nameof(ResolveMissingModulesOnline)),
+            ResolveMissingModulesOnline = ResolveMissingModulesOnline.IsPresent,
+            WarnIfRequiredModulesOutdatedSpecified = bound.ContainsKey(nameof(WarnIfRequiredModulesOutdated)),
+            WarnIfRequiredModulesOutdated = WarnIfRequiredModulesOutdated.IsPresent,
+            InstallMissingModulesRepositorySpecified = bound.ContainsKey(nameof(InstallMissingModulesRepository)),
+            InstallMissingModulesRepository = InstallMissingModulesRepository,
+            InstallMissingModulesCredentialUserNameSpecified = bound.ContainsKey(nameof(InstallMissingModulesCredentialUserName)),
+            InstallMissingModulesCredentialUserName = InstallMissingModulesCredentialUserName,
+            InstallMissingModulesCredentialSecretSpecified = bound.ContainsKey(nameof(InstallMissingModulesCredentialSecret)),
+            InstallMissingModulesCredentialSecret = InstallMissingModulesCredentialSecret,
+            InstallMissingModulesCredentialSecretFilePathSpecified = bound.ContainsKey(nameof(InstallMissingModulesCredentialSecretFilePath)),
+            InstallMissingModulesCredentialSecretFilePath = InstallMissingModulesCredentialSecretFilePath,
+            SkipBuiltinReplacementsSpecified = bound.ContainsKey(nameof(SkipBuiltinReplacements)),
+            SkipBuiltinReplacements = SkipBuiltinReplacements.IsPresent,
+            DoNotAttemptToFixRelativePathsSpecified = bound.ContainsKey(nameof(DoNotAttemptToFixRelativePaths)),
+            DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent,
+            CertificateThumbprintSpecified = bound.ContainsKey(nameof(CertificateThumbprint)),
+            CertificateThumbprint = CertificateThumbprint,
+            CertificatePFXPathSpecified = bound.ContainsKey(nameof(CertificatePFXPath)),
+            CertificatePFXPath = CertificatePFXPath,
+            CertificatePFXBase64Specified = bound.ContainsKey(nameof(CertificatePFXBase64)),
+            CertificatePFXBase64 = CertificatePFXBase64,
+            CertificatePFXPasswordSpecified = bound.ContainsKey(nameof(CertificatePFXPassword)),
+            CertificatePFXPassword = CertificatePFXPassword,
+            NETProjectPathSpecified = bound.ContainsKey(nameof(NETProjectPath)),
+            NETProjectPath = NETProjectPath,
+            NETConfigurationSpecified = bound.ContainsKey(nameof(NETConfiguration)),
+            NETConfiguration = NETConfiguration,
+            NETFrameworkSpecified = bound.ContainsKey(nameof(NETFramework)),
+            NETFramework = NETFramework,
+            NETProjectNameSpecified = bound.ContainsKey(nameof(NETProjectName)),
+            NETProjectName = NETProjectName,
+            NETExcludeMainLibrarySpecified = bound.ContainsKey(nameof(NETExcludeMainLibrary)),
+            NETExcludeMainLibrary = NETExcludeMainLibrary.IsPresent,
+            NETExcludeLibraryFilterSpecified = bound.ContainsKey(nameof(NETExcludeLibraryFilter)),
+            NETExcludeLibraryFilter = NETExcludeLibraryFilter,
+            NETIgnoreLibraryOnLoadSpecified = bound.ContainsKey(nameof(NETIgnoreLibraryOnLoad)),
+            NETIgnoreLibraryOnLoad = NETIgnoreLibraryOnLoad,
+            NETBinaryModuleSpecified = bound.ContainsKey(nameof(NETBinaryModule)),
+            NETBinaryModule = NETBinaryModule,
+            NETHandleAssemblyWithSameNameSpecified = bound.ContainsKey(nameof(NETHandleAssemblyWithSameName)),
+            NETHandleAssemblyWithSameName = NETHandleAssemblyWithSameName.IsPresent,
+            NETLineByLineAddTypeSpecified = bound.ContainsKey(nameof(NETLineByLineAddType)),
+            NETLineByLineAddType = NETLineByLineAddType.IsPresent,
+            NETBinaryModuleCmdletScanDisabledSpecified = bound.ContainsKey(nameof(NETBinaryModuleCmdletScanDisabled)),
+            NETBinaryModuleCmdletScanDisabled = NETBinaryModuleCmdletScanDisabled.IsPresent,
+            NETMergeLibraryDebuggingSpecified = bound.ContainsKey(nameof(NETMergeLibraryDebugging)),
+            NETMergeLibraryDebugging = NETMergeLibraryDebugging.IsPresent,
+            NETResolveBinaryConflictsSpecified = bound.ContainsKey(nameof(NETResolveBinaryConflicts)),
+            NETResolveBinaryConflicts = NETResolveBinaryConflicts.IsPresent,
+            NETResolveBinaryConflictsNameSpecified = bound.ContainsKey(nameof(NETResolveBinaryConflictsName)),
+            NETResolveBinaryConflictsName = NETResolveBinaryConflictsName,
+            NETBinaryModuleDocumentationSpecified = bound.ContainsKey(nameof(NETBinaryModuleDocumentation)),
+            NETBinaryModuleDocumentation = NETBinaryModuleDocumentation.IsPresent,
+            NETDoNotCopyLibrariesRecursivelySpecified = bound.ContainsKey(nameof(NETDoNotCopyLibrariesRecursively)),
+            NETDoNotCopyLibrariesRecursively = NETDoNotCopyLibrariesRecursively.IsPresent,
+            NETSearchClassSpecified = bound.ContainsKey(nameof(NETSearchClass)),
+            NETSearchClass = NETSearchClass,
+            NETHandleRuntimesSpecified = bound.ContainsKey(nameof(NETHandleRuntimes)),
+            NETHandleRuntimes = NETHandleRuntimes.IsPresent,
+            KillLockersBeforeInstallSpecified = bound.ContainsKey(nameof(KillLockersBeforeInstall)),
+            KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent,
+            KillLockersForceSpecified = bound.ContainsKey(nameof(KillLockersForce)),
+            KillLockersForce = KillLockersForce.IsPresent,
+            AutoSwitchExactOnPublishSpecified = bound.ContainsKey(nameof(AutoSwitchExactOnPublish)),
+            AutoSwitchExactOnPublish = AutoSwitchExactOnPublish.IsPresent,
+            SignIncludeInternalsSpecified = bound.ContainsKey(nameof(SignIncludeInternals)),
+            SignIncludeInternals = SignIncludeInternals.IsPresent,
+            SignIncludeBinariesSpecified = bound.ContainsKey(nameof(SignIncludeBinaries)),
+            SignIncludeBinaries = SignIncludeBinaries.IsPresent,
+            SignIncludeExeSpecified = bound.ContainsKey(nameof(SignIncludeExe)),
+            SignIncludeExe = SignIncludeExe.IsPresent,
+            SignCustomIncludeSpecified = bound.ContainsKey(nameof(SignCustomInclude)),
+            SignCustomInclude = SignCustomInclude,
+            SignExcludePathsSpecified = bound.ContainsKey(nameof(SignExcludePaths)),
+            SignExcludePaths = SignExcludePaths,
+            SignOverwriteSignedSpecified = bound.ContainsKey(nameof(SignOverwriteSigned)),
+            SignOverwriteSigned = SignOverwriteSigned.IsPresent
+        };
+
+        try
+        {
+            foreach (var segment in new BuildConfigurationFactory().Create(request))
+                WriteObject(segment);
         }
-        else if (bound.ContainsKey(nameof(InstallMissingModulesCredentialSecret)) &&
-                 !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialSecret))
+        catch (ArgumentException ex)
         {
-            missingModulesSecret = InstallMissingModulesCredentialSecret!.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(missingModulesSecret) &&
-            string.IsNullOrWhiteSpace(InstallMissingModulesCredentialUserName))
-        {
-            throw new PSArgumentException("InstallMissingModulesCredentialUserName is required when InstallMissingModulesCredentialSecret/InstallMissingModulesCredentialSecretFilePath is provided.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(missingModulesSecret) &&
-            !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialUserName))
-        {
-            EnsureBuildModule();
-            buildModule!.InstallMissingModulesCredential = new RepositoryCredential
-            {
-                UserName = InstallMissingModulesCredentialUserName!.Trim(),
-                Secret = missingModulesSecret
-            };
-        }
-
-        if (bound.ContainsKey(nameof(DoNotAttemptToFixRelativePaths))) { EnsureBuildModule(); buildModule!.DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent; }
-        if (bound.ContainsKey(nameof(NETMergeLibraryDebugging))) { EnsureBuildModule(); buildModule!.DebugDLL = NETMergeLibraryDebugging.IsPresent; }
-        if (bound.ContainsKey(nameof(KillLockersBeforeInstall))) { EnsureBuildModule(); buildModule!.KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent; }
-        if (bound.ContainsKey(nameof(KillLockersForce))) { EnsureBuildModule(); buildModule!.KillLockersForce = KillLockersForce.IsPresent; }
-        if (bound.ContainsKey(nameof(AutoSwitchExactOnPublish))) { EnsureBuildModule(); buildModule!.AutoSwitchExactOnPublish = AutoSwitchExactOnPublish.IsPresent; }
-
-        if (bound.ContainsKey(nameof(NETResolveBinaryConflictsName)))
-        {
-            EnsureBuildModule();
-            buildModule!.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration { ProjectName = NETResolveBinaryConflictsName };
-        }
-        else if (bound.ContainsKey(nameof(NETResolveBinaryConflicts)))
-        {
-            EnsureBuildModule();
-            buildModule!.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration { Enabled = NETResolveBinaryConflicts.IsPresent };
-        }
-
-        if (buildModule is not null)
-            WriteObject(new ConfigurationBuildSegment { BuildModule = buildModule });
-
-        // Signing options
-        SigningOptionsConfiguration? signing = null;
-        void EnsureSigning() => signing ??= new SigningOptionsConfiguration();
-
-        if (bound.ContainsKey(nameof(SignIncludeInternals))) { EnsureSigning(); signing!.IncludeInternals = SignIncludeInternals.IsPresent; }
-        if (bound.ContainsKey(nameof(SignIncludeBinaries))) { EnsureSigning(); signing!.IncludeBinaries = SignIncludeBinaries.IsPresent; }
-        if (bound.ContainsKey(nameof(SignIncludeExe))) { EnsureSigning(); signing!.IncludeExe = SignIncludeExe.IsPresent; }
-        if (bound.ContainsKey(nameof(SignCustomInclude))) { EnsureSigning(); signing!.Include = SignCustomInclude; }
-        if (bound.ContainsKey(nameof(SignExcludePaths))) { EnsureSigning(); signing!.ExcludePaths = SignExcludePaths; }
-        if (bound.ContainsKey(nameof(SignOverwriteSigned))) { EnsureSigning(); signing!.OverwriteSigned = SignOverwriteSigned.IsPresent; }
-
-        // Certificate selection (single branch)
-        if (bound.ContainsKey(nameof(CertificateThumbprint)))
-        {
-            EnsureSigning();
-            signing!.CertificateThumbprint = CertificateThumbprint;
-        }
-        else if (bound.ContainsKey(nameof(CertificatePFXPath)))
-        {
-            if (!bound.ContainsKey(nameof(CertificatePFXPassword)))
-                throw new PSArgumentException("CertificatePFXPassword is required when using CertificatePFXPath");
-
-            EnsureSigning();
-            signing!.CertificatePFXPath = CertificatePFXPath;
-            signing.CertificatePFXPassword = CertificatePFXPassword;
-        }
-        else if (bound.ContainsKey(nameof(CertificatePFXBase64)))
-        {
-            if (!bound.ContainsKey(nameof(CertificatePFXPassword)))
-                throw new PSArgumentException("CertificatePFXPassword is required when using CertificatePFXBase64");
-
-            EnsureSigning();
-            signing!.CertificatePFXBase64 = CertificatePFXBase64;
-            signing.CertificatePFXPassword = CertificatePFXPassword;
-        }
-
-        if (signing is not null)
-        {
-            WriteObject(new ConfigurationOptionsSegment
-            {
-                Options = new ConfigurationOptions { Signing = signing }
-            });
-        }
-
-        // BuildLibraries
-        BuildLibrariesConfiguration? buildLibraries = null;
-        bool enableBuildLibraries = false;
-        void EnsureBuildLibraries() => buildLibraries ??= new BuildLibrariesConfiguration();
-
-        if (bound.ContainsKey(nameof(NETConfiguration)))
-        {
-            EnsureBuildLibraries();
-            buildLibraries!.Configuration = NETConfiguration;
-            enableBuildLibraries = true;
-        }
-        if (bound.ContainsKey(nameof(NETFramework)))
-        {
-            EnsureBuildLibraries();
-            buildLibraries!.Framework = NETFramework;
-            enableBuildLibraries = true;
-        }
-        if (bound.ContainsKey(nameof(NETProjectName))) { EnsureBuildLibraries(); buildLibraries!.ProjectName = NETProjectName; }
-        if (bound.ContainsKey(nameof(NETExcludeMainLibrary))) { EnsureBuildLibraries(); buildLibraries!.ExcludeMainLibrary = NETExcludeMainLibrary.IsPresent; }
-        if (bound.ContainsKey(nameof(NETExcludeLibraryFilter))) { EnsureBuildLibraries(); buildLibraries!.ExcludeLibraryFilter = NETExcludeLibraryFilter; }
-        if (bound.ContainsKey(nameof(NETIgnoreLibraryOnLoad))) { EnsureBuildLibraries(); buildLibraries!.IgnoreLibraryOnLoad = NETIgnoreLibraryOnLoad; }
-        if (bound.ContainsKey(nameof(NETBinaryModule))) { EnsureBuildLibraries(); buildLibraries!.BinaryModule = NETBinaryModule; }
-        if (bound.ContainsKey(nameof(NETHandleAssemblyWithSameName))) { EnsureBuildLibraries(); buildLibraries!.HandleAssemblyWithSameName = NETHandleAssemblyWithSameName.IsPresent; }
-        if (bound.ContainsKey(nameof(NETLineByLineAddType))) { EnsureBuildLibraries(); buildLibraries!.NETLineByLineAddType = NETLineByLineAddType.IsPresent; }
-        if (bound.ContainsKey(nameof(NETProjectPath))) { EnsureBuildLibraries(); buildLibraries!.NETProjectPath = NETProjectPath; }
-        if (bound.ContainsKey(nameof(NETBinaryModuleCmdletScanDisabled))) { EnsureBuildLibraries(); buildLibraries!.BinaryModuleCmdletScanDisabled = NETBinaryModuleCmdletScanDisabled.IsPresent; }
-        if (bound.ContainsKey(nameof(NETSearchClass))) { EnsureBuildLibraries(); buildLibraries!.SearchClass = NETSearchClass; }
-        if (bound.ContainsKey(nameof(NETBinaryModuleDocumentation))) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = NETBinaryModuleDocumentation.IsPresent; }
-        if (bound.ContainsKey(nameof(NETHandleRuntimes))) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = NETHandleRuntimes.IsPresent; }
-        if (bound.ContainsKey(nameof(NETDoNotCopyLibrariesRecursively))) { EnsureBuildLibraries(); buildLibraries!.NETDoNotCopyLibrariesRecursively = NETDoNotCopyLibrariesRecursively.IsPresent; }
-
-        if (buildLibraries is not null)
-        {
-            if (enableBuildLibraries) buildLibraries.Enable = true;
-            WriteObject(new ConfigurationBuildLibrariesSegment { BuildLibraries = buildLibraries });
-        }
-
-        if (bound.ContainsKey(nameof(SkipBuiltinReplacements)) && SkipBuiltinReplacements.IsPresent)
-        {
-            WriteObject(new ConfigurationPlaceHolderOptionSegment
-            {
-                PlaceHolderOption = new PlaceHolderOptionConfiguration
-                {
-                    SkipBuiltinReplacements = true
-                }
-            });
+            throw new PSArgumentException(ex.Message, ex);
         }
     }
 }
