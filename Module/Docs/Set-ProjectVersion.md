@@ -143,7 +143,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ProjectVersionUpdateResult`
+- `PowerForge.ProjectVersionUpdateResult`
 
 ## RELATED LINKS
 

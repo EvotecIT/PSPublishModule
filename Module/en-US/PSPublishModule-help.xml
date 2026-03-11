@@ -2557,7 +2557,7 @@ and returns one record per discovered version entry.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ProjectVersionInfo</maml:name>
+          <maml:name>PowerForge.ProjectVersionInfo</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -23315,7 +23315,7 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ProjectVersionUpdateResult</maml:name>
+          <maml:name>PowerForge.ProjectVersionUpdateResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
