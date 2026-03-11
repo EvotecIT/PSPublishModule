@@ -267,293 +267,34 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         var resolvedGitHubToken = gitHubToken!;
-
-        var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode)
-            ? "Single"
-            : config.GitHubReleaseMode!.Trim();
-        var perProject = string.Equals(releaseMode, "PerProject", StringComparison.OrdinalIgnoreCase);
-        var conflictPolicy = ParseGitHubTagConflictPolicy(config.GitHubTagConflictPolicy);
-        var reuseExistingReleaseOnConflict = conflictPolicy == GitHubTagConflictPolicy.Reuse;
-        var nowLocal = DateTime.Now;
-        var nowUtc = DateTime.UtcNow;
-        var dateToken = nowLocal.ToString("yyyy.MM.dd");
-        var utcDateToken = nowUtc.ToString("yyyy.MM.dd");
-        var dateTimeToken = nowLocal.ToString("yyyy.MM.dd-HH.mm.ss");
-        var utcDateTimeToken = nowUtc.ToString("yyyy.MM.dd-HH.mm.ss");
-        var timestampToken = nowLocal.ToString("yyyyMMddHHmmss");
-        var utcTimestampToken = nowUtc.ToString("yyyyMMddHHmmss");
-        var repoName = string.IsNullOrWhiteSpace(config.GitHubRepositoryName)
-            ? "repository"
-            : config.GitHubRepositoryName!.Trim();
-
-        if (perProject)
+        var publisher = new ProjectBuildGitHubPublisher(logger);
+        var publishSummary = publisher.Publish(new ProjectBuildGitHubPublishRequest
         {
-            foreach (var project in release.Projects)
-            {
-                if (!project.IsPackable) continue;
-                var r = new ProjectBuildGitHubResult { ProjectName = project.ProjectName };
+            Owner = config.GitHubUsername!,
+            Repository = config.GitHubRepositoryName!,
+            Token = resolvedGitHubToken,
+            Release = release,
+            ReleaseMode = config.GitHubReleaseMode ?? "Single",
+            IncludeProjectNameInTag = config.GitHubIncludeProjectNameInTag,
+            IsPreRelease = config.GitHubIsPreRelease,
+            GenerateReleaseNotes = config.GitHubGenerateReleaseNotes,
+            PublishFailFast = spec.PublishFailFast,
+            ReleaseName = config.GitHubReleaseName,
+            TagName = config.GitHubTagName,
+            TagTemplate = config.GitHubTagTemplate,
+            PrimaryProject = config.GitHubPrimaryProject,
+            TagConflictPolicy = config.GitHubTagConflictPolicy
+        });
 
-                if (string.IsNullOrWhiteSpace(project.NewVersion))
-                {
-                    r.Success = false;
-                    r.ErrorMessage = "Missing project version for GitHub release.";
-                    result.GitHub.Add(r);
-                    if (spec.PublishFailFast)
-                    {
-                        result.Success = false;
-                        result.ErrorMessage = r.ErrorMessage;
-                        break;
-                    }
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(project.ReleaseZipPath))
-                {
-                    r.Success = false;
-                    r.ErrorMessage = "No release zip available for GitHub release.";
-                    result.GitHub.Add(r);
-                    if (spec.PublishFailFast)
-                    {
-                        result.Success = false;
-                        result.ErrorMessage = r.ErrorMessage;
-                        break;
-                    }
-                    continue;
-                }
-
-                if (!File.Exists(project.ReleaseZipPath))
-                {
-                    r.Success = false;
-                    r.ErrorMessage = $"Release zip not found: {project.ReleaseZipPath}";
-                    result.GitHub.Add(r);
-                    if (spec.PublishFailFast)
-                    {
-                        result.Success = false;
-                        result.ErrorMessage = r.ErrorMessage;
-                        break;
-                    }
-                    continue;
-                }
-
-                var tag = string.IsNullOrWhiteSpace(config.GitHubTagName)
-                    ? (config.GitHubIncludeProjectNameInTag == false ? $"v{project.NewVersion}" : $"{project.ProjectName}-v{project.NewVersion}")
-                    : config.GitHubTagName!;
-                if (!string.IsNullOrWhiteSpace(config.GitHubTagTemplate))
-                {
-                    tag = ApplyTemplate(
-                        config.GitHubTagTemplate!,
-                        project.ProjectName,
-                        project.NewVersion ?? project.OldVersion ?? string.Empty,
-                        config.GitHubPrimaryProject ?? project.ProjectName,
-                        project.NewVersion ?? project.OldVersion ?? string.Empty,
-                        repoName,
-                        dateToken,
-                        utcDateToken,
-                        dateTimeToken,
-                        utcDateTimeToken,
-                        timestampToken,
-                        utcTimestampToken);
-                }
-                tag = ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
-
-                var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
-                    ? tag
-                    : ApplyTemplate(
-                        config.GitHubReleaseName!,
-                        project.ProjectName,
-                        project.NewVersion ?? project.OldVersion ?? string.Empty,
-                        config.GitHubPrimaryProject ?? project.ProjectName,
-                        project.NewVersion ?? project.OldVersion ?? string.Empty,
-                        repoName,
-                        dateToken,
-                        utcDateToken,
-                        dateTimeToken,
-                        utcDateTimeToken,
-                        timestampToken,
-                        utcTimestampToken);
-
-                bool ok;
-                string? releaseUrl;
-                string? errorMessage;
-
-                try
-                {
-                    var gr = ExecuteGitHubReleasePublish(
-                        logger,
-                        config.GitHubUsername!,
-                        config.GitHubRepositoryName!,
-                        resolvedGitHubToken,
-                        tag,
-                        releaseName,
-                        new[] { project.ReleaseZipPath! },
-                        config.GitHubIsPreRelease,
-                        config.GitHubGenerateReleaseNotes,
-                        reuseExistingReleaseOnConflict);
-                    ok = gr.Succeeded;
-                    releaseUrl = gr.HtmlUrl;
-                    errorMessage = null;
-                    WriteGitHubPublishNotes(logger, tag, gr);
-                }
-                catch (Exception ex)
-                {
-                    ok = false;
-                    releaseUrl = null;
-                    errorMessage = ex.Message;
-                }
-
-                r.Success = ok;
-                r.TagName = tag;
-                r.ReleaseUrl = releaseUrl;
-                r.ErrorMessage = errorMessage;
-                result.GitHub.Add(r);
-
-                if (!ok)
-                {
-                    result.Success = false;
-                    result.ErrorMessage = errorMessage ?? "GitHub publish failed.";
-                    if (spec.PublishFailFast)
-                        break;
-                }
-            }
-        }
-        else
-        {
-            var assets = new List<string>();
-            foreach (var project in release.Projects)
-            {
-                if (!project.IsPackable) continue;
-                var zip = project.ReleaseZipPath;
-                if (string.IsNullOrWhiteSpace(zip))
-                    continue;
-                if (File.Exists(zip))
-                    assets.Add(zip!);
-            }
-
-            var distinctAssets = assets.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            if (distinctAssets.Length == 0)
-            {
-                result.Success = false;
-                result.ErrorMessage = "No release zips available for GitHub release.";
-                WriteObject(result);
-                return;
-            }
-
-            var baseVersion = ResolveGitHubBaseVersion(config, release);
-            var tagVersionToken = string.IsNullOrWhiteSpace(baseVersion) ? dateToken : baseVersion!;
-
-            var tag = !string.IsNullOrWhiteSpace(config.GitHubTagName)
-                ? config.GitHubTagName!
-                : (!string.IsNullOrWhiteSpace(config.GitHubTagTemplate)
-                    ? ApplyTemplate(
-                        config.GitHubTagTemplate!,
-                        repoName,
-                        tagVersionToken,
-                        config.GitHubPrimaryProject ?? repoName,
-                        tagVersionToken,
-                        repoName,
-                        dateToken,
-                        utcDateToken,
-                        dateTimeToken,
-                        utcDateTimeToken,
-                        timestampToken,
-                        utcTimestampToken)
-                    : $"v{tagVersionToken}");
-            tag = ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
-
-            var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
-                ? tag
-                : ApplyTemplate(
-                    config.GitHubReleaseName!,
-                    repoName,
-                    tagVersionToken,
-                    config.GitHubPrimaryProject ?? repoName,
-                    tagVersionToken,
-                    repoName,
-                    dateToken,
-                    utcDateToken,
-                    dateTimeToken,
-                    utcDateTimeToken,
-                    timestampToken,
-                    utcTimestampToken);
-
-            bool ok;
-            string? releaseUrl;
-            string? errorMessage;
-
-            try
-            {
-                var gr = ExecuteGitHubReleasePublish(
-                    logger,
-                    config.GitHubUsername!,
-                    config.GitHubRepositoryName!,
-                    resolvedGitHubToken,
-                    tag,
-                    releaseName,
-                    distinctAssets,
-                    config.GitHubIsPreRelease,
-                    config.GitHubGenerateReleaseNotes,
-                    reuseExistingReleaseOnConflict);
-                ok = gr.Succeeded;
-                releaseUrl = gr.HtmlUrl;
-                errorMessage = null;
-                WriteGitHubPublishNotes(logger, tag, gr);
-            }
-            catch (Exception ex)
-            {
-                ok = false;
-                releaseUrl = null;
-                errorMessage = ex.Message;
-            }
-
-            foreach (var project in release.Projects.Where(p => p.IsPackable))
-            {
-                result.GitHub.Add(new ProjectBuildGitHubResult
-                {
-                    ProjectName = project.ProjectName,
-                    Success = ok,
-                    TagName = tag,
-                    ReleaseUrl = releaseUrl,
-                    ErrorMessage = ok ? null : errorMessage
-                });
-            }
-
-            result.Success = ok;
-            result.ErrorMessage = ok ? null : (errorMessage ?? "GitHub publish failed.");
-            if (interactive)
-                WriteGitHubSummary(perProject, tag, releaseUrl, distinctAssets.Length, result.GitHub);
-        }
+        result.GitHub.AddRange(publishSummary.Results);
+        result.Success = publishSummary.Success;
+        result.ErrorMessage = publishSummary.ErrorMessage;
+        if (interactive && !publishSummary.PerProject)
+            WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, result.GitHub);
 
         if (result.ErrorMessage is null)
             result.Success = result.GitHub.Count == 0 || result.GitHub.TrueForAll(g => g.Success);
 
         WriteObject(result);
     }
-}
-
-/// <summary>Aggregate result for project builds.</summary>
-public sealed class ProjectBuildResult
-{
-    /// <summary>True when the pipeline completed successfully.</summary>
-    public bool Success { get; set; }
-    /// <summary>Error message when <see cref="Success"/> is false.</summary>
-    public string? ErrorMessage { get; set; }
-    /// <summary>Release pipeline result.</summary>
-    public DotNetRepositoryReleaseResult? Release { get; set; }
-    /// <summary>GitHub publishing results.</summary>
-    public List<ProjectBuildGitHubResult> GitHub { get; } = new();
-}
-
-/// <summary>GitHub publish result per project.</summary>
-public sealed class ProjectBuildGitHubResult
-{
-    /// <summary>Project name.</summary>
-    public string ProjectName { get; set; } = string.Empty;
-    /// <summary>True when publishing succeeded.</summary>
-    public bool Success { get; set; }
-    /// <summary>Computed tag name.</summary>
-    public string? TagName { get; set; }
-    /// <summary>Release URL when publishing succeeded.</summary>
-    public string? ReleaseUrl { get; set; }
-    /// <summary>Error message when publishing failed.</summary>
-    public string? ErrorMessage { get; set; }
 }

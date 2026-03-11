@@ -6596,7 +6596,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ProjectBuildResult</maml:name>
+          <maml:name>PowerForge.ProjectBuildResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
