@@ -93,18 +93,19 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
     /// <summary>Executes the connect/login workflow.</summary>
     protected override void ProcessRecord()
     {
-        PrivateGalleryCommandSupport.EnsureProviderSupported(Provider);
+        var host = new CmdletPrivateGalleryHost(this);
+        var service = new PrivateGalleryService(host);
+        service.EnsureProviderSupported(Provider);
 
         var endpoint = AzureArtifactsRepositoryEndpoints.Create(
             AzureDevOpsOrganization,
             AzureDevOpsProject,
             AzureArtifactsFeed,
             Name);
-        var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-        var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
+        var prerequisiteInstall = service.EnsureBootstrapPrerequisites(InstallPrerequisites.IsPresent);
+        var allowInteractivePrompt = !host.IsWhatIfRequested;
 
-        var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
-            this,
+        var credentialResolution = service.ResolveCredential(
             endpoint.RepositoryName,
             BootstrapMode,
             CredentialUserName,
@@ -114,8 +115,7 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
             prerequisiteInstall.Status,
             allowInteractivePrompt);
 
-        var result = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
-            this,
+        var result = service.EnsureAzureArtifactsRepositoryRegistered(
             AzureDevOpsOrganization,
             AzureDevOpsProject,
             AzureArtifactsFeed,
@@ -136,18 +136,19 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
 
         if (!result.RegistrationPerformed)
         {
-            PrivateGalleryCommandSupport.WriteRegistrationSummary(this, result);
-            WriteObject(result);
+            service.WriteRegistrationSummary(result);
+            WriteObject(ModuleRepositoryRegistrationResultMapper.ToCmdletResult(result));
             return;
         }
 
-        var probe = PrivateGalleryCommandSupport.ProbeRepositoryAccess(result, credentialResolution.Credential);
+        var probe = service.ProbeRepositoryAccess(result, credentialResolution.Credential);
         result.AccessProbePerformed = true;
         result.AccessProbeSucceeded = probe.Succeeded;
         result.AccessProbeTool = probe.Tool;
         result.AccessProbeMessage = probe.Message;
 
-        PrivateGalleryCommandSupport.WriteRegistrationSummary(this, result);
+        service.WriteRegistrationSummary(result);
+        var cmdletResult = ModuleRepositoryRegistrationResultMapper.ToCmdletResult(result);
 
         if (!probe.Succeeded)
         {
@@ -160,10 +161,10 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
                 exception,
                 "ConnectModuleRepositoryProbeFailed",
                 ErrorCategory.OpenError,
-                result.RepositoryName));
+                cmdletResult.RepositoryName));
             return;
         }
 
-        WriteObject(result);
+        WriteObject(cmdletResult);
     }
 }

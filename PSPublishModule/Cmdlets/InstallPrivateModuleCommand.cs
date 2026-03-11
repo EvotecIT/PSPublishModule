@@ -117,26 +117,27 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     /// <summary>Executes the install workflow.</summary>
     protected override void ProcessRecord()
     {
-        var modules = PrivateGalleryCommandSupport.BuildDependencies(Name);
+        var host = new CmdletPrivateGalleryHost(this);
+        var service = new PrivateGalleryService(host);
+        var modules = service.BuildDependencies(Name);
         var repositoryName = Repository;
         RepositoryCredential? credential;
         var preferPowerShellGet = false;
 
         if (ParameterSetName == ParameterSetAzureArtifacts)
         {
-            PrivateGalleryCommandSupport.EnsureProviderSupported(Provider);
+            service.EnsureProviderSupported(Provider);
 
             var endpoint = AzureArtifactsRepositoryEndpoints.Create(
                 AzureDevOpsOrganization,
                 AzureDevOpsProject,
                 AzureArtifactsFeed,
                 RepositoryName);
-            var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-            var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
+            var prerequisiteInstall = service.EnsureBootstrapPrerequisites(InstallPrerequisites.IsPresent);
+            var allowInteractivePrompt = !host.IsWhatIfRequested;
 
             repositoryName = endpoint.RepositoryName;
-            var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
-                this,
+            var credentialResolution = service.ResolveCredential(
                 repositoryName,
                 BootstrapMode,
                 CredentialUserName,
@@ -147,8 +148,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 allowInteractivePrompt);
             credential = credentialResolution.Credential;
 
-            var registration = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
-                this,
+            var registration = service.EnsureAzureArtifactsRepositoryRegistered(
                 AzureDevOpsOrganization,
                 AzureDevOpsProject,
                 AzureArtifactsFeed,
@@ -173,7 +173,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 return;
             }
 
-            PrivateGalleryCommandSupport.WriteRegistrationSummary(this, registration);
+            service.WriteRegistrationSummary(registration);
             WriteVerbose($"Repository '{registration.RepositoryName}' is ready for installation.");
 
             if (credential is null &&
@@ -200,8 +200,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
 
         if (ParameterSetName == ParameterSetRepository)
         {
-            credential = PrivateGalleryCommandSupport.ResolveOptionalCredential(
-                this,
+            credential = service.ResolveOptionalCredential(
                 repositoryName,
                 CredentialUserName,
                 CredentialSecret,

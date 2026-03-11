@@ -1,19 +1,18 @@
 using System;
 using System.Linq;
-using PowerForge;
 
-namespace PSPublishModule;
+namespace PowerForge;
 
-internal static partial class PrivateGalleryCommandSupport
+internal static class PrivateGalleryVersionPolicy
 {
-    private static PrivateGalleryBootstrapMode GetRecommendedBootstrapMode(BootstrapPrerequisiteStatus status)
+    internal static PrivateGalleryBootstrapMode GetRecommendedBootstrapMode(BootstrapPrerequisiteStatus status)
         => IsExistingSessionBootstrapReady(status)
             ? PrivateGalleryBootstrapMode.ExistingSession
             : IsCredentialPromptBootstrapReady(status)
                 ? PrivateGalleryBootstrapMode.CredentialPrompt
                 : PrivateGalleryBootstrapMode.Auto;
 
-    private static string BuildBootstrapUnavailableMessage(string repositoryName, BootstrapPrerequisiteStatus status)
+    internal static string BuildBootstrapUnavailableMessage(string repositoryName, BootstrapPrerequisiteStatus status)
     {
         var message = $"No supported private-gallery bootstrap path is ready for repository '{repositoryName}'.";
         var reasons = status.ReadinessMessages
@@ -27,13 +26,13 @@ internal static partial class PrivateGalleryCommandSupport
         return message;
     }
 
-    private static bool IsExistingSessionBootstrapReady(BootstrapPrerequisiteStatus status)
+    internal static bool IsExistingSessionBootstrapReady(BootstrapPrerequisiteStatus status)
         => status.PSResourceGetSupportsExistingSessionBootstrap && status.CredentialProviderDetection.IsDetected;
 
-    private static bool IsCredentialPromptBootstrapReady(BootstrapPrerequisiteStatus status)
+    internal static bool IsCredentialPromptBootstrapReady(BootstrapPrerequisiteStatus status)
         => (status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion) || status.PowerShellGetAvailable;
 
-    private static string SelectAccessProbeTool(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
+    internal static string SelectAccessProbeTool(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
     {
         if (credential is null)
         {

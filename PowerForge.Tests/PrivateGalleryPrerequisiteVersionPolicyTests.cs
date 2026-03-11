@@ -17,7 +17,7 @@ public sealed class PrivateGalleryPrerequisiteVersionPolicyTests
     [InlineData("", "1.1.1", false)]
     public void VersionMeetsMinimum_EvaluatesExpectedValues(string versionText, string minimumVersion, bool expected)
     {
-        var actual = PSPublishModule.PrivateGalleryCommandSupport.VersionMeetsMinimum(versionText, minimumVersion);
+        var actual = PrivateGalleryVersionPolicy.VersionMeetsMinimum(versionText, minimumVersion);
 
         Assert.Equal(expected, actual);
     }

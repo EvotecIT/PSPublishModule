@@ -95,18 +95,19 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
     /// <summary>Executes the repository refresh.</summary>
     protected override void ProcessRecord()
     {
-        PrivateGalleryCommandSupport.EnsureProviderSupported(Provider);
+        var host = new CmdletPrivateGalleryHost(this);
+        var service = new PrivateGalleryService(host);
+        service.EnsureProviderSupported(Provider);
 
         var endpoint = AzureArtifactsRepositoryEndpoints.Create(
             AzureDevOpsOrganization,
             AzureDevOpsProject,
             AzureArtifactsFeed,
             Name);
-        var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-        var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
+        var prerequisiteInstall = service.EnsureBootstrapPrerequisites(InstallPrerequisites.IsPresent);
+        var allowInteractivePrompt = !host.IsWhatIfRequested;
 
-        var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
-            this,
+        var credentialResolution = service.ResolveCredential(
             endpoint.RepositoryName,
             BootstrapMode,
             CredentialUserName,
@@ -116,8 +117,7 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
             prerequisiteInstall.Status,
             allowInteractivePrompt);
 
-        var result = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
-            this,
+        var result = service.EnsureAzureArtifactsRepositoryRegistered(
             AzureDevOpsOrganization,
             AzureDevOpsProject,
             AzureArtifactsFeed,
@@ -136,7 +136,7 @@ public sealed class UpdateModuleRepositoryCommand : PSCmdlet
         result.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
         result.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 
-        PrivateGalleryCommandSupport.WriteRegistrationSummary(this, result);
-        WriteObject(result);
+        service.WriteRegistrationSummary(result);
+        WriteObject(ModuleRepositoryRegistrationResultMapper.ToCmdletResult(result));
     }
 }
