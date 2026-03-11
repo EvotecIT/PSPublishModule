@@ -1,14 +1,9 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -387,27 +382,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             ScriptRoot = MyInvocation?.PSScriptRoot,
             ResolvePath = path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)
         });
-        var moduleName = preparation.ModuleName;
-        var projectRoot = preparation.ProjectRoot;
-        var basePathForScaffold = preparation.BasePathForScaffold;
-        if (basePathForScaffold is not null)
+        var scaffold = new ModuleBuildScaffoldBootstrapService(logger)
+            .EnsureScaffold(preparation, MyInvocation?.MyCommand?.Module?.ModuleBase);
+        if (!scaffold.Succeeded)
         {
-            if (!Directory.Exists(basePathForScaffold))
-            {
-                logger.Error($"Path '{basePathForScaffold}' does not exist. Please create it before continuing.");
-                if (exitCodeMode) Host.SetShouldExit(1);
-                return;
-            }
-
-            var scaffolder = new ModuleScaffoldService(logger);
-            var moduleBase = MyInvocation?.MyCommand?.Module?.ModuleBase;
-            var templates = !string.IsNullOrWhiteSpace(moduleBase) ? System.IO.Path.Combine(moduleBase, "Data") : null;
-            scaffolder.EnsureScaffold(new ModuleScaffoldSpec
-            {
-                ProjectRoot = projectRoot,
-                ModuleName = moduleName,
-                TemplateRootPath = templates
-            });
+            if (exitCodeMode) Host.SetShouldExit(1);
+            return;
         }
 
         var useLegacy =
@@ -416,9 +396,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             Settings is not null;
 
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
-        BufferingLogger? interactiveBuffer = null;
+        BufferedLogger? interactiveBuffer = null;
         ModuleBuildWorkflowResult? workflow = null;
         var success = false;
+        var logSupport = new BufferedLogSupportService();
 
         if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
             logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
@@ -438,7 +419,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             workflow = new ModuleBuildWorkflowService(
                 logger,
                 runInteractive: (spec, plan, configLabel) => SpectrePipelineConsoleUi.RunInteractive(
-                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
+                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }),
                     spec: spec,
                     plan: plan,
                     configLabel: configLabel),
@@ -453,7 +434,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 if (emitErrorRecord)
                     WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
                 if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
-                    WriteLogTail(interactiveBuffer, logger);
+                    logSupport.WriteTail(interactiveBuffer.Entries, logger);
                 if (workflow.UsedInteractiveView && workflow.Plan is not null && !workflow.WrotePolicySummary)
                 {
                     try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
@@ -464,7 +445,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 #pragma warning restore CA1031
 
         var elapsed = sw.Elapsed;
-        var elapsedText = FormatDuration(elapsed);
+        var elapsedText = logSupport.FormatDuration(elapsed);
 
         if (success)
         {
@@ -482,45 +463,6 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
 
         return;
-    }
-
-    private static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)
-    {
-        if (buffer is null) return;
-        if (buffer.Entries.Count == 0) return;
-
-        maxEntries = Math.Max(1, maxEntries);
-        var total = buffer.Entries.Count;
-        var start = Math.Max(0, total - maxEntries);
-        var shown = total - start;
-
-        logger.Warn($"Last {shown}/{total} log lines:");
-        for (int i = start; i < total; i++)
-        {
-            var e = buffer.Entries[i];
-            var msg = e.Message;
-            switch (e.Level)
-            {
-                case "success": logger.Success(msg); break;
-                case "warn": logger.Warn(msg); break;
-                case "error": logger.Error(msg); break;
-                case "verbose": logger.Verbose(msg); break;
-                default: logger.Info(msg); break;
-            }
-        }
-    }
-
-    private static string FormatDuration(TimeSpan elapsed)
-    {
-        if (elapsed.TotalDays >= 1)
-            return $"{(int)elapsed.TotalDays}d {elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
-        if (elapsed.TotalHours >= 1)
-            return $"{elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
-        if (elapsed.TotalMinutes >= 1)
-            return $"{elapsed.Minutes}m {elapsed.Seconds}s";
-        if (elapsed.TotalSeconds >= 1)
-            return $"{elapsed.Seconds}s {elapsed.Milliseconds}ms";
-        return $"{elapsed.Milliseconds}ms";
     }
 
     private static bool IsTrue(object? value)

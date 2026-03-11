@@ -6,30 +6,9 @@ using System.Text.Json;
 
 internal static partial class Program
 {
-    static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)
+    static void WriteLogTail(BufferedLogger buffer, ILogger logger, int maxEntries = 80)
     {
-        if (buffer is null) return;
-        if (buffer.Entries.Count == 0) return;
-
-        maxEntries = Math.Max(1, maxEntries);
-        var total = buffer.Entries.Count;
-        var start = Math.Max(0, total - maxEntries);
-        var shown = total - start;
-
-        logger.Warn($"Last {shown}/{total} log lines:");
-        for (int i = start; i < total; i++)
-        {
-            var e = buffer.Entries[i];
-            var msg = e.Message ?? string.Empty;
-            switch (e.Level)
-            {
-                case "success": logger.Success(msg); break;
-                case "warn": logger.Warn(msg); break;
-                case "error": logger.Error(msg); break;
-                case "verbose": logger.Verbose(msg); break;
-                default: logger.Info(msg); break;
-            }
-        }
+        new BufferedLogSupportService().WriteTail(buffer.Entries, logger, maxEntries);
     }
 
     static void WriteDotNetPublishFailureDetails(DotNetPublishResult result, ILogger logger)

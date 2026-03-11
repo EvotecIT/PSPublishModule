@@ -555,11 +555,11 @@ internal static partial class Program
         return list.ToArray();
     }
 
-    static JsonElement? LogsToJsonElement(BufferingLogger? logBuffer)
+    static JsonElement? LogsToJsonElement(BufferedLogger? logBuffer)
     {
         if (logBuffer is null) return null;
         if (logBuffer.Entries.Count == 0) return null;
-        return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.LogEntryArray);
+        return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.BufferedLogEntryArray);
     }
 
     static ProcessResult RunProcess(string command, IEnumerable<string> args, string workingDirectory)
@@ -636,35 +636,6 @@ internal static partial class Program
 
     sealed record ProcessResult(int ExitCode, string Output, string Error);
 
-}
-
-sealed class LogEntry
-{
-    public string Level { get; }
-    public string Message { get; }
-
-    public LogEntry(string level, string message)
-    {
-        Level = level;
-        Message = message;
-    }
-}
-
-sealed class BufferingLogger : ILogger
-{
-    public bool IsVerbose { get; set; }
-
-    public List<LogEntry> Entries { get; } = new();
-
-    public void Info(string message) => Entries.Add(new LogEntry("info", message));
-    public void Success(string message) => Entries.Add(new LogEntry("success", message));
-    public void Warn(string message) => Entries.Add(new LogEntry("warn", message));
-    public void Error(string message) => Entries.Add(new LogEntry("error", message));
-    public void Verbose(string message)
-    {
-        if (!IsVerbose) return;
-        Entries.Add(new LogEntry("verbose", message));
-    }
 }
 
 sealed class CliOptions
