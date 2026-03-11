@@ -197,13 +197,13 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
         var result = new DotNetRepositoryReleaseWorkflowService(logger).Execute(preparation, executeBuild);
         if (interactive)
-            WriteRepositorySummary(result, isPlan: !executeBuild);
+            WriteRepositorySummary(new DotNetRepositoryReleaseSummaryService().CreateSummary(result), isPlan: !executeBuild);
         WriteObject(result);
     }
 
-    private static void WriteRepositorySummary(DotNetRepositoryReleaseResult result, bool isPlan)
+    private static void WriteRepositorySummary(DotNetRepositoryReleaseSummary summary, bool isPlan)
     {
-        if (result is null) return;
+        if (summary is null) return;
 
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
 
@@ -223,19 +223,23 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));
 
-        foreach (var project in result.Projects.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
+        foreach (var project in summary.Projects)
         {
             var packable = project.IsPackable ? "Yes" : "No";
-            var version = string.IsNullOrWhiteSpace(project.OldVersion) && string.IsNullOrWhiteSpace(project.NewVersion)
-                ? string.Empty
-                : $"{project.OldVersion ?? "?"} -> {project.NewVersion ?? "?"}";
-            var packages = project.Packages.Count.ToString();
-            var status = string.IsNullOrWhiteSpace(project.ErrorMessage)
-                ? (project.IsPackable ? "[green]Ok[/]" : "[grey]Skipped[/]")
-                : "[red]Fail[/]";
-            var error = TrimForTable(project.ErrorMessage);
+            var status = project.Status switch
+            {
+                DotNetRepositoryReleaseProjectStatus.Ok => "[green]Ok[/]",
+                DotNetRepositoryReleaseProjectStatus.Skipped => "[grey]Skipped[/]",
+                _ => "[red]Fail[/]"
+            };
 
-            table.AddRow(Esc(project.ProjectName), packable, Esc(version), packages, status, Esc(error));
+            table.AddRow(
+                Esc(project.ProjectName),
+                packable,
+                Esc(project.VersionDisplay),
+                project.PackageCount.ToString(),
+                status,
+                Esc(project.ErrorPreview));
         }
 
         AnsiConsole.Write(table);
@@ -245,34 +249,20 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        var totalProjects = result.Projects.Count;
-        var packableProjects = result.Projects.Count(p => p.IsPackable);
-        var failedProjects = result.Projects.Count(p => !string.IsNullOrWhiteSpace(p.ErrorMessage));
-        var totalPackages = result.Projects.Sum(p => p.Packages.Count);
-
-        totals.AddRow("Projects", totalProjects.ToString());
-        totals.AddRow("Packable", packableProjects.ToString());
-        totals.AddRow("Failed", failedProjects.ToString());
-        totals.AddRow("Packages", totalPackages.ToString());
-        if (result.PublishedPackages.Count > 0)
-            totals.AddRow("Published", result.PublishedPackages.Count.ToString());
-        if (result.SkippedDuplicatePackages.Count > 0)
-            totals.AddRow("Skipped duplicates", result.SkippedDuplicatePackages.Count.ToString());
-        if (result.FailedPackages.Count > 0)
-            totals.AddRow("Failed publishes", result.FailedPackages.Count.ToString());
-        if (!string.IsNullOrWhiteSpace(result.ResolvedVersion))
-            totals.AddRow("Resolved version", Esc(result.ResolvedVersion));
+        totals.AddRow("Projects", summary.Totals.ProjectCount.ToString());
+        totals.AddRow("Packable", summary.Totals.PackableCount.ToString());
+        totals.AddRow("Failed", summary.Totals.FailedProjectCount.ToString());
+        totals.AddRow("Packages", summary.Totals.PackageCount.ToString());
+        if (summary.Totals.PublishedPackageCount > 0)
+            totals.AddRow("Published", summary.Totals.PublishedPackageCount.ToString());
+        if (summary.Totals.SkippedDuplicatePackageCount > 0)
+            totals.AddRow("Skipped duplicates", summary.Totals.SkippedDuplicatePackageCount.ToString());
+        if (summary.Totals.FailedPublishCount > 0)
+            totals.AddRow("Failed publishes", summary.Totals.FailedPublishCount.ToString());
+        if (!string.IsNullOrWhiteSpace(summary.Totals.ResolvedVersion))
+            totals.AddRow("Resolved version", Esc(summary.Totals.ResolvedVersion));
 
         AnsiConsole.Write(totals);
-    }
-
-    private static string TrimForTable(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var trimmed = value!.Trim();
-        const int max = 140;
-        if (trimmed.Length <= max) return trimmed;
-        return trimmed.Substring(0, max - 3) + "...";
     }
 
 }
