@@ -21,7 +21,7 @@ public sealed partial class InvokeProjectBuildCommand
     /// <param name="logger">Logger used for informational preflight messages.</param>
     /// <returns>An advisory message when the publish should be blocked; otherwise <see langword="null"/>.</returns>
     private static string? ValidateGitHubPublishPreflight(
-        ProjectBuildConfig config,
+        ProjectBuildConfiguration config,
         DotNetRepositoryReleaseResult plan,
         string gitHubToken,
         ILogger logger)
@@ -32,8 +32,8 @@ public sealed partial class InvokeProjectBuildCommand
         if (!string.Equals(releaseMode, "Single", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var conflictPolicy = ParseGitHubTagConflictPolicy(config.GitHubTagConflictPolicy);
-        if (conflictPolicy != GitHubTagConflictPolicy.Reuse)
+        var conflictPolicy = ProjectBuildSupportService.ParseGitHubTagConflictPolicy(config.GitHubTagConflictPolicy);
+        if (!string.Equals(conflictPolicy, "Reuse", StringComparison.OrdinalIgnoreCase))
             return null;
 
         var plannedAssetNames = plan.Projects
@@ -57,13 +57,13 @@ public sealed partial class InvokeProjectBuildCommand
         var repoName = string.IsNullOrWhiteSpace(config.GitHubRepositoryName)
             ? "repository"
             : config.GitHubRepositoryName!.Trim();
-        var baseVersion = ResolveGitHubBaseVersion(config, plan);
+        var baseVersion = ProjectBuildSupportService.ResolveGitHubBaseVersion(config, plan);
         var tagVersionToken = string.IsNullOrWhiteSpace(baseVersion) ? dateToken : baseVersion!;
 
         var tag = !string.IsNullOrWhiteSpace(config.GitHubTagName)
             ? config.GitHubTagName!
             : (!string.IsNullOrWhiteSpace(config.GitHubTagTemplate)
-                ? ApplyTemplate(
+                ? ProjectBuildSupportService.ApplyTemplate(
                     config.GitHubTagTemplate!,
                     repoName,
                     tagVersionToken,
@@ -77,7 +77,7 @@ public sealed partial class InvokeProjectBuildCommand
                     timestampToken,
                     utcTimestampToken)
                 : $"v{tagVersionToken}");
-        tag = ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
+        tag = ProjectBuildSupportService.ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
 
         var existingRelease = ProbeGitHubReleaseByTag(
             config.GitHubUsername!,
