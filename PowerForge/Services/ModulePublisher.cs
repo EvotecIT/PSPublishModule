@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 
 namespace PowerForge;
 
@@ -14,12 +15,13 @@ public sealed class ModulePublisher
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGetClient _powerShellGet;
     private readonly GitHubReleasePublisher _gitHub;
+    private readonly PowerShellGalleryVersionFeedClient _powerShellGalleryFeed;
 
     /// <summary>
     /// Creates a new publisher using the provided logger and the default out-of-process PowerShell runner.
     /// </summary>
     public ModulePublisher(ILogger logger)
-        : this(logger, new PowerShellRunner())
+        : this(logger, new PowerShellRunner(), client: null)
     {
     }
 
@@ -27,12 +29,18 @@ public sealed class ModulePublisher
     /// Creates a new publisher using the provided logger and runner.
     /// </summary>
     public ModulePublisher(ILogger logger, IPowerShellRunner runner)
+        : this(logger, runner, client: null)
+    {
+    }
+
+    internal ModulePublisher(ILogger logger, IPowerShellRunner runner, HttpClient? client)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
+        _powerShellGalleryFeed = new PowerShellGalleryVersionFeedClient(_logger, client);
     }
 
     /// <summary>
@@ -445,7 +453,7 @@ public sealed class ModulePublisher
         return "Any version";
     }
 
-    private void EnsureVersionIsGreaterThanRepository(
+    internal void EnsureVersionIsGreaterThanRepository(
         PublishTool tool,
         string moduleName,
         string moduleVersion,
@@ -475,6 +483,30 @@ public sealed class ModulePublisher
 
     private SemVer? TryGetLatestRepositoryVersion(PublishTool tool, string moduleName, string repositoryName, RepositoryCredential? credential)
     {
+        SemVer? latest = null;
+
+        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                foreach (var version in _powerShellGalleryFeed.GetVersions(moduleName, includePrerelease: true, timeout: TimeSpan.FromMinutes(2)))
+                {
+                    if (!TryParseSemVer(version.VersionText, out var parsed))
+                        continue;
+
+                    if (latest is null || parsed.CompareTo(latest.Value) > 0)
+                        latest = parsed;
+                }
+
+                if (latest is not null)
+                    return latest;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to query the raw PowerShell Gallery feed for '{moduleName}'. Falling back to {tool}. {ex.Message}");
+            }
+        }
+
         var versions = tool == PublishTool.PowerShellGet
             ? _powerShellGet.Find(
                     new PowerShellGetFindOptions(
@@ -496,7 +528,6 @@ public sealed class ModulePublisher
                 .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
                 .Select(GetRepositoryVersionText);
 
-        SemVer? latest = null;
         foreach (var v in versions)
         {
             if (!TryParseSemVer(v, out var parsed)) continue;

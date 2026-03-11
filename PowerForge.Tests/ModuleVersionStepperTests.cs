@@ -1,100 +1,26 @@
-using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
-using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePublisherRepositoryVersionTests
+public sealed class ModuleVersionStepperTests
 {
     [Fact]
-    public void PSResourceGetClient_Find_PreservesPrereleaseField()
-    {
-        var stdout = string.Join("::", new[]
-        {
-            "PFPSRG::ITEM",
-            Encode("Mailozaurr"),
-            Encode("2.0.1"),
-            Encode("PSGallery"),
-            Encode("Przemyslaw Klys"),
-            Encode("Mailozaurr"),
-            Encode("2b0ea9f1-3ff1-4300-b939-106d5da608fa"),
-            Encode("Preview1")
-        });
-
-        var client = new PSResourceGetClient(
-            new StubPowerShellRunner(new PowerShellRunResult(0, stdout, string.Empty, "pwsh.exe")),
-            new NullLogger());
-
-        var results = client.Find(
-            new PSResourceFindOptions(
-                names: new[] { "Mailozaurr" },
-                prerelease: true,
-                repositories: new[] { "PSGallery" }));
-
-        var item = Assert.Single(results);
-        Assert.Equal("2.0.1", item.Version);
-        Assert.Equal("Preview1", item.PreRelease);
-    }
-
-    [Fact]
-    public void GetRepositoryVersionText_AppendsPrereleaseSuffix()
-    {
-        var resource = new PSResourceInfo(
-            name: "Mailozaurr",
-            version: "2.0.1",
-            repository: "PSGallery",
-            author: null,
-            description: null,
-            guid: null,
-            preRelease: "Preview1");
-
-        var versionText = ModulePublisher.GetRepositoryVersionText(resource);
-
-        Assert.Equal("2.0.1-Preview1", versionText);
-    }
-
-    [Fact]
-    public void GetGitHubTag_Default_IncludesPrereleaseSuffix()
-    {
-        var publish = new PublishConfiguration
-        {
-            Destination = PublishDestination.GitHub,
-            Enabled = true
-        };
-
-        var tag = ModulePublisher.GetGitHubTag(
-            publish,
-            moduleName: "Mailozaurr",
-            resolvedVersion: "2.0.1",
-            preRelease: "Preview2");
-
-        Assert.Equal("v2.0.1-Preview2", tag);
-    }
-
-    [Fact]
-    public void EnsureVersionIsGreaterThanRepository_UsesUnlistedPowerShellGalleryVersions()
+    public void Step_UsesUnlistedPowerShellGalleryVersionWhenStepping()
     {
         using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
-        var publisher = new ModulePublisher(
+        var stepper = new ModuleVersionStepper(
             new NullLogger(),
             new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "2.0.27"), string.Empty, "pwsh.exe")),
             client);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => publisher.EnsureVersionIsGreaterThanRepository(
-            PublishTool.PSResourceGet,
-            moduleName: "PSPublishModule",
-            moduleVersion: "3.0.0",
-            preRelease: null,
-            repositoryName: "PSGallery",
-            credential: null));
+        var result = stepper.Step("3.0.X", moduleName: "PSPublishModule", localPsd1Path: null, repository: "PSGallery");
 
-        Assert.Contains("not greater than repository version '3.0.0'", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("3.0.1", result.Version);
+        Assert.Equal(ModuleVersionSource.Repository, result.CurrentVersionSource);
+        Assert.Equal("3.0.0", result.CurrentVersion);
     }
-
-    private static string Encode(string value)
-        => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
     private static string VisibleRepositoryItem(string name, string version)
         => string.Join("::", new[]
@@ -108,6 +34,9 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode(Guid.Empty.ToString()),
             Encode(string.Empty)
         });
+
+    private static string Encode(string value)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
