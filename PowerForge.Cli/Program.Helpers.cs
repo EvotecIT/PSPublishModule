@@ -163,13 +163,13 @@ internal static partial class Program
         return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
     }
 
-    static (ILogger Logger, BufferingLogger? Buffer) CreateCommandLogger(bool outputJson, CliOptions cli, ILogger textLogger)
+    static (ILogger Logger, BufferedLogger? Buffer) CreateCommandLogger(bool outputJson, CliOptions cli, ILogger textLogger)
     {
         if (!outputJson) return (textLogger, null);
 
         if (cli.Diagnostics)
         {
-            var buffer = new BufferingLogger { IsVerbose = cli.Verbose };
+            var buffer = new BufferedLogger { IsVerbose = cli.Verbose };
             return (buffer, buffer);
         }
 

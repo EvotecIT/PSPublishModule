@@ -37,7 +37,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(ArtefactBuildResult[]))]
 [JsonSerializable(typeof(NormalizationResult[]))]
 [JsonSerializable(typeof(FormatterResult[]))]
-[JsonSerializable(typeof(global::LogEntry[]))]
+[JsonSerializable(typeof(BufferedLogEntry[]))]
 [JsonSerializable(typeof(PSResourceInfo[]))]
 [JsonSerializable(typeof(ConfigurationArtefactSegment))]
 [JsonSerializable(typeof(ConfigurationBuildDocumentationSegment))]

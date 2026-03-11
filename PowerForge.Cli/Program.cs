@@ -441,7 +441,7 @@ internal static partial class Program
                 return 2;
             }
 
-            BufferingLogger? interactiveBuffer = null;
+            BufferedLogger? interactiveBuffer = null;
             ModulePipelinePlan? lastPlan = null;
             bool usedInteractiveView = false;
             try
@@ -449,7 +449,7 @@ internal static partial class Program
                 var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
                 usedInteractiveView = interactive;
                 var (cmdLogger, logBuffer) = interactive
-                    ? (interactiveBuffer = new BufferingLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
+                    ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
                     : CreateCommandLogger(outputJson, cli, logger);
                 var runner = new ModulePipelineRunner(cmdLogger);
                 var plan = runner.Plan(spec);
