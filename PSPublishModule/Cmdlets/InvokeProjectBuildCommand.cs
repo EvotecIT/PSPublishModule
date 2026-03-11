@@ -81,10 +81,11 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         ILogger logger = interactive
             ? new SpectreConsoleLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
+        var support = new ProjectBuildSupportService(logger);
 
         var configFullPath = ResolveConfigPath(ConfigPath);
         var configDir = Path.GetDirectoryName(configFullPath) ?? SessionState.Path.CurrentFileSystemLocation.Path;
-        var config = LoadConfig(configFullPath);
+        var config = support.LoadConfig(configFullPath);
 
         object? planValue = null;
         object? updateValue = null;
@@ -98,11 +99,11 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var publishNugetProvided = bound?.TryGetValue(nameof(PublishNuget), out publishNugetValue) == true;
         var publishGitHubProvided = bound?.TryGetValue(nameof(PublishGitHub), out publishGitHubValue) == true;
 
-        bool planOnly = planProvided ? IsTrue(planValue) : (config.PlanOnly ?? false);
-        bool updateVersions = updateProvided ? IsTrue(updateValue) : (config.UpdateVersions ?? false);
-        bool build = buildProvided ? IsTrue(buildValue) : (config.Build ?? false);
-        bool publishNuget = publishNugetProvided ? IsTrue(publishNugetValue) : (config.PublishNuget ?? false);
-        bool publishGitHub = publishGitHubProvided ? IsTrue(publishGitHubValue) : (config.PublishGitHub ?? false);
+        bool planOnly = planProvided ? ProjectBuildSupportService.IsTrue(planValue) : (config.PlanOnly ?? false);
+        bool updateVersions = updateProvided ? ProjectBuildSupportService.IsTrue(updateValue) : (config.UpdateVersions ?? false);
+        bool build = buildProvided ? ProjectBuildSupportService.IsTrue(buildValue) : (config.Build ?? false);
+        bool publishNuget = publishNugetProvided ? ProjectBuildSupportService.IsTrue(publishNugetValue) : (config.PublishNuget ?? false);
+        bool publishGitHub = publishGitHubProvided ? ProjectBuildSupportService.IsTrue(publishGitHubValue) : (config.PublishGitHub ?? false);
 
         var anyConfigSpecified = config.UpdateVersions is not null || config.Build is not null ||
                                  config.PublishNuget is not null || config.PublishGitHub is not null;
@@ -126,18 +127,18 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var rootPath = ResolveOptionalPath(config.RootPath, configDir) ?? configDir;
-        var stagingPath = ResolveOptionalPath(config.StagingPath, rootPath);
-        var outputPath = ResolveOptionalPath(config.OutputPath, rootPath);
-        var releaseZipOutputPath = ResolveOptionalPath(config.ReleaseZipOutputPath, rootPath);
-        var planOutputPath = ResolveOptionalPath(PlanPath ?? config.PlanOutputPath, configDir);
+        var rootPath = ProjectBuildSupportService.ResolveOptionalPath(config.RootPath, configDir) ?? configDir;
+        var stagingPath = ProjectBuildSupportService.ResolveOptionalPath(config.StagingPath, rootPath);
+        var outputPath = ProjectBuildSupportService.ResolveOptionalPath(config.OutputPath, rootPath);
+        var releaseZipOutputPath = ProjectBuildSupportService.ResolveOptionalPath(config.ReleaseZipOutputPath, rootPath);
+        var planOutputPath = ProjectBuildSupportService.ResolveOptionalPath(PlanPath ?? config.PlanOutputPath, configDir);
 
         if (string.IsNullOrWhiteSpace(outputPath) && !string.IsNullOrWhiteSpace(stagingPath))
             outputPath = Path.Combine(stagingPath, "packages");
         if (string.IsNullOrWhiteSpace(releaseZipOutputPath) && !string.IsNullOrWhiteSpace(stagingPath))
             releaseZipOutputPath = Path.Combine(stagingPath, "releases");
 
-        var nugetCredentialSecret = ResolveSecret(config.NugetCredentialSecret, config.NugetCredentialSecretFilePath, config.NugetCredentialSecretEnvName, configDir);
+        var nugetCredentialSecret = ProjectBuildSupportService.ResolveSecret(config.NugetCredentialSecret, config.NugetCredentialSecretFilePath, config.NugetCredentialSecretEnvName, configDir);
         var nugetUser = string.IsNullOrWhiteSpace(config.NugetCredentialUserName) ? null : config.NugetCredentialUserName!.Trim();
         var nugetCredential = (!string.IsNullOrWhiteSpace(nugetUser) || !string.IsNullOrWhiteSpace(nugetCredentialSecret))
             ? new RepositoryCredential
@@ -147,9 +148,9 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             }
             : null;
 
-        var publishApiKey = ResolveSecret(config.PublishApiKey, config.PublishApiKeyFilePath, config.PublishApiKeyEnvName, configDir);
+        var publishApiKey = ProjectBuildSupportService.ResolveSecret(config.PublishApiKey, config.PublishApiKeyFilePath, config.PublishApiKeyEnvName, configDir);
 
-        var store = ParseCertificateStore(config.CertificateStore);
+        var store = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore);
         var createReleaseZip = config.CreateReleaseZip ?? true;
         var spec = new DotNetRepositoryReleaseSpec
         {
@@ -189,7 +190,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
 
         if (planOnly || !ShouldProcess(rootPath, "Build project repository"))
         {
-            TryWritePlan(plan, planOutputPath, logger);
+            support.TryWritePlan(plan, planOutputPath);
             WriteObject(new ProjectBuildResult
             {
                 Success = preflightErrors.Count == 0,
@@ -199,12 +200,12 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var preflightError = ValidatePreflight(publishNuget, publishGitHub, createReleaseZip, publishApiKey, config, configDir);
+        var preflightError = support.ValidatePreflight(publishNuget, publishGitHub, createReleaseZip, publishApiKey, config, configDir);
         if (!string.IsNullOrWhiteSpace(preflightError))
             preflightErrors.Add(preflightError!);
 
         var gitHubToken = publishGitHub
-            ? ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir)
+            ? ProjectBuildSupportService.ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir)
             : null;
         if (publishGitHub && string.IsNullOrWhiteSpace(preflightError))
         {
@@ -225,10 +226,10 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         if (!string.IsNullOrWhiteSpace(stagingPath))
-            PrepareStaging(stagingPath!, config.CleanStaging ?? false, logger);
-        EnsureDirectory(outputPath);
-        EnsureDirectory(releaseZipOutputPath);
-        TryWritePlan(plan, planOutputPath, logger);
+            support.PrepareStaging(stagingPath!, config.CleanStaging ?? false);
+        ProjectBuildSupportService.EnsureDirectory(outputPath);
+        ProjectBuildSupportService.EnsureDirectory(releaseZipOutputPath);
+        support.TryWritePlan(plan, planOutputPath);
 
         spec.WhatIf = false;
         var release = runner.Execute(spec);
@@ -249,7 +250,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        gitHubToken ??= ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
+        gitHubToken ??= ProjectBuildSupportService.ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
         if (string.IsNullOrWhiteSpace(gitHubToken))
         {
             result.Success = false;
