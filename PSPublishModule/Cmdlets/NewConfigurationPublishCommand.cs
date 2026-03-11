@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Management.Automation;
 using PowerForge;
 
@@ -35,9 +34,6 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {
-    private const string AzureArtifactsApiKeyPlaceholder = "AzureDevOps";
-    private const string PowerShellGalleryRepositoryName = "PSGallery";
-
     /// <summary>Choose between PowerShellGallery and GitHub.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
@@ -179,139 +175,39 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var isAzureArtifacts = ParameterSetName == "AzureArtifacts";
-        var destination = isAzureArtifacts ? PowerForge.PublishDestination.PowerShellGallery : Type;
-        var apiKeyToUse = ParameterSetName switch
+        var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
         {
-            "ApiFromFile" => File.ReadAllText(FilePath).Trim(),
-            // Azure Artifacts accepts any non-empty API key placeholder for NuGet publish operations.
-            "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
-            _ => ApiKey
-        };
-
-        if (destination == PowerForge.PublishDestination.GitHub && string.IsNullOrWhiteSpace(UserName))
-            throw new PSArgumentException("UserName is required for GitHub. Please fix New-ConfigurationPublish and provide UserName");
-
-        var repositorySecret = string.Empty;
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecretFilePath)) &&
-            !string.IsNullOrWhiteSpace(RepositoryCredentialSecretFilePath))
-        {
-            repositorySecret = File.ReadAllText(RepositoryCredentialSecretFilePath!).Trim();
-        }
-        else if (MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecret)) &&
-                 !string.IsNullOrWhiteSpace(RepositoryCredentialSecret))
-        {
-            repositorySecret = RepositoryCredentialSecret!.Trim();
-        }
-
-        var anyRepositoryUriProvided =
-            !string.IsNullOrWhiteSpace(RepositoryUri) ||
-            !string.IsNullOrWhiteSpace(RepositorySourceUri) ||
-            !string.IsNullOrWhiteSpace(RepositoryPublishUri);
-
-        var resolvedAzureArtifactsRepositoryName = string.IsNullOrWhiteSpace(RepositoryName)
-            ? AzureArtifactsFeed?.Trim()
-            : RepositoryName?.Trim();
-
-        if (isAzureArtifacts &&
-            !string.IsNullOrWhiteSpace(resolvedAzureArtifactsRepositoryName) &&
-            string.Equals(resolvedAzureArtifactsRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.");
-        }
-
-        if (isAzureArtifacts && anyRepositoryUriProvided)
-            throw new PSArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.");
-
-        if (!isAzureArtifacts && anyRepositoryUriProvided)
-        {
-            var resolvedRepositoryName = RepositoryName?.Trim();
-            if (string.IsNullOrWhiteSpace(resolvedRepositoryName))
-                throw new PSArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
-            if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
-                throw new PSArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.");
-        }
-
-        var hasRepoCredentialSecret = !string.IsNullOrWhiteSpace(repositorySecret);
-        if (hasRepoCredentialSecret && string.IsNullOrWhiteSpace(RepositoryCredentialUserName))
-            throw new PSArgumentException("RepositoryCredentialUserName is required when RepositoryCredentialSecret/RepositoryCredentialSecretFilePath is provided.");
-
-        PublishRepositoryConfiguration? repoConfig = null;
-        var hasRepoCred = !string.IsNullOrWhiteSpace(RepositoryCredentialUserName) && hasRepoCredentialSecret;
-        var hasRepoOptions = isAzureArtifacts ||
-                             anyRepositoryUriProvided ||
-                             hasRepoCred ||
-                             MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryPriority)) ||
-                             MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryApiVersion)) ||
-                             MyInvocation.BoundParameters.ContainsKey(nameof(EnsureRepositoryRegistered)) ||
-                             UnregisterRepositoryAfterPublish.IsPresent;
-
-        if (isAzureArtifacts)
-        {
-            repoConfig = AzureArtifactsRepositoryEndpoints.CreatePublishRepositoryConfiguration(
-                AzureDevOpsOrganization,
-                AzureDevOpsProject,
-                AzureArtifactsFeed!,
-                repositoryName: RepositoryName,
-                trusted: RepositoryTrusted,
-                priority: RepositoryPriority,
-                apiVersion: RepositoryApiVersion == PowerForge.RepositoryApiVersion.Auto ? PowerForge.RepositoryApiVersion.V3 : RepositoryApiVersion,
-                ensureRegistered: EnsureRepositoryRegistered,
-                unregisterAfterUse: UnregisterRepositoryAfterPublish.IsPresent,
-                credential: hasRepoCred
-                    ? new RepositoryCredential
-                    {
-                        UserName = RepositoryCredentialUserName!.Trim(),
-                        Secret = repositorySecret
-                    }
-                    : null);
-
-            RepositoryName = repoConfig.Name;
-        }
-        else if (hasRepoOptions)
-        {
-            repoConfig = new PublishRepositoryConfiguration
-            {
-                Name = RepositoryName,
-                Uri = RepositoryUri,
-                SourceUri = RepositorySourceUri,
-                PublishUri = RepositoryPublishUri,
-                Trusted = RepositoryTrusted,
-                Priority = RepositoryPriority,
-                ApiVersion = RepositoryApiVersion,
-                EnsureRegistered = EnsureRepositoryRegistered,
-                UnregisterAfterUse = UnregisterRepositoryAfterPublish.IsPresent,
-                Credential = hasRepoCred
-                    ? new RepositoryCredential
-                    {
-                        UserName = RepositoryCredentialUserName,
-                        Secret = repositorySecret
-                    }
-                    : null
-            };
-        }
-
-        var publish = new PublishConfiguration
-        {
-            Destination = destination,
-            Tool = Tool,
-            ApiKey = apiKeyToUse,
-            ID = ID,
-            Enabled = Enabled.IsPresent,
+            ParameterSetName = ParameterSetName,
+            Type = Type,
+            AzureDevOpsOrganization = AzureDevOpsOrganization,
+            AzureDevOpsProject = AzureDevOpsProject,
+            AzureArtifactsFeed = AzureArtifactsFeed,
+            FilePath = FilePath,
+            ApiKey = ApiKey,
             UserName = UserName,
             RepositoryName = RepositoryName,
-            Repository = repoConfig,
-            Force = Force.IsPresent,
+            Tool = Tool,
+            RepositoryUri = RepositoryUri,
+            RepositorySourceUri = RepositorySourceUri,
+            RepositoryPublishUri = RepositoryPublishUri,
+            RepositoryTrusted = RepositoryTrusted,
+            RepositoryPriority = RepositoryPriority,
+            RepositoryApiVersion = RepositoryApiVersion,
+            EnsureRepositoryRegistered = EnsureRepositoryRegistered,
+            UnregisterRepositoryAfterPublish = UnregisterRepositoryAfterPublish.IsPresent,
+            RepositoryCredentialUserName = RepositoryCredentialUserName,
+            RepositoryCredentialSecret = RepositoryCredentialSecret,
+            RepositoryCredentialSecretSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecret)),
+            RepositoryCredentialSecretFilePath = RepositoryCredentialSecretFilePath,
+            RepositoryCredentialSecretFilePathSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(RepositoryCredentialSecretFilePath)),
+            Enabled = Enabled.IsPresent,
             OverwriteTagName = OverwriteTagName,
+            Force = Force.IsPresent,
+            ID = ID,
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
-        };
-
-        var settings = new ConfigurationPublishSegment
-        {
-            Configuration = publish
-        };
+        });
 
         WriteObject(settings);
     }
