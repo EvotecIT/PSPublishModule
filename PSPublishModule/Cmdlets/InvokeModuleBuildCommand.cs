@@ -416,77 +416,50 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             Settings is not null;
 
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
-        var success = false;
         BufferingLogger? interactiveBuffer = null;
-        ModulePipelinePlan? lastPlan = null;
-        bool usedInteractiveView = false;
-        try
+        ModuleBuildWorkflowResult? workflow = null;
+        var success = false;
+
+        if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
+            logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
+
+        if (JsonOnly.IsPresent)
         {
-            if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
-                logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
-            var pipelineSpec = preparation.PipelineSpec;
-
-            if (JsonOnly.IsPresent)
-            {
-                var jsonFullPath = preparation.JsonOutputPath!;
-                new ModuleBuildPreparationService().WritePipelineSpecJson(pipelineSpec, jsonFullPath);
-                logger.Success($"Wrote pipeline JSON: {jsonFullPath}");
-            }
-            else
-            {
-                var planningRunner = new ModulePipelineRunner(logger);
-                var plan = planningRunner.Plan(pipelineSpec);
-                lastPlan = plan;
-
-                var interactive = !NoInteractive.IsPresent &&
-                    SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
-                usedInteractiveView = interactive;
-                var result = interactive
-                    ? SpectrePipelineConsoleUi.RunInteractive(
-                        runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
-                        spec: pipelineSpec,
-                        plan: plan,
-                        configLabel: useLegacy ? "dsl" : "cmdlet")
-                    : planningRunner.Run(pipelineSpec, plan);
-
-                SpectrePipelineConsoleUi.WriteSummary(result);
-            }
-
+            var jsonFullPath = preparation.JsonOutputPath!;
+            new ModuleBuildPreparationService().WritePipelineSpecJson(preparation.PipelineSpec, jsonFullPath);
+            logger.Success($"Wrote pipeline JSON: {jsonFullPath}");
             success = true;
         }
-        catch (Exception ex)
+        else
         {
-            var policyFailure = ex as ModulePipelineDiagnosticsPolicyException;
-            var wrotePolicySummary = false;
-            if (policyFailure is not null)
-            {
-                try
-                {
-                    SpectrePipelineConsoleUi.WriteSummary(policyFailure.Result);
-                    wrotePolicySummary = true;
-                }
-                catch
-                {
-                    wrotePolicySummary = false;
-                }
-            }
+            var interactive = !NoInteractive.IsPresent &&
+                SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
 
-            // When -ExitCode is used, treat the cmdlet as an "app-like" command:
-            // print friendly output and set the host exit code, but avoid emitting a PowerShell error record
-            // (which adds noisy invocation context like script line numbers).
-            // Additionally, avoid emitting a PowerShell error record when using the interactive Spectre.Console view
-            // because it breaks the live UI experience with the default PowerShell formatting.
-            var emitErrorRecord = !exitCodeMode && !usedInteractiveView && policyFailure is null;
-            if (emitErrorRecord)
-                WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
-            if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
-                WriteLogTail(interactiveBuffer, logger);
-            if (usedInteractiveView && lastPlan is not null && !wrotePolicySummary)
+            workflow = new ModuleBuildWorkflowService(
+                logger,
+                runInteractive: (spec, plan, configLabel) => SpectrePipelineConsoleUi.RunInteractive(
+                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
+                    spec: spec,
+                    plan: plan,
+                    configLabel: configLabel),
+                writeSummary: SpectrePipelineConsoleUi.WriteSummary)
+                .Execute(preparation, interactive, useLegacy ? "dsl" : "cmdlet");
+
+            success = workflow.Succeeded;
+            if (!success)
             {
-                try { SpectrePipelineConsoleUi.WriteFailureSummary(lastPlan, ex); }
-                catch { /* best effort */ }
+                var ex = workflow.Error!;
+                var emitErrorRecord = !exitCodeMode && !workflow.UsedInteractiveView && workflow.PolicyFailure is null;
+                if (emitErrorRecord)
+                    WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
+                if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
+                    WriteLogTail(interactiveBuffer, logger);
+                if (workflow.UsedInteractiveView && workflow.Plan is not null && !workflow.WrotePolicySummary)
+                {
+                    try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
+                    catch { /* best effort */ }
+                }
             }
-            success = false;
         }
 #pragma warning restore CA1031
 
