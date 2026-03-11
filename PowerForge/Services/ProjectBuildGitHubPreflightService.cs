@@ -1,30 +1,31 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using PowerForge;
 
-namespace PSPublishModule;
+namespace PowerForge;
 
-public sealed partial class InvokeProjectBuildCommand
+internal sealed class ProjectBuildGitHubPreflightService
 {
-    /// <summary>
-    /// Validates whether GitHub single-release reuse is safe for the current plan.
-    /// </summary>
-    /// <param name="config">Project build configuration.</param>
-    /// <param name="plan">Repository release plan used for the publish preflight.</param>
-    /// <param name="gitHubToken">Resolved GitHub access token.</param>
-    /// <param name="logger">Logger used for informational preflight messages.</param>
-    /// <returns>An advisory message when the publish should be blocked; otherwise <see langword="null"/>.</returns>
-    private static string? ValidateGitHubPublishPreflight(
-        ProjectBuildConfiguration config,
-        DotNetRepositoryReleaseResult plan,
-        string gitHubToken,
-        ILogger logger)
+    private readonly ILogger _logger;
+    private readonly Func<string, string, string, string, GitHubReleaseProbeResult> _probeRelease;
+    private readonly Func<DateTime> _localNow;
+    private readonly Func<DateTime> _utcNow;
+
+    public ProjectBuildGitHubPreflightService(
+        ILogger logger,
+        Func<string, string, string, string, GitHubReleaseProbeResult>? probeRelease = null,
+        Func<DateTime>? localNow = null,
+        Func<DateTime>? utcNow = null)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _probeRelease = probeRelease ?? ProbeGitHubReleaseByTag;
+        _localNow = localNow ?? (() => DateTime.Now);
+        _utcNow = utcNow ?? (() => DateTime.UtcNow);
+    }
+
+    public string? Validate(ProjectBuildConfiguration config, DotNetRepositoryReleaseResult plan, string gitHubToken)
     {
         var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode)
             ? "Single"
@@ -37,8 +38,8 @@ public sealed partial class InvokeProjectBuildCommand
             return null;
 
         var plannedAssetNames = plan.Projects
-            .Where(p => p.IsPackable && !string.IsNullOrWhiteSpace(p.ReleaseZipPath))
-            .Select(p => System.IO.Path.GetFileName(p.ReleaseZipPath))
+            .Where(project => project.IsPackable && !string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+            .Select(project => Path.GetFileName(project.ReleaseZipPath))
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -46,8 +47,8 @@ public sealed partial class InvokeProjectBuildCommand
         if (plannedAssetNames.Length == 0)
             return null;
 
-        var nowLocal = DateTime.Now;
-        var nowUtc = DateTime.UtcNow;
+        var nowLocal = _localNow();
+        var nowUtc = _utcNow();
         var dateToken = nowLocal.ToString("yyyy.MM.dd");
         var utcDateToken = nowUtc.ToString("yyyy.MM.dd");
         var dateTimeToken = nowLocal.ToString("yyyy.MM.dd-HH.mm.ss");
@@ -79,7 +80,7 @@ public sealed partial class InvokeProjectBuildCommand
                 : $"v{tagVersionToken}");
         tag = ProjectBuildSupportService.ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
 
-        var existingRelease = ProbeGitHubReleaseByTag(
+        var existingRelease = _probeRelease(
             config.GitHubUsername!,
             config.GitHubRepositoryName!,
             gitHubToken,
@@ -89,7 +90,7 @@ public sealed partial class InvokeProjectBuildCommand
         if (!existingRelease.Exists)
             return existingRelease.ErrorMessage;
 
-        logger.Info($"GitHub preflight: release tag '{tag}' already exists; validating asset set before publish.");
+        _logger.Info($"GitHub preflight: release tag '{tag}' already exists; validating asset set before publish.");
         return ProjectBuildGitHubPublisher.BuildSingleReleaseReuseAdvisory(tag, plan.Projects, plannedAssetNames, existingRelease.AssetNames);
     }
 
@@ -125,7 +126,7 @@ public sealed partial class InvokeProjectBuildCommand
                 Exists = true,
                 ReleaseUrl = parsed?.HtmlUrl,
                 AssetNames = parsed?.Assets?
-                    .Select(a => a.Name)
+                    .Select(asset => asset.Name)
                     .Where(name => !string.IsNullOrWhiteSpace(name))
                     .Select(name => name!)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -156,16 +157,14 @@ public sealed partial class InvokeProjectBuildCommand
 
     private static string TrimForMessage(string? text)
     {
-        if (text is null)
-            return string.Empty;
         if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
 
-        var trimmed = text.Trim();
+        var trimmed = text!.Trim();
         return trimmed.Length > 4000 ? trimmed.Substring(0, 4000) + "..." : trimmed;
     }
 
-    private sealed class GitHubReleaseProbeResult
+    internal sealed class GitHubReleaseProbeResult
     {
         public bool Exists { get; set; }
         public string? ReleaseUrl { get; set; }

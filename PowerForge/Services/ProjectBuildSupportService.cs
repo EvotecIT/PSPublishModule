@@ -195,8 +195,9 @@ internal sealed class ProjectBuildSupportService
         bool publishGitHub,
         bool createReleaseZip,
         string? publishApiKey,
-        ProjectBuildConfiguration config,
-        string configDir)
+        string? gitHubToken,
+        string? gitHubUsername,
+        string? gitHubRepositoryName)
     {
         if (publishNuget && string.IsNullOrWhiteSpace(publishApiKey))
             return "PublishNuget is enabled but no PublishApiKey was resolved (use PublishApiKey, PublishApiKeyFilePath, or PublishApiKeyEnvName).";
@@ -207,11 +208,10 @@ internal sealed class ProjectBuildSupportService
         if (!publishGitHub)
             return null;
 
-        var token = ResolveSecret(config.GitHubAccessToken, config.GitHubAccessTokenFilePath, config.GitHubAccessTokenEnvName, configDir);
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(gitHubToken))
             return "PublishGitHub is enabled but GitHubAccessToken is missing (use GitHubAccessToken, GitHubAccessTokenFilePath, or GitHubAccessTokenEnvName).";
 
-        if (string.IsNullOrWhiteSpace(config.GitHubUsername) || string.IsNullOrWhiteSpace(config.GitHubRepositoryName))
+        if (string.IsNullOrWhiteSpace(gitHubUsername) || string.IsNullOrWhiteSpace(gitHubRepositoryName))
             return "PublishGitHub is enabled but GitHubUsername/GitHubRepositoryName are not set.";
 
         return null;

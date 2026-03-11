@@ -70,19 +70,20 @@ public sealed class ProjectBuildSupportServiceTests
             publishGitHub: true,
             createReleaseZip: true,
             publishApiKey: null,
-            config: config,
-            configDir: Directory.GetCurrentDirectory());
+            gitHubToken: null,
+            gitHubUsername: config.GitHubUsername,
+            gitHubRepositoryName: config.GitHubRepositoryName);
         Assert.Contains("GitHubAccessToken", missingToken, StringComparison.Ordinal);
 
-        config.GitHubAccessToken = "token";
         config.GitHubRepositoryName = null;
         var missingRepo = service.ValidatePreflight(
             publishNuget: false,
             publishGitHub: true,
             createReleaseZip: true,
             publishApiKey: null,
-            config: config,
-            configDir: Directory.GetCurrentDirectory());
+            gitHubToken: "token",
+            gitHubUsername: config.GitHubUsername,
+            gitHubRepositoryName: config.GitHubRepositoryName);
         Assert.Contains("GitHubUsername/GitHubRepositoryName", missingRepo, StringComparison.Ordinal);
     }
 }
