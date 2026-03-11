@@ -84,46 +84,26 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Emits documentation configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        WriteObject(new ConfigurationDocumentationSegment
+        foreach (var segment in new DocumentationConfigurationFactory().Create(new DocumentationConfigurationRequest
         {
-            Configuration = new DocumentationConfiguration
-            {
-                Path = Path,
-                PathReadme = PathReadme
-            }
-        });
-
-        var emitBuildSegment =
-            Enable.IsPresent ||
-            StartClean.IsPresent ||
-            UpdateWhenNew.IsPresent ||
-            SyncExternalHelpToProjectRoot.IsPresent ||
-            SkipExternalHelp.IsPresent ||
-            SkipAboutTopics.IsPresent ||
-            SkipFallbackExamples.IsPresent ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpCulture)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(AboutTopicsSourcePath));
-
-        if (emitBuildSegment)
+            Enable = Enable.IsPresent,
+            StartClean = StartClean.IsPresent,
+            UpdateWhenNew = UpdateWhenNew.IsPresent,
+            SyncExternalHelpToProjectRoot = SyncExternalHelpToProjectRoot.IsPresent,
+            SkipExternalHelp = SkipExternalHelp.IsPresent,
+            SkipAboutTopics = SkipAboutTopics.IsPresent,
+            SkipFallbackExamples = SkipFallbackExamples.IsPresent,
+            ExternalHelpCulture = ExternalHelpCulture,
+            ExternalHelpCultureSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpCulture)),
+            ExternalHelpFileName = ExternalHelpFileName,
+            ExternalHelpFileNameSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName)),
+            AboutTopicsSourcePath = AboutTopicsSourcePath ?? System.Array.Empty<string>(),
+            AboutTopicsSourcePathSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AboutTopicsSourcePath)),
+            Path = Path,
+            PathReadme = PathReadme
+        }))
         {
-            WriteObject(new ConfigurationBuildDocumentationSegment
-            {
-                Configuration = new BuildDocumentationConfiguration
-                {
-                    Enable = Enable.IsPresent,
-                    StartClean = StartClean.IsPresent,
-                    UpdateWhenNew = UpdateWhenNew.IsPresent,
-                    SyncExternalHelpToProjectRoot = SyncExternalHelpToProjectRoot.IsPresent,
-                    Tool = PowerForge.DocumentationTool.PowerForge,
-                    IncludeAboutTopics = !SkipAboutTopics.IsPresent,
-                    GenerateFallbackExamples = !SkipFallbackExamples.IsPresent,
-                    GenerateExternalHelp = !SkipExternalHelp.IsPresent,
-                    ExternalHelpCulture = ExternalHelpCulture,
-                    ExternalHelpFileName = ExternalHelpFileName,
-                    AboutTopicsSourcePath = AboutTopicsSourcePath ?? System.Array.Empty<string>()
-                }
-            });
+            WriteObject(segment);
         }
     }
 }
