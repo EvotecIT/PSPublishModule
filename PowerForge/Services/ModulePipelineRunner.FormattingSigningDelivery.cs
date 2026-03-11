@@ -106,8 +106,7 @@ public sealed partial class ModulePipelineRunner
     private ModuleSigningResult SignBuiltModuleOutput(
         string moduleName,
         string rootPath,
-        SigningOptionsConfiguration? signing,
-        DeliveryOptionsConfiguration? delivery)
+        SigningOptionsConfiguration? signing)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -119,8 +118,7 @@ public sealed partial class ModulePipelineRunner
                 "Configure a certificate (CertificateThumbprint / CertificatePFXPath / CertificatePFXBase64) or disable signing.");
         }
 
-        var effectiveSigning = ApplyDeliverySigningPreference(signing, delivery);
-        if (effectiveSigning is null)
+        if (signing is null)
         {
             throw new InvalidOperationException(
                 "Signing is enabled but no signing options were provided. " +
@@ -128,9 +126,9 @@ public sealed partial class ModulePipelineRunner
         }
 
         var hasCertificate =
-            !string.IsNullOrWhiteSpace(effectiveSigning.CertificateThumbprint) ||
-            !string.IsNullOrWhiteSpace(effectiveSigning.CertificatePFXPath) ||
-            !string.IsNullOrWhiteSpace(effectiveSigning.CertificatePFXBase64);
+            !string.IsNullOrWhiteSpace(signing.CertificateThumbprint) ||
+            !string.IsNullOrWhiteSpace(signing.CertificatePFXPath) ||
+            !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64);
         if (!hasCertificate)
         {
             throw new InvalidOperationException(
@@ -138,19 +136,19 @@ public sealed partial class ModulePipelineRunner
                 "Configure CertificateThumbprint, CertificatePFXPath, or CertificatePFXBase64 before enabling delivery/module signing.");
         }
 
-        var include = BuildSigningIncludePatterns(effectiveSigning);
-        var exclude = BuildSigningExcludeSubstrings(effectiveSigning, delivery);
+        var include = BuildSigningIncludePatterns(signing);
+        var exclude = BuildSigningExcludeSubstrings(signing);
 
         var args = new List<string>(8)
         {
             rootPath,
             EncodeLines(include),
             EncodeLines(exclude),
-            effectiveSigning.CertificateThumbprint ?? string.Empty,
-            effectiveSigning.CertificatePFXPath ?? string.Empty,
-            effectiveSigning.CertificatePFXBase64 ?? string.Empty,
-            effectiveSigning.CertificatePFXPassword ?? string.Empty,
-            effectiveSigning.OverwriteSigned == true ? "1" : "0"
+            signing.CertificateThumbprint ?? string.Empty,
+            signing.CertificatePFXPath ?? string.Empty,
+            signing.CertificatePFXBase64 ?? string.Empty,
+            signing.CertificatePFXPassword ?? string.Empty,
+            signing.OverwriteSigned == true ? "1" : "0"
         };
 
         var runner = new PowerShellRunner();
@@ -287,11 +285,10 @@ public sealed partial class ModulePipelineRunner
         normalized = normalized.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
             .TrimEnd(Path.DirectorySeparatorChar);
 
-        var trimmedInternals = (internalsPath ?? "Internals").Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+        var trimmedInternals = internalsPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
             .TrimEnd(Path.DirectorySeparatorChar);
 
-        return normalized.Equals(trimmedInternals, StringComparison.OrdinalIgnoreCase) ||
-               normalized.Equals("Internals", StringComparison.OrdinalIgnoreCase);
+        return normalized.Equals(trimmedInternals, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int ParseSignedCount(string stdout)

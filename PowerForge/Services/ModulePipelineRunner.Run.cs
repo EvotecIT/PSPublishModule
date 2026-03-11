@@ -291,8 +291,7 @@ public sealed partial class ModulePipelineRunner
                     signingResult = SignBuiltModuleOutput(
                         moduleName: plan.ModuleName,
                         rootPath: buildResult.StagingPath,
-                        signing: plan.Signing,
-                        delivery: plan.Delivery);
+                        signing: plan.Signing);
                     SafeDone(reporter, signStep);
                 }
                 catch (Exception ex)

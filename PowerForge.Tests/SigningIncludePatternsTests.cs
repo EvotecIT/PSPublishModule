@@ -120,4 +120,28 @@ public sealed class SigningIncludePatternsTests
         Assert.Contains("Modules", effective.ExcludePaths!);
         Assert.Contains("IgnoreMe", effective.ExcludePaths!);
     }
+
+    [Fact]
+    public void ApplyDeliverySigningPreference_PreservesNonDeliveryInternalsExcludesForCustomPath()
+    {
+        var signing = new SigningOptionsConfiguration
+        {
+            IncludeInternals = false,
+            ExcludePaths = new[] { "Internals", "Assets", "Modules" }
+        };
+        var delivery = new DeliveryOptionsConfiguration
+        {
+            Enable = true,
+            Sign = true,
+            InternalsPath = "Assets"
+        };
+
+        var effective = ModulePipelineRunner.ApplyDeliverySigningPreference(signing, delivery);
+
+        Assert.NotNull(effective);
+        Assert.True(effective!.IncludeInternals);
+        Assert.Contains("Internals", effective.ExcludePaths!);
+        Assert.DoesNotContain("Assets", effective.ExcludePaths!);
+        Assert.Contains("Modules", effective.ExcludePaths!);
+    }
 }

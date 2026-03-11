@@ -63,6 +63,65 @@ public sealed class ModulePipelineDeliverySigningTests
         }
     }
 
+    [Fact]
+    public void Run_DeliverySign_WithoutCertificate_ThrowsClearError()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var internalsDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Internals"));
+            File.WriteAllText(Path.Combine(internalsDir.FullName, "helper.ps1"), "function Get-Helper { 'ok' }");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SignMerged = false
+                        }
+                    },
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Delivery = new DeliveryOptionsConfiguration
+                            {
+                                Enable = true,
+                                Sign = true,
+                                InternalsPath = "Internals"
+                            },
+                            Signing = new SigningOptionsConfiguration()
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+            Assert.Contains("no signing certificate was configured", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string root, string moduleName, string version)
     {
         Directory.CreateDirectory(root);
