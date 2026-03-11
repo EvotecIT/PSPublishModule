@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,14 @@ namespace PSPublishModule;
 
 public sealed partial class InvokeProjectBuildCommand
 {
+    private static bool? ResolveRequestedAction(IDictionary? boundParameters, string parameterName)
+    {
+        if (boundParameters?.Contains(parameterName) != true)
+            return null;
+
+        return ProjectBuildSupportService.IsTrue(boundParameters[parameterName]);
+    }
+
     private string ResolveConfigPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
