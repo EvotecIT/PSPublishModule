@@ -197,22 +197,34 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
         var result = new DotNetRepositoryReleaseWorkflowService(logger).Execute(preparation, executeBuild);
         if (interactive)
-            WriteRepositorySummary(new DotNetRepositoryReleaseSummaryService().CreateSummary(result), isPlan: !executeBuild);
+        {
+            var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);
+            var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: !executeBuild);
+            WriteRepositorySummary(display);
+        }
         WriteObject(result);
     }
 
-    private static void WriteRepositorySummary(DotNetRepositoryReleaseSummary summary, bool isPlan)
+    private static void WriteRepositorySummary(DotNetRepositoryReleaseDisplayModel display)
     {
-        if (summary is null) return;
+        if (display is null) return;
 
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
+        static string ColorTag(ConsoleColor? color)
+            => color switch
+            {
+                ConsoleColor.Green => "green",
+                ConsoleColor.Gray => "grey",
+                ConsoleColor.Red => "red",
+                ConsoleColor.Yellow => "yellow",
+                _ => "white"
+            };
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var title = isPlan ? "Plan" : "Summary";
         var icon = unicode ? "✅" : "*";
 
-        AnsiConsole.Write(new Rule($"[green]{icon} {title}[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[green]{icon} {display.Title}[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
@@ -223,22 +235,14 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));
 
-        foreach (var project in summary.Projects)
+        foreach (var project in display.Projects)
         {
-            var packable = project.IsPackable ? "Yes" : "No";
-            var status = project.Status switch
-            {
-                DotNetRepositoryReleaseProjectStatus.Ok => "[green]Ok[/]",
-                DotNetRepositoryReleaseProjectStatus.Skipped => "[grey]Skipped[/]",
-                _ => "[red]Fail[/]"
-            };
-
             table.AddRow(
                 Esc(project.ProjectName),
-                packable,
+                project.Packable,
                 Esc(project.VersionDisplay),
-                project.PackageCount.ToString(),
-                status,
+                project.PackageCount,
+                $"[{ColorTag(project.StatusColor)}]{Esc(project.StatusText)}[/]",
                 Esc(project.ErrorPreview));
         }
 
@@ -249,18 +253,8 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        totals.AddRow("Projects", summary.Totals.ProjectCount.ToString());
-        totals.AddRow("Packable", summary.Totals.PackableCount.ToString());
-        totals.AddRow("Failed", summary.Totals.FailedProjectCount.ToString());
-        totals.AddRow("Packages", summary.Totals.PackageCount.ToString());
-        if (summary.Totals.PublishedPackageCount > 0)
-            totals.AddRow("Published", summary.Totals.PublishedPackageCount.ToString());
-        if (summary.Totals.SkippedDuplicatePackageCount > 0)
-            totals.AddRow("Skipped duplicates", summary.Totals.SkippedDuplicatePackageCount.ToString());
-        if (summary.Totals.FailedPublishCount > 0)
-            totals.AddRow("Failed publishes", summary.Totals.FailedPublishCount.ToString());
-        if (!string.IsNullOrWhiteSpace(summary.Totals.ResolvedVersion))
-            totals.AddRow("Resolved version", Esc(summary.Totals.ResolvedVersion));
+        foreach (var row in display.Totals)
+            totals.AddRow(row.Label, Esc(row.Value));
 
         AnsiConsole.Write(totals);
     }
