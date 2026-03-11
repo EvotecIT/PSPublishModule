@@ -1,8 +1,7 @@
 using System;
 using System.Collections;
-using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -73,16 +72,14 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         var exportPath = string.IsNullOrWhiteSpace(ExportPath)
             ? null
             : System.IO.Path.GetFullPath(ExportPath!.Trim().Trim('"'));
+        var display = new PowerShellCompatibilityDisplayService();
 
         if (!Internal.IsPresent)
         {
-            HostWriteLineSafe("🔎 Analyzing PowerShell compatibility...", ConsoleColor.Cyan);
-            HostWriteLineSafe($"📁 Path: {inputPath}", ConsoleColor.White);
-
             var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
             var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
             var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
-            HostWriteLineSafe($"💻 Current PowerShell: {psEdition} {psVersion}", ConsoleColor.White);
+            WriteDisplayLines(display.CreateHeader(inputPath, psEdition, psVersion));
         }
         else
         {
@@ -94,25 +91,26 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
             isVerbose: MyInvocation.BoundParameters.ContainsKey("Verbose"),
             warningsAsVerbose: Internal.IsPresent);
 
-        var analyzer = new PowerShellCompatibilityAnalyzer(logger);
-        var spec = new PowerShellCompatibilitySpec(inputPath, Recurse.IsPresent, ExcludeDirectories);
-
-        var report = analyzer.Analyze(
-            spec,
+        var workflow = new PowerShellCompatibilityWorkflowService(new PowerShellCompatibilityAnalyzer(logger));
+        var result = workflow.Execute(
+            new PowerShellCompatibilityWorkflowRequest
+            {
+                InputPath = inputPath,
+                ExportPath = exportPath,
+                Recurse = Recurse.IsPresent,
+                ExcludeDirectories = ExcludeDirectories,
+                Internal = Internal.IsPresent
+            },
             progress: !Internal.IsPresent
                 ? p =>
                 {
-                    var percent = p.Total == 0
-                        ? 0
-                        : (int)Math.Round((p.Current / (double)p.Total) * 100.0, 0);
-
                     WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", $"Processing {System.IO.Path.GetFileName(p.FilePath)}")
                     {
-                        PercentComplete = percent
+                        PercentComplete = PowerShellCompatibilityDisplayService.CalculatePercent(p)
                     });
                 }
-                : null,
-            exportPath: exportPath);
+                : null);
+        var report = result.Report;
 
         if (!Internal.IsPresent && report.Files.Length > 0)
             WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", "Completed") { RecordType = ProgressRecordType.Completed });
@@ -127,128 +125,28 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         if (!Internal.IsPresent)
             HostWriteLineSafe($"📄 Found {report.Files.Length} PowerShell files to analyze", ConsoleColor.Yellow);
         else
-            WriteVerbose($"Found {report.Files.Length} PowerShell files to analyze");
+            foreach (var message in display.CreateInternalSummaryMessages(report, ShowDetails.IsPresent, exportPath))
+                WriteVerbose(message);
 
-        WriteSummaryToHost(report.Summary);
-        WriteDetailsToHost(report.Files);
-        WriteExportToHostIfRequested(exportPath);
+        if (!Internal.IsPresent)
+        {
+            WriteDisplayLines(display.CreateSummary(report.Summary));
+            if (ShowDetails.IsPresent)
+                WriteDisplayLines(display.CreateDetails(report.Files));
+            if (!string.IsNullOrWhiteSpace(exportPath))
+            {
+                var exportStatus = display.CreateExportStatus(exportPath!, File.Exists(exportPath));
+                HostWriteLineSafe(exportStatus.Text, exportStatus.Color);
+            }
+        }
 
         WriteObject(report, enumerateCollection: false);
     }
 
-    private void WriteSummaryToHost(PowerShellCompatibilitySummary summary)
+    private void WriteDisplayLines(IReadOnlyList<PowerShellCompatibilityDisplayLine> lines)
     {
-        if (Internal.IsPresent)
-        {
-            WriteVerbose($"PowerShell Compatibility: {summary.Status} - {summary.Message}");
-            if (summary.Recommendations.Length > 0)
-            {
-                var joined = string.Join("; ", summary.Recommendations.Where(s => !string.IsNullOrWhiteSpace(s)));
-                if (!string.IsNullOrWhiteSpace(joined))
-                    WriteVerbose($"Recommendations: {joined}");
-            }
-            return;
-        }
-
-        HostWriteLineSafe(string.Empty);
-
-        var color = summary.Status switch
-        {
-            CheckStatus.Pass => ConsoleColor.Green,
-            CheckStatus.Warning => ConsoleColor.Yellow,
-            _ => ConsoleColor.Red
-        };
-
-        var statusEmoji = summary.Status switch
-        {
-            CheckStatus.Pass => "✅",
-            CheckStatus.Warning => "⚠️",
-            _ => "❌"
-        };
-
-        HostWriteLineSafe($"{statusEmoji} Status: {summary.Status}", color);
-        HostWriteLineSafe(summary.Message, ConsoleColor.White);
-        HostWriteLineSafe($"PS 5.1 compatible: {summary.PowerShell51Compatible}/{summary.TotalFiles}", ConsoleColor.White);
-        HostWriteLineSafe($"PS 7 compatible:   {summary.PowerShell7Compatible}/{summary.TotalFiles}", ConsoleColor.White);
-        HostWriteLineSafe($"Cross-compatible: {summary.CrossCompatible}/{summary.TotalFiles} ({summary.CrossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)", ConsoleColor.White);
-
-        if (summary.Recommendations.Length > 0)
-        {
-            HostWriteLineSafe(string.Empty);
-            HostWriteLineSafe("Recommendations:", ConsoleColor.Cyan);
-            foreach (var r in summary.Recommendations.Where(s => !string.IsNullOrWhiteSpace(s)))
-                HostWriteLineSafe($"- {r}", ConsoleColor.White);
-        }
-    }
-
-    private void WriteDetailsToHost(PowerShellCompatibilityFileResult[] results)
-    {
-        if (!ShowDetails.IsPresent)
-            return;
-
-        if (results.Length == 0)
-            return;
-
-        if (Internal.IsPresent)
-        {
-            foreach (var r in results)
-            {
-                if (r.Issues.Length > 0)
-                {
-                    var issueTypes = string.Join(
-                        ", ",
-                        r.Issues.Select(i => i.Type.ToString())
-                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                            .Distinct(StringComparer.OrdinalIgnoreCase));
-
-                    WriteVerbose($"Issues in {r.RelativePath}: {issueTypes}");
-                }
-            }
-            return;
-        }
-
-        HostWriteLineSafe(string.Empty);
-        HostWriteLineSafe("Detailed Analysis:", ConsoleColor.Cyan);
-
-        foreach (var r in results)
-        {
-            HostWriteLineSafe(string.Empty);
-            HostWriteLineSafe($"{r.RelativePath}", ConsoleColor.White);
-
-            HostWriteLineSafe($"  PS 5.1: {(r.PowerShell51Compatible ? "Compatible" : "Not compatible")}", r.PowerShell51Compatible ? ConsoleColor.Green : ConsoleColor.Red);
-            HostWriteLineSafe($"  PS 7:   {(r.PowerShell7Compatible ? "Compatible" : "Not compatible")}", r.PowerShell7Compatible ? ConsoleColor.Green : ConsoleColor.Red);
-
-            if (r.Issues.Length == 0)
-                continue;
-
-            HostWriteLineSafe("  Issues:", ConsoleColor.Yellow);
-            foreach (var issue in r.Issues)
-            {
-                HostWriteLineSafe($"    - {issue.Type}: {issue.Description}", ConsoleColor.Red);
-                if (!string.IsNullOrWhiteSpace(issue.Recommendation))
-                    HostWriteLineSafe($"      - {issue.Recommendation}", ConsoleColor.Cyan);
-            }
-        }
-    }
-
-    private void WriteExportToHostIfRequested(string? exportPath)
-    {
-        if (string.IsNullOrWhiteSpace(exportPath))
-            return;
-
-        if (!File.Exists(exportPath))
-        {
-            if (Internal.IsPresent)
-                WriteVerbose($"Failed to export detailed report to: {exportPath}");
-            else
-                HostWriteLineSafe($"❌ Failed to export detailed report to: {exportPath}", ConsoleColor.Red);
-            return;
-        }
-
-        if (Internal.IsPresent)
-            WriteVerbose($"Detailed report exported to: {exportPath}");
-        else
-            HostWriteLineSafe($"✅ Detailed report exported to: {exportPath}", ConsoleColor.Green);
+        foreach (var line in lines)
+            HostWriteLineSafe(line.Text, line.Color);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
