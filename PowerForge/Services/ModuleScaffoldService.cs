@@ -35,7 +35,10 @@ public sealed class ModuleScaffoldService
             return new ModuleScaffoldResult(projectRoot, created: false, moduleGuid: null);
         }
 
-        var templateRoot = ResolveTemplateRoot(spec.TemplateRootPath);
+        IReadOnlyDictionary<string, string>? embeddedTemplates = null;
+        var useEmbeddedTemplates = string.IsNullOrWhiteSpace(spec.TemplateRootPath) &&
+                                   ModuleScaffoldTemplateStore.TryLoadDefaults(out embeddedTemplates);
+        var templateRoot = useEmbeddedTemplates ? null : ResolveTemplateRoot(spec.TemplateRootPath);
         var basePath = Directory.GetParent(projectRoot)?.FullName;
         if (!string.IsNullOrWhiteSpace(basePath) && !Directory.Exists(basePath))
             throw new DirectoryNotFoundException($"Base path does not exist: {basePath}");
@@ -49,13 +52,13 @@ public sealed class ModuleScaffoldService
         var guid = Guid.NewGuid().ToString();
         var filesToCopy = new (string Source, string Dest, bool Patch)[]
         {
-            (Path.Combine(templateRoot, "Example-Gitignore.txt"), Path.Combine(projectRoot, ".gitignore"), false),
-            (Path.Combine(templateRoot, "Example-CHANGELOG.MD"), Path.Combine(projectRoot, "CHANGELOG.MD"), false),
-            (Path.Combine(templateRoot, "Example-README.MD"), Path.Combine(projectRoot, "README.MD"), false),
-            (Path.Combine(templateRoot, "Example-LicenseMIT.txt"), Path.Combine(projectRoot, "LICENSE"), false),
-            (Path.Combine(templateRoot, "Example-ModuleBuilder.txt"), Path.Combine(projectRoot, "Build", "Build-Module.ps1"), true),
-            (Path.Combine(templateRoot, "Example-ModulePSM1.txt"), Path.Combine(projectRoot, $"{moduleName}.psm1"), false),
-            (Path.Combine(templateRoot, "Example-ModulePSD1.txt"), Path.Combine(projectRoot, $"{moduleName}.psd1"), true),
+            (useEmbeddedTemplates ? "Example-Gitignore.txt" : Path.Combine(templateRoot!, "Example-Gitignore.txt"), Path.Combine(projectRoot, ".gitignore"), false),
+            (useEmbeddedTemplates ? "Example-CHANGELOG.MD" : Path.Combine(templateRoot!, "Example-CHANGELOG.MD"), Path.Combine(projectRoot, "CHANGELOG.MD"), false),
+            (useEmbeddedTemplates ? "Example-README.MD" : Path.Combine(templateRoot!, "Example-README.MD"), Path.Combine(projectRoot, "README.MD"), false),
+            (useEmbeddedTemplates ? "Example-LicenseMIT.txt" : Path.Combine(templateRoot!, "Example-LicenseMIT.txt"), Path.Combine(projectRoot, "LICENSE"), false),
+            (useEmbeddedTemplates ? "Example-ModuleBuilder.txt" : Path.Combine(templateRoot!, "Example-ModuleBuilder.txt"), Path.Combine(projectRoot, "Build", "Build-Module.ps1"), true),
+            (useEmbeddedTemplates ? "Example-ModulePSM1.txt" : Path.Combine(templateRoot!, "Example-ModulePSM1.txt"), Path.Combine(projectRoot, $"{moduleName}.psm1"), false),
+            (useEmbeddedTemplates ? "Example-ModulePSD1.txt" : Path.Combine(templateRoot!, "Example-ModulePSD1.txt"), Path.Combine(projectRoot, $"{moduleName}.psd1"), true),
         };
 
         foreach (var f in filesToCopy)
@@ -63,7 +66,14 @@ public sealed class ModuleScaffoldService
             if (File.Exists(f.Dest)) continue;
 
             _logger.Info($"   📄 Copying '{Path.GetFileName(f.Dest)}' ({f.Source})");
-            File.Copy(f.Source, f.Dest, overwrite: false);
+            if (useEmbeddedTemplates)
+            {
+                File.WriteAllText(f.Dest, embeddedTemplates![f.Source], new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            }
+            else
+            {
+                File.Copy(f.Source, f.Dest, overwrite: false);
+            }
 
             if (f.Patch)
                 PatchInitialModuleTemplate(f.Dest, moduleName, guid);
@@ -146,7 +156,7 @@ public sealed class ModuleScaffoldService
             }
         }
 
-        throw new DirectoryNotFoundException("Module Data directory not found (expected template files under 'Data' or 'Module\\Data').");
+        throw new DirectoryNotFoundException("Module scaffold templates not found (expected embedded defaults or template files under 'Data' or 'Module\\Data').");
     }
 
     private static bool IsTemplateRoot(string path)

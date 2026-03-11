@@ -9,7 +9,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void DoesVersionMatchRequiredModule_ExactRequiredVersion()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "PSSharedGoods",
             requiredVersion: "0.0.312");
 
@@ -20,7 +20,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void DoesVersionMatchRequiredModule_MinimumVersion()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "PSSharedGoods",
             moduleVersion: "0.0.312");
 
@@ -32,7 +32,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void DoesVersionMatchRequiredModule_RangeVersion()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "PSSharedGoods",
             moduleVersion: "0.0.300",
             maximumVersion: "0.0.350");
@@ -46,7 +46,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void HasMatchingRequiredModuleVersion_ReturnsTrueWhenAnyVersionMatches()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "PSSharedGoods",
             moduleVersion: "0.0.312");
 
@@ -60,7 +60,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void ShouldSkipRepositoryDependencyValidation_WhenRequiredModuleIsExternal()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "Microsoft.PowerShell.Utility");
 
         var external = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -77,7 +77,7 @@ public sealed class ModulePublisherRequiredModulesTests
     [Fact]
     public void ShouldSkipRepositoryDependencyValidation_WhenRequiredModuleIsNotExternal()
     {
-        var required = new ManifestEditor.RequiredModule(
+        var required = new RequiredModuleReference(
             moduleName: "PSSharedGoods");
 
         var external = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

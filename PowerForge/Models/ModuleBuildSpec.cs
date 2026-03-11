@@ -79,6 +79,16 @@ public sealed class ModuleBuildSpec
     public string[] BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
+    /// </summary>
+    public string[] ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
+    /// </summary>
+    public bool DoNotCopyLibrariesRecursively { get; set; }
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }

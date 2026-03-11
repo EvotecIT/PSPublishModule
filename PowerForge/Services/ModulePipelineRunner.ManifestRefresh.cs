@@ -9,7 +9,7 @@ public sealed partial class ModulePipelineRunner
     private void RefreshManifestFromPlan(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        ManifestEditor.RequiredModule[] manifestRequiredModules,
+        RequiredModuleReference[] manifestRequiredModules,
         string[] manifestExternalModuleDependencies)
     {
         RefreshManifestPathFromPlan(
@@ -26,14 +26,14 @@ public sealed partial class ModulePipelineRunner
         RefreshManifestPathFromPlan(
             plan,
             manifestPath,
-            plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>(),
+            plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
             plan.ExternalModuleDependencies ?? Array.Empty<string>());
     }
 
     private void RefreshManifestPathFromPlan(
         ModulePipelinePlan plan,
         string manifestPath,
-        ManifestEditor.RequiredModule[] manifestRequiredModules,
+        RequiredModuleReference[] manifestRequiredModules,
         string[] manifestExternalModuleDependencies)
     {
         var manifest = plan.Manifest;
@@ -105,8 +105,12 @@ public sealed partial class ModulePipelineRunner
         ManifestEditor.TryRemoveTopLevelKey(manifestPath, "Prerelease");
 
         // Keep dependency fields deterministic and avoid stale values from source PSD1.
-        ManifestEditor.TrySetRequiredModules(manifestPath, manifestRequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>());
-        ManifestEditor.TrySetPsDataStringArray(manifestPath, "ExternalModuleDependencies", NormalizeStringArray(manifestExternalModuleDependencies));
+        var normalizedExternalModules = NormalizeExternalModuleDependencies(manifestExternalModuleDependencies);
+        var normalizedRequiredModules = NormalizeRequiredModulesForManifest(
+            manifestRequiredModules,
+            normalizedExternalModules);
+        ManifestEditor.TrySetRequiredModules(manifestPath, normalizedRequiredModules);
+        ManifestEditor.TrySetPsDataStringArray(manifestPath, "ExternalModuleDependencies", normalizedExternalModules);
 
         var scriptsToProcess = Array.Empty<string>();
         if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "ScriptsToProcess", out var existingScripts) &&
@@ -164,6 +168,25 @@ public sealed partial class ModulePipelineRunner
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string[] NormalizeExternalModuleDependencies(IEnumerable<string>? values)
+    {
+        return NormalizeStringArray(values)
+            .Where(name => !ShouldSkipManifestDependencyModule(name))
+            .ToArray();
+    }
+
+    private static RequiredModuleReference[] NormalizeRequiredModulesForManifest(
+        IEnumerable<RequiredModuleReference>? modules,
+        IReadOnlyCollection<string> externalModuleDependencies)
+    {
+        return (modules ?? Array.Empty<RequiredModuleReference>())
+            .Where(module =>
+                module is not null &&
+                !string.IsNullOrWhiteSpace(module.ModuleName) &&
+                !ShouldSkipManifestDependencyModule(module.ModuleName))
             .ToArray();
     }
 }

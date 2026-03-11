@@ -112,6 +112,8 @@ public sealed class ModuleBuildPipeline
             ExportAssemblies = spec.ExportAssemblies ?? Array.Empty<string>(),
             DisableBinaryCmdletScan = spec.DisableBinaryCmdletScan,
             BinaryConflictSearchRoots = spec.BinaryConflictSearchRoots ?? Array.Empty<string>(),
+            ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
+            DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
         });
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");

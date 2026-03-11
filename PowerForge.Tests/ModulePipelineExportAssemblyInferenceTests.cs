@@ -91,4 +91,46 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void Plan_CarriesLegacyLibraryCopySettings_IntoBuildSpec()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            ExcludeLibraryFilter = new[] { "Microsoft.CodeAnalysis*" },
+                            NETDoNotCopyLibrariesRecursively = true
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(new[] { "Microsoft.CodeAnalysis*" }, plan.BuildSpec.ExcludeLibraryFilter);
+            Assert.True(plan.BuildSpec.DoNotCopyLibrariesRecursively);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

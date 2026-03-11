@@ -122,6 +122,10 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
 
         try
         {
+            var isVerbose = MyInvocation?.BoundParameters.ContainsKey("Verbose") == true;
+            var logger = new CmdletLogger(this, isVerbose);
+            var publisher = new GitHubReleasePublisher(logger);
+
             foreach (var projectPath in projectPaths)
             {
                 var result = NewResult();
@@ -204,8 +208,6 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
             if (entries.Count == 0)
                 return;
 
-            var sb = ScriptBlock.Create(PowerForgeScripts.Load("Scripts/Cmdlets/Invoke-SendGitHubRelease.ps1"));
-
             foreach (var group in entries.GroupBy(e => e.TagName, StringComparer.OrdinalIgnoreCase))
             {
                 var tag = group.Key;
@@ -224,40 +226,30 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
                 }
                 else
                 {
-                    // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
-                    // in the binary module context, so we must invoke directly.
-                    var output = sb.Invoke(
-                        GitHubUsername,
-                        GitHubRepositoryName,
-                        GitHubAccessToken,
-                        tag,
-                        relName,
-                        assets,
-                        isPreRelease,
-                        generateReleaseNotes,
-                        true);
-                    var status = output.Count > 0 ? output[0]?.BaseObject : null;
+                    try
+                    {
+                        var publishResult = publisher.PublishRelease(new GitHubReleasePublishRequest
+                        {
+                            Owner = GitHubUsername,
+                            Repository = GitHubRepositoryName,
+                            Token = GitHubAccessToken,
+                            TagName = tag,
+                            ReleaseName = relName,
+                            GenerateReleaseNotes = generateReleaseNotes,
+                            IsPreRelease = isPreRelease,
+                            ReuseExistingReleaseOnConflict = true,
+                            AssetFilePaths = assets
+                        });
 
-                    succeeded = false;
-                    releaseUrl = null;
-                    errorMessage = null;
-
-                    if (status is SendGitHubReleaseCommand.GitHubReleaseResult gr)
-                    {
-                        succeeded = gr.Succeeded;
-                        releaseUrl = gr.ReleaseUrl;
-                        errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                        succeeded = publishResult.Succeeded;
+                        releaseUrl = publishResult.HtmlUrl;
+                        errorMessage = null;
                     }
-                    else if (status is PSObject pso)
+                    catch (Exception ex)
                     {
-                        var ok = pso.Properties["Succeeded"]?.Value as bool?;
-                        succeeded = ok ?? false;
-                        releaseUrl = pso.Properties["ReleaseUrl"]?.Value?.ToString();
-                        errorMessage = pso.Properties["ErrorMessage"]?.Value?.ToString();
-                    }
-                    else
-                    {
-                        errorMessage = "Unexpected result from Send-GitHubRelease.";
+                        succeeded = false;
+                        releaseUrl = null;
+                        errorMessage = ex.Message;
                     }
                 }
 

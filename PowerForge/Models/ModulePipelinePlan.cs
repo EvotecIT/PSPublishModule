@@ -50,7 +50,7 @@ public sealed class ModulePipelinePlan
     /// <summary>
     /// Required module entries requested by configuration (used for manifest patching).
     /// </summary>
-    public ManifestEditor.RequiredModule[] RequiredModules { get; }
+    public RequiredModuleReference[] RequiredModules { get; }
 
     /// <summary>
     /// External module dependencies (PSData.ExternalModuleDependencies).
@@ -60,7 +60,7 @@ public sealed class ModulePipelinePlan
     /// <summary>
     /// Required modules that should be packaged into artefacts when enabled (excludes ExternalModule dependencies).
     /// </summary>
-    public ManifestEditor.RequiredModule[] RequiredModulesForPackaging { get; }
+    public RequiredModuleReference[] RequiredModulesForPackaging { get; }
 
     /// <summary>
     /// Optional information configuration (include/exclude patterns) used for artefact packaging.
@@ -249,9 +249,9 @@ public sealed class ModulePipelinePlan
         ManifestConfiguration? manifest,
         ModuleBuildSpec buildSpec,
         string[] compatiblePSEditions,
-        ManifestEditor.RequiredModule[] requiredModules,
+        RequiredModuleReference[] requiredModules,
         string[] externalModuleDependencies,
-        ManifestEditor.RequiredModule[] requiredModulesForPackaging,
+        RequiredModuleReference[] requiredModulesForPackaging,
         InformationConfiguration? information,
         DocumentationConfiguration? documentation,
         DeliveryOptionsConfiguration? delivery,

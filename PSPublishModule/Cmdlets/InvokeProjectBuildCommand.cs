@@ -266,7 +266,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var sb = ScriptBlock.Create(PowerForgeScripts.Load("Scripts/Cmdlets/Invoke-SendGitHubRelease.ps1"));
+        var resolvedGitHubToken = gitHubToken!;
 
         var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode)
             ? "Single"
@@ -372,39 +372,33 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                         timestampToken,
                         utcTimestampToken);
 
-                var output = sb.Invoke(
-                    config.GitHubUsername,
-                    config.GitHubRepositoryName,
-                    gitHubToken,
-                    tag,
-                    releaseName,
-                    new[] { project.ReleaseZipPath },
-                    config.GitHubIsPreRelease,
-                    config.GitHubGenerateReleaseNotes,
-                    reuseExistingReleaseOnConflict);
-                var status = output.Count > 0 ? output[0]?.BaseObject : null;
+                bool ok;
+                string? releaseUrl;
+                string? errorMessage;
 
-                bool ok = false;
-                string? releaseUrl = null;
-                string? errorMessage = null;
-
-                if (status is SendGitHubReleaseCommand.GitHubReleaseResult gr)
+                try
                 {
+                    var gr = ExecuteGitHubReleasePublish(
+                        logger,
+                        config.GitHubUsername!,
+                        config.GitHubRepositoryName!,
+                        resolvedGitHubToken,
+                        tag,
+                        releaseName,
+                        new[] { project.ReleaseZipPath! },
+                        config.GitHubIsPreRelease,
+                        config.GitHubGenerateReleaseNotes,
+                        reuseExistingReleaseOnConflict);
                     ok = gr.Succeeded;
-                    releaseUrl = gr.ReleaseUrl;
-                    errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                    releaseUrl = gr.HtmlUrl;
+                    errorMessage = null;
                     WriteGitHubPublishNotes(logger, tag, gr);
                 }
-                else if (status is PSObject pso)
+                catch (Exception ex)
                 {
-                    var succeeded = pso.Properties["Succeeded"]?.Value as bool?;
-                    ok = succeeded ?? false;
-                    releaseUrl = pso.Properties["ReleaseUrl"]?.Value?.ToString();
-                    errorMessage = pso.Properties["ErrorMessage"]?.Value?.ToString();
-                }
-                else
-                {
-                    errorMessage = "Unexpected result from Send-GitHubRelease.";
+                    ok = false;
+                    releaseUrl = null;
+                    errorMessage = ex.Message;
                 }
 
                 r.Success = ok;
@@ -482,39 +476,33 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                     timestampToken,
                     utcTimestampToken);
 
-            var output = sb.Invoke(
-                config.GitHubUsername,
-                config.GitHubRepositoryName,
-                gitHubToken,
-                tag,
-                releaseName,
-                distinctAssets,
-                config.GitHubIsPreRelease,
-                config.GitHubGenerateReleaseNotes,
-                reuseExistingReleaseOnConflict);
-            var status = output.Count > 0 ? output[0]?.BaseObject : null;
+            bool ok;
+            string? releaseUrl;
+            string? errorMessage;
 
-            bool ok = false;
-            string? releaseUrl = null;
-            string? errorMessage = null;
-
-            if (status is SendGitHubReleaseCommand.GitHubReleaseResult gr)
+            try
             {
+                var gr = ExecuteGitHubReleasePublish(
+                    logger,
+                    config.GitHubUsername!,
+                    config.GitHubRepositoryName!,
+                    resolvedGitHubToken,
+                    tag,
+                    releaseName,
+                    distinctAssets,
+                    config.GitHubIsPreRelease,
+                    config.GitHubGenerateReleaseNotes,
+                    reuseExistingReleaseOnConflict);
                 ok = gr.Succeeded;
-                releaseUrl = gr.ReleaseUrl;
-                errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                releaseUrl = gr.HtmlUrl;
+                errorMessage = null;
                 WriteGitHubPublishNotes(logger, tag, gr);
             }
-            else if (status is PSObject pso)
+            catch (Exception ex)
             {
-                var succeeded = pso.Properties["Succeeded"]?.Value as bool?;
-                ok = succeeded ?? false;
-                releaseUrl = pso.Properties["ReleaseUrl"]?.Value?.ToString();
-                errorMessage = pso.Properties["ErrorMessage"]?.Value?.ToString();
-            }
-            else
-            {
-                errorMessage = "Unexpected result from Send-GitHubRelease.";
+                ok = false;
+                releaseUrl = null;
+                errorMessage = ex.Message;
             }
 
             foreach (var project in release.Projects.Where(p => p.IsPackable))

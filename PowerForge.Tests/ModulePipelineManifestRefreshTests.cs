@@ -77,7 +77,7 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.False(ManifestEditor.TryGetTopLevelStringArray(manifestPath, "FormatsToProcess", out _));
             Assert.False(ManifestEditor.TryGetPsDataStringArray(manifestPath, "Tags", out _));
 
-            Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out var requiredModules));
+            Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
             var required = Assert.Single(requiredModules!);
             Assert.Equal("LegacyOnly", required.ModuleName);
             Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
@@ -196,6 +196,50 @@ public sealed class ModulePipelineManifestRefreshTests
         }
     }
 
+    [Fact]
+    public void Run_RemovesInboxAndDuplicatedExternalDependenciesFromManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteModuleWithStaleDependencyMetadata(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+            var manifestPath = result.BuildResult.ManifestPath;
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
+            Assert.NotNull(requiredModules);
+            Assert.Equal(2, requiredModules!.Length);
+            Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
+            Assert.Equal(new[] { "Az.Accounts" }, externalModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteModuleWithStaleManifest(string rootPath, string moduleName, string version)
     {
         File.WriteAllText(Path.Combine(rootPath, $"{moduleName}.psm1"), "function Test-Example { 'ok' }");
@@ -225,6 +269,28 @@ public sealed class ModulePipelineManifestRefreshTests
             "            LicenseUri = 'https://old.example/license'" + Environment.NewLine +
             "            RequireLicenseAcceptance = $true" + Environment.NewLine +
             "            ExternalModuleDependencies = @('Old.External')" + Environment.NewLine +
+            "        }" + Environment.NewLine +
+            "    }" + Environment.NewLine +
+            "}" + Environment.NewLine);
+    }
+
+    private static void WriteModuleWithStaleDependencyMetadata(string rootPath, string moduleName, string version)
+    {
+        File.WriteAllText(Path.Combine(rootPath, $"{moduleName}.psm1"), "function Test-Example { 'ok' }");
+        File.WriteAllText(Path.Combine(rootPath, $"{moduleName}.psd1"),
+            "@{" + Environment.NewLine +
+            $"    RootModule = '{moduleName}.psm1'" + Environment.NewLine +
+            $"    ModuleVersion = '{version}'" + Environment.NewLine +
+            "    GUID = '11111111-1111-1111-1111-111111111111'" + Environment.NewLine +
+            "    Author = 'Old Author'" + Environment.NewLine +
+            "    Description = 'Old description'" + Environment.NewLine +
+            "    RequiredModules = @('LegacyOnly', 'Microsoft.PowerShell.Utility', 'Az.Accounts')" + Environment.NewLine +
+            "    FunctionsToExport = @('Test-Example')" + Environment.NewLine +
+            "    CmdletsToExport = @()" + Environment.NewLine +
+            "    AliasesToExport = @()" + Environment.NewLine +
+            "    PrivateData = @{" + Environment.NewLine +
+            "        PSData = @{" + Environment.NewLine +
+            "            ExternalModuleDependencies = @('Microsoft.PowerShell.Utility', 'Az.Accounts')" + Environment.NewLine +
             "        }" + Environment.NewLine +
             "    }" + Environment.NewLine +
             "}" + Environment.NewLine);

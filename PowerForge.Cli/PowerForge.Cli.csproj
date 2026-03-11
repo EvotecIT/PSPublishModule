@@ -19,6 +19,7 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
+    <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
   </ItemGroup>
 
   <ItemGroup>

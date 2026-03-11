@@ -48,19 +48,11 @@ public static partial class ManifestEditor
         return InsertKeyValue(topHash, content, filePath, "ModuleVersion", $"'{newVersion}'");
     }
 
-    /// <summary>Represents a single RequiredModules entry.</summary>
-    public sealed class RequiredModule
+    /// <summary>
+    /// Backward-compatible manifest editor wrapper for <see cref="RequiredModuleReference"/>.
+    /// </summary>
+    public sealed class RequiredModule : RequiredModuleReference
     {
-        /// <summary>Module name.</summary>
-        public string ModuleName { get; }
-        /// <summary>Optional explicit module version.</summary>
-        public string? ModuleVersion { get; }
-        /// <summary>Optional exact required version.</summary>
-        public string? RequiredVersion { get; }
-        /// <summary>Optional maximum allowed version.</summary>
-        public string? MaximumVersion { get; }
-        /// <summary>Optional module GUID.</summary>
-        public string? Guid { get; }
         /// <summary>Creates a new required module entry.</summary>
         public RequiredModule(
             string moduleName,
@@ -68,17 +60,13 @@ public static partial class ManifestEditor
             string? requiredVersion = null,
             string? maximumVersion = null,
             string? guid = null)
+            : base(moduleName, moduleVersion, requiredVersion, maximumVersion, guid)
         {
-            ModuleName = moduleName;
-            ModuleVersion = moduleVersion;
-            RequiredVersion = requiredVersion;
-            MaximumVersion = maximumVersion;
-            Guid = guid;
         }
     }
 
     /// <summary>Gets the RequiredModules list from the top-level manifest.</summary>
-    public static bool TryGetRequiredModules(string filePath, out RequiredModule[]? modules)
+    public static bool TryGetRequiredModules(string filePath, out RequiredModuleReference[]? modules)
     {
         modules = null;
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
@@ -98,8 +86,26 @@ public static partial class ManifestEditor
         return false;
     }
 
+    /// <summary>Gets the RequiredModules list using the legacy nested type.</summary>
+    public static bool TryGetRequiredModules(string filePath, out RequiredModule[]? modules)
+    {
+        modules = null;
+        if (!TryGetRequiredModules(filePath, out RequiredModuleReference[]? resolved) || resolved is null)
+            return false;
+
+        modules = resolved
+            .Select(static module => new RequiredModule(
+                module.ModuleName,
+                module.ModuleVersion,
+                module.RequiredVersion,
+                module.MaximumVersion,
+                module.Guid))
+            .ToArray();
+        return true;
+    }
+
     /// <summary>Sets (replaces) RequiredModules at top-level with the specified entries.</summary>
-    public static bool TrySetRequiredModules(string filePath, RequiredModule[] modules)
+    public static bool TrySetRequiredModules(string filePath, RequiredModuleReference[] modules)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
         var content = File.ReadAllText(filePath);
@@ -129,6 +135,10 @@ public static partial class ManifestEditor
         return InsertKeyValue(topHash, content, filePath, "RequiredModules", arrayText);
     }
 
+    /// <summary>Sets (replaces) RequiredModules at top-level with the legacy nested type.</summary>
+    public static bool TrySetRequiredModules(string filePath, RequiredModule[] modules)
+        => TrySetRequiredModules(filePath, modules.Cast<RequiredModuleReference>().ToArray());
+
     /// <summary>Gets required module names that are declared as hashtables without any version fields.</summary>
     public static bool TryGetInvalidRequiredModuleSpecs(string filePath, out string[]? modules)
     {
@@ -151,9 +161,9 @@ public static partial class ManifestEditor
     }
 
     /// <summary>Add or update a single RequiredModule by ModuleName. Returns true if modified.</summary>
-    public static bool TryUpsertRequiredModule(string filePath, RequiredModule entry)
+    public static bool TryUpsertRequiredModule(string filePath, RequiredModuleReference entry)
     {
-        if (!TryGetRequiredModules(filePath, out var current) || current == null)
+        if (!TryGetRequiredModules(filePath, out RequiredModuleReference[]? current) || current == null)
         {
             return TrySetRequiredModules(filePath, new[] { entry });
         }
@@ -165,6 +175,10 @@ public static partial class ManifestEditor
             updated.Add(entry);
         return TrySetRequiredModules(filePath, updated.ToArray());
     }
+
+    /// <summary>Add or update a single RequiredModule by ModuleName using the legacy nested type.</summary>
+    public static bool TryUpsertRequiredModule(string filePath, RequiredModule entry)
+        => TryUpsertRequiredModule(filePath, (RequiredModuleReference)entry);
 
     /// <summary>
     /// Sets a top-level hashtable whose values are string arrays (e.g., CommandModuleDependencies).
@@ -234,7 +248,7 @@ public static partial class ManifestEditor
     /// <summary>Removes a RequiredModule entry by ModuleName. Returns true if modified.</summary>
     public static bool TryRemoveRequiredModule(string filePath, string moduleName)
     {
-        if (!TryGetRequiredModules(filePath, out var current) || current == null) return false;
+        if (!TryGetRequiredModules(filePath, out RequiredModuleReference[]? current) || current == null) return false;
         var updated = current.Where(m => !string.Equals(m.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (updated.Length == current.Length) return false;
         return TrySetRequiredModules(filePath, updated);

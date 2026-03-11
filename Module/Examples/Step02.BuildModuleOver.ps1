@@ -20,10 +20,7 @@ Build-Module -ModuleName 'MyGreatModule' -Path "C:\Support\GitHub" {
     # Add standard module dependencies (directly, but can be used with loop as well)
     New-ConfigurationModule -Type RequiredModule -Name 'PSSharedGoods' -Guid 'Auto' -Version 'Latest'
 
-    # Add external module dependencies, using loop for simplicity
-    foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-        New-ConfigurationModule -Type ExternalModule -Name $Module
-    }
+    # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over

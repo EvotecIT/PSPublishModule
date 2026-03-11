@@ -17121,6 +17121,8 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
 install/package dependencies during a build.</maml:para>
       <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries are written to&#xD;
 PrivateData.PSData.ExternalModuleDependencies (not packaged into artefacts).</maml:para>
+      <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime&#xD;
+modules, not gallery-resolvable dependencies.</maml:para>
       <maml:para>Version/Guid values set to Auto or Latest are resolved from installed modules; when&#xD;
 ResolveMissingModulesOnline is enabled, repository results are used without installing.</maml:para>
     </maml:description>

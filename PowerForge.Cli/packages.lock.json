@@ -601,9 +601,15 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "System.IO.Packaging": "[10.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
+      "powerforge.powershell": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.PowerShell.SDK": "[7.4.1, )",
+          "PowerForge": "[1.0.0, )"
         }
       }
     },
@@ -1214,9 +1220,15 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "System.IO.Packaging": "[8.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
+      "powerforge.powershell": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.PowerShell.SDK": "[7.4.1, )",
+          "PowerForge": "[1.0.0, )"
         }
       }
     }

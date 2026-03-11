@@ -132,16 +132,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.10.3",
-        "contentHash": "gi7kRE4x4fBDBwgCFKM3KJbLRBoK332DdeaIu+xDE4syWRYG5oEU+iXqmHM1RihJH0N17F0qL44vZKs9V89bqw==",
+        "resolved": "14.10.4",
+        "contentHash": "CHUcm/MLCHr/gSYjhfroNU6344aYQICLD3u7wTb4Uii0eCQ/NMEV/XB28DO/hULcLWqOcdk69NDgta61vjhmqw==",
         "dependencies": {
-          "Magick.NET.Core": "14.10.3"
+          "Magick.NET.Core": "14.10.4"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.10.3",
-        "contentHash": "Shb3KrAMFB49+j7nJ2uVbNBuGg+rEAoOpIDmR2A/sSbQ21l4vrPY8Py90chcndGcjzvhqZWk69SMmb8v5esOjA=="
+        "resolved": "14.10.4",
+        "contentHash": "2OvmKkpHoe3f8LlhngRSrRb2f4uB2AAc5MNT0aDW97SMdpkpWYnKG1zaeCaU0dmBp4FaZ0/FawhcalaOOlgbng=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -833,16 +833,22 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "System.IO.Packaging": "[10.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
+      "powerforge.powershell": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.PowerShell.SDK": "[7.4.1, )",
+          "PowerForge": "[1.0.0, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
-          "Magick.NET-Q8-AnyCPU": "[14.10.3, )",
+          "Magick.NET-Q8-AnyCPU": "[14.10.4, )",
           "OfficeIMO.Markdown": "[0.5.2, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[5.11.0, )",
@@ -859,6 +865,7 @@
         "type": "Project",
         "dependencies": {
           "PowerForge": "[1.0.0, )",
+          "PowerForge.PowerShell": "[1.0.0, )",
           "Spectre.Console": "[0.54.0, )",
           "System.IO.Packaging": "[10.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"

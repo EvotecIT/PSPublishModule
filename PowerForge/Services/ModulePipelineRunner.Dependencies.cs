@@ -14,12 +14,12 @@ public sealed partial class ModulePipelineRunner
     {
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
 
-        var required = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var required = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         if (required.Length == 0)
         {
             var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
             if (File.Exists(manifestPath) &&
-                ManifestEditor.TryGetRequiredModules(manifestPath, out var fromManifest) &&
+                ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? fromManifest) &&
                 fromManifest is not null)
             {
                 required = fromManifest;

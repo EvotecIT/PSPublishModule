@@ -41,7 +41,7 @@ public sealed class ModuleInformationReader
         string? rootModule = null;
         string? powerShellVersion = null;
         Guid? guid = null;
-        ManifestEditor.RequiredModule[] requiredModules = Array.Empty<ManifestEditor.RequiredModule>();
+        RequiredModuleReference[] requiredModules = Array.Empty<RequiredModuleReference>();
         string? manifestText = null;
 
         try
@@ -58,7 +58,7 @@ public sealed class ModuleInformationReader
                     guid = g;
             }
 
-            if (ManifestEditor.TryGetRequiredModules(manifestPath, out var req) && req is not null)
+            if (ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? req) && req is not null)
                 requiredModules = req;
         }
         catch

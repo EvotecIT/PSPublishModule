@@ -105,7 +105,7 @@ public sealed partial class ModulePipelineRunner
             : trimmed.ToUpperInvariant();
     }
 
-    private ManifestEditor.RequiredModule[] ResolveRequiredModules(
+    private RequiredModuleReference[] ResolveRequiredModules(
         IReadOnlyList<RequiredModuleDraft> drafts,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
@@ -116,7 +116,7 @@ public sealed partial class ModulePipelineRunner
         var list = (drafts ?? Array.Empty<RequiredModuleDraft>())
             .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.ModuleName))
             .ToArray();
-        if (list.Length == 0) return Array.Empty<ManifestEditor.RequiredModule>();
+        if (list.Length == 0) return Array.Empty<RequiredModuleReference>();
 
         var moduleNames = list.Select(d => d.ModuleName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var installed = TryGetLatestInstalledModuleInfo(moduleNames);
@@ -150,7 +150,7 @@ public sealed partial class ModulePipelineRunner
         var unresolvedVersion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var unresolvedGuid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var results = new List<ManifestEditor.RequiredModule>(list.Length);
+        var results = new List<RequiredModuleReference>(list.Length);
         foreach (var d in list)
         {
             installed.TryGetValue(d.ModuleName, out var info);
@@ -190,7 +190,7 @@ public sealed partial class ModulePipelineRunner
             // RequiredVersion is exact; do not also emit ModuleVersion when present.
             if (!string.IsNullOrWhiteSpace(required)) moduleVersion = null;
 
-            results.Add(new ManifestEditor.RequiredModule(d.ModuleName, moduleVersion: moduleVersion, requiredVersion: required, guid: guid));
+            results.Add(new RequiredModuleReference(d.ModuleName, moduleVersion: moduleVersion, requiredVersion: required, guid: guid));
         }
 
         if (resolvedOnline.Count > 0)
@@ -276,22 +276,22 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
-    private static ManifestEditor.RequiredModule[] ResolveOutputRequiredModules(
-        ManifestEditor.RequiredModule[] modules,
+    private static RequiredModuleReference[] ResolveOutputRequiredModules(
+        RequiredModuleReference[] modules,
         bool mergeMissing,
         IReadOnlyCollection<string> approvedModules)
     {
         if (!mergeMissing)
-            return modules ?? Array.Empty<ManifestEditor.RequiredModule>();
+            return modules ?? Array.Empty<RequiredModuleReference>();
 
         return FilterRequiredModules(modules, approvedModules);
     }
 
-    private static ManifestEditor.RequiredModule[] FilterRequiredModules(
-        ManifestEditor.RequiredModule[] modules,
+    private static RequiredModuleReference[] FilterRequiredModules(
+        RequiredModuleReference[] modules,
         IReadOnlyCollection<string> approvedModules)
     {
-        if (modules is null || modules.Length == 0) return Array.Empty<ManifestEditor.RequiredModule>();
+        if (modules is null || modules.Length == 0) return Array.Empty<RequiredModuleReference>();
         if (approvedModules is null || approvedModules.Count == 0) return modules;
 
         var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);

@@ -6,8 +6,7 @@ namespace PowerForge;
 public static class PowerForgeScripts
 {
     /// <summary>
-    /// Loads an embedded script by relative path (for example <c>Scripts/Cmdlets/Invoke-SendGitHubRelease.ps1</c>).
+    /// Loads an embedded script by relative path (for example <c>Scripts/ModulePipeline/Import-Modules.ps1</c>).
     /// </summary>
     public static string Load(string relativePath) => EmbeddedScripts.Load(relativePath);
 }
-
