@@ -97,8 +97,8 @@ public sealed class ModulePipelineApprovedModulesTests
                 manifestPath,
                 new[]
                 {
-                    new ManifestEditor.RequiredModule("LegacyOnly", moduleVersion: "1.0.0"),
-                    new ManifestEditor.RequiredModule("Microsoft.PowerShell.Utility")
+                    new RequiredModuleReference("LegacyOnly", moduleVersion: "1.0.0"),
+                    new RequiredModuleReference("Microsoft.PowerShell.Utility")
                 }));
 
             var spec = new ModulePipelineSpec
@@ -170,8 +170,8 @@ public sealed class ModulePipelineApprovedModulesTests
                 manifestPath,
                 new[]
                 {
-                    new ManifestEditor.RequiredModule("LegacyOnly", moduleVersion: "1.0.0"),
-                    new ManifestEditor.RequiredModule("Microsoft.PowerShell.Utility")
+                    new RequiredModuleReference("LegacyOnly", moduleVersion: "1.0.0"),
+                    new RequiredModuleReference("Microsoft.PowerShell.Utility")
                 }));
             Assert.True(ManifestEditor.TrySetPsDataStringArray(
                 manifestPath,
@@ -286,8 +286,8 @@ public sealed class ModulePipelineApprovedModulesTests
 
     private static string[] ReadRequiredModuleNames(string manifestPath)
     {
-        Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out var required));
-        return (required ?? Array.Empty<ManifestEditor.RequiredModule>())
+        Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? required));
+        return (required ?? Array.Empty<RequiredModuleReference>())
             .Select(m => m.ModuleName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(n => n!.Trim())

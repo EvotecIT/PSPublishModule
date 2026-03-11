@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Security.Cryptography.X509Certificates;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -76,6 +77,9 @@ public sealed class RegisterCertificateCommand : PSCmdlet
     /// <summary>Executes signing and outputs signature objects.</summary>
     protected override void ProcessRecord()
     {
+        var isVerbose = MyInvocation?.BoundParameters.ContainsKey("Verbose") == true;
+        var logger = new CmdletLogger(this, isVerbose);
+        var signingService = new AuthenticodeSigningService(logger);
         var root = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
         if (!Directory.Exists(root))
         {
@@ -83,18 +87,32 @@ public sealed class RegisterCertificateCommand : PSCmdlet
             return;
         }
 
-        List<X509Certificate2>? available = null;
-        var certificate = ParameterSetName == ParameterSetPfx
-            ? TryLoadPfx(CertificatePFX)
-            : TrySelectFromStore(LocalStore, Thumbprint, out available);
+        var lookup = ParameterSetName == ParameterSetPfx
+            ? null
+            : signingService.SelectCertificateFromStore(
+                LocalStore == CertificateStoreLocation.LocalMachine
+                    ? PowerForge.CertificateStoreLocation.LocalMachine
+                    : PowerForge.CertificateStoreLocation.CurrentUser,
+                Thumbprint);
 
-        if (ParameterSetName == ParameterSetStore && certificate is null && available is not null && available.Count > 1 &&
+        string? pfxError = null;
+        var certificate = ParameterSetName == ParameterSetPfx
+            ? signingService.TryLoadPfx(CertificatePFX, out pfxError)
+            : lookup?.Certificate;
+
+        if (ParameterSetName == ParameterSetPfx && certificate is null)
+        {
+            WriteWarning($"Register-Certificate - {pfxError}");
+            return;
+        }
+
+        if (ParameterSetName == ParameterSetStore && certificate is null && lookup is not null && lookup.AvailableCertificates.Count > 1 &&
             string.IsNullOrWhiteSpace(Thumbprint))
         {
             var codeError = $"Get-ChildItem -Path Cert:\\{LocalStore}\\My -CodeSigningCert";
             WriteWarning("Register-Certificate - More than one certificate found in store. Provide Thumbprint for expected certificate");
             WriteWarning($"Register-Certificate - Use: {codeError}");
-            foreach (var c in available) WriteObject(c);
+            foreach (var c in lookup.AvailableCertificates) WriteObject(c);
             return;
         }
 
@@ -104,181 +122,41 @@ public sealed class RegisterCertificateCommand : PSCmdlet
             return;
         }
 
-        var files = EnumerateFiles(root, Include, ExcludePath).ToArray();
+        var files = signingService.EnumerateFiles(root, Include, ExcludePath);
         if (files.Length == 0) return;
-
-        if (IsWindows())
-        {
-            if (!HasCommand("Set-AuthenticodeSignature"))
-            {
-                WriteWarning("Register-Certificate - Code signing commands not found. Skipping signing.");
-                return;
-            }
-
-            var sb = ScriptBlock.Create(@"
-param($files,$cert,$ts,$includeChain,$hash)
-$files |
-  Where-Object { (Get-AuthenticodeSignature -FilePath $_).Status -eq 'NotSigned' } |
-  ForEach-Object { Set-AuthenticodeSignature -FilePath $_ -Certificate $cert -TimestampServer $ts -IncludeChain $includeChain -HashAlgorithm $hash }
-");
-            var result = InvokeInModuleScope(sb, files, certificate, TimeStampServer, IncludeChain.ToString(), HashAlgorithm.ToString());
-            WriteObject(result, enumerateCollection: true);
-        }
-        else
-        {
-            if (!HasCommand("Set-OpenAuthenticodeSignature"))
-            {
-                WriteWarning("Register-Certificate - OpenAuthenticode module not found. Please install it from PSGallery");
-                return;
-            }
-
-            var includeOption = IncludeChain switch
-            {
-                CertificateChainInclude.All => "WholeChain",
-                CertificateChainInclude.NotRoot => "ExcludeRoot",
-                CertificateChainInclude.Signer => "EndCertOnly",
-                _ => "None"
-            };
-
-            var sb = ScriptBlock.Create(@"
-param($files,$cert,$ts,$includeChain,$hash)
-$files |
-  Where-Object { (Get-OpenAuthenticodeSignature -FilePath $_).Status -eq 'NotSigned' } |
-  ForEach-Object { Set-OpenAuthenticodeSignature -FilePath $_ -Certificate $cert -TimeStampServer $ts -IncludeChain $includeChain -HashAlgorithm $hash }
-");
-            var result = InvokeInModuleScope(sb, files, certificate, TimeStampServer, includeOption, HashAlgorithm.ToString());
-            WriteObject(result, enumerateCollection: true);
-        }
-    }
-
-    private X509Certificate2? TryLoadPfx(string pfxPath)
-    {
-        var resolved = SessionState.Path.GetUnresolvedProviderPathFromPSPath(pfxPath);
-        if (!File.Exists(resolved))
-        {
-            WriteWarning("Register-Certificate - PFX not found.");
-            return null;
-        }
 
         try
         {
-            var flags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
-#if NET10_0_OR_GREATER
-            var data = File.ReadAllBytes(resolved);
-            return X509CertificateLoader.LoadPkcs12(data, (string?)null, flags);
-#else
-            return new X509Certificate2(resolved, (string?)null, flags);
-#endif
+            var result = signingService.SignFiles(new AuthenticodeSignRequest
+            {
+                Certificate = certificate,
+                FilePaths = files,
+                TimeStampServer = TimeStampServer,
+                HashAlgorithm = HashAlgorithm.ToString(),
+                WindowsIncludeChain = IncludeChain.ToString(),
+                NonWindowsIncludeChain = IncludeChain switch
+                {
+                    CertificateChainInclude.All => "WholeChain",
+                    CertificateChainInclude.NotRoot => "ExcludeRoot",
+                    CertificateChainInclude.Signer => "EndCertOnly",
+                    _ => "None"
+                }
+            });
+            WriteObject(result, enumerateCollection: true);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Set-AuthenticodeSignature", StringComparison.OrdinalIgnoreCase) ||
+                                                   ex.Message.Contains("Get-AuthenticodeSignature", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteWarning("Register-Certificate - Code signing commands not found. Skipping signing.");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Set-OpenAuthenticodeSignature", StringComparison.OrdinalIgnoreCase) ||
+                                                   ex.Message.Contains("Get-OpenAuthenticodeSignature", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteWarning("Register-Certificate - OpenAuthenticode module not found. Please install it from PSGallery");
         }
         catch (Exception ex)
         {
-            WriteWarning($"Register-Certificate - No certificates found for PFX ({ex.Message})");
-            return null;
+            WriteWarning($"Register-Certificate - Signing failed ({ex.Message})");
         }
-    }
-
-    private static bool IsCodeSigningCert(X509Certificate2 cert)
-    {
-        if (!cert.HasPrivateKey) return false;
-        foreach (var ext in cert.Extensions)
-        {
-            if (ext is X509EnhancedKeyUsageExtension eku)
-            {
-                foreach (var oid in eku.EnhancedKeyUsages)
-                {
-                    if (string.Equals(oid.Value, "1.3.6.1.5.5.7.3.3", StringComparison.Ordinal))
-                        return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static string NormalizeThumbprint(string? thumbprint)
-        => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
-
-    private static X509Certificate2? TrySelectFromStore(CertificateStoreLocation storeLocation, string? thumbprint, out List<X509Certificate2>? available)
-    {
-        available = null;
-        try
-        {
-            var loc = storeLocation == CertificateStoreLocation.LocalMachine ? StoreLocation.LocalMachine : StoreLocation.CurrentUser;
-            using var store = new X509Store(StoreName.My, loc);
-            store.Open(OpenFlags.ReadOnly);
-
-            var certs = store.Certificates.Cast<X509Certificate2>().Where(IsCodeSigningCert).ToList();
-            available = certs;
-
-            if (certs.Count == 0) return null;
-
-            if (!string.IsNullOrWhiteSpace(thumbprint))
-            {
-                var norm = NormalizeThumbprint(thumbprint);
-                return certs.FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == norm);
-            }
-
-            return certs.Count == 1 ? certs[0] : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private IEnumerable<string> EnumerateFiles(string root, IEnumerable<string> includePatterns, string[]? excludePath)
-    {
-        var includes = (includePatterns ?? Array.Empty<string>())
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => new WildcardPattern(p, WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant))
-            .ToArray();
-
-        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-        {
-            var fileName = System.IO.Path.GetFileName(file);
-            if (includes.Length > 0 && !includes.Any(p => p.IsMatch(fileName))) continue;
-
-            // Always exclude Internals folder unless explicitly handled elsewhere in the pipeline.
-            if (file.IndexOf($"{System.IO.Path.DirectorySeparatorChar}Internals{System.IO.Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                file.IndexOf("/Internals/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                file.IndexOf("\\Internals\\", StringComparison.OrdinalIgnoreCase) >= 0)
-                continue;
-
-            if (excludePath is not null && excludePath.Length > 0)
-            {
-                var excluded = excludePath.Any(x => !string.IsNullOrWhiteSpace(x) &&
-                    file.IndexOf(x, StringComparison.OrdinalIgnoreCase) >= 0);
-                if (excluded) continue;
-            }
-
-            yield return file;
-        }
-    }
-
-    private bool HasCommand(string name)
-    {
-        try
-        {
-            return InvokeCommand.GetCommand(name, CommandTypes.Cmdlet | CommandTypes.Function | CommandTypes.Alias) is not null;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private ICollection<PSObject> InvokeInModuleScope(ScriptBlock scriptBlock, params object[] args)
-    {
-        // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
-        // in the binary module context, so we must invoke directly.
-        return scriptBlock.Invoke(args);
-    }
-
-    private static bool IsWindows()
-    {
-#if NET472
-        return Environment.OSVersion.Platform == PlatformID.Win32NT;
-#else
-        return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
-#endif
     }
 }

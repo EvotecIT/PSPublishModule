@@ -36,7 +36,7 @@ public sealed partial class ModulePipelineRunner
     private static string[] GetRequiredModuleNames(ModulePipelinePlan plan)
     {
         if (plan is null) return Array.Empty<string>();
-        return (plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>())
+        return (plan.RequiredModules ?? Array.Empty<RequiredModuleReference>())
             .Select(m => m.ModuleName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(n => n!.Trim())
@@ -284,7 +284,7 @@ public sealed partial class ModulePipelineRunner
     {
         if (plan is null) return;
 
-        var requiredModules = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var requiredModules = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         var approvedModules = plan.ApprovedModules ?? Array.Empty<string>();
         var dependent = dependentModules ?? Array.Empty<string>();
 
@@ -363,7 +363,7 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private static string FormatRequiredModule(ManifestEditor.RequiredModule module)
+    private static string FormatRequiredModule(RequiredModuleReference module)
     {
         if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             return string.Empty;

@@ -27,6 +27,76 @@ public sealed class GitHubReleasePublisher
     /// <summary>
     /// Creates a GitHub release and uploads assets.
     /// </summary>
+    public GitHubReleasePublishResult PublishRelease(GitHubReleasePublishRequest request)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var owner = request.Owner;
+        var repo = request.Repository;
+        var token = request.Token;
+        var tagName = request.TagName;
+        var releaseName = request.ReleaseName;
+        var releaseNotes = request.ReleaseNotes;
+        var commitish = request.Commitish;
+        var generateReleaseNotes = request.GenerateReleaseNotes;
+        var isDraft = request.IsDraft;
+        var isPreRelease = request.IsPreRelease;
+        var reuseExistingReleaseOnConflict = request.ReuseExistingReleaseOnConflict;
+
+        if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Owner is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(repo)) throw new ArgumentException("Repository is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Token is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("TagName is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(releaseName)) releaseName = tagName;
+        if (generateReleaseNotes && !string.IsNullOrWhiteSpace(releaseNotes))
+            throw new ArgumentException("ReleaseNotes cannot be provided when GenerateReleaseNotes is enabled.", nameof(request));
+
+        var assets = (request.AssetFilePaths ?? Array.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => Path.GetFullPath(p.Trim().Trim('"')))
+            .ToArray();
+
+        foreach (var assetPath in assets)
+        {
+            if (!File.Exists(assetPath))
+                throw new FileNotFoundException($"GitHub asset not found: {assetPath}");
+        }
+
+        var release = CreateRelease(
+            owner,
+            repo,
+            token,
+            tagName,
+            releaseName!,
+            releaseNotes,
+            commitish,
+            generateReleaseNotes,
+            isDraft,
+            isPreRelease,
+            reuseExistingReleaseOnConflict);
+
+        var result = new GitHubReleasePublishResult
+        {
+            Succeeded = true,
+            ReleaseCreationSucceeded = true,
+            AllAssetUploadsSucceeded = assets.Length == 0 ? null : true,
+            HtmlUrl = release.HtmlUrl,
+            UploadUrl = release.UploadUrl,
+            ReusedExistingRelease = release.ReusedExistingRelease
+        };
+
+        if (assets.Length > 0)
+        {
+            var uploadUrl = RemoveUploadUrlTemplate(release.UploadUrl);
+            result.SkippedExistingAssets.AddRange(UploadAssets(uploadUrl, assets, token));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Creates a GitHub release and uploads assets using the legacy parameter surface.
+    /// </summary>
     public (string HtmlUrl, string UploadUrl) PublishRelease(
         string owner,
         string repo,
@@ -40,31 +110,26 @@ public sealed class GitHubReleasePublisher
         bool isPreRelease,
         IReadOnlyList<string> assetFilePaths)
     {
-        if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Owner is required.", nameof(owner));
-        if (string.IsNullOrWhiteSpace(repo)) throw new ArgumentException("Repo is required.", nameof(repo));
-        if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Token is required.", nameof(token));
-        if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("TagName is required.", nameof(tagName));
-        if (string.IsNullOrWhiteSpace(releaseName)) releaseName = tagName;
-        if (generateReleaseNotes && !string.IsNullOrWhiteSpace(releaseNotes))
-            throw new ArgumentException("ReleaseNotes cannot be provided when GenerateReleaseNotes is enabled.", nameof(releaseNotes));
+        var result = PublishRelease(new GitHubReleasePublishRequest
+        {
+            Owner = owner,
+            Repository = repo,
+            Token = token,
+            TagName = tagName,
+            ReleaseName = releaseName,
+            ReleaseNotes = releaseNotes,
+            Commitish = commitish,
+            GenerateReleaseNotes = generateReleaseNotes,
+            IsDraft = isDraft,
+            IsPreRelease = isPreRelease,
+            ReuseExistingReleaseOnConflict = true,
+            AssetFilePaths = assetFilePaths ?? Array.Empty<string>()
+        });
 
-        var created = CreateRelease(owner, repo, token, tagName, releaseName, releaseNotes, commitish, generateReleaseNotes, isDraft, isPreRelease);
-        var uploadUrl = RemoveUploadUrlTemplate(created.UploadUrl);
-
-        var assets = (assetFilePaths ?? Array.Empty<string>())
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => Path.GetFullPath(p.Trim().Trim('"')))
-            .ToArray();
-        foreach (var a in assets)
-            if (!File.Exists(a)) throw new FileNotFoundException($"GitHub asset not found: {a}");
-
-        if (assets.Length > 0)
-            UploadAssets(uploadUrl, assets, token);
-
-        return (created.HtmlUrl, created.UploadUrl);
+        return (result.HtmlUrl ?? string.Empty, result.UploadUrl ?? string.Empty);
     }
 
-    private (string HtmlUrl, string UploadUrl) CreateRelease(
+    private GitHubReleaseApiResponse CreateRelease(
         string owner,
         string repo,
         string token,
@@ -74,7 +139,8 @@ public sealed class GitHubReleasePublisher
         string? commitish,
         bool generateReleaseNotes,
         bool isDraft,
-        bool isPreRelease)
+        bool isPreRelease,
+        bool reuseExistingReleaseOnConflict)
     {
         var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases");
 
@@ -104,10 +170,12 @@ public sealed class GitHubReleasePublisher
         if (!response.IsSuccessStatusCode)
         {
             // Idempotency: reruns frequently hit "tag already exists" (release already created).
-            if ((int)response.StatusCode == 422 && IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
+            if (reuseExistingReleaseOnConflict &&
+                (int)response.StatusCode == 422 &&
+                IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
             {
-                _logger.Warn($"GitHub release for tag '{tagName}' already exists; reusing existing release and continuing.");
-                return GetReleaseByTag(owner, repo, token, tagName);
+                _logger.Info($"GitHub release for tag '{tagName}' already exists; reusing existing release.");
+                return GetReleaseByTag(owner, repo, token, tagName, reusedExistingRelease: true);
             }
 
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
@@ -119,10 +187,10 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException("GitHub release creation succeeded but upload_url was empty.");
 
-        return (html, upload);
+        return new GitHubReleaseApiResponse(html, upload, reusedExistingRelease: false);
     }
 
-    private (string HtmlUrl, string UploadUrl) GetReleaseByTag(string owner, string repo, string token, string tagName)
+    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName, bool reusedExistingRelease)
     {
         var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
@@ -139,11 +207,13 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException($"GitHub get-release-by-tag succeeded for '{tagName}' but upload_url was empty.");
 
-        return (html, upload);
+        return new GitHubReleaseApiResponse(html, upload, reusedExistingRelease);
     }
 
-    private void UploadAssets(string uploadUrl, string[] assets, string token)
+    private IReadOnlyList<string> UploadAssets(string uploadUrl, string[] assets, string token)
     {
+        var skippedAssets = new List<string>();
+
         foreach (var assetPath in assets)
         {
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
@@ -165,13 +235,16 @@ public sealed class GitHubReleasePublisher
                 // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
                 if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
                 {
-                    _logger.Warn($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    skippedAssets.Add(fileName);
                     continue;
                 }
 
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
             }
         }
+
+        return skippedAssets;
     }
 
     private static HttpClient CreateSharedClient()
@@ -309,5 +382,19 @@ public sealed class GitHubReleasePublisher
 
         [DataMember(Name = "message", EmitDefaultValue = false)]
         public string? Message { get; set; }
+    }
+
+    private sealed class GitHubReleaseApiResponse
+    {
+        public GitHubReleaseApiResponse(string htmlUrl, string uploadUrl, bool reusedExistingRelease)
+        {
+            HtmlUrl = htmlUrl;
+            UploadUrl = uploadUrl;
+            ReusedExistingRelease = reusedExistingRelease;
+        }
+
+        public string HtmlUrl { get; }
+        public string UploadUrl { get; }
+        public bool ReusedExistingRelease { get; }
     }
 }

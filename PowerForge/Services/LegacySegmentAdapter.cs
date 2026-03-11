@@ -123,7 +123,12 @@ public static class LegacySegmentAdapter
                         Configuration = GetString(buildLibraries, "Configuration"),
                         Framework = GetStringArray(buildLibraries, "Framework"),
                         ProjectName = GetString(buildLibraries, "ProjectName"),
-                        NETProjectPath = GetString(buildLibraries, "NETProjectPath")
+                        NETProjectPath = GetString(buildLibraries, "NETProjectPath"),
+                        ExcludeLibraryFilter = GetStringArray(buildLibraries, "ExcludeLibraryFilter") ?? GetStringArray(buildLibraries, "NETExcludeLibraryFilter"),
+                        IgnoreLibraryOnLoad = GetStringArray(buildLibraries, "IgnoreLibraryOnLoad") ?? GetStringArray(buildLibraries, "NETIgnoreLibraryOnLoad"),
+                        NETDoNotCopyLibrariesRecursively = HasKey(buildLibraries, "NETDoNotCopyLibrariesRecursively")
+                            ? GetBool(buildLibraries, "NETDoNotCopyLibrariesRecursively")
+                            : null
                     }
                 });
             }
@@ -190,7 +195,12 @@ public static class LegacySegmentAdapter
                     Configuration = GetString(conf, "Configuration"),
                     Framework = GetStringArray(conf, "Framework"),
                     ProjectName = GetString(conf, "ProjectName"),
-                    NETProjectPath = GetString(conf, "NETProjectPath")
+                    NETProjectPath = GetString(conf, "NETProjectPath"),
+                    ExcludeLibraryFilter = GetStringArray(conf, "ExcludeLibraryFilter") ?? GetStringArray(conf, "NETExcludeLibraryFilter"),
+                    IgnoreLibraryOnLoad = GetStringArray(conf, "IgnoreLibraryOnLoad") ?? GetStringArray(conf, "NETIgnoreLibraryOnLoad"),
+                    NETDoNotCopyLibrariesRecursively = HasKey(conf, "NETDoNotCopyLibrariesRecursively")
+                        ? GetBool(conf, "NETDoNotCopyLibrariesRecursively")
+                        : null
                 }
             });
             return;
@@ -278,6 +288,9 @@ public static class LegacySegmentAdapter
         return null;
     }
 
+    private static bool HasKey(IDictionary dict, string key)
+        => GetValue(dict, key) is not null;
+
     private static string? GetString(IDictionary dict, string key)
     {
         var v = GetValue(dict, key);
@@ -345,4 +358,3 @@ public static class LegacySegmentAdapter
         return d2 is null ? null : GetStringArray(d2, key3);
     }
 }
-

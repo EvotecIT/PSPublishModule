@@ -152,7 +152,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             HostWriteLineSafe($"  Module Name: {moduleInfo.ModuleName}", ConsoleColor.Green);
             HostWriteLineSafe($"  Module Version: {moduleInfo.ModuleVersion ?? string.Empty}", ConsoleColor.Green);
             HostWriteLineSafe($"  Manifest Path: {moduleInfo.ManifestPath}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Required Modules: {(moduleInfo.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Length}", ConsoleColor.Green);
+            HostWriteLineSafe($"  Required Modules: {(moduleInfo.RequiredModules ?? Array.Empty<RequiredModuleReference>()).Length}", ConsoleColor.Green);
             HostWriteLineSafe(string.Empty);
 
             HostWriteLineSafe("Step 2: Executing test suite (out-of-process)...", ConsoleColor.Yellow);
@@ -252,7 +252,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
         return SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory();
     }
 
-    private void WriteDependencySummary(ManifestEditor.RequiredModule[] requiredModules)
+    private void WriteDependencySummary(RequiredModuleReference[] requiredModules)
     {
         if (requiredModules.Length == 0)
         {

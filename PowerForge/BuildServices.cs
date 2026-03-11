@@ -196,7 +196,7 @@ public static class BuildServices
     /// <summary>Sets RequiredModules from an array of PowerShell dictionaries (ModuleName/ModuleVersion/Guid).</summary>
     public static bool SetRequiredModulesFromDictionaries(string psd1Path, System.Collections.IEnumerable dicts)
     {
-        var list = new System.Collections.Generic.List<ManifestEditor.RequiredModule>();
+        var list = new System.Collections.Generic.List<RequiredModuleReference>();
         foreach (var obj in dicts)
         {
             if (obj is System.Collections.IDictionary d)
@@ -207,11 +207,11 @@ public static class BuildServices
                 var req = d.Contains("RequiredVersion") ? d["RequiredVersion"]?.ToString() : null;
                 var max = d.Contains("MaximumVersion") ? d["MaximumVersion"]?.ToString() : null;
                 var guid = d.Contains("Guid") ? d["Guid"]?.ToString() : null;   
-                list.Add(new ManifestEditor.RequiredModule(name!, moduleVersion: ver, requiredVersion: req, maximumVersion: max, guid: guid));
+                list.Add(new RequiredModuleReference(name!, moduleVersion: ver, requiredVersion: req, maximumVersion: max, guid: guid));
             }
             else if (obj is string s && !string.IsNullOrWhiteSpace(s))
             {
-                list.Add(new ManifestEditor.RequiredModule(s));
+                list.Add(new RequiredModuleReference(s));
             }
         }
         return ManifestEditor.TrySetRequiredModules(psd1Path, list.ToArray());  

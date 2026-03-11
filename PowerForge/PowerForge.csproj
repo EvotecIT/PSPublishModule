@@ -19,7 +19,6 @@
   </PropertyGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net10.0' ">
-    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.1" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
   </ItemGroup>
 
@@ -33,7 +32,6 @@
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies" Version="1.1.0" />
     <PackageReference Include="System.Reflection.Metadata" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <Reference Include="System.Net.Http" />
@@ -43,6 +41,49 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Scripts\\**\\*.ps1" />
+    <EmbeddedResource Include="..\\Module\\Data\\Example-*.*"
+                      Link="Templates\\ModuleScaffold\\%(Filename)%(Extension)"
+                      LogicalName="PowerForge.Templates.ModuleScaffold.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="BuildServices.cs" />
+    <Compile Remove="Models\\Analysis\\MissingFunctionCommand.cs" />
+    <Compile Remove="Models\\Analysis\\MissingFunctionsReport.cs" />
+    <Compile Remove="Models\\ArtefactBuildResult.cs" />
+    <Compile Remove="Models\\ModuleInformation.cs" />
+    <Compile Remove="Models\\ModulePipelineDiagnosticsPolicyException.cs" />
+    <Compile Remove="Models\\ModulePipelinePlan.cs" />
+    <Compile Remove="Models\\ModulePipelineResult.cs" />
+    <Compile Remove="Models\\ModulePipelineStep.cs" />
+    <Compile Remove="Models\\ModulePublishResult.cs" />
+    <Compile Remove="Models\\ModuleTestSuiteResult.cs" />
+    <Compile Remove="Models\\ProjectCleanupOutput.cs" />
+    <Compile Remove="Models\\ProjectCleanupSpec.cs" />
+    <Compile Remove="Models\\ProjectCleanupSummary.cs" />
+    <Compile Remove="Models\\ProjectDeleteMethod.cs" />
+    <Compile Remove="Services\\ArtefactBuilder*.cs" />
+    <Compile Remove="Services\\AuthenticodeSigningService.cs" />
+    <Compile Remove="Services\\BinaryConflictDetectionService.cs" />
+    <Compile Remove="Services\\BinaryDependencyPreflightService.cs" />
+    <Compile Remove="Services\\BuildDiagnosticsFactory.cs" />
+    <Compile Remove="Services\\DocumentationEngine.cs" />
+    <Compile Remove="Services\\ExportDetector.cs" />
+    <Compile Remove="Services\\IModulePipelineProgressReporter.cs" />
+    <Compile Remove="Services\\LegacySegmentAdapter.cs" />
+    <Compile Remove="Services\\ManifestEditor*.cs" />
+    <Compile Remove="Services\\MissingFunctionsAnalyzer.cs" />
+    <Compile Remove="Services\\ModuleBuildPipeline.cs" />
+    <Compile Remove="Services\\ModuleBuilder.cs" />
+    <Compile Remove="Services\\ModuleInformationReader.cs" />
+    <Compile Remove="Services\\ModuleInstaller.cs" />
+    <Compile Remove="Services\\ModulePipelineRunner*.cs" />
+    <Compile Remove="Services\\ModulePublisher.cs" />
+    <Compile Remove="Services\\ModuleTestFailureAnalyzer.cs" />
+    <Compile Remove="Services\\ModuleTestSuiteService.cs" />
+    <Compile Remove="Services\\ModuleValidationService*.cs" />
+    <Compile Remove="Services\\ModuleVersionStepper.cs" />
+    <Compile Remove="Services\\ProjectCleanupService.cs" />
   </ItemGroup>
 
 </Project>

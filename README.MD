@@ -184,10 +184,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
 
-    # Add external module dependencies, using loop for simplicity
-    foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-        New-ConfigurationModule -Type ExternalModule -Name $Module
-    }
+    # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
@@ -309,12 +306,7 @@ $Configuration = @{
                 @{ ModuleName = 'powershellget'; ModuleVersion = "2.2.5"; Guid = '1d73a601-4a6c-43c5-ba3f-619b18bbb404' }
                 @{ ModuleName = 'PSScriptAnalyzer'; ModuleVersion = "Latest"; Guid = 'd6245802-193d-4068-a631-8863a4342a18' }
             )
-            ExternalModuleDependencies = @(
-                "Microsoft.PowerShell.Utility"
-                "Microsoft.PowerShell.Archive"
-                "Microsoft.PowerShell.Management"
-                "Microsoft.PowerShell.Security"
-            )
+            ExternalModuleDependencies = @()
             DotNetFrameworkVersion     = '4.5.2'
         }
     }

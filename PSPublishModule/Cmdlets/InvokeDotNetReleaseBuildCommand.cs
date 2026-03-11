@@ -67,6 +67,7 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var logger = new CmdletLogger(this, isVerbose);
         var service = new DotNetReleaseBuildService(logger);
+        var signingService = new AuthenticodeSigningService(logger);
 
         var mappedStore = LocalStore == CertificateStoreLocation.LocalMachine
             ? PowerForge.CertificateStoreLocation.LocalMachine
@@ -127,30 +128,27 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
             Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null;
             if (!string.IsNullOrWhiteSpace(CertificateThumbprint))
             {
-                signAssemblies = req => InvokeRegisterCertificate(
-                    req.ReleasePath,
-                    LocalStore,
-                    req.CertificateThumbprint,
-                    req.TimeStampServer,
-                    req.IncludePatterns);
+                signAssemblies = req =>
+                {
+                    var lookup = signingService.SelectCertificateFromStore(req.LocalStore, req.CertificateThumbprint);
+                    if (lookup.Certificate is null)
+                        throw new InvalidOperationException($"Certificate '{req.CertificateThumbprint}' not found in {req.LocalStore}\\My store.");
+
+                    var files = signingService.EnumerateFiles(req.ReleasePath, req.IncludePatterns);
+                    signingService.SignFiles(new AuthenticodeSignRequest
+                    {
+                        Certificate = lookup.Certificate,
+                        FilePaths = files,
+                        TimeStampServer = req.TimeStampServer,
+                        HashAlgorithm = "SHA256",
+                        WindowsIncludeChain = "All",
+                        NonWindowsIncludeChain = "WholeChain"
+                    });
+                };
             }
 
             var result = service.Execute(spec, signAssemblies);
             WriteObject(result);
         }
-    }
-
-    private void InvokeRegisterCertificate(
-        string releasePath,
-        CertificateStoreLocation store,
-        string thumbprint,
-        string timeStampServer,
-        string[] includePatterns)
-    {
-        var sb = ScriptBlock.Create(PowerForgeScripts.Load("Scripts/Cmdlets/Invoke-RegisterCertificate.ps1"));
-
-        // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
-        // in the binary module context, so we must invoke directly.
-        sb.Invoke(releasePath, store.ToString(), thumbprint, timeStampServer, includePatterns);
     }
 }

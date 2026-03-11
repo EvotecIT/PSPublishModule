@@ -67,6 +67,8 @@ public sealed partial class ModulePipelineRunner
         string? netProjectName = null;
         string? netProjectPath = null;
         string[]? exportAssembliesFromSegments = null;
+        string[]? excludeLibraryFilterFromSegments = null;
+        bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
 
@@ -110,8 +112,7 @@ public sealed partial class ModulePipelineRunner
                     continue;
 
                 var name = external.Trim();
-                if (externalIndex.Add(name))
-                    externalModules.Add(name);
+                TryAddExternalModuleDependency(name, externalIndex, externalModules);
             }
 
             foreach (var module in manifestBaseline.RequiredModules)
@@ -119,8 +120,12 @@ public sealed partial class ModulePipelineRunner
                 if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
                     continue;
 
+                var requiredModuleName = module.ModuleName.Trim();
+                if (ShouldSkipManifestDependencyModule(requiredModuleName))
+                    continue;
+
                 var draft = new RequiredModuleDraft(
-                    moduleName: module.ModuleName.Trim(),
+                    moduleName: requiredModuleName,
                     moduleVersion: module.ModuleVersion,
                     minimumVersion: module.ModuleVersion,
                     requiredVersion: module.RequiredVersion,
@@ -133,9 +138,6 @@ public sealed partial class ModulePipelineRunner
                     requiredIndex[draft.ModuleName] = requiredModulesDraft.Count;
                     requiredModulesDraft.Add(draft);
                 }
-
-                if (manifestBaseline.ExternalModuleDependencies.Contains(draft.ModuleName, StringComparer.OrdinalIgnoreCase))
-                    continue;
 
                 if (requiredPackagingIndex.TryGetValue(draft.ModuleName, out var pidx))
                     requiredModulesDraftForPackaging[pidx] = draft;
@@ -252,6 +254,8 @@ public sealed partial class ModulePipelineRunner
                     if (!string.IsNullOrWhiteSpace(bl.ProjectName)) netProjectName = bl.ProjectName;
                     if (!string.IsNullOrWhiteSpace(bl.NETProjectPath)) netProjectPath = bl.NETProjectPath;
                     if (bl.BinaryModule is { Length: > 0 }) exportAssembliesFromSegments = bl.BinaryModule;
+                    if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
+                    if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     break;
                 }
@@ -269,11 +273,9 @@ public sealed partial class ModulePipelineRunner
 
                     if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
                     {
-                        if (!externalIndex.Contains(name))
-                        {
-                            externalIndex.Add(name);
-                            externalModules.Add(name);
-                        }
+                        if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
+                            break;
+
                         var externalDraft = new RequiredModuleDraft(
                             moduleName: name,
                             moduleVersion: md.ModuleVersion,
@@ -281,9 +283,6 @@ public sealed partial class ModulePipelineRunner
                             requiredVersion: md.RequiredVersion,
                             guid: md.Guid);
 
-                        // Legacy behavior compatibility: external dependencies are mirrored into RequiredModules
-                        // so Import-Module honors runtime prerequisites, but they are not included in
-                        // RequiredModulesForPackaging (so artefacts do not bundle inbox/platform modules).
                         if (requiredIndex.TryGetValue(name, out var externalIdx))
                             requiredModulesDraft[externalIdx] = externalDraft;
                         else
@@ -295,6 +294,9 @@ public sealed partial class ModulePipelineRunner
                     }
 
                     if (moduleSeg.Kind is not ModuleDependencyKind.RequiredModule)
+                        break;
+
+                    if (ShouldSkipManifestDependencyModule(name))
                         break;
 
                     var draft = new RequiredModuleDraft(
@@ -525,6 +527,8 @@ public sealed partial class ModulePipelineRunner
             ExcludeDirectories = spec.Build.ExcludeDirectories ?? Array.Empty<string>(),
             ExcludeFiles = spec.Build.ExcludeFiles ?? Array.Empty<string>(),
             ExportAssemblies = exportAssemblies,
+            ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
+            DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             KeepStaging = spec.Build.KeepStaging,
             RefreshManifestOnly = refreshPsd1Only
@@ -736,6 +740,32 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter);
+    }
+
+    private bool TryAddExternalModuleDependency(
+        string moduleName,
+        HashSet<string> externalIndex,
+        List<string> externalModules)
+    {
+        if (ShouldSkipManifestDependencyModule(moduleName))
+        {
+            _logger.Info($"Skipping built-in PowerShell module '{moduleName}' from manifest dependency output.");
+            return false;
+        }
+
+        if (externalIndex.Add(moduleName))
+            externalModules.Add(moduleName);
+
+        return true;
+    }
+
+    private static bool ShouldSkipManifestDependencyModule(string? moduleName)
+    {
+        var normalizedModuleName = moduleName?.Trim();
+        if (normalizedModuleName is null || normalizedModuleName.Length == 0)
+            return true;
+
+        return normalizedModuleName.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
     }
 
 }

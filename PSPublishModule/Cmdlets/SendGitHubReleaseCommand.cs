@@ -1,13 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
-using System.Text;
+using System.Linq;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -96,6 +92,9 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     /// <summary>Creates the release and uploads assets.</summary>
     protected override void ProcessRecord()
     {
+        var isVerbose = MyInvocation?.BoundParameters.ContainsKey("Verbose") == true;
+        var logger = new CmdletLogger(this, isVerbose);
+        var publisher = new GitHubReleasePublisher(logger);
         var result = new GitHubReleaseResult
         {
             Succeeded = false,
@@ -126,26 +125,28 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         try
         {
-            var release = CreateRelease(GitHubUsername, GitHubRepositoryName, GitHubAccessToken,
-                TagName, ReleaseName!, ReleaseNotes, Commitish, GenerateReleaseNotes.IsPresent, IsDraft, IsPreRelease, ReuseExistingReleaseOnConflict);
-
-            result.ReleaseCreationSucceeded = true;
-            result.ReusedExistingRelease = release.ReusedExistingRelease;
-            result.ReleaseUrl = release.HtmlUrl;
-
-            if (thereAreNoAssetsToInclude)
+            var publishResult = publisher.PublishRelease(new GitHubReleasePublishRequest
             {
-                result.Succeeded = true;
-                WriteObject(result);
-                return;
-            }
+                Owner = GitHubUsername,
+                Repository = GitHubRepositoryName,
+                Token = GitHubAccessToken,
+                TagName = TagName,
+                ReleaseName = ReleaseName,
+                ReleaseNotes = ReleaseNotes,
+                Commitish = Commitish,
+                GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
+                IsDraft = IsDraft,
+                IsPreRelease = IsPreRelease,
+                ReuseExistingReleaseOnConflict = ReuseExistingReleaseOnConflict,
+                AssetFilePaths = assets
+            });
 
-            var uploadUrl = RemoveUploadUrlTemplate(release.UploadUrl);
-            var skippedAssets = UploadAssets(uploadUrl, assets, GitHubAccessToken);
-            result.SkippedExistingAssets.AddRange(skippedAssets);
-
-            result.AllAssetUploadsSucceeded = true;
-            result.Succeeded = true;
+            result.ReleaseCreationSucceeded = publishResult.ReleaseCreationSucceeded;
+            result.ReusedExistingRelease = publishResult.ReusedExistingRelease;
+            result.ReleaseUrl = publishResult.HtmlUrl;
+            result.AllAssetUploadsSucceeded = publishResult.AllAssetUploadsSucceeded;
+            result.SkippedExistingAssets.AddRange(publishResult.SkippedExistingAssets);
+            result.Succeeded = publishResult.Succeeded;
             WriteObject(result);
         }
         catch (Exception ex)
@@ -169,246 +170,6 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             {
                 throw new InvalidOperationException($"There is no file at the specified path, '{filePath}'.");
             }
-        }
-    }
-
-    private GitHubReleaseApiResponse CreateRelease(
-        string owner,
-        string repo,
-        string token,
-        string tagName,
-        string releaseName,
-        string? releaseNotes,
-        string? commitish,
-        bool generateReleaseNotes,
-        bool isDraft,
-        bool isPreRelease,
-        bool reuseExistingReleaseOnConflict)
-    {
-        using var client = CreateHttpClient(token);
-
-        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases");
-
-        var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
-        var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
-        if (generateReleaseNotes) normalizedReleaseNotes = null;
-        var body = new CreateReleaseRequest
-        {
-            TagName = tagName,
-            TargetCommitish = normalizedCommitish,
-            Name = releaseName,
-            Body = normalizedReleaseNotes,
-            GenerateReleaseNotes = generateReleaseNotes,
-            Draft = isDraft,
-            Prerelease = isPreRelease
-        };
-
-        var json = Serialize(body);
-        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/vnd.github+json")
-        };
-
-        var response = client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
-        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-        if (!response.IsSuccessStatusCode)
-        {
-            // Idempotency: reruns frequently hit "tag already exists" (release already created).
-            if (reuseExistingReleaseOnConflict &&
-                (int)response.StatusCode == 422 &&
-                IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
-            {
-                WriteVerbose($"GitHub release for tag '{tagName}' already exists; reusing existing release.");
-                return GetReleaseByTag(owner, repo, token, tagName, reusedExistingRelease: true);
-            }
-
-            throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
-        }
-
-        var parsed = Deserialize<CreateReleaseResponse>(responseText);
-        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty, reusedExistingRelease: false);
-    }
-
-    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName, bool reusedExistingRelease)
-    {
-        using var client = CreateHttpClient(token);
-        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
-
-        var response = client.GetAsync(uri).ConfigureAwait(false).GetAwaiter().GetResult();
-        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
-
-        var parsed = Deserialize<CreateReleaseResponse>(responseText);
-        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty, reusedExistingRelease);
-    }
-
-    private IReadOnlyList<string> UploadAssets(string uploadUrl, string[] assets, string token)
-    {
-        using var client = CreateHttpClient(token);
-        var skippedAssets = new List<string>();
-
-        foreach (var assetPath in assets)
-        {
-            var fileName = System.IO.Path.GetFileName(assetPath) ?? assetPath;
-            var target = new Uri(uploadUrl + "?name=" + Uri.EscapeDataString(fileName));
-
-            using var fs = System.IO.File.OpenRead(assetPath);
-            using var content = new StreamContent(fs);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-
-            using var req = new HttpRequestMessage(HttpMethod.Post, target) { Content = content };
-            var resp = client.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
-            var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            if (!resp.IsSuccessStatusCode)
-            {
-                // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
-                if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
-                {
-                    WriteVerbose($"GitHub release asset '{fileName}' already exists; skipping upload.");
-                    skippedAssets.Add(fileName);
-                    continue;
-                }
-
-                throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
-            }
-        }
-
-        return skippedAssets;
-    }
-
-    private static HttpClient CreateHttpClient(string token)
-    {
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.Clear();
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PSPublishModule", "2.0"));
-        client.DefaultRequestHeaders.Accept.Clear();
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return client;
-    }
-
-    private static string RemoveUploadUrlTemplate(string uploadUrl)
-    {
-        if (string.IsNullOrWhiteSpace(uploadUrl)) return uploadUrl;
-        var idx = uploadUrl.IndexOf('{');
-        return idx >= 0 ? uploadUrl.Substring(0, idx) : uploadUrl;
-    }
-
-    private static string Serialize<T>(T value)
-    {
-        var serializer = new DataContractJsonSerializer(typeof(T));
-        using var ms = new MemoryStream();
-        serializer.WriteObject(ms, value);
-        return Encoding.UTF8.GetString(ms.ToArray());
-    }
-
-    private static T Deserialize<T>(string json)
-    {
-        var serializer = new DataContractJsonSerializer(typeof(T));
-        using var ms = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return (T)serializer.ReadObject(ms)!;
-    }
-
-    private static string TrimForMessage(string? text)
-    {
-        if (text is null) return string.Empty;
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        var t = text.Trim();
-        return t.Length > 4000 ? t.Substring(0, 4000) + "..." : t;
-    }
-
-    private static bool IsAlreadyExistsValidationError(string? responseJson, string fieldName)
-    {
-        if (string.IsNullOrWhiteSpace(responseJson)) return false;
-        try
-        {
-            var parsed = Deserialize<GitHubValidationErrorResponse>(responseJson!);
-            var errors = parsed.Errors ?? Array.Empty<GitHubValidationError>();
-            return errors.Any(e =>
-                string.Equals(e.Code, "already_exists", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(e.Field, fieldName, StringComparison.OrdinalIgnoreCase));
-        }
-        catch
-        {
-            // Best-effort parse only. If GitHub changes the error schema (or returns non-JSON), just treat it as non-matching.
-            return false;
-        }
-    }
-
-    [DataContract]
-    private sealed class CreateReleaseRequest
-    {
-        [DataMember(Name = "tag_name", EmitDefaultValue = true)]
-        public string TagName { get; set; } = string.Empty;
-
-        [DataMember(Name = "target_commitish", EmitDefaultValue = false)]
-        public string? TargetCommitish { get; set; }
-
-        [DataMember(Name = "name", EmitDefaultValue = true)]
-        public string Name { get; set; } = string.Empty;
-
-        [DataMember(Name = "body", EmitDefaultValue = false)]
-        public string? Body { get; set; }
-
-        [DataMember(Name = "generate_release_notes", EmitDefaultValue = false)]
-        public bool GenerateReleaseNotes { get; set; }
-
-        [DataMember(Name = "draft", EmitDefaultValue = true)]
-        public bool Draft { get; set; }
-
-        [DataMember(Name = "prerelease", EmitDefaultValue = true)]
-        public bool Prerelease { get; set; }
-    }
-
-    [DataContract]
-    private sealed class CreateReleaseResponse
-    {
-        [DataMember(Name = "html_url")]
-        public string? HtmlUrl { get; set; }
-
-        [DataMember(Name = "upload_url")]
-        public string? UploadUrl { get; set; }
-    }
-
-    [DataContract]
-    private sealed class GitHubValidationErrorResponse
-    {
-        [DataMember(Name = "message", EmitDefaultValue = false)]
-        public string? Message { get; set; }
-
-        [DataMember(Name = "errors", EmitDefaultValue = false)]
-        public GitHubValidationError[]? Errors { get; set; }
-    }
-
-    [DataContract]
-    private sealed class GitHubValidationError
-    {
-        [DataMember(Name = "resource", EmitDefaultValue = false)]
-        public string? Resource { get; set; }
-
-        [DataMember(Name = "code", EmitDefaultValue = false)]
-        public string? Code { get; set; }
-
-        [DataMember(Name = "field", EmitDefaultValue = false)]
-        public string? Field { get; set; }
-
-        [DataMember(Name = "message", EmitDefaultValue = false)]
-        public string? Message { get; set; }
-    }
-
-    private sealed class GitHubReleaseApiResponse
-    {
-        public string HtmlUrl { get; }
-        public string UploadUrl { get; }
-        public bool ReusedExistingRelease { get; }
-
-        public GitHubReleaseApiResponse(string htmlUrl, string uploadUrl, bool reusedExistingRelease)
-        {
-            HtmlUrl = htmlUrl;
-            UploadUrl = uploadUrl;
-            ReusedExistingRelease = reusedExistingRelease;
         }
     }
 

@@ -299,7 +299,7 @@ public sealed partial class InvokeProjectBuildCommand
     private static void WriteGitHubPublishNotes(
         ILogger logger,
         string? tag,
-        SendGitHubReleaseCommand.GitHubReleaseResult result)
+        GitHubReleasePublishResult result)
     {
         if (result.ReusedExistingRelease && !string.IsNullOrWhiteSpace(tag))
             logger.Info($"GitHub release for tag '{tag}' already exists; reusing existing release.");
@@ -311,6 +311,33 @@ public sealed partial class InvokeProjectBuildCommand
         {
             logger.Info($"GitHub release asset '{asset}' already exists; skipping upload.");
         }
+    }
+
+    private static GitHubReleasePublishResult ExecuteGitHubReleasePublish(
+        ILogger logger,
+        string owner,
+        string repository,
+        string token,
+        string tag,
+        string releaseName,
+        IReadOnlyList<string> assets,
+        bool isPreRelease,
+        bool generateReleaseNotes,
+        bool reuseExistingReleaseOnConflict)
+    {
+        var publisher = new GitHubReleasePublisher(logger);
+        return publisher.PublishRelease(new GitHubReleasePublishRequest
+        {
+            Owner = owner,
+            Repository = repository,
+            Token = token,
+            TagName = tag,
+            ReleaseName = releaseName,
+            GenerateReleaseNotes = generateReleaseNotes,
+            IsPreRelease = isPreRelease,
+            ReuseExistingReleaseOnConflict = reuseExistingReleaseOnConflict,
+            AssetFilePaths = assets
+        });
     }
 
     private sealed class ProjectBuildConfig

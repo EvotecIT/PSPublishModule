@@ -44,7 +44,7 @@ public sealed class ModuleTestSuiteService
         var moduleName = moduleInfo.ModuleName;
         var moduleVersion = moduleInfo.ModuleVersion;
         var manifestPath = moduleInfo.ManifestPath;
-        var requiredModules = moduleInfo.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var requiredModules = moduleInfo.RequiredModules ?? Array.Empty<RequiredModuleReference>();
 
         var testPath = ResolveTestPath(projectRoot, spec.TestPath);
 
@@ -167,7 +167,7 @@ public sealed class ModuleTestSuiteService
 
     private ModuleDependencyInstallResult[] EnsureDependenciesInstalled(
         ModuleTestSuiteSpec spec,
-        ManifestEditor.RequiredModule[] requiredModules)
+        RequiredModuleReference[] requiredModules)
     {
         var deps = new List<ModuleDependency>();
 
@@ -177,7 +177,7 @@ public sealed class ModuleTestSuiteService
                 deps.Add(new ModuleDependency(name.Trim()));
         }
 
-        foreach (var m in requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>())
+        foreach (var m in requiredModules ?? Array.Empty<RequiredModuleReference>())
         {
             if (string.IsNullOrWhiteSpace(m.ModuleName))
                 continue;

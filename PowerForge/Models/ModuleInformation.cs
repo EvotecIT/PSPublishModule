@@ -22,7 +22,7 @@ public sealed class ModuleInformation
     /// <summary>GUID value from the manifest (GUID), when present and parseable.</summary>
     public Guid? Guid { get; }
     /// <summary>Typed RequiredModules entries extracted from the manifest.</summary>
-    public ManifestEditor.RequiredModule[] RequiredModules { get; }
+    public RequiredModuleReference[] RequiredModules { get; }
     /// <summary>Raw manifest text, when available.</summary>
     public string? ManifestText { get; }
 
@@ -37,7 +37,7 @@ public sealed class ModuleInformation
         string? rootModule,
         string? powerShellVersion,
         Guid? guid,
-        ManifestEditor.RequiredModule[] requiredModules,
+        RequiredModuleReference[] requiredModules,
         string? manifestText)
     {
         ModuleName = moduleName;
@@ -47,8 +47,7 @@ public sealed class ModuleInformation
         RootModule = rootModule;
         PowerShellVersion = powerShellVersion;
         Guid = guid;
-        RequiredModules = requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
         ManifestText = manifestText;
     }
 }
-

@@ -9,7 +9,7 @@ public sealed partial class ModulePipelineRunner
     private sealed class ProjectManifestBaseline
     {
         public ManifestConfiguration Manifest { get; set; } = new();
-        public ManifestEditor.RequiredModule[] RequiredModules { get; set; } = Array.Empty<ManifestEditor.RequiredModule>();
+        public RequiredModuleReference[] RequiredModules { get; set; } = Array.Empty<RequiredModuleReference>();
         public string[] ExternalModuleDependencies { get; set; } = Array.Empty<string>();
     }
 
@@ -83,17 +83,17 @@ public sealed partial class ModulePipelineRunner
         return NormalizeArray(values);
     }
 
-    private static ManifestEditor.RequiredModule[] ReadRequiredModules(string manifestPath)
+    private static RequiredModuleReference[] ReadRequiredModules(string manifestPath)
     {
-        if (!ManifestEditor.TryGetRequiredModules(manifestPath, out var values) || values is null)
-            return Array.Empty<ManifestEditor.RequiredModule>();
+        if (!ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? values) || values is null)
+            return Array.Empty<RequiredModuleReference>();
 
         return values
             .Where(v => v is not null && !string.IsNullOrWhiteSpace(v.ModuleName))
             .Select(v =>
             {
                 var entry = v!;
-                return new ManifestEditor.RequiredModule(
+                return new RequiredModuleReference(
                     moduleName: entry.ModuleName.Trim(),
                     moduleVersion: NormalizeNullable(entry.ModuleVersion),
                     requiredVersion: NormalizeNullable(entry.RequiredVersion),

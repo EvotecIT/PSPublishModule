@@ -18,6 +18,10 @@ namespace PSPublishModule;
 /// <c>PrivateData.PSData.ExternalModuleDependencies</c> (not packaged into artefacts).
 /// </para>
 /// <para>
+/// Built-in <c>Microsoft.PowerShell.*</c> modules are ignored during manifest refresh because they are inbox runtime
+/// modules, not gallery-resolvable dependencies.
+/// </para>
+/// <para>
 /// Version/Guid values set to <c>Auto</c> or <c>Latest</c> are resolved from installed modules; when
 /// <c>ResolveMissingModulesOnline</c> is enabled, repository results are used without installing.
 /// </para>

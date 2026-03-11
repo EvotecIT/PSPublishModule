@@ -130,10 +130,9 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
-    # Add external module dependencies, using loop for simplicity
-    New-ConfigurationModule -Type ExternalModule -Name @(
-        'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security'
-    )
+    # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.
+    # They are part of the runtime and publishing them as gallery dependencies breaks
+    # Save-Module / Install-Module resolution for consumers.
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
@@ -236,7 +235,7 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     New-ConfigurationImportModule -ImportSelf
 
-    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMONSTER' }
+    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMAGIC' }
     $newConfigurationBuildSplat = @{
         Enable                         = $true
         SignModule                     = $signEnabled

@@ -96,11 +96,11 @@ public static partial class ManifestEditor
         }
     }
 
-    private static RequiredModule[]? ExtractRequiredModules(Ast? expr)    
+    private static RequiredModuleReference[]? ExtractRequiredModules(Ast? expr)    
     {
         if (expr == null) return null;
         var e2 = AsExpression(expr);
-        var list = new System.Collections.Generic.List<RequiredModule>(); 
+        var list = new System.Collections.Generic.List<RequiredModuleReference>(); 
         if (e2 is ArrayExpressionAst ae)
         {
             if (ae.SubExpression is StatementBlockAst sb)
@@ -135,7 +135,7 @@ public static partial class ManifestEditor
             var mod = ParseRequiredModuleItem(e2);
             if (mod != null) list.Add(mod);
         }
-        return list.Count > 0 ? list.ToArray() : Array.Empty<RequiredModule>();
+        return list.Count > 0 ? list.ToArray() : Array.Empty<RequiredModuleReference>();
     }
 
     private static string[] ExtractInvalidRequiredModules(Ast? expr)
@@ -207,11 +207,11 @@ public static partial class ManifestEditor
         yield return expr;
     }
 
-    private static RequiredModule? ParseRequiredModuleItem(ExpressionAst? expr)
+    private static RequiredModuleReference? ParseRequiredModuleItem(ExpressionAst? expr)
     {
         if (expr == null) return null;
-        if (expr is StringConstantExpressionAst s) return new RequiredModule(s.Value);
-        if (expr is ConstantExpressionAst c && c.Value is string raw) return new RequiredModule(raw);
+        if (expr is StringConstantExpressionAst s) return new RequiredModuleReference(s.Value);
+        if (expr is ConstantExpressionAst c && c.Value is string raw) return new RequiredModuleReference(raw);
         if (expr is HashtableAst h)
         {
             string? name = null, version = null, requiredVersion = null, maximumVersion = null, guid = null;
@@ -240,12 +240,12 @@ public static partial class ManifestEditor
                     if (val is StringConstantExpressionAst gv) guid = gv.Value; else if (val is ConstantExpressionAst gc && gc.Value is string gss) guid = gss;
                 }
             }
-            if (!string.IsNullOrWhiteSpace(name)) return new RequiredModule(name!, version, requiredVersion, maximumVersion, guid);
+            if (!string.IsNullOrWhiteSpace(name)) return new RequiredModuleReference(name!, version, requiredVersion, maximumVersion, guid);
         }
         return null;
     }
 
-    private static string BuildRequiredModulesArrayText(RequiredModule[] modules)
+    private static string BuildRequiredModulesArrayText(RequiredModuleReference[] modules)
     {
         if (modules == null || modules.Length == 0)
             return "@()";

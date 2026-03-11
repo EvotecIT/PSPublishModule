@@ -324,13 +324,13 @@ public sealed class ModulePublisher
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static ManifestEditor.RequiredModule[] GetRequiredModulesForPublish(
+    private static RequiredModuleReference[] GetRequiredModulesForPublish(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)
     {
         if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
             File.Exists(buildResult.ManifestPath) &&
-            ManifestEditor.TryGetRequiredModules(buildResult.ManifestPath, out var manifestModules) &&
+            ManifestEditor.TryGetRequiredModules(buildResult.ManifestPath, out RequiredModuleReference[]? manifestModules) &&
             manifestModules is { Length: > 0 })
         {
             return manifestModules
@@ -338,9 +338,9 @@ public sealed class ModulePublisher
                 .ToArray()!;
         }
 
-        var planned = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var planned = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         if (planned.Length == 0)
-            return Array.Empty<ManifestEditor.RequiredModule>();
+            return Array.Empty<RequiredModuleReference>();
 
         return planned
             .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
@@ -348,7 +348,7 @@ public sealed class ModulePublisher
     }
 
     internal static bool HasMatchingRequiredModuleVersion(
-        ManifestEditor.RequiredModule requiredModule,
+        RequiredModuleReference requiredModule,
         IReadOnlyList<string> repositoryVersions)
     {
         if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
@@ -367,7 +367,7 @@ public sealed class ModulePublisher
     }
 
     internal static bool ShouldSkipRepositoryDependencyValidation(
-        ManifestEditor.RequiredModule requiredModule,
+        RequiredModuleReference requiredModule,
         ISet<string> externalModuleDependencies)
     {
         if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
@@ -379,7 +379,7 @@ public sealed class ModulePublisher
         return externalModuleDependencies.Contains(requiredModule.ModuleName.Trim());
     }
 
-    internal static bool DoesVersionMatchRequiredModule(ManifestEditor.RequiredModule requiredModule, string candidateVersion)
+    internal static bool DoesVersionMatchRequiredModule(RequiredModuleReference requiredModule, string candidateVersion)
     {
         if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
             return false;
@@ -432,7 +432,7 @@ public sealed class ModulePublisher
         return true;
     }
 
-    internal static string FormatRequiredModuleConstraint(ManifestEditor.RequiredModule requiredModule)
+    internal static string FormatRequiredModuleConstraint(RequiredModuleReference requiredModule)
     {
         if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
             return $"RequiredVersion = {requiredModule.RequiredVersion}";

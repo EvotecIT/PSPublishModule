@@ -62,7 +62,7 @@ public sealed partial class ModulePipelineRunner
         if (cfg is null || !ShouldAnalyzeBinaryConflicts(cfg, importRequired))
             return Array.Empty<BuildDiagnostic>();
 
-        var requiredModules = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var requiredModules = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         var installedModules = ResolveInstalledRequiredModuleReferences(requiredModules);
         if (installedModules.Length == 0)
             return Array.Empty<BuildDiagnostic>();
@@ -82,11 +82,11 @@ public sealed partial class ModulePipelineRunner
         return diagnostics.ToArray();
     }
 
-    private ManifestEditor.RequiredModule[] ReorderRequiredModulesForBinaryConflicts(
-        ManifestEditor.RequiredModule[] requiredModules,
+    private RequiredModuleReference[] ReorderRequiredModulesForBinaryConflicts(
+        RequiredModuleReference[] requiredModules,
         IReadOnlyList<string>? compatiblePSEditions)
     {
-        var modules = requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var modules = requiredModules ?? Array.Empty<RequiredModuleReference>();
         if (modules.Length < 2)
             return modules;
 
@@ -119,7 +119,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private BuildDiagnostic[] CreateRequiredModuleOrderDiagnostics(
-        ManifestEditor.RequiredModule[] requiredModules,
+        RequiredModuleReference[] requiredModules,
         InstalledModuleReference[] installedModules,
         string[] editions,
         bool preferConflictOrder)
@@ -318,9 +318,9 @@ public sealed partial class ModulePipelineRunner
         return scores;
     }
 
-    private InstalledModuleReference[] ResolveInstalledRequiredModuleReferences(IReadOnlyList<ManifestEditor.RequiredModule> requiredModules)
+    private InstalledModuleReference[] ResolveInstalledRequiredModuleReferences(IReadOnlyList<RequiredModuleReference> requiredModules)
     {
-        var names = (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>())
+        var names = (requiredModules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
             .Select(static module => module.ModuleName!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)

@@ -30,7 +30,7 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
         InformationConfiguration? information = null,
         DeliveryOptionsConfiguration? delivery = null,
         bool includeScriptFolders = true)
@@ -74,7 +74,7 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
@@ -100,7 +100,7 @@ public sealed partial class ArtefactBuilder
         {
             var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
             var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-            foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+            foreach (var rm in (requiredModules ?? Array.Empty<RequiredModuleReference>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
             {
                 var depEntry = SaveRequiredModuleToFolder(
                     rm,
@@ -133,7 +133,7 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
@@ -164,7 +164,7 @@ public sealed partial class ArtefactBuilder
             {
                 var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
                 var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-                foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+                foreach (var rm in (requiredModules ?? Array.Empty<RequiredModuleReference>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
                 {
                     var depEntry = SaveRequiredModuleToFolder(
                         rm,
@@ -198,7 +198,7 @@ public sealed partial class ArtefactBuilder
     }
 
     private ArtefactModuleEntry SaveRequiredModuleToFolder(
-        ManifestEditor.RequiredModule requiredModule,
+        RequiredModuleReference requiredModule,
         string destinationRoot,
         string? repository,
         RepositoryCredential? credential,

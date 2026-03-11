@@ -21,6 +21,9 @@ install/package dependencies during a build.
 RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries are written to
 PrivateData.PSData.ExternalModuleDependencies (not packaged into artefacts).
 
+Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime
+modules, not gallery-resolvable dependencies.
+
 Version/Guid values set to Auto or Latest are resolved from installed modules; when
 ResolveMissingModulesOnline is enabled, repository results are used without installing.
 
