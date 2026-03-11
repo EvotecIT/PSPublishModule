@@ -184,8 +184,6 @@ internal sealed class PrivateGalleryService
             repositoryName);
 
         var effectiveTool = tool;
-        var messages = new List<string>(8);
-        var unavailableTools = new List<string>(2);
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,
@@ -215,26 +213,7 @@ internal sealed class PrivateGalleryService
             ReadinessMessages = prerequisiteStatus.ReadinessMessages,
         };
 
-        if (effectiveTool == RepositoryRegistrationTool.Auto)
-        {
-            if (prerequisiteStatus.PSResourceGetAvailable && prerequisiteStatus.PSResourceGetMeetsMinimumVersion)
-            {
-                effectiveTool = RepositoryRegistrationTool.PSResourceGet;
-            }
-            else if (prerequisiteStatus.PowerShellGetAvailable)
-            {
-                effectiveTool = RepositoryRegistrationTool.PowerShellGet;
-                if (!prerequisiteStatus.PSResourceGetAvailable)
-                    unavailableTools.Add("PSResourceGet");
-            }
-            else
-            {
-                unavailableTools.Add("PSResourceGet");
-                unavailableTools.Add("PowerShellGet");
-                throw new InvalidOperationException($"Neither PSResourceGet {MinimumPSResourceGetVersion}+ nor PowerShellGet are available for repository registration. Install prerequisites with -InstallPrerequisites or install PowerShellGet manually.");
-            }
-        }
-        else if (effectiveTool == RepositoryRegistrationTool.PSResourceGet &&
+        if (effectiveTool == RepositoryRegistrationTool.PSResourceGet &&
                  (!prerequisiteStatus.PSResourceGetAvailable || !prerequisiteStatus.PSResourceGetMeetsMinimumVersion))
         {
             throw new InvalidOperationException($"PSResourceGet {MinimumPSResourceGetVersion}+ is required when Tool is PSResourceGet. Detected version: {prerequisiteStatus.PSResourceGetVersion ?? "not installed"}.");
@@ -254,10 +233,6 @@ internal sealed class PrivateGalleryService
                 $"Detected PSResourceGet: {prerequisiteStatus.PSResourceGetVersion ?? "not installed"}, PowerShellGet: {prerequisiteStatus.PowerShellGetVersion ?? "not installed"}.");
         }
 
-        result.UnavailableTools = unavailableTools
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static toolName => toolName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
         result.Tool = effectiveTool;
 
         if (!_host.ShouldProcess(result.RepositoryName, shouldProcessAction))
@@ -266,54 +241,46 @@ internal sealed class PrivateGalleryService
         result.RegistrationPerformed = true;
         var runner = new PowerShellRunner();
         var logger = new PrivateGalleryHostLogger(_host);
+        var unavailableTools = new List<string>(2);
+        var messages = new List<string>(8);
+        var failures = new List<string>(2);
 
-        if (effectiveTool == RepositoryRegistrationTool.Auto)
-            throw new InvalidOperationException("Repository registration tool could not be resolved.");
-
-        if (effectiveTool is RepositoryRegistrationTool.PSResourceGet or RepositoryRegistrationTool.Both)
-        {
-            var client = new PSResourceGetClient(runner, logger);
-            var created = client.EnsureRepositoryRegistered(
-                result.RepositoryName,
-                endpoint.PSResourceGetUri,
-                trusted,
-                priority,
-                apiVersion: RepositoryApiVersion.V3,
-                timeout: TimeSpan.FromMinutes(2));
-
-            result.PSResourceGetRegistered = true;
-            result.PSResourceGetCreated = created;
-            messages.Add(created
-                ? $"Registered PSResourceGet repository '{result.RepositoryName}'."
-                : $"PSResourceGet repository '{result.RepositoryName}' already existed and was refreshed.");
-        }
-
-        if (effectiveTool is RepositoryRegistrationTool.PowerShellGet or RepositoryRegistrationTool.Both)
-        {
-            var client = new PowerShellGetClient(runner, logger);
-            var created = client.EnsureRepositoryRegistered(
-                result.RepositoryName,
-                endpoint.PowerShellGetSourceUri,
-                endpoint.PowerShellGetPublishUri,
-                trusted,
-                credential,
-                timeout: TimeSpan.FromMinutes(2));
-
-            result.PowerShellGetRegistered = true;
-            result.PowerShellGetCreated = created;
-            messages.Add(created
-                ? $"Registered PowerShellGet repository '{result.RepositoryName}'."
-                : $"PowerShellGet repository '{result.RepositoryName}' already existed and was refreshed.");
-        }
-
-        if (tool == RepositoryRegistrationTool.Auto &&
-            effectiveTool == RepositoryRegistrationTool.PSResourceGet &&
-            prerequisiteStatus.PowerShellGetAvailable)
+        void RegisterPSResourceGet()
         {
             try
             {
-                var powerShellGetClient = new PowerShellGetClient(runner, logger);
-                var created = powerShellGetClient.EnsureRepositoryRegistered(
+                var client = new PSResourceGetClient(runner, logger);
+                var created = client.EnsureRepositoryRegistered(
+                    result.RepositoryName,
+                    endpoint.PSResourceGetUri,
+                    trusted,
+                    priority,
+                    apiVersion: RepositoryApiVersion.V3,
+                    timeout: TimeSpan.FromMinutes(2));
+
+                result.PSResourceGetRegistered = true;
+                result.PSResourceGetCreated = created;
+                messages.Add(created
+                    ? $"Registered PSResourceGet repository '{result.RepositoryName}'."
+                    : $"PSResourceGet repository '{result.RepositoryName}' already existed and was refreshed.");
+            }
+            catch (PowerShellToolNotAvailableException ex)
+            {
+                unavailableTools.Add("PSResourceGet");
+                messages.Add(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"PSResourceGet registration failed: {ex.Message}");
+            }
+        }
+
+        void RegisterPowerShellGet()
+        {
+            try
+            {
+                var client = new PowerShellGetClient(runner, logger);
+                var created = client.EnsureRepositoryRegistered(
                     result.RepositoryName,
                     endpoint.PowerShellGetSourceUri,
                     endpoint.PowerShellGetPublishUri,
@@ -324,22 +291,59 @@ internal sealed class PrivateGalleryService
                 result.PowerShellGetRegistered = true;
                 result.PowerShellGetCreated = created;
                 messages.Add(created
-                    ? $"Registered PowerShellGet repository '{result.RepositoryName}' for compatibility."
-                    : $"PowerShellGet repository '{result.RepositoryName}' was already present for compatibility.");
-                result.ToolUsed = RepositoryRegistrationTool.Both;
+                    ? $"Registered PowerShellGet repository '{result.RepositoryName}'."
+                    : $"PowerShellGet repository '{result.RepositoryName}' already existed and was refreshed.");
+            }
+            catch (PowerShellToolNotAvailableException ex)
+            {
+                unavailableTools.Add("PowerShellGet");
+                messages.Add(ex.Message);
             }
             catch (Exception ex)
             {
-                messages.Add($"PowerShellGet registration was skipped after PSResourceGet succeeded: {ex.Message}");
-                result.ToolUsed = result.PSResourceGetRegistered ? RepositoryRegistrationTool.PSResourceGet : RepositoryRegistrationTool.PowerShellGet;
+                failures.Add($"PowerShellGet registration failed: {ex.Message}");
             }
+        }
+
+        if (effectiveTool == RepositoryRegistrationTool.Auto)
+        {
+            RegisterPSResourceGet();
+            if (!result.PSResourceGetRegistered)
+                RegisterPowerShellGet();
         }
         else
         {
-            result.ToolUsed = effectiveTool;
+            if (effectiveTool is RepositoryRegistrationTool.PowerShellGet or RepositoryRegistrationTool.Both)
+                RegisterPowerShellGet();
+
+            if (effectiveTool is RepositoryRegistrationTool.PSResourceGet or RepositoryRegistrationTool.Both)
+                RegisterPSResourceGet();
         }
 
-        result.Messages = messages.Where(static message => !string.IsNullOrWhiteSpace(message)).ToArray();
+        result.UnavailableTools = unavailableTools
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static toolName => toolName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        result.Messages = messages
+            .Concat(failures)
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (!result.PSResourceGetRegistered && !result.PowerShellGetRegistered)
+        {
+            var message = result.Messages.Length > 0
+                ? string.Join(" ", result.Messages)
+                : $"No repository registration path succeeded for '{endpoint.RepositoryName}'.";
+            throw new InvalidOperationException(message);
+        }
+
+        result.ToolUsed = result.PSResourceGetRegistered && result.PowerShellGetRegistered
+            ? RepositoryRegistrationTool.Both
+            : result.PSResourceGetRegistered
+                ? RepositoryRegistrationTool.PSResourceGet
+                : RepositoryRegistrationTool.PowerShellGet;
+
         return result;
     }
 

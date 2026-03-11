@@ -33,8 +33,9 @@ internal sealed class PrivateModuleWorkflowService
         var repositoryName = request.RepositoryName;
         RepositoryCredential? credential = null;
         var preferPowerShellGet = false;
+        var useAzureArtifacts = request.UseAzureArtifacts;
 
-        if (request.UseAzureArtifacts)
+        if (useAzureArtifacts)
         {
             _privateGalleryService.EnsureProviderSupported(request.Provider);
 
@@ -102,16 +103,6 @@ internal sealed class PrivateModuleWorkflowService
             preferPowerShellGet = credential is null &&
                                   string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.OrdinalIgnoreCase);
         }
-        else
-        {
-            credential = _privateGalleryService.ResolveOptionalCredential(
-                repositoryName,
-                request.CredentialUserName,
-                request.CredentialSecret,
-                request.CredentialSecretFilePath,
-                request.PromptForCredential);
-        }
-
         if (!shouldProcess(
                 $"{modules.Count} module(s) from repository '{repositoryName}'",
                 GetFinalAction(request.Operation, request.Force)))
@@ -122,6 +113,16 @@ internal sealed class PrivateModuleWorkflowService
                 RepositoryName = repositoryName,
                 DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
             };
+        }
+
+        if (!useAzureArtifacts)
+        {
+            credential = _privateGalleryService.ResolveOptionalCredential(
+                repositoryName,
+                request.CredentialUserName,
+                request.CredentialSecret,
+                request.CredentialSecretFilePath,
+                request.PromptForCredential);
         }
 
         var results = _dependencyExecutor(new PrivateModuleDependencyExecutionRequest

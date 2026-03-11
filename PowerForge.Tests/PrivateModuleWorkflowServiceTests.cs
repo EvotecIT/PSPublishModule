@@ -97,6 +97,40 @@ public sealed class PrivateModuleWorkflowServiceTests
         Assert.False(executorCalled);
     }
 
+    [Fact]
+    public void Execute_RepositoryMode_DoesNotResolveOptionalCredentialsWhenShouldProcessDeclines()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var executorCalled = false;
+
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ =>
+            {
+                executorCalled = true;
+                return Array.Empty<ModuleDependencyInstallResult>();
+            });
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "ModuleA" },
+                UseAzureArtifacts = false,
+                RepositoryName = "Company",
+                CredentialSecretFilePath = "missing-secret.txt"
+            },
+            (_, _) => false);
+
+        Assert.False(result.OperationPerformed);
+        Assert.Equal("Company", result.RepositoryName);
+        Assert.Empty(result.DependencyResults);
+        Assert.False(executorCalled);
+    }
+
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
         public bool ShouldProcess(string target, string action) => true;
