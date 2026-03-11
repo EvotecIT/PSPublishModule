@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Xml.Linq;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -90,204 +89,67 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
     /// <summary>Publishes the release asset.</summary>
     protected override void ProcessRecord()
     {
-        static PublishGitHubReleaseAssetResult NewResult() => new()
-        {
-            Success = false,
-            TagName = null,
-            ReleaseName = null,
-            ZipPath = null,
-            ReleaseUrl = null,
-            ErrorMessage = null
-        };
-
-        var versionOverride = Version;
-        var tagNameOverride = TagName;
-        var releaseNameOverride = ReleaseName;
-        var zipOverride = ZipPath;
-        var tagTemplate = TagTemplate;
-        var includeProjectInTag = IncludeProjectNameInTag.IsPresent;
-        var isPreRelease = IsPreRelease.IsPresent;
-        var generateReleaseNotes = GenerateReleaseNotes.IsPresent;
-
-        var projectPaths = ProjectPath ?? Array.Empty<string>();
-        if (projectPaths.Length > 1 && !string.IsNullOrWhiteSpace(zipOverride))
-        {
-            var r = NewResult();
-            r.ErrorMessage = "ZipPath override is not supported when multiple ProjectPath values are provided.";
-            WriteObject(r);
-            return;
-        }
-
-        var entries = new List<(string ProjectName, string TagName, string ReleaseName, string ZipPath)>();
-
         try
         {
             var isVerbose = MyInvocation?.BoundParameters.ContainsKey("Verbose") == true;
             var logger = new CmdletLogger(this, isVerbose);
-            var publisher = new GitHubReleasePublisher(logger);
-
-            foreach (var projectPath in projectPaths)
+            var workflow = new GitHubReleaseAssetWorkflowService(logger);
+            var shouldPublish = ShouldProcess($"{GitHubUsername}/{GitHubRepositoryName}", "Publish GitHub release assets");
+            var request = new GitHubReleaseAssetWorkflowRequest
             {
-                var result = NewResult();
+                ProjectPaths = ResolveProjectPaths(ProjectPath),
+                Owner = GitHubUsername,
+                Repository = GitHubRepositoryName,
+                Token = GitHubAccessToken,
+                IsPreRelease = IsPreRelease.IsPresent,
+                GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
+                Version = Version,
+                TagName = TagName,
+                TagTemplate = TagTemplate,
+                ReleaseName = ReleaseName,
+                IncludeProjectNameInTag = IncludeProjectNameInTag.IsPresent,
+                ZipPath = ResolveOptionalPath(ZipPath)
+            };
 
-                if (string.IsNullOrWhiteSpace(projectPath))
-                {
-                    result.ErrorMessage = "ProjectPath contains an empty value.";
-                    WriteObject(result);
-                    continue;
-                }
-
-                string fullProjectPath;
-                try { fullProjectPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(projectPath); }
-                catch { fullProjectPath = projectPath; }
-
-                if (!Directory.Exists(fullProjectPath) && !File.Exists(fullProjectPath))
-                {
-                    result.ErrorMessage = $"Project path '{projectPath}' not found.";
-                    WriteObject(result);
-                    continue;
-                }
-
-                var csproj = ResolveCsproj(fullProjectPath);
-                if (csproj is null)
-                {
-                    result.ErrorMessage = $"No csproj found in {projectPath}";
-                    WriteObject(result);
-                    continue;
-                }
-
-                var projectName = Path.GetFileNameWithoutExtension(csproj) ?? "Project";
-                var csprojDir = Path.GetDirectoryName(csproj) ?? fullProjectPath;
-
-                var version = versionOverride;
-                if (string.IsNullOrWhiteSpace(version))
-                {
-                    var doc = XDocument.Load(csproj);
-                    version = GetFirstElementValue(doc, "VersionPrefix");
-                    if (string.IsNullOrWhiteSpace(version))
-                    {
-                        result.ErrorMessage = $"VersionPrefix not found in '{csproj}'";
-                        WriteObject(result);
-                        continue;
-                    }
-                }
-
-                var zip = string.IsNullOrWhiteSpace(zipOverride)
-                    ? Path.Combine(csprojDir, "bin", "Release", $"{projectName}.{version}.zip")
-                    : SessionState.Path.GetUnresolvedProviderPathFromPSPath(zipOverride);
-
-                if (!File.Exists(zip))
-                {
-                    result.ErrorMessage = $"Zip file '{zip}' not found.";
-                    WriteObject(result);
-                    continue;
-                }
-
-                var tag = tagNameOverride;
-                if (string.IsNullOrWhiteSpace(tag))
-                {
-                    if (!string.IsNullOrWhiteSpace(tagTemplate))
-                    {
-                        tag = tagTemplate!.Replace("{Project}", projectName).Replace("{Version}", version);
-                    }
-                    else if (includeProjectInTag)
-                    {
-                        tag = $"{projectName}-v{version}";
-                    }
-                    else
-                    {
-                        tag = $"v{version}";
-                    }
-                }
-
-                var relName = !string.IsNullOrWhiteSpace(releaseNameOverride) ? releaseNameOverride : tag;
-
-                entries.Add((projectName, tag!, relName!, zip));
-            }
-
-            if (entries.Count == 0)
-                return;
-
-            foreach (var group in entries.GroupBy(e => e.TagName, StringComparer.OrdinalIgnoreCase))
-            {
-                var tag = group.Key;
-                var relName = group.First().ReleaseName;
-                var assets = group.Select(e => e.ZipPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-
-                bool succeeded;
-                string? releaseUrl;
-                string? errorMessage;
-
-                if (!ShouldProcess($"{GitHubUsername}/{GitHubRepositoryName}", $"Publish release {tag} to GitHub"))
-                {
-                    succeeded = true;
-                    errorMessage = null;
-                    releaseUrl = $"https://github.com/{GitHubUsername}/{GitHubRepositoryName}/releases/tag/{tag}";
-                }
-                else
-                {
-                    try
-                    {
-                        var publishResult = publisher.PublishRelease(new GitHubReleasePublishRequest
-                        {
-                            Owner = GitHubUsername,
-                            Repository = GitHubRepositoryName,
-                            Token = GitHubAccessToken,
-                            TagName = tag,
-                            ReleaseName = relName,
-                            GenerateReleaseNotes = generateReleaseNotes,
-                            IsPreRelease = isPreRelease,
-                            ReuseExistingReleaseOnConflict = true,
-                            AssetFilePaths = assets
-                        });
-
-                        succeeded = publishResult.Succeeded;
-                        releaseUrl = publishResult.HtmlUrl;
-                        errorMessage = null;
-                    }
-                    catch (Exception ex)
-                    {
-                        succeeded = false;
-                        releaseUrl = null;
-                        errorMessage = ex.Message;
-                    }
-                }
-
-                foreach (var e in group)
-                {
-                    var r = NewResult();
-                    r.Success = succeeded;
-                    r.TagName = tag;
-                    r.ReleaseName = relName;
-                    r.ZipPath = e.ZipPath;
-                    r.ReleaseUrl = releaseUrl;
-                    r.ErrorMessage = succeeded ? null : errorMessage;
-                    WriteObject(r);
-                }
-            }
+            foreach (var result in workflow.Execute(request, shouldPublish))
+                WriteObject(ToCmdletResult(result));
         }
         catch (Exception ex)
         {
-            var r = NewResult();
-            r.Success = false;
-            r.ErrorMessage = ex.Message;
-            WriteObject(r);
+            WriteObject(new PublishGitHubReleaseAssetResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            });
         }
     }
 
-    private static string? ResolveCsproj(string path)
+    private string[] ResolveProjectPaths(IEnumerable<string>? projectPaths)
     {
-        if (File.Exists(path) && path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            return Path.GetFullPath(path);
-
-        if (!Directory.Exists(path))
-            return null;
-
-        return Directory.EnumerateFiles(path, "*.csproj", SearchOption.AllDirectories).FirstOrDefault();
+        return (projectPaths ?? Array.Empty<string>())
+            .Select(path => ResolvePathWithFallback(path ?? string.Empty))
+            .ToArray();
     }
 
-    private static string? GetFirstElementValue(XDocument doc, string localName)
-        => doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase))?.Value;
+    private string? ResolveOptionalPath(string? path)
+        => string.IsNullOrWhiteSpace(path) ? null : ResolvePathWithFallback(path!);
+
+    private string ResolvePathWithFallback(string path)
+    {
+        try { return SessionState.Path.GetUnresolvedProviderPathFromPSPath(path); }
+        catch { return path; }
+    }
+
+    private static PublishGitHubReleaseAssetResult ToCmdletResult(GitHubReleaseAssetWorkflowResult result)
+        => new()
+        {
+            Success = result.Success,
+            TagName = result.TagName,
+            ReleaseName = result.ReleaseName,
+            ZipPath = result.ZipPath,
+            ReleaseUrl = result.ReleaseUrl,
+            ErrorMessage = result.ErrorMessage
+        };
 
     /// <summary>Result returned by <c>Publish-GitHubReleaseAsset</c>.</summary>
     public sealed class PublishGitHubReleaseAssetResult
