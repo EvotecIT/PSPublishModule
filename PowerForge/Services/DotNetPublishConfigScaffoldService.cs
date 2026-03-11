@@ -61,13 +61,24 @@ public sealed class DotNetPublishConfigScaffoldService
     private static string ResolvePath(string basePath, string value)
     {
         var fallback = string.IsNullOrWhiteSpace(basePath) ? Environment.CurrentDirectory : basePath;
-        var raw = (value ?? string.Empty).Trim().Trim('"');
+        var raw = NormalizePathValue(value);
         if (raw.Length == 0)
             return Path.GetFullPath(fallback);
 
         return Path.IsPathRooted(raw)
             ? Path.GetFullPath(raw)
             : Path.GetFullPath(Path.Combine(fallback, raw));
+    }
+
+    private static string NormalizePathValue(string? value)
+    {
+        var raw = (value ?? string.Empty).Trim().Trim('"');
+        if (raw.Length == 0)
+            return string.Empty;
+
+        return raw
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .Replace(Path.DirectorySeparatorChar == '/' ? '\\' : '/', Path.DirectorySeparatorChar);
     }
 
     private static string? NormalizeNullable(string? value)

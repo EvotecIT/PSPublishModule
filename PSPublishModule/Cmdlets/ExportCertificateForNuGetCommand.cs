@@ -58,11 +58,12 @@ public sealed class ExportCertificateForNuGetCommand : PSCmdlet
             ? PowerForge.CertificateStoreLocation.LocalMachine
             : PowerForge.CertificateStoreLocation.CurrentUser;
         var currentDirectory = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory();
+        var resolvedOutputPath = ResolveOutputPath(OutputPath);
         var result = new NuGetCertificateExportService().Execute(new NuGetCertificateExportRequest
         {
             CertificateThumbprint = ParameterSetName == ParameterSetThumbprint ? CertificateThumbprint : null,
             CertificateSha256 = ParameterSetName == ParameterSetSha256 ? CertificateSha256 : null,
-            OutputPath = OutputPath,
+            OutputPath = resolvedOutputPath,
             StoreLocation = storeLocation,
             WorkingDirectory = currentDirectory
         });
@@ -87,6 +88,21 @@ public sealed class ExportCertificateForNuGetCommand : PSCmdlet
             HostWriteLineSafe(line.Text, line.Color);
 
         WriteObject(result);
+    }
+
+    private string? ResolveOutputPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            return SessionState?.Path?.GetUnresolvedProviderPathFromPSPath(path) ?? path;
+        }
+        catch
+        {
+            return path;
+        }
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)

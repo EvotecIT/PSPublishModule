@@ -51,7 +51,20 @@ internal sealed class PrivateGalleryService
         var hasCredentialSecretFile = !string.IsNullOrWhiteSpace(credentialSecretFilePath);
         var hasCredentialSecret = !string.IsNullOrWhiteSpace(credentialSecret);
         var hasCredentialUser = !string.IsNullOrWhiteSpace(credentialUserName);
-        var hasExplicitCredential = hasCredentialUser && (hasCredentialSecretFile || hasCredentialSecret);
+        var hasAnyCredentialSecret = hasCredentialSecretFile || hasCredentialSecret;
+        var hasExplicitCredential = hasCredentialUser && hasAnyCredentialSecret;
+
+        if (hasAnyCredentialSecret && !hasCredentialUser)
+            throw new ArgumentException("CredentialUserName is required when CredentialSecret/CredentialSecretFilePath is provided.", nameof(credentialUserName));
+
+        if (promptForCredential && (hasAnyCredentialSecret || hasCredentialUser))
+            throw new ArgumentException("PromptForCredential cannot be combined with CredentialUserName/CredentialSecret/CredentialSecretFilePath.", nameof(promptForCredential));
+
+        if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession &&
+            (promptForCredential || hasExplicitCredential))
+        {
+            throw new ArgumentException("BootstrapMode ExistingSession cannot be combined with interactive or explicit credential parameters.", nameof(bootstrapMode));
+        }
 
         var resolvedSecret = string.Empty;
         if (hasCredentialSecretFile)
@@ -61,18 +74,6 @@ internal sealed class PrivateGalleryService
         else if (hasCredentialSecret)
         {
             resolvedSecret = credentialSecret!.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(resolvedSecret) && !hasCredentialUser)
-            throw new ArgumentException("CredentialUserName is required when CredentialSecret/CredentialSecretFilePath is provided.", nameof(credentialUserName));
-
-        if (promptForCredential && (!string.IsNullOrWhiteSpace(resolvedSecret) || hasCredentialUser))
-            throw new ArgumentException("PromptForCredential cannot be combined with CredentialUserName/CredentialSecret/CredentialSecretFilePath.", nameof(promptForCredential));
-
-        if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession &&
-            (promptForCredential || hasExplicitCredential))
-        {
-            throw new ArgumentException("BootstrapMode ExistingSession cannot be combined with interactive or explicit credential parameters.", nameof(bootstrapMode));
         }
 
         var effectiveMode = bootstrapMode;
@@ -243,6 +244,15 @@ internal sealed class PrivateGalleryService
         {
             throw new InvalidOperationException("PowerShellGet is required when Tool is PowerShellGet.");
         }
+        else if (effectiveTool == RepositoryRegistrationTool.Both &&
+                 (!prerequisiteStatus.PSResourceGetAvailable ||
+                  !prerequisiteStatus.PSResourceGetMeetsMinimumVersion ||
+                  !prerequisiteStatus.PowerShellGetAvailable))
+        {
+            throw new InvalidOperationException(
+                $"Both PSResourceGet {MinimumPSResourceGetVersion}+ and PowerShellGet are required when Tool is Both. " +
+                $"Detected PSResourceGet: {prerequisiteStatus.PSResourceGetVersion ?? "not installed"}, PowerShellGet: {prerequisiteStatus.PowerShellGetVersion ?? "not installed"}.");
+        }
 
         result.UnavailableTools = unavailableTools
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -255,9 +265,12 @@ internal sealed class PrivateGalleryService
 
         result.RegistrationPerformed = true;
         var runner = new PowerShellRunner();
-        var logger = new NullLogger();
+        var logger = new PrivateGalleryHostLogger(_host);
 
-        if (effectiveTool == RepositoryRegistrationTool.PSResourceGet)
+        if (effectiveTool == RepositoryRegistrationTool.Auto)
+            throw new InvalidOperationException("Repository registration tool could not be resolved.");
+
+        if (effectiveTool is RepositoryRegistrationTool.PSResourceGet or RepositoryRegistrationTool.Both)
         {
             var client = new PSResourceGetClient(runner, logger);
             var created = client.EnsureRepositoryRegistered(
@@ -265,6 +278,7 @@ internal sealed class PrivateGalleryService
                 endpoint.PSResourceGetUri,
                 trusted,
                 priority,
+                apiVersion: RepositoryApiVersion.V3,
                 timeout: TimeSpan.FromMinutes(2));
 
             result.PSResourceGetRegistered = true;
@@ -273,7 +287,8 @@ internal sealed class PrivateGalleryService
                 ? $"Registered PSResourceGet repository '{result.RepositoryName}'."
                 : $"PSResourceGet repository '{result.RepositoryName}' already existed and was refreshed.");
         }
-        else
+
+        if (effectiveTool is RepositoryRegistrationTool.PowerShellGet or RepositoryRegistrationTool.Both)
         {
             var client = new PowerShellGetClient(runner, logger);
             var created = client.EnsureRepositoryRegistered(
@@ -311,7 +326,7 @@ internal sealed class PrivateGalleryService
                 messages.Add(created
                     ? $"Registered PowerShellGet repository '{result.RepositoryName}' for compatibility."
                     : $"PowerShellGet repository '{result.RepositoryName}' was already present for compatibility.");
-                result.ToolUsed = RepositoryRegistrationTool.Auto;
+                result.ToolUsed = RepositoryRegistrationTool.Both;
             }
             catch (Exception ex)
             {
@@ -337,7 +352,7 @@ internal sealed class PrivateGalleryService
         var installed = new List<string>(2);
         var messages = new List<string>(4);
         var runner = new PowerShellRunner();
-        var logger = new NullLogger();
+        var logger = new PrivateGalleryHostLogger(_host);
 
         if (!initialStatus.PSResourceGetAvailable || !initialStatus.PSResourceGetMeetsMinimumVersion || forceInstall)
         {
@@ -411,7 +426,7 @@ internal sealed class PrivateGalleryService
 
         const string probeName = "__PowerForgePrivateGalleryConnectionProbe__";
         var runner = new PowerShellRunner();
-        var logger = new NullLogger();
+        var logger = new PrivateGalleryHostLogger(_host);
         var tool = PrivateGalleryVersionPolicy.SelectAccessProbeTool(registration, credential);
 
         try
