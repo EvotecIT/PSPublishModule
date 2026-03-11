@@ -348,15 +348,48 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             // best effort only
         }
         ILogger logger = new SpectreConsoleLogger { IsVerbose = isVerbose };
-
-        var moduleName = ParameterSetName == ParameterSetConfiguration
-            ? LegacySegmentAdapter.ResolveModuleNameFromLegacyConfiguration(Configuration)
-            : ModuleName;
-
-        if (string.IsNullOrWhiteSpace(moduleName))
-            throw new PSArgumentException("ModuleName is required.");
-
-        var (projectRoot, basePathForScaffold) = ResolveProjectPaths(moduleName);
+        var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+        {
+            ParameterSetName = ParameterSetName,
+            Settings = Settings,
+            Configuration = Configuration,
+            ModuleName = ModuleName,
+            InputPath = Path,
+            StagingPath = StagingPath,
+            CsprojPath = CsprojPath,
+            DotNetConfiguration = DotNetConfiguration,
+            DotNetFramework = DotNetFramework,
+            DotNetFrameworkWasBound = boundParameters?.ContainsKey(nameof(DotNetFramework)) == true,
+            Legacy = Legacy.IsPresent,
+            SkipInstall = SkipInstall.IsPresent,
+            InstallStrategy = InstallStrategy,
+            InstallStrategyWasBound = boundParameters?.ContainsKey(nameof(InstallStrategy)) == true,
+            KeepVersions = KeepVersions,
+            KeepVersionsWasBound = boundParameters?.ContainsKey(nameof(KeepVersions)) == true,
+            InstallRoots = InstallRoots,
+            InstallRootsWasBound = boundParameters?.ContainsKey(nameof(InstallRoots)) == true,
+            LegacyFlatHandling = LegacyFlatHandling,
+            LegacyFlatHandlingWasBound = boundParameters?.ContainsKey(nameof(LegacyFlatHandling)) == true,
+            PreserveInstallVersions = PreserveInstallVersions,
+            PreserveInstallVersionsWasBound = boundParameters?.ContainsKey(nameof(PreserveInstallVersions)) == true,
+            KeepStaging = KeepStaging.IsPresent,
+            ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+            ExcludeFiles = ExcludeFiles ?? Array.Empty<string>(),
+            DiagnosticsBaselinePath = DiagnosticsBaselinePath,
+            GenerateDiagnosticsBaseline = GenerateDiagnosticsBaseline.IsPresent,
+            UpdateDiagnosticsBaseline = UpdateDiagnosticsBaseline.IsPresent,
+            FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
+            FailOnDiagnosticsSeverity = FailOnDiagnosticsSeverity,
+            DiagnosticsBinaryConflictSearchRoot = DiagnosticsBinaryConflictSearchRoot,
+            JsonOnly = JsonOnly.IsPresent,
+            JsonPath = JsonPath,
+            CurrentPath = SessionState.Path.CurrentFileSystemLocation.Path,
+            ScriptRoot = MyInvocation?.PSScriptRoot,
+            ResolvePath = path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)
+        });
+        var moduleName = preparation.ModuleName;
+        var projectRoot = preparation.ProjectRoot;
+        var basePathForScaffold = preparation.BasePathForScaffold;
         if (basePathForScaffold is not null)
         {
             if (!Directory.Exists(basePathForScaffold))
@@ -391,67 +424,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
                 logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
-
-            var segments = useLegacy
-                ? (ParameterSetName == ParameterSetConfiguration
-                    ? LegacySegmentAdapter.CollectFromLegacyConfiguration(Configuration)
-                    : LegacySegmentAdapter.CollectFromSettings(Settings))
-                : Array.Empty<IConfigurationSegment>();
-
-            var baseVersion = "1.0.0";
-            var psd1 = System.IO.Path.Combine(projectRoot, $"{moduleName}.psd1");
-            if (File.Exists(psd1) &&
-                ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var version) &&
-                !string.IsNullOrWhiteSpace(version))
-            {
-                baseVersion = version!;
-            }
-            var frameworks = useLegacy && boundParameters?.ContainsKey(nameof(DotNetFramework)) != true
-                ? Array.Empty<string>()
-                : DotNetFramework;
-
-            var pipelineSpec = new ModulePipelineSpec
-            {
-                Build = new ModuleBuildSpec
-                {
-                    Name = moduleName,
-                    SourcePath = projectRoot,
-                    StagingPath = StagingPath,
-                    CsprojPath = CsprojPath,
-                    Version = baseVersion,
-                    Configuration = DotNetConfiguration,
-                    Frameworks = frameworks,
-                    KeepStaging = KeepStaging.IsPresent,
-                    ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
-                    ExcludeFiles = BuildStageExcludeFiles(moduleName),
-                    BinaryConflictSearchRoots = DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>(),
-                },
-                Install = new ModulePipelineInstallOptions
-                {
-                    Enabled = !SkipInstall.IsPresent,
-                    Strategy = boundParameters?.ContainsKey(nameof(InstallStrategy)) == true ? InstallStrategy : null,
-                    KeepVersions = boundParameters?.ContainsKey(nameof(KeepVersions)) == true ? KeepVersions : null,
-                    Roots = boundParameters?.ContainsKey(nameof(InstallRoots)) == true ? (InstallRoots ?? Array.Empty<string>()) : null,
-                    LegacyFlatHandling = boundParameters?.ContainsKey(nameof(LegacyFlatHandling)) == true ? LegacyFlatHandling : null,
-                    PreserveVersions = boundParameters?.ContainsKey(nameof(PreserveInstallVersions)) == true ? PreserveInstallVersions : null,
-                },
-                Diagnostics = new ModulePipelineDiagnosticsOptions
-                {
-                    BaselinePath = DiagnosticsBaselinePath,
-                    GenerateBaseline = GenerateDiagnosticsBaseline.IsPresent,
-                    UpdateBaseline = UpdateDiagnosticsBaseline.IsPresent,
-                    FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
-                    FailOnSeverity = FailOnDiagnosticsSeverity,
-                    BinaryConflictSearchRoots = DiagnosticsBinaryConflictSearchRoot ?? Array.Empty<string>()
-                },
-                Segments = segments,
-            };
+            var pipelineSpec = preparation.PipelineSpec;
 
             if (JsonOnly.IsPresent)
             {
-                var jsonFullPath = ResolveJsonOutputPath(projectRoot);
-                PrepareSpecForJsonExport(pipelineSpec, jsonFullPath);
-                WritePipelineSpecJson(pipelineSpec, jsonFullPath);
+                var jsonFullPath = preparation.JsonOutputPath!;
+                new ModuleBuildPreparationService().WritePipelineSpecJson(pipelineSpec, jsonFullPath);
                 logger.Success($"Wrote pipeline JSON: {jsonFullPath}");
             }
             else
@@ -533,146 +511,6 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         return;
     }
 
-    private static bool IsTrue(object? value)
-        => value switch
-        {
-            SwitchParameter sp => sp.IsPresent,
-            bool b => b,
-            _ => false
-        };
-
-    private (string ProjectRoot, string? BasePathForScaffold) ResolveProjectPaths(string moduleName)
-    {
-        if (ParameterSetName == ParameterSetModern && !string.IsNullOrWhiteSpace(Path))
-        {
-            var basePath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-            var fullProjectPath = System.IO.Path.Combine(basePath, moduleName);
-            return (fullProjectPath, basePath);
-        }
-
-        var scriptRoot = MyInvocation?.PSScriptRoot;
-        string rootToUse;
-        if (!string.IsNullOrWhiteSpace(scriptRoot))
-        {
-            rootToUse = System.IO.Path.GetFullPath(System.IO.Path.Combine(scriptRoot, ".."));
-        }
-        else
-        {
-            rootToUse = SessionState.Path.CurrentFileSystemLocation.Path;
-        }
-
-        return (rootToUse, null);
-    }
-
-    private string[] BuildStageExcludeFiles(string moduleName)
-    {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in (ExcludeFiles ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)))
-            set.Add(entry.Trim());
-
-        if (!string.IsNullOrWhiteSpace(moduleName))
-            set.Add($"{moduleName}.Tests.ps1");
-
-        return set.ToArray();
-    }
-
-    private string ResolveJsonOutputPath(string projectRoot)
-    {
-        if (!string.IsNullOrWhiteSpace(JsonPath))
-            return SessionState.Path.GetUnresolvedProviderPathFromPSPath(JsonPath);
-
-        return System.IO.Path.Combine(projectRoot, "powerforge.json");
-    }
-
-    private static void PrepareSpecForJsonExport(ModulePipelineSpec spec, string jsonFullPath)
-    {
-        if (spec is null) throw new ArgumentNullException(nameof(spec));
-        if (spec.Build is null) throw new ArgumentException("Spec.Build is required.", nameof(spec));
-
-        var baseDir = System.IO.Path.GetDirectoryName(jsonFullPath);
-        if (string.IsNullOrWhiteSpace(baseDir)) return;
-
-        spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
-        spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
-        spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
-        if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
-            spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
-    }
-
-    private static string MakeRelativeForConfig(string baseDir, string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return path;
-
-        try
-        {
-            var full = System.IO.Path.GetFullPath(path);
-            var rel = GetRelativePath(baseDir, full);
-            return rel.Replace('\\', '/');
-        }
-        catch
-        {
-            return path.Replace('\\', '/');
-        }
-    }
-
-    private static string? MakeRelativeForConfigNullable(string baseDir, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        return MakeRelativeForConfig(baseDir, path!);
-    }
-
-    private static string GetRelativePath(string baseDir, string fullPath)
-    {
-#if NET472
-        // System.IO.Path.GetRelativePath is not available on .NET Framework.
-        // Use Uri-based relative path calculation as a fallback.
-        var baseFull = EnsureTrailingSeparator(System.IO.Path.GetFullPath(baseDir));
-        var baseUri = new Uri(baseFull);
-        var pathUri = new Uri(System.IO.Path.GetFullPath(fullPath));
-
-        if (!string.Equals(baseUri.Scheme, pathUri.Scheme, StringComparison.OrdinalIgnoreCase))
-            return fullPath;
-
-        var relativeUri = baseUri.MakeRelativeUri(pathUri);
-        var relative = Uri.UnescapeDataString(relativeUri.ToString());
-        return relative.Replace('/', System.IO.Path.DirectorySeparatorChar);
-#else
-        return System.IO.Path.GetRelativePath(baseDir, fullPath);
-#endif
-
-#if NET472
-        static string EnsureTrailingSeparator(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return input;
-            if (input.EndsWith(System.IO.Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
-                input.EndsWith(System.IO.Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                return input;
-            return input + System.IO.Path.DirectorySeparatorChar;
-        }
-#endif
-    }
-
-    private static void WritePipelineSpecJson(ModulePipelineSpec spec, string jsonFullPath)
-    {
-        if (spec is null) throw new ArgumentNullException(nameof(spec));
-        if (string.IsNullOrWhiteSpace(jsonFullPath)) throw new ArgumentException("Json path is required.", nameof(jsonFullPath));
-
-        var opts = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-        opts.Converters.Add(new JsonStringEnumConverter());
-        opts.Converters.Add(new ConfigurationSegmentJsonConverter());
-
-        var outDir = System.IO.Path.GetDirectoryName(jsonFullPath);
-        if (!string.IsNullOrWhiteSpace(outDir))
-            Directory.CreateDirectory(outDir);
-
-        var json = JsonSerializer.Serialize(spec, opts) + Environment.NewLine;
-        File.WriteAllText(jsonFullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-    }
-
     private static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)
     {
         if (buffer is null) return;
@@ -711,4 +549,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             return $"{elapsed.Seconds}s {elapsed.Milliseconds}ms";
         return $"{elapsed.Milliseconds}ms";
     }
+
+    private static bool IsTrue(object? value)
+        => value switch
+        {
+            SwitchParameter sp => sp.IsPresent,
+            bool b => b,
+            _ => false
+        };
 }
