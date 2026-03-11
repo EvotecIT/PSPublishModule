@@ -46,7 +46,7 @@ public sealed class DotNetPublishConfigScaffoldService
         return scaffolder.Generate(new DotNetPublishConfigScaffoldOptions
         {
             ProjectRoot = resolvedRoot,
-            ProjectPath = NormalizeNullable(request.ProjectPath),
+            ProjectPath = NormalizePathNullable(request.ProjectPath),
             TargetName = NormalizeNullable(request.TargetName),
             Framework = NormalizeNullable(request.Framework),
             Runtimes = NormalizeStrings(request.Runtimes),
@@ -84,6 +84,12 @@ public sealed class DotNetPublishConfigScaffoldService
     private static string? NormalizeNullable(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
+        return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static string? NormalizePathNullable(string? value)
+    {
+        var normalized = NormalizePathValue(value);
         return normalized.Length == 0 ? null : normalized;
     }
 
