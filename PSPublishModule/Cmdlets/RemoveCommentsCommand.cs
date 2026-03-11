@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
-using System.Management.Automation.Language;
 using System.Text;
-using System.Text.RegularExpressions;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -86,14 +84,15 @@ public sealed class RemoveCommentsCommand : PSCmdlet
         var content = ParameterSetName == ParameterSetFilePath
             ? ReadContentFromFilePath(SourceFilePath)
             : (Content ?? string.Empty);
-
-        var processed = RemoveCommentsCore(
-            content,
-            removeEmptyLines: RemoveEmptyLines.IsPresent,
-            removeAllEmptyLines: RemoveAllEmptyLines.IsPresent,
-            removeCommentsInParamBlock: RemoveCommentsInParamBlock.IsPresent,
-            removeCommentsBeforeParamBlock: RemoveCommentsBeforeParamBlock.IsPresent,
-            doNotRemoveSignatureBlock: DoNotRemoveSignatureBlock.IsPresent);
+        var processed = new CommentRemovalService().Process(new CommentRemovalRequest
+        {
+            Content = content,
+            RemoveEmptyLines = RemoveEmptyLines.IsPresent,
+            RemoveAllEmptyLines = RemoveAllEmptyLines.IsPresent,
+            RemoveCommentsInParamBlock = RemoveCommentsInParamBlock.IsPresent,
+            RemoveCommentsBeforeParamBlock = RemoveCommentsBeforeParamBlock.IsPresent,
+            DoNotRemoveSignatureBlock = DoNotRemoveSignatureBlock.IsPresent
+        });
 
         if (!string.IsNullOrEmpty(DestinationFilePath))
         {
@@ -118,134 +117,5 @@ public sealed class RemoveCommentsCommand : PSCmdlet
     {
         // Match legacy script behavior (PS 5.1 uses UTF8 which includes BOM; PS 7 uses UTF8BOM explicitly).
         return new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
-    }
-
-    private static string RemoveCommentsCore(
-        string content,
-        bool removeEmptyLines,
-        bool removeAllEmptyLines,
-        bool removeCommentsInParamBlock,
-        bool removeCommentsBeforeParamBlock,
-        bool doNotRemoveSignatureBlock)
-    {
-        var text = content ?? string.Empty;
-
-        // Tokenize and remove comment tokens using the same state machine as the legacy PowerShell implementation.
-        var ast = Parser.ParseInput(text, out Token[] tokens, out ParseError[] _);
-        var scriptAst = ast as ScriptBlockAst;
-
-        var toRemove = new List<Token>();
-        bool doNotRemove = false;
-        bool doNotRemoveCommentParam = false;
-        int countParams = 0;
-        bool paramFound = false;
-        bool signatureBlock = false;
-        var scriptParamOffset = scriptAst?.ParamBlock?.Extent.StartOffset ?? -1;
-
-        // Group tokens by StartLineNumber to mirror the legacy approach (though ordering is unchanged).
-        foreach (var lineGroup in tokens.GroupBy(t => t.Extent.StartLineNumber))
-        {
-            var lineTokens = lineGroup.ToArray();
-            for (int i = 0; i < lineTokens.Length; i++)
-            {
-                var token = lineTokens[i];
-                var extentText = token.Extent.Text;
-
-                // Find comments between function and param block and not remove them (default).
-                if (string.Equals(extentText, "function", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!removeCommentsBeforeParamBlock)
-                        doNotRemove = true;
-                    continue;
-                }
-
-                if (string.Equals(extentText, "param", StringComparison.OrdinalIgnoreCase))
-                {
-                    paramFound = true;
-                    doNotRemove = false;
-                }
-
-                if (doNotRemove)
-                    continue;
-
-                // Find comments between param block and end of param block (default: do not remove).
-                if (string.Equals(extentText, "param", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!removeCommentsInParamBlock)
-                        doNotRemoveCommentParam = true;
-                    continue;
-                }
-
-                if (paramFound && (string.Equals(extentText, "(", StringComparison.Ordinal) || string.Equals(extentText, "@(", StringComparison.Ordinal)))
-                {
-                    countParams += 1;
-                }
-                else if (paramFound && string.Equals(extentText, ")", StringComparison.Ordinal))
-                {
-                    countParams -= 1;
-                }
-
-                if (paramFound && string.Equals(extentText, ")", StringComparison.Ordinal))
-                {
-                    if (countParams == 0)
-                    {
-                        doNotRemoveCommentParam = false;
-                        paramFound = false;
-                    }
-                }
-
-                if (doNotRemoveCommentParam)
-                    continue;
-
-                if (token.Kind != TokenKind.Comment)
-                    continue;
-
-                if (!removeCommentsBeforeParamBlock && scriptParamOffset >= 0 && token.Extent.EndOffset <= scriptParamOffset)
-                    continue;
-
-                if (doNotRemoveSignatureBlock)
-                {
-                    if (string.Equals(token.Text, "# SIG # Begin signature block", StringComparison.OrdinalIgnoreCase))
-                    {
-                        signatureBlock = true;
-                        continue;
-                    }
-
-                    if (signatureBlock)
-                    {
-                        if (string.Equals(token.Text, "# SIG # End signature block", StringComparison.OrdinalIgnoreCase))
-                        {
-                            signatureBlock = false;
-                        }
-                        continue;
-                    }
-                }
-
-                toRemove.Add(token);
-            }
-        }
-
-        foreach (var token in toRemove.OrderByDescending(t => t.Extent.StartOffset))
-        {
-            var startIndex = token.Extent.StartOffset;
-            var howManyChars = token.Extent.EndOffset - token.Extent.StartOffset;
-            text = text.Remove(startIndex, howManyChars);
-        }
-
-        if (removeEmptyLines)
-        {
-            text = Regex.Replace(text, @"(?m)^\s*$", string.Empty);
-            text = Regex.Replace(text, @"(?:\r?\n|\n|\r)", "\r\n");
-        }
-
-        if (removeAllEmptyLines)
-        {
-            text = Regex.Replace(text, @"(?m)^\s*$(\r?\n)?", string.Empty);
-        }
-
-        if (!string.IsNullOrEmpty(text))
-            text = text.Trim();
-
-        return text;
     }
 }
