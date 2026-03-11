@@ -13,70 +13,13 @@ namespace PSPublishModule;
 public sealed partial class InvokeProjectBuildCommand
 {
     /// <summary>
-    /// Builds a preflight advisory when GitHub single-release reuse would publish a mixed-version asset set into an existing tag.
+    /// Validates whether GitHub single-release reuse is safe for the current plan.
     /// </summary>
-    /// <param name="tag">GitHub release tag being evaluated.</param>
-    /// <param name="projects">Packable projects participating in the release plan.</param>
-    /// <param name="plannedAssetNames">Asset names that would be published for the current plan.</param>
-    /// <param name="existingAssetNames">Asset names already attached to the existing GitHub release.</param>
-    /// <returns>An advisory message when the reuse is unsafe; otherwise <see langword="null"/>.</returns>
-    internal static string? BuildGitHubSingleReleaseReuseAdvisory(
-        string tag,
-        IReadOnlyList<DotNetRepositoryProjectResult> projects,
-        IReadOnlyCollection<string> plannedAssetNames,
-        IReadOnlyCollection<string> existingAssetNames)
-    {
-        if (string.IsNullOrWhiteSpace(tag))
-            return null;
-
-        var packable = projects
-            .Where(p => p.IsPackable && !string.IsNullOrWhiteSpace(p.NewVersion))
-            .ToArray();
-        var distinctVersions = packable
-            .Select(p => p.NewVersion!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (distinctVersions.Length <= 1)
-            return null;
-
-        var planned = new HashSet<string>(
-            plannedAssetNames.Where(name => !string.IsNullOrWhiteSpace(name)),
-            StringComparer.OrdinalIgnoreCase);
-        var existing = new HashSet<string>(
-            existingAssetNames.Where(name => !string.IsNullOrWhiteSpace(name)),
-            StringComparer.OrdinalIgnoreCase);
-
-        if (planned.Count == 0 || planned.SetEquals(existing))
-            return null;
-
-        var versionSummary = string.Join(", ",
-            packable
-                .OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase)
-                .Select(p => $"{p.ProjectName}={p.NewVersion}"));
-        var missingAssets = planned
-            .Except(existing, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var extraAssets = existing
-            .Except(planned, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var details = new List<string>
-        {
-            $"GitHub preflight blocked publish: tag '{tag}' already exists and Single release mode would reuse it for a mixed-version package set ({versionSummary})."
-        };
-
-        if (missingAssets.Length > 0)
-            details.Add($"Planned assets missing from the existing release: {string.Join(", ", missingAssets)}.");
-        if (extraAssets.Length > 0)
-            details.Add($"Existing release contains different assets: {string.Join(", ", extraAssets)}.");
-
-        details.Add("Change one of: set GitHubReleaseMode to 'PerProject'; set GitHubTagConflictPolicy to 'Fail' or 'AppendUtcTimestamp'; or use a unique GitHubTagTemplate such as '{Repo}-v{UtcTimestamp}'. Keep GitHubPrimaryProject explicit when Single mode is intentional.");
-        return string.Join(" ", details);
-    }
-
+    /// <param name="config">Project build configuration.</param>
+    /// <param name="plan">Repository release plan used for the publish preflight.</param>
+    /// <param name="gitHubToken">Resolved GitHub access token.</param>
+    /// <param name="logger">Logger used for informational preflight messages.</param>
+    /// <returns>An advisory message when the publish should be blocked; otherwise <see langword="null"/>.</returns>
     private static string? ValidateGitHubPublishPreflight(
         ProjectBuildConfig config,
         DotNetRepositoryReleaseResult plan,
@@ -147,7 +90,7 @@ public sealed partial class InvokeProjectBuildCommand
             return existingRelease.ErrorMessage;
 
         logger.Info($"GitHub preflight: release tag '{tag}' already exists; validating asset set before publish.");
-        return BuildGitHubSingleReleaseReuseAdvisory(tag, plan.Projects, plannedAssetNames, existingRelease.AssetNames);
+        return ProjectBuildGitHubPublisher.BuildSingleReleaseReuseAdvisory(tag, plan.Projects, plannedAssetNames, existingRelease.AssetNames);
     }
 
     private static GitHubReleaseProbeResult ProbeGitHubReleaseByTag(

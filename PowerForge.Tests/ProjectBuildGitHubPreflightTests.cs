@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using PowerForge;
-using PSPublishModule;
-
 namespace PowerForge.Tests;
 
 public sealed class ProjectBuildGitHubPreflightTests
@@ -11,7 +9,7 @@ public sealed class ProjectBuildGitHubPreflightTests
     public void BuildGitHubSingleReleaseReuseAdvisory_ReturnsMessage_WhenMixedVersionsWouldReuseDifferentAssets()
     {
         var projects = CreateProjects();
-        var advisory = InvokeProjectBuildCommand.BuildGitHubSingleReleaseReuseAdvisory(
+        var advisory = ProjectBuildGitHubPublisher.BuildSingleReleaseReuseAdvisory(
             tag: "DbaClientX-v0.2.0",
             projects: projects,
             plannedAssetNames: new[]
@@ -53,7 +51,7 @@ public sealed class ProjectBuildGitHubPreflightTests
             "DbaClientX.SqlServer.0.1.0.zip"
         };
 
-        var advisory = InvokeProjectBuildCommand.BuildGitHubSingleReleaseReuseAdvisory(
+        var advisory = ProjectBuildGitHubPublisher.BuildSingleReleaseReuseAdvisory(
             tag: "DbaClientX-v0.2.0",
             projects: CreateProjects(),
             plannedAssetNames: plannedAssets,

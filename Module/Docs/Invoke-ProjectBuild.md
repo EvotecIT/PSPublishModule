@@ -155,7 +155,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ProjectBuildResult`
+- `PowerForge.ProjectBuildResult`
 
 ## RELATED LINKS
 
