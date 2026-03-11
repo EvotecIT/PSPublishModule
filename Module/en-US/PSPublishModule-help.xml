@@ -1901,9 +1901,8 @@ or a precomputed ModuleTestFailureAnalysis.</maml:para>
     <maml:description>
       <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported&#xD;
 for binary modules (compiled cmdlets).</maml:para>
-      <maml:para>Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.&#xD;
-Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),&#xD;
-especially when running under Windows PowerShell 5.1.</maml:para>
+      <maml:para>The cmdlet delegates scanning to a typed PowerForge service so the metadata logic can be reused outside&#xD;
+the PowerShell surface.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">

@@ -95,6 +95,7 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
         try
         {
             var analyzer = new ModuleTestFailureAnalyzer();
+            var serializer = new ModuleTestFailureSerializationService();
             ModuleTestFailureAnalysis analysis;
 
             if (ParameterSetName == ParameterSetTestResults)
@@ -123,7 +124,7 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
             switch (OutputFormat)
             {
                 case ModuleTestFailureOutputFormat.Json:
-                    WriteObject(ConvertToJson(analysis), enumerateCollection: false);
+                    WriteObject(serializer.ToJson(analysis), enumerateCollection: false);
                     break;
                 case ModuleTestFailureOutputFormat.Summary:
                     WriteSummary(analysis, ShowSuccessful.IsPresent);
@@ -219,13 +220,6 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
             WriteWarning($"  {p}");
 
         return null;
-    }
-
-    private string ConvertToJson(object analysis)
-    {
-        var script = "param($o) $o | ConvertTo-Json -Depth 3";
-        var res = InvokeCommand.InvokeScript(script, analysis);
-        return res.Count > 0 ? (res[0]?.BaseObject?.ToString() ?? string.Empty) : string.Empty;
     }
 
     private void WriteSummary(ModuleTestFailureAnalysis analysis, bool showSuccessful)

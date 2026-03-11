@@ -1,10 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Management.Automation;
-using System.Management.Automation.Runspaces;
-using System.Runtime.InteropServices;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -46,7 +41,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
 
     /// <summary>Artefact type to generate.</summary>
     [Parameter(Mandatory = true)]
-    public PowerForge.ArtefactType Type { get; set; }
+    public ArtefactType Type { get; set; }
 
     /// <summary>Enable artefact creation. By default artefact creation is disabled.</summary>
     [Parameter]
@@ -143,173 +138,50 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     /// <summary>Emits an artefact configuration object for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var artefact = new ConfigurationArtefactSegment
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var factory = new ArtefactConfigurationFactory(logger);
+        var request = new ArtefactConfigurationRequest
         {
-            ArtefactType = Type,
-            Configuration = new ArtefactConfiguration
-            {
-                RequiredModules = new ArtefactRequiredModulesConfiguration()
-            }
+            Type = Type,
+            EnableSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Enable)),
+            Enable = Enable.IsPresent,
+            IncludeTagNameSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)),
+            IncludeTagName = IncludeTagName.IsPresent,
+            Path = Path,
+            ModulesPath = ModulesPath,
+            RequiredModulesPath = RequiredModulesPath,
+            RequiredModulesRepository = RequiredModulesRepository,
+            RequiredModulesTool = MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesTool)) ? RequiredModulesTool : null,
+            RequiredModulesSource = MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesSource)) ? RequiredModulesSource : null,
+            AddRequiredModulesSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AddRequiredModules)),
+            AddRequiredModules = AddRequiredModules.IsPresent,
+            RequiredModulesCredentialUserName = RequiredModulesCredentialUserName,
+            RequiredModulesCredentialSecret = RequiredModulesCredentialSecret,
+            RequiredModulesCredentialSecretFilePath = RequiredModulesCredentialSecretFilePath,
+            CopyDirectories = MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectories)) ? CopyDirectories : null,
+            CopyDirectoriesRelativeSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectoriesRelative)),
+            CopyDirectoriesRelative = CopyDirectoriesRelative.IsPresent,
+            CopyFiles = MyInvocation.BoundParameters.ContainsKey(nameof(CopyFiles)) ? CopyFiles : null,
+            CopyFilesRelativeSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(CopyFilesRelative)),
+            CopyFilesRelative = CopyFilesRelative.IsPresent,
+            DoNotClearSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(DoNotClear)),
+            DoNotClear = DoNotClear.IsPresent,
+            ArtefactName = MyInvocation.BoundParameters.ContainsKey(nameof(ArtefactName)) ? ArtefactName : null,
+            ScriptName = MyInvocation.BoundParameters.ContainsKey(nameof(ScriptName)) ? ScriptName : null,
+            ID = MyInvocation.BoundParameters.ContainsKey(nameof(ID)) ? ID : null,
+            PreScriptMergeText = MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMerge)) ? PreScriptMerge?.ToString() : null,
+            PostScriptMergeText = MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMerge)) ? PostScriptMerge?.ToString() : null,
+            PreScriptMergePath = MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMergePath)) ? PreScriptMergePath : null,
+            PostScriptMergePath = MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMergePath)) ? PostScriptMergePath : null
         };
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(Enable)))
-            artefact.Configuration.Enabled = Enable.IsPresent;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)))
-            artefact.Configuration.IncludeTagName = IncludeTagName.IsPresent;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(Path)) && Path is not null)
-            artefact.Configuration.Path = NormalizePath(Path);
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesPath)) && RequiredModulesPath is not null)
-            artefact.Configuration.RequiredModules.Path = NormalizePath(RequiredModulesPath);
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesRepository)) &&
-            !string.IsNullOrWhiteSpace(RequiredModulesRepository))        
-        {
-            artefact.Configuration.RequiredModules.Repository = RequiredModulesRepository!.Trim();
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesTool)))
-            artefact.Configuration.RequiredModules.Tool = RequiredModulesTool;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesSource)))
-            artefact.Configuration.RequiredModules.Source = RequiredModulesSource;
-
-        var requiredModulesSecret = string.Empty;
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecretFilePath)) &&
-            !string.IsNullOrWhiteSpace(RequiredModulesCredentialSecretFilePath))
-        {
-            requiredModulesSecret = File.ReadAllText(RequiredModulesCredentialSecretFilePath!).Trim();
-        }
-        else if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecret)) &&
-                 !string.IsNullOrWhiteSpace(RequiredModulesCredentialSecret))
-        {
-            requiredModulesSecret = RequiredModulesCredentialSecret!.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(requiredModulesSecret) &&
-            string.IsNullOrWhiteSpace(RequiredModulesCredentialUserName))
-        {
-            throw new PSArgumentException(
-                "RequiredModulesCredentialUserName is required when RequiredModulesCredentialSecret/RequiredModulesCredentialSecretFilePath is provided.");
-        }
-
-        var hasRequiredModulesCredential =
-            !string.IsNullOrWhiteSpace(RequiredModulesCredentialUserName) &&
-            !string.IsNullOrWhiteSpace(requiredModulesSecret);
-
-        if (hasRequiredModulesCredential)
-        {
-            artefact.Configuration.RequiredModules.Credential = new RepositoryCredential
-            {
-                UserName = RequiredModulesCredentialUserName!.Trim(),
-                Secret = requiredModulesSecret
-            };
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(AddRequiredModules)))
-            artefact.Configuration.RequiredModules.Enabled = true;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ModulesPath)) && ModulesPath is not null)
-            artefact.Configuration.RequiredModules.ModulesPath = NormalizePath(ModulesPath);
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectories)) && CopyDirectories is not null)
-            artefact.Configuration.DirectoryOutput = NormalizeMappings(CopyDirectories);
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectoriesRelative)))
-            artefact.Configuration.DestinationDirectoriesRelative = CopyDirectoriesRelative.IsPresent;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFiles)) && CopyFiles is not null)
-            artefact.Configuration.FilesOutput = NormalizeMappings(CopyFiles);
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFilesRelative)))
-            artefact.Configuration.DestinationFilesRelative = CopyFilesRelative.IsPresent;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(DoNotClear)))
-            artefact.Configuration.DoNotClear = DoNotClear.IsPresent;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ArtefactName)))
-            artefact.Configuration.ArtefactName = ArtefactName;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ScriptName)))
-            artefact.Configuration.ScriptName = ScriptName;
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMerge)) && PreScriptMerge is not null)
-            artefact.Configuration.PreScriptMerge = TryFormatScript(PreScriptMerge.ToString());
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMerge)) && PostScriptMerge is not null)
-            artefact.Configuration.PostScriptMerge = TryFormatScript(PostScriptMerge.ToString());
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMergePath)) && !string.IsNullOrWhiteSpace(PreScriptMergePath))
-        {
-            var scriptContent = File.ReadAllText(PreScriptMergePath!);
-            if (!string.IsNullOrWhiteSpace(scriptContent))
-                artefact.Configuration.PreScriptMerge = TryFormatScript(scriptContent);
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMergePath)) && !string.IsNullOrWhiteSpace(PostScriptMergePath))
-        {
-            var scriptContent = File.ReadAllText(PostScriptMergePath!);
-            if (!string.IsNullOrWhiteSpace(scriptContent))
-                artefact.Configuration.PostScriptMerge = TryFormatScript(scriptContent);
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ID)))
-            artefact.Configuration.ID = ID;
-
-        WriteObject(artefact);
-    }
-
-    private static string NormalizePath(string value)
-    {
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? value.Replace('/', '\\')
-            : value.Replace('\\', '/');
-    }
-
-    private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)
-    {
-        if (input is null || input.Length == 0) return null;
-
-        var mappings = new List<ArtefactCopyMapping>();
-        foreach (var entry in input)
-        {
-            if (entry is null) continue;
-            if (string.IsNullOrWhiteSpace(entry.Source) || string.IsNullOrWhiteSpace(entry.Destination))
-                continue;
-
-            mappings.Add(new ArtefactCopyMapping
-            {
-                Source = NormalizePath(entry.Source),
-                Destination = NormalizePath(entry.Destination)
-            });
-        }
-
-        return mappings.Count == 0 ? null : mappings.ToArray();
-    }
-
-    private string TryFormatScript(string scriptDefinition)
-    {
-        if (string.IsNullOrWhiteSpace(scriptDefinition)) return scriptDefinition;
 
         try
         {
-            using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
-            ps.AddCommand("Invoke-Formatter")
-                .AddParameter("ScriptDefinition", scriptDefinition);
-
-            var results = ps.Invoke();
-            if (ps.HadErrors)
-                throw ps.Streams.Error.FirstOrDefault()?.Exception ?? new InvalidOperationException("Invoke-Formatter failed.");
-
-            var formatted = results.FirstOrDefault()?.BaseObject?.ToString();
-            return string.IsNullOrWhiteSpace(formatted) ? scriptDefinition : formatted!;
+            WriteObject(factory.Create(request));
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
-            WriteWarning($"Unable to format merge script provided by user. Error: {ex.Message}. Using original script.");
-            return scriptDefinition;
+            throw new PSArgumentException(ex.Message, ex);
         }
     }
 }
