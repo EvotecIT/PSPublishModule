@@ -113,106 +113,34 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var host = new CmdletPrivateGalleryHost(this);
-        var service = new PrivateGalleryService(host);
-        var modules = service.BuildDependencies(Name);
-        var repositoryName = Repository;
-        RepositoryCredential? credential;
-        var preferPowerShellGet = false;
-
-        if (ParameterSetName == ParameterSetAzureArtifacts)
-        {
-            service.EnsureProviderSupported(Provider);
-
-            var endpoint = AzureArtifactsRepositoryEndpoints.Create(
-                AzureDevOpsOrganization,
-                AzureDevOpsProject,
-                AzureArtifactsFeed,
-                RepositoryName);
-            var prerequisiteInstall = service.EnsureBootstrapPrerequisites(InstallPrerequisites.IsPresent);
-            var allowInteractivePrompt = !host.IsWhatIfRequested;
-
-            repositoryName = endpoint.RepositoryName;
-            var credentialResolution = service.ResolveCredential(
-                repositoryName,
-                BootstrapMode,
-                CredentialUserName,
-                CredentialSecret,
-                CredentialSecretFilePath,
-                PromptForCredential,
-                prerequisiteInstall.Status,
-                allowInteractivePrompt);
-            credential = credentialResolution.Credential;
-
-            var registration = service.EnsureAzureArtifactsRepositoryRegistered(
-                AzureDevOpsOrganization,
-                AzureDevOpsProject,
-                AzureArtifactsFeed,
-                RepositoryName,
-                Tool,
-                Trusted,
-                Priority,
-                BootstrapMode,
-                credentialResolution.BootstrapModeUsed,
-                credentialResolution.CredentialSource,
-                credential,
-                prerequisiteInstall.Status,
-                shouldProcessAction: Tool == RepositoryRegistrationTool.Auto
-                    ? "Update module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-                    : $"Update module repository using {Tool}");
-            registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
-            registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
-
-            if (!registration.RegistrationPerformed)
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var result = new PrivateModuleWorkflowService(host, new PrivateGalleryService(host), logger).Execute(
+            new PrivateModuleWorkflowRequest
             {
-                WriteWarning($"Repository '{registration.RepositoryName}' was not refreshed because the operation was skipped. Module update was not attempted.");
-                return;
-            }
+                Operation = PrivateModuleWorkflowOperation.Update,
+                ModuleNames = Name,
+                UseAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts,
+                RepositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository,
+                Provider = Provider,
+                AzureDevOpsOrganization = AzureDevOpsOrganization,
+                AzureDevOpsProject = AzureDevOpsProject,
+                AzureArtifactsFeed = AzureArtifactsFeed,
+                Tool = Tool,
+                BootstrapMode = BootstrapMode,
+                Trusted = Trusted,
+                Priority = Priority,
+                CredentialUserName = CredentialUserName,
+                CredentialSecret = CredentialSecret,
+                CredentialSecretFilePath = CredentialSecretFilePath,
+                PromptForCredential = PromptForCredential,
+                InstallPrerequisites = InstallPrerequisites,
+                Prerelease = Prerelease
+            },
+            (target, action) => ShouldProcess(target, action));
 
-            service.WriteRegistrationSummary(registration);
-            WriteVerbose($"Repository '{registration.RepositoryName}' is ready for update.");
-
-            if (credential is null &&
-                !registration.InstallPSResourceReady &&
-                !registration.InstallModuleReady)
-            {
-                var hint = string.IsNullOrWhiteSpace(registration.RecommendedBootstrapCommand)
-                    ? string.Empty
-                    : $" Recommended next step: {registration.RecommendedBootstrapCommand}";
-                throw new InvalidOperationException(
-                    $"Repository '{registration.RepositoryName}' was registered, but no native update path is ready for bootstrap mode {registration.BootstrapModeUsed}.{hint}");
-            }
-
-            preferPowerShellGet = credential is null &&
-                                  string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.OrdinalIgnoreCase);
-        }
-        else
-        {
-            credential = null;
-        }
-
-        if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", "Update private modules"))
+        if (!result.OperationPerformed)
             return;
 
-        if (ParameterSetName == ParameterSetRepository)
-        {
-            credential = service.ResolveOptionalCredential(
-                repositoryName,
-                CredentialUserName,
-                CredentialSecret,
-                CredentialSecretFilePath,
-                PromptForCredential);
-        }
-
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), logger);
-        var results = installer.EnsureUpdated(
-            modules,
-            repository: repositoryName,
-            credential: credential,
-            prerelease: Prerelease.IsPresent,
-            preferPowerShellGet: preferPowerShellGet,
-            timeoutPerModule: TimeSpan.FromMinutes(10));
-
-        WriteObject(results, enumerateCollection: true);
+        WriteObject(result.DependencyResults, enumerateCollection: true);
     }
 }

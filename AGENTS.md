@@ -1,6 +1,6 @@
 # Agent Guide (PSPublishModule / PowerForge.Web + Websites)
 
-Last updated: 2026-03-01
+Last updated: 2026-03-11
 
 This file is the "start here" context for any agent working on the PowerForge.Web engine and the three websites that use it.
 
@@ -74,12 +74,44 @@ need per-user global skill installs.
 ## Working Agreements (Best Practices)
 
 - Prefer engine fixes over theme hacks when the same issue can recur across sites.
+- Keep `PSPublishModule` cmdlets thin:
+  - parameter binding
+  - `ShouldProcess` / prompting / PowerShell UX
+  - output mapping back to PowerShell-facing contract types
+- Move reusable logic into shared services first:
+  - `PowerForge` for host-agnostic logic
+  - `PowerForge.PowerShell` for logic that still needs PowerShell-host/runtime concepts
+- Do not add new business logic to `PSPublishModule\Cmdlets\` when the same behavior could be reused by `PowerForge.Cli`, PowerForge Studio, tests, or another C# host.
+- If a public PSPublishModule result type must stay stable, keep the reusable internal model in `PowerForge`/`PowerForge.PowerShell` and map it back in `PSPublishModule` instead of forcing cmdlet-specific types into shared layers.
 - CI/release should fail on regressions; dev should warn and summarize:
   - Verify: use baselines + `failOnNewWarnings:true` in CI.
   - Audit: use baselines + `failOnNewIssues:true` in CI.
 - Prefer stable theme helpers over ad-hoc rendering:
   - Scriban: use `pf.nav_links` / `pf.nav_actions` / `pf.menu_tree` (avoid `navigation.menus[0]`).
 - Commit frequently. Avoid "big bang" diffs that mix unrelated changes.
+
+## Module Layering
+
+When touching the PowerShell module stack, prefer this boundary:
+
+- `PSPublishModule\Cmdlets\`
+  - PowerShell-only surface area
+  - minimal orchestration
+  - no reusable build/publish/install rules unless they are truly cmdlet-specific
+- `PSPublishModule\Services\`
+  - cmdlet host adapters or PowerShell-facing compatibility mappers only
+- `PowerForge\`
+  - reusable domain logic, pipelines, models, filesystem/process/network orchestration
+- `PowerForge.PowerShell\`
+  - reusable services that still depend on PowerShell-host concepts, module registration, manifest editing, or other SMA-adjacent behavior
+
+Quick smell test before adding code to a cmdlet:
+
+1. Could this be called from a test, CLI, Studio app, or another C# host?
+2. Could two cmdlets share it?
+3. Does it manipulate files, versions, dependencies, repositories, GitHub, NuGet, or build plans?
+
+If the answer to any of those is yes, the code probably belongs in `PowerForge` or `PowerForge.PowerShell`, not directly in the cmdlet.
 
 ## Quality Gates (Pattern)
 
