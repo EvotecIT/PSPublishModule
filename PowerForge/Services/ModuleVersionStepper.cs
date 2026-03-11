@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 
 namespace PowerForge;
 
@@ -11,12 +12,13 @@ public sealed class ModuleVersionStepper
 {
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
+    private readonly PowerShellGalleryVersionFeedClient _powerShellGalleryFeed;
 
     /// <summary>
     /// Creates a new instance using the provided logger and an out-of-process PowerShell runner.
     /// </summary>
     public ModuleVersionStepper(ILogger logger)
-        : this(logger, new PowerShellRunner())
+        : this(logger, new PowerShellRunner(), client: null)
     {
     }
 
@@ -24,10 +26,16 @@ public sealed class ModuleVersionStepper
     /// Creates a new instance using the provided logger and runner.
     /// </summary>
     public ModuleVersionStepper(ILogger logger, IPowerShellRunner runner)
+        : this(logger, runner, client: null)
+    {
+    }
+
+    internal ModuleVersionStepper(ILogger logger, IPowerShellRunner runner, HttpClient? client)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
         _psResourceGet = new PSResourceGetClient(runner, _logger);
+        _powerShellGalleryFeed = new PowerShellGalleryVersionFeedClient(_logger, client);
     }
 
     /// <summary>
@@ -108,6 +116,20 @@ public sealed class ModuleVersionStepper
             }
         }
 
+        if (string.Equals(repository, "PSGallery", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var galleryVersion = TryResolveCurrentVersionFromPowerShellGalleryFeed(moduleName!, prerelease);
+                if (galleryVersion is not null)
+                    return (galleryVersion, ModuleVersionSource.Repository);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Couldn't resolve current version from the raw PowerShell Gallery feed: {ex.Message}");
+            }
+        }
+
         try
         {
             var results = _psResourceGet.Find(
@@ -131,6 +153,45 @@ public sealed class ModuleVersionStepper
             _logger.Warn($"Couldn't resolve current version from repository: {ex.Message}");
             return (null, ModuleVersionSource.Repository);
         }
+    }
+
+    private Version? TryResolveCurrentVersionFromPowerShellGalleryFeed(string moduleName, bool prerelease)
+    {
+        var versions = _powerShellGalleryFeed.GetVersions(moduleName, prerelease, timeout: TimeSpan.FromMinutes(2));
+        Version? latest = null;
+        var usedUnlisted = false;
+
+        foreach (var item in versions)
+        {
+            if (!TryParseRepositoryVersion(item.VersionText, out var parsed))
+                continue;
+
+            if (latest is null || parsed.CompareTo(latest) > 0)
+            {
+                latest = parsed;
+                usedUnlisted = !item.IsListed;
+            }
+        }
+
+        if (latest is not null && usedUnlisted && _logger.IsVerbose)
+            _logger.Verbose($"PowerShell Gallery latest version for '{moduleName}' was resolved from an unlisted package entry ({latest}).");
+
+        return latest;
+    }
+
+    private static bool TryParseRepositoryVersion(string versionText, out Version version)
+    {
+        version = new Version(0, 0);
+        if (string.IsNullOrWhiteSpace(versionText))
+            return false;
+
+        var dashIndex = versionText.IndexOf('-');
+        var numericVersion = dashIndex >= 0 ? versionText.Substring(0, dashIndex) : versionText;
+        if (!Version.TryParse(numericVersion, out var parsed))
+            return false;
+
+        version = parsed;
+        return true;
     }
 
     private static string ComputeNextVersion(string expectedVersion, Version? currentVersion)
