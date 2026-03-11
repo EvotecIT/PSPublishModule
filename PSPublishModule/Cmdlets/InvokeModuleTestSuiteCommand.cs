@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -131,11 +130,24 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     {
         try
         {
-            ApplyCiCdDefaults();
-
-            var projectRoot = ResolveProjectPath();
-            if (!Directory.Exists(projectRoot))
-                throw new DirectoryNotFoundException($"Path '{projectRoot}' does not exist or is not a directory");
+            var preparation = new ModuleTestSuitePreparationService().Prepare(new ModuleTestSuitePreparationRequest
+            {
+                CurrentPath = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory(),
+                ProjectPath = ProjectPath,
+                AdditionalModules = AdditionalModules,
+                SkipModules = SkipModules,
+                TestPath = TestPath,
+                OutputFormat = MapOutputFormat(OutputFormat),
+                TimeoutSeconds = TimeoutSeconds,
+                EnableCodeCoverage = EnableCodeCoverage.IsPresent,
+                Force = Force.IsPresent,
+                ExitOnFailure = ExitOnFailure.IsPresent,
+                SkipDependencies = SkipDependencies.IsPresent,
+                SkipImport = SkipImport.IsPresent,
+                PassThru = PassThru.IsPresent,
+                CICD = CICD.IsPresent
+            });
+            var projectRoot = preparation.ProjectRoot;
 
             HostWriteLineSafe(CICD.IsPresent ? "=== CI/CD Module Testing Pipeline ===" : "=== PowerShell Module Test Suite ===", ConsoleColor.Magenta);
             HostWriteLineSafe($"Project Path: {projectRoot}", ConsoleColor.Cyan);
@@ -157,26 +169,11 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
 
             HostWriteLineSafe("Step 2: Executing test suite (out-of-process)...", ConsoleColor.Yellow);
             var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: true);
-
-            var service = new ModuleTestSuiteService(new PowerShellRunner(), logger);
-            var result = service.Run(new ModuleTestSuiteSpec
-            {
-                ProjectPath = projectRoot,
-                TestPath = TestPath,
-                AdditionalModules = AdditionalModules ?? Array.Empty<string>(),
-                SkipModules = SkipModules ?? Array.Empty<string>(),
-                OutputFormat = MapOutputFormat(OutputFormat),
-                EnableCodeCoverage = EnableCodeCoverage.IsPresent,
-                Force = Force.IsPresent,
-                SkipDependencies = SkipDependencies.IsPresent,
-                SkipImport = SkipImport.IsPresent,
-                KeepResultsXml = false,
-                PreferPwsh = true,
-                TimeoutSeconds = TimeoutSeconds
-            });
+            var workflow = new ModuleTestSuiteWorkflowService(logger).Execute(preparation);
+            var result = workflow.Result;
 
             // Emit captured Pester output if requested.
-            if (OutputFormat != ModuleTestSuiteOutputFormat.Minimal && !string.IsNullOrWhiteSpace(result.StdOut))
+            if (preparation.Spec.OutputFormat != PowerForge.ModuleTestSuiteOutputFormat.Minimal && !string.IsNullOrWhiteSpace(result.StdOut))
             {
                 HostWriteLineSafe(result.StdOut);
                 HostWriteLineSafe(string.Empty);
@@ -211,20 +208,22 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
                     HostWriteLineSafe(string.Empty);
                 }
 
-                EmitCiOutputs(result, success: false, errorMessage: $"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed");
+                foreach (var line in workflow.CiOutputLines)
+                    HostWriteLineSafe(line);
 
-                if (ExitOnFailure.IsPresent)
+                if (preparation.ExitOnFailure)
                     Environment.ExitCode = 1;
 
-                if (PassThru.IsPresent)
+                if (preparation.PassThru)
                     WriteObject(result, enumerateCollection: false);
 
-                throw new InvalidOperationException($"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed");
+                throw new InvalidOperationException(workflow.FailureMessage);
             }
 
-            EmitCiOutputs(result, success: true, errorMessage: null);
+            foreach (var line in workflow.CiOutputLines)
+                HostWriteLineSafe(line);
 
-            if (PassThru.IsPresent)
+            if (preparation.PassThru)
                 WriteObject(result, enumerateCollection: false);
         }
         catch (Exception ex)
@@ -232,24 +231,6 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             WriteError(new ErrorRecord(ex, "InvokeModuleTestSuiteFailed", ErrorCategory.NotSpecified, null));
             throw;
         }
-    }
-
-    private void ApplyCiCdDefaults()
-    {
-        if (!CICD.IsPresent)
-            return;
-
-        OutputFormat = ModuleTestSuiteOutputFormat.Minimal;
-        ExitOnFailure = true;
-        PassThru = true;
-    }
-
-    private string ResolveProjectPath()
-    {
-        if (!string.IsNullOrWhiteSpace(ProjectPath))
-            return Path.GetFullPath(ProjectPath!.Trim().Trim('"'));
-
-        return SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory();
     }
 
     private void WriteDependencySummary(RequiredModuleReference[] requiredModules)
@@ -370,32 +351,6 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
                 HostWriteLineSafe($"   Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
 
             HostWriteLineSafe(string.Empty);
-        }
-    }
-
-    private void EmitCiOutputs(ModuleTestSuiteResult result, bool success, string? errorMessage)
-    {
-        if (!CICD.IsPresent)
-            return;
-
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
-        {
-            HostWriteLineSafe($"::set-output name=test-result::{(success ? "true" : "false")}");
-            HostWriteLineSafe($"::set-output name=total-tests::{result.TotalCount}");
-            HostWriteLineSafe($"::set-output name=failed-tests::{result.FailedCount}");
-            if (!success && !string.IsNullOrWhiteSpace(errorMessage))
-                HostWriteLineSafe($"::set-output name=error-message::{errorMessage}");
-            if (result.CoveragePercent.HasValue)
-                HostWriteLineSafe($"::set-output name=code-coverage::{result.CoveragePercent.Value.ToString("0.00", CultureInfo.InvariantCulture)}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TF_BUILD")))
-        {
-            HostWriteLineSafe($"##vso[task.setvariable variable=TestResult;isOutput=true]{(success ? "true" : "false")}");
-            HostWriteLineSafe($"##vso[task.setvariable variable=TotalTests;isOutput=true]{result.TotalCount}");
-            HostWriteLineSafe($"##vso[task.setvariable variable=FailedTests;isOutput=true]{result.FailedCount}");
-            if (!success && !string.IsNullOrWhiteSpace(errorMessage))
-                HostWriteLineSafe($"##vso[task.setvariable variable=ErrorMessage;isOutput=true]{errorMessage}");
         }
     }
 
