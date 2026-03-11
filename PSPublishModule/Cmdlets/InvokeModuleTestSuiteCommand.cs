@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
-using System.IO;
-using System.Linq;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -130,9 +129,10 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     {
         try
         {
+            var display = new ModuleTestSuiteDisplayService();
             var preparation = new ModuleTestSuitePreparationService().Prepare(new ModuleTestSuitePreparationRequest
             {
-                CurrentPath = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory(),
+                CurrentPath = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory,
                 ProjectPath = ProjectPath,
                 AdditionalModules = AdditionalModules,
                 SkipModules = SkipModules,
@@ -149,25 +149,16 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             });
             var projectRoot = preparation.ProjectRoot;
 
-            HostWriteLineSafe(CICD.IsPresent ? "=== CI/CD Module Testing Pipeline ===" : "=== PowerShell Module Test Suite ===", ConsoleColor.Magenta);
-            HostWriteLineSafe($"Project Path: {projectRoot}", ConsoleColor.Cyan);
-
             var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
             var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
             var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
-            HostWriteLineSafe($"PowerShell Version: {psVersion}", ConsoleColor.Cyan);
-            HostWriteLineSafe($"PowerShell Edition: {psEdition}", ConsoleColor.Cyan);
-            HostWriteLineSafe(string.Empty);
+            WriteDisplayLines(display.CreateHeader(projectRoot, psVersion, psEdition, CICD.IsPresent));
 
-            HostWriteLineSafe("Step 1: Gathering module information...", ConsoleColor.Yellow);
+            WriteDisplayLines(display.CreateModuleInfoHeader());
             var moduleInfo = new ModuleInformationReader().Read(projectRoot);
-            HostWriteLineSafe($"  Module Name: {moduleInfo.ModuleName}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Module Version: {moduleInfo.ModuleVersion ?? string.Empty}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Manifest Path: {moduleInfo.ManifestPath}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Required Modules: {(moduleInfo.RequiredModules ?? Array.Empty<RequiredModuleReference>()).Length}", ConsoleColor.Green);
-            HostWriteLineSafe(string.Empty);
+            WriteDisplayLines(display.CreateModuleInfoDetails(moduleInfo));
 
-            HostWriteLineSafe("Step 2: Executing test suite (out-of-process)...", ConsoleColor.Yellow);
+            WriteDisplayLines(display.CreateExecutionHeader());
             var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: true);
             var workflow = new ModuleTestSuiteWorkflowService(logger).Execute(preparation);
             var result = workflow.Result;
@@ -179,32 +170,20 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
                 HostWriteLineSafe(string.Empty);
             }
 
-            HostWriteLineSafe("Step 3: Dependency summary...", ConsoleColor.Yellow);
-            WriteDependencySummary(result.RequiredModules);
-            WriteAdditionalModulesSummary();
-            HostWriteLineSafe(string.Empty);
+            WriteDisplayLines(display.CreateDependencySummary(result.RequiredModules, AdditionalModules, SkipModules));
 
             if (!SkipDependencies.IsPresent)
-            {
-                HostWriteLineSafe("Step 4: Dependency installation results...", ConsoleColor.Yellow);
-                WriteDependencyInstallResults(result.DependencyResults);
-                HostWriteLineSafe(string.Empty);
-            }
+                WriteDisplayLines(display.CreateDependencyInstallResults(result.DependencyResults));
 
-            var successColor = result.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green;
-            HostWriteLineSafe(result.FailedCount > 0 ? "=== Test Suite Failed ===" : "=== Test Suite Completed Successfully ===", successColor);
-            HostWriteLineSafe($"Module: {result.ModuleName} v{result.ModuleVersion ?? string.Empty}", ConsoleColor.Green);
-            HostWriteLineSafe($"Tests: {result.PassedCount}/{result.TotalCount} passed", result.FailedCount > 0 ? ConsoleColor.Yellow : ConsoleColor.Green);
-            if (result.Duration.HasValue)
-                HostWriteLineSafe($"Duration: {result.Duration.Value}", ConsoleColor.Green);
-            HostWriteLineSafe(string.Empty);
+            WriteDisplayLines(display.CreateCompletionSummary(result));
 
             if (result.FailedCount > 0)
             {
                 if (ShowFailureSummary.IsPresent || CICD.IsPresent)
                 {
-                    HostWriteLineSafe("=== Test Failure Analysis ===", ConsoleColor.Yellow);
-                    WriteFailureSummary(result.FailureAnalysis, FailureSummaryFormat);
+                    WriteDisplayLines(display.CreateFailureSummary(
+                        result.FailureAnalysis,
+                        detailed: FailureSummaryFormat == ModuleTestSuiteFailureSummaryFormat.Detailed));
                     HostWriteLineSafe(string.Empty);
                 }
 
@@ -233,127 +212,6 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
         }
     }
 
-    private void WriteDependencySummary(RequiredModuleReference[] requiredModules)
-    {
-        if (requiredModules.Length == 0)
-        {
-            HostWriteLineSafe("  No required modules specified in manifest", ConsoleColor.Gray);
-            return;
-        }
-
-        HostWriteLineSafe("Required modules:", ConsoleColor.Cyan);
-        foreach (var m in requiredModules)
-        {
-            var name = m.ModuleName;
-            var min = m.ModuleVersion;
-            var req = m.RequiredVersion;
-            var max = m.MaximumVersion;
-
-            var versionInfo = string.Empty;
-            if (!string.IsNullOrWhiteSpace(min)) versionInfo += $" (Min: {min})";
-            if (!string.IsNullOrWhiteSpace(req)) versionInfo += $" (Required: {req})";
-            if (!string.IsNullOrWhiteSpace(max)) versionInfo += $" (Max: {max})";
-
-            HostWriteLineSafe($"  📦 {name}{versionInfo}", ConsoleColor.Green);
-        }
-    }
-
-    private void WriteAdditionalModulesSummary()
-    {
-        if (AdditionalModules.Length == 0)
-            return;
-
-        HostWriteLineSafe("Additional modules:", ConsoleColor.Cyan);
-        foreach (var m in AdditionalModules)
-        {
-            if (SkipModules.Contains(m, StringComparer.OrdinalIgnoreCase))
-                continue;
-
-            HostWriteLineSafe($"  ✅ {m}", ConsoleColor.Green);
-        }
-    }
-
-    private void WriteDependencyInstallResults(ModuleDependencyInstallResult[] results)
-    {
-        if (results.Length == 0)
-        {
-            HostWriteLineSafe("  (no dependency install actions)", ConsoleColor.Gray);
-            return;
-        }
-
-        foreach (var r in results)
-        {
-            switch (r.Status)
-            {
-                case ModuleDependencyInstallStatus.Skipped:
-                    HostWriteLineSafe($"  ⏭️ Skipping: {r.Name}", ConsoleColor.Gray);
-                    break;
-                case ModuleDependencyInstallStatus.Satisfied:
-                    HostWriteLineSafe($"  ✅ {r.Name} OK (installed: {r.InstalledVersion ?? "unknown"})", ConsoleColor.Green);
-                    break;
-                case ModuleDependencyInstallStatus.Installed:
-                case ModuleDependencyInstallStatus.Updated:
-                {
-                    var icon = r.Status == ModuleDependencyInstallStatus.Updated ? "🔄" : "📥";
-                    HostWriteLineSafe($"  {icon} {r.Name} {r.Status} via {r.Installer ?? "installer"} (resolved: {r.ResolvedVersion ?? "unknown"})", ConsoleColor.Green);
-                    break;
-                }
-                case ModuleDependencyInstallStatus.Failed:
-                    HostWriteLineSafe($"  ❌ {r.Name}: {r.Message}", ConsoleColor.Red);
-                    break;
-            }
-        }
-    }
-
-    private void WriteFailureSummary(ModuleTestFailureAnalysis? analysis, ModuleTestSuiteFailureSummaryFormat format)
-    {
-        if (analysis is null)
-        {
-            HostWriteLineSafe("No failure analysis available.", ConsoleColor.Yellow);
-            return;
-        }
-
-        if (analysis.TotalCount == 0)
-        {
-            HostWriteLineSafe("No test results found", ConsoleColor.Yellow);
-            return;
-        }
-
-        var color = analysis.FailedCount == 0 ? ConsoleColor.Green : ConsoleColor.Yellow;
-        HostWriteLineSafe($"Summary: {analysis.PassedCount}/{analysis.TotalCount} tests passed", color);
-        HostWriteLineSafe(string.Empty);
-
-        if (analysis.FailedCount == 0)
-        {
-            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
-            return;
-        }
-
-        HostWriteLineSafe($"Failed Tests ({analysis.FailedCount}):", ConsoleColor.Red);
-        HostWriteLineSafe(string.Empty);
-
-        foreach (var f in analysis.FailedTests)
-        {
-            HostWriteLineSafe($"- {f.Name}", ConsoleColor.Red);
-            if (format == ModuleTestSuiteFailureSummaryFormat.Detailed &&
-                !string.IsNullOrWhiteSpace(f.ErrorMessage) &&
-                !string.Equals(f.ErrorMessage, "No error message available", StringComparison.Ordinal))
-            {
-                foreach (var line in f.ErrorMessage.Split(new[] { '\n' }, StringSplitOptions.None))
-                {
-                    var trimmed = line.Trim();
-                    if (trimmed.Length > 0)
-                        HostWriteLineSafe($"   {trimmed}", ConsoleColor.Yellow);
-                }
-            }
-
-            if (format == ModuleTestSuiteFailureSummaryFormat.Detailed && f.Duration.HasValue)
-                HostWriteLineSafe($"   Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
-
-            HostWriteLineSafe(string.Empty);
-        }
-    }
-
     private static PowerForge.ModuleTestSuiteOutputFormat MapOutputFormat(ModuleTestSuiteOutputFormat format)
     {
         return format switch
@@ -363,6 +221,12 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             ModuleTestSuiteOutputFormat.Minimal => PowerForge.ModuleTestSuiteOutputFormat.Minimal,
             _ => PowerForge.ModuleTestSuiteOutputFormat.Detailed
         };
+    }
+
+    private void WriteDisplayLines(IReadOnlyList<ModuleTestSuiteDisplayLine> lines)
+    {
+        foreach (var line in lines)
+            HostWriteLineSafe(line.Text, line.Color);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
