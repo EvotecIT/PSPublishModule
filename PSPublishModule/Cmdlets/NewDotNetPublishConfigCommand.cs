@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -102,9 +101,22 @@ public sealed class NewDotNetPublishConfigCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var cwd = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory;
-        var resolvedRoot = ResolvePath(cwd, ProjectRoot);
-        var resolvedOutputPath = ResolvePath(resolvedRoot, OutputPath);
+        var request = new DotNetPublishConfigScaffoldRequest
+        {
+            ProjectRoot = ProjectRoot,
+            ProjectPath = ProjectPath,
+            TargetName = TargetName,
+            Framework = Framework,
+            Runtimes = Runtimes,
+            Styles = Styles,
+            Configuration = Configuration,
+            OutputPath = OutputPath,
+            Force = Force.IsPresent,
+            IncludeSchema = !NoSchema.IsPresent,
+            WorkingDirectory = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory
+        };
+        var service = new DotNetPublishConfigScaffoldService();
+        var resolvedOutputPath = service.ResolveOutputPath(request);
 
         var action = File.Exists(resolvedOutputPath)
             ? "Overwrite DotNet publish configuration"
@@ -117,20 +129,7 @@ public sealed class NewDotNetPublishConfigCommand : PSCmdlet
 
         try
         {
-            var scaffolder = new DotNetPublishConfigScaffolder(logger);
-            var result = scaffolder.Generate(new DotNetPublishConfigScaffoldOptions
-            {
-                ProjectRoot = resolvedRoot,
-                ProjectPath = NormalizeNullable(ProjectPath),
-                TargetName = NormalizeNullable(TargetName),
-                Framework = NormalizeNullable(Framework),
-                Runtimes = NormalizeStrings(Runtimes),
-                Styles = NormalizeStyles(Styles),
-                Configuration = string.IsNullOrWhiteSpace(Configuration) ? "Release" : Configuration.Trim(),
-                OutputPath = resolvedOutputPath,
-                Overwrite = Force.IsPresent,
-                IncludeSchema = !NoSchema.IsPresent
-            });
+            var result = service.Generate(request, logger);
 
             if (PassThru.IsPresent)
                 WriteObject(result);
@@ -142,45 +141,5 @@ public sealed class NewDotNetPublishConfigCommand : PSCmdlet
             var record = new ErrorRecord(ex, "NewDotNetPublishConfigFailed", ErrorCategory.WriteError, resolvedOutputPath);
             ThrowTerminatingError(record);
         }
-    }
-
-    private static string ResolvePath(string basePath, string value)
-    {
-        var raw = (value ?? string.Empty).Trim().Trim('"');
-        if (raw.Length == 0)
-            return Path.GetFullPath(basePath);
-
-        return Path.IsPathRooted(raw)
-            ? Path.GetFullPath(raw)
-            : Path.GetFullPath(Path.Combine(basePath, raw));
-    }
-
-    private static string? NormalizeNullable(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-            return null;
-
-        return normalized;
-    }
-
-    private static string[]? NormalizeStrings(string[]? values)
-    {
-        if (values is null || values.Length == 0) return null;
-        var normalized = values
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return normalized.Length == 0 ? null : normalized;
-    }
-
-    private static DotNetPublishStyle[]? NormalizeStyles(DotNetPublishStyle[]? values)
-    {
-        if (values is null || values.Length == 0) return null;
-        var normalized = values
-            .Distinct()
-            .ToArray();
-        return normalized.Length == 0 ? null : normalized;
     }
 }

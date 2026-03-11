@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Management.Automation;
 using PowerForge;
 
@@ -72,45 +71,35 @@ public sealed class NewModuleAboutTopicCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var root = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory;
-        var outputDirectory = ResolveOutputDirectory(root, OutputPath);
-        var normalizedTopic = AboutTopicTemplateGenerator.NormalizeTopicName(TopicName);
-        var extension = Format == AboutTopicTemplateFormat.Markdown ? ".md" : ".help.txt";
-        var filePath = Path.Combine(outputDirectory, normalizedTopic + extension);
+        var request = new AboutTopicTemplateRequest
+        {
+            TopicName = TopicName,
+            OutputPath = OutputPath,
+            ShortDescription = ShortDescription,
+            Format = Format,
+            Force = Force.IsPresent,
+            WorkingDirectory = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory
+        };
+        var service = new AboutTopicTemplateService();
+        var preview = service.Preview(request);
 
-        var action = File.Exists(filePath) ? "Overwrite about topic template" : "Create about topic template";
-        if (!ShouldProcess(filePath, action))
+        var action = preview.Exists ? "Overwrite about topic template" : "Create about topic template";
+        if (!ShouldProcess(preview.FilePath, action))
             return;
 
         try
         {
-            var created = AboutTopicTemplateGenerator.WriteTemplateFile(
-                outputDirectory: outputDirectory,
-                topicName: normalizedTopic,
-                force: Force.IsPresent,
-                shortDescription: ShortDescription,
-                format: Format);
+            var created = service.Generate(request);
 
             if (PassThru.IsPresent)
-                WriteObject(created);
+                WriteObject(created.FilePath);
             else
-                WriteVerbose($"Created about topic template: {created}");
+                WriteVerbose($"Created about topic template: {created.FilePath}");
         }
         catch (Exception ex)
         {
-            var record = new ErrorRecord(ex, "NewModuleAboutTopicFailed", ErrorCategory.WriteError, filePath);
+            var record = new ErrorRecord(ex, "NewModuleAboutTopicFailed", ErrorCategory.WriteError, preview.FilePath);
             ThrowTerminatingError(record);
         }
-    }
-
-    private static string ResolveOutputDirectory(string currentDirectory, string outputPath)
-    {
-        var trimmed = (outputPath ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(trimmed))
-            return Path.GetFullPath(currentDirectory);
-
-        return Path.IsPathRooted(trimmed)
-            ? Path.GetFullPath(trimmed)
-            : Path.GetFullPath(Path.Combine(currentDirectory, trimmed));
     }
 }

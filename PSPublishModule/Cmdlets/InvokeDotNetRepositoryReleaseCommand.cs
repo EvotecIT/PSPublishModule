@@ -197,22 +197,34 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
         var result = new DotNetRepositoryReleaseWorkflowService(logger).Execute(preparation, executeBuild);
         if (interactive)
-            WriteRepositorySummary(result, isPlan: !executeBuild);
+        {
+            var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);
+            var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: !executeBuild);
+            WriteRepositorySummary(display);
+        }
         WriteObject(result);
     }
 
-    private static void WriteRepositorySummary(DotNetRepositoryReleaseResult result, bool isPlan)
+    private static void WriteRepositorySummary(DotNetRepositoryReleaseDisplayModel display)
     {
-        if (result is null) return;
+        if (display is null) return;
 
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
+        static string ColorTag(ConsoleColor? color)
+            => color switch
+            {
+                ConsoleColor.Green => "green",
+                ConsoleColor.Gray => "grey",
+                ConsoleColor.Red => "red",
+                ConsoleColor.Yellow => "yellow",
+                _ => "white"
+            };
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var title = isPlan ? "Plan" : "Summary";
         var icon = unicode ? "✅" : "*";
 
-        AnsiConsole.Write(new Rule($"[green]{icon} {title}[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[green]{icon} {display.Title}[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
@@ -223,19 +235,15 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));
 
-        foreach (var project in result.Projects.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
+        foreach (var project in display.Projects)
         {
-            var packable = project.IsPackable ? "Yes" : "No";
-            var version = string.IsNullOrWhiteSpace(project.OldVersion) && string.IsNullOrWhiteSpace(project.NewVersion)
-                ? string.Empty
-                : $"{project.OldVersion ?? "?"} -> {project.NewVersion ?? "?"}";
-            var packages = project.Packages.Count.ToString();
-            var status = string.IsNullOrWhiteSpace(project.ErrorMessage)
-                ? (project.IsPackable ? "[green]Ok[/]" : "[grey]Skipped[/]")
-                : "[red]Fail[/]";
-            var error = TrimForTable(project.ErrorMessage);
-
-            table.AddRow(Esc(project.ProjectName), packable, Esc(version), packages, status, Esc(error));
+            table.AddRow(
+                Esc(project.ProjectName),
+                project.Packable,
+                Esc(project.VersionDisplay),
+                project.PackageCount,
+                $"[{ColorTag(project.StatusColor)}]{Esc(project.StatusText)}[/]",
+                Esc(project.ErrorPreview));
         }
 
         AnsiConsole.Write(table);
@@ -245,34 +253,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        var totalProjects = result.Projects.Count;
-        var packableProjects = result.Projects.Count(p => p.IsPackable);
-        var failedProjects = result.Projects.Count(p => !string.IsNullOrWhiteSpace(p.ErrorMessage));
-        var totalPackages = result.Projects.Sum(p => p.Packages.Count);
-
-        totals.AddRow("Projects", totalProjects.ToString());
-        totals.AddRow("Packable", packableProjects.ToString());
-        totals.AddRow("Failed", failedProjects.ToString());
-        totals.AddRow("Packages", totalPackages.ToString());
-        if (result.PublishedPackages.Count > 0)
-            totals.AddRow("Published", result.PublishedPackages.Count.ToString());
-        if (result.SkippedDuplicatePackages.Count > 0)
-            totals.AddRow("Skipped duplicates", result.SkippedDuplicatePackages.Count.ToString());
-        if (result.FailedPackages.Count > 0)
-            totals.AddRow("Failed publishes", result.FailedPackages.Count.ToString());
-        if (!string.IsNullOrWhiteSpace(result.ResolvedVersion))
-            totals.AddRow("Resolved version", Esc(result.ResolvedVersion));
+        foreach (var row in display.Totals)
+            totals.AddRow(row.Label, Esc(row.Value));
 
         AnsiConsole.Write(totals);
-    }
-
-    private static string TrimForTable(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var trimmed = value!.Trim();
-        const int max = 140;
-        if (trimmed.Length <= max) return trimmed;
-        return trimmed.Substring(0, max - 3) + "...";
     }
 
 }

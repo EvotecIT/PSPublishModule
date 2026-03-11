@@ -117,109 +117,36 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
     /// <summary>Executes the install workflow.</summary>
     protected override void ProcessRecord()
     {
-        var modules = PrivateGalleryCommandSupport.BuildDependencies(Name);
-        var repositoryName = Repository;
-        RepositoryCredential? credential;
-        var preferPowerShellGet = false;
-
-        if (ParameterSetName == ParameterSetAzureArtifacts)
-        {
-            PrivateGalleryCommandSupport.EnsureProviderSupported(Provider);
-
-            var endpoint = AzureArtifactsRepositoryEndpoints.Create(
-                AzureDevOpsOrganization,
-                AzureDevOpsProject,
-                AzureArtifactsFeed,
-                RepositoryName);
-            var prerequisiteInstall = PrivateGalleryCommandSupport.EnsureBootstrapPrerequisites(this, InstallPrerequisites.IsPresent);
-            var allowInteractivePrompt = !PrivateGalleryCommandSupport.IsWhatIfRequested(this);
-
-            repositoryName = endpoint.RepositoryName;
-            var credentialResolution = PrivateGalleryCommandSupport.ResolveCredential(
-                this,
-                repositoryName,
-                BootstrapMode,
-                CredentialUserName,
-                CredentialSecret,
-                CredentialSecretFilePath,
-                PromptForCredential,
-                prerequisiteInstall.Status,
-                allowInteractivePrompt);
-            credential = credentialResolution.Credential;
-
-            var registration = PrivateGalleryCommandSupport.EnsureAzureArtifactsRepositoryRegistered(
-                this,
-                AzureDevOpsOrganization,
-                AzureDevOpsProject,
-                AzureArtifactsFeed,
-                RepositoryName,
-                Tool,
-                Trusted,
-                Priority,
-                BootstrapMode,
-                credentialResolution.BootstrapModeUsed,
-                credentialResolution.CredentialSource,
-                credential,
-                prerequisiteInstall.Status,
-                shouldProcessAction: Tool == RepositoryRegistrationTool.Auto
-                    ? "Register module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-                    : $"Register module repository using {Tool}");
-            registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
-            registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
-
-            if (!registration.RegistrationPerformed)
+        var host = new CmdletPrivateGalleryHost(this);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var result = new PrivateModuleWorkflowService(host, new PrivateGalleryService(host), logger).Execute(
+            new PrivateModuleWorkflowRequest
             {
-                WriteWarning($"Repository '{registration.RepositoryName}' was not registered because the operation was skipped. Module installation was not attempted.");
-                return;
-            }
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = Name,
+                UseAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts,
+                RepositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository,
+                Provider = Provider,
+                AzureDevOpsOrganization = AzureDevOpsOrganization,
+                AzureDevOpsProject = AzureDevOpsProject,
+                AzureArtifactsFeed = AzureArtifactsFeed,
+                Tool = Tool,
+                BootstrapMode = BootstrapMode,
+                Trusted = Trusted,
+                Priority = Priority,
+                CredentialUserName = CredentialUserName,
+                CredentialSecret = CredentialSecret,
+                CredentialSecretFilePath = CredentialSecretFilePath,
+                PromptForCredential = PromptForCredential,
+                InstallPrerequisites = InstallPrerequisites,
+                Prerelease = Prerelease,
+                Force = Force
+            },
+            (target, action) => ShouldProcess(target, action));
 
-            PrivateGalleryCommandSupport.WriteRegistrationSummary(this, registration);
-            WriteVerbose($"Repository '{registration.RepositoryName}' is ready for installation.");
-
-            if (credential is null &&
-                !registration.InstallPSResourceReady &&
-                !registration.InstallModuleReady)
-            {
-                var hint = string.IsNullOrWhiteSpace(registration.RecommendedBootstrapCommand)
-                    ? string.Empty
-                    : $" Recommended next step: {registration.RecommendedBootstrapCommand}";
-                throw new InvalidOperationException(
-                    $"Repository '{registration.RepositoryName}' was registered, but no native install path is ready for bootstrap mode {registration.BootstrapModeUsed}.{hint}");
-            }
-
-            preferPowerShellGet = credential is null &&
-                                  string.Equals(registration.PreferredInstallCommand, "Install-Module", StringComparison.OrdinalIgnoreCase);
-        }
-        else
-        {
-            credential = null;
-        }
-
-        if (!ShouldProcess($"{modules.Count} module(s) from repository '{repositoryName}'", Force.IsPresent ? "Install or reinstall private modules" : "Install private modules"))
+        if (!result.OperationPerformed)
             return;
 
-        if (ParameterSetName == ParameterSetRepository)
-        {
-            credential = PrivateGalleryCommandSupport.ResolveOptionalCredential(
-                this,
-                repositoryName,
-                CredentialUserName,
-                CredentialSecret,
-                CredentialSecretFilePath,
-                PromptForCredential);
-        }
-
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), logger);
-        var results = installer.EnsureInstalled(
-            modules,
-            force: Force.IsPresent,
-            repository: repositoryName,
-            credential: credential,
-            prerelease: Prerelease.IsPresent,
-            preferPowerShellGet: preferPowerShellGet,
-            timeoutPerModule: TimeSpan.FromMinutes(10));
-
-        WriteObject(results, enumerateCollection: true);
+        WriteObject(result.DependencyResults, enumerateCollection: true);
     }
 }

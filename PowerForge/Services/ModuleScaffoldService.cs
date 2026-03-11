@@ -97,17 +97,17 @@ public sealed class ModuleScaffoldService
         if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(moduleName))
             return;
 
-        var aboutDir = Path.Combine(projectRoot, "Help", "About");
-        Directory.CreateDirectory(aboutDir);
-
-        var topicName = $"about_{moduleName}_Overview";
+        var service = new AboutTopicTemplateService();
         try
         {
-            AboutTopicTemplateGenerator.WriteTemplateFile(
-                outputDirectory: aboutDir,
-                topicName: topicName,
-                force: false,
-                shortDescription: $"Overview for {moduleName} module.");
+            service.Generate(new AboutTopicTemplateRequest
+            {
+                TopicName = $"about_{moduleName}_Overview",
+                OutputPath = Path.Combine("Help", "About"),
+                Force = false,
+                ShortDescription = $"Overview for {moduleName} module.",
+                WorkingDirectory = projectRoot
+            });
         }
         catch (IOException)
         {

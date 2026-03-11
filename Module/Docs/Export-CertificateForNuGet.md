@@ -114,7 +114,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.NuGetCertificateExportResult`
 
 ## RELATED LINKS
 

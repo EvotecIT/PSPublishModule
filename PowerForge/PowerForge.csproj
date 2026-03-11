@@ -80,6 +80,7 @@
     <Compile Remove="Services\\ModulePipelineRunner*.cs" />
     <Compile Remove="Services\\ModulePublisher.cs" />
     <Compile Remove="Services\\ModuleTestFailureAnalyzer.cs" />
+    <Compile Remove="Services\\ModuleTestFailureWorkflowService.cs" />
     <Compile Remove="Services\\ModuleTestSuiteService.cs" />
     <Compile Remove="Services\\ModuleValidationService*.cs" />
     <Compile Remove="Services\\ModuleVersionStepper.cs" />

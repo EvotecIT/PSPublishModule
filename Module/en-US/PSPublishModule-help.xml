@@ -1213,7 +1213,7 @@ This cmdlet exports the selected certificate from the local certificate store.</
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Object</maml:name>
+          <maml:name>PowerForge.NuGetCertificateExportResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>

@@ -398,8 +398,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
         BufferedLogger? interactiveBuffer = null;
         ModuleBuildWorkflowResult? workflow = null;
-        var success = false;
         var logSupport = new BufferedLogSupportService();
+        ModuleBuildCompletionOutcome? outcome = null;
 
         if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
             logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
@@ -408,8 +408,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             var jsonFullPath = preparation.JsonOutputPath!;
             new ModuleBuildPreparationService().WritePipelineSpecJson(preparation.PipelineSpec, jsonFullPath);
+            workflow = new ModuleBuildWorkflowResult { Succeeded = true };
             logger.Success($"Wrote pipeline JSON: {jsonFullPath}");
-            success = true;
         }
         else
         {
@@ -425,42 +425,37 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     configLabel: configLabel),
                 writeSummary: SpectrePipelineConsoleUi.WriteSummary)
                 .Execute(preparation, interactive, useLegacy ? "dsl" : "cmdlet");
-
-            success = workflow.Succeeded;
-            if (!success)
-            {
-                var ex = workflow.Error!;
-                var emitErrorRecord = !exitCodeMode && !workflow.UsedInteractiveView && workflow.PolicyFailure is null;
-                if (emitErrorRecord)
-                    WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
-                if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
-                    logSupport.WriteTail(interactiveBuffer.Entries, logger);
-                if (workflow.UsedInteractiveView && workflow.Plan is not null && !workflow.WrotePolicySummary)
-                {
-                    try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
-                    catch { /* best effort */ }
-                }
-            }
         }
 #pragma warning restore CA1031
 
-        var elapsed = sw.Elapsed;
-        var elapsedText = logSupport.FormatDuration(elapsed);
+        outcome = new ModuleBuildOutcomeService().Evaluate(
+            workflow,
+            exitCodeMode,
+            JsonOnly.IsPresent,
+            useLegacy,
+            sw.Elapsed);
 
-        if (success)
+        if (!outcome.Succeeded)
         {
-            logger.Success(JsonOnly.IsPresent
-                ? $"Pipeline config generated in {elapsedText}"
-                : $"Module build completed in {elapsedText}");
-            if (exitCodeMode) Host.SetShouldExit(0);
+            var ex = workflow?.Error!;
+            if (outcome.ShouldEmitErrorRecord && ex is not null)
+                WriteError(new ErrorRecord(ex, outcome.ErrorRecordId, ErrorCategory.NotSpecified, null));
+            if (outcome.ShouldReplayBufferedLogs && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
+                logSupport.WriteTail(interactiveBuffer.Entries, logger);
+            if (outcome.ShouldWriteInteractiveFailureSummary && workflow?.Plan is not null && ex is not null)
+            {
+                try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
+                catch { /* best effort */ }
+            }
         }
+
+        if (outcome.Succeeded)
+            logger.Success(outcome.CompletionMessage);
         else
-        {
-            logger.Error(JsonOnly.IsPresent
-                ? $"Pipeline config generation failed in {elapsedText}"
-                : $"Module build failed in {elapsedText}");
-            if (exitCodeMode) Host.SetShouldExit(1);
-        }
+            logger.Error(outcome.CompletionMessage);
+
+        if (outcome.ShouldSetExitCode)
+            Host.SetShouldExit(outcome.ExitCode);
 
         return;
     }

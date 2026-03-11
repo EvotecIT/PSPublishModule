@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
-using System.Globalization;
-using System.IO;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -166,7 +165,12 @@ public sealed class ConvertProjectConsistencyCommand : PSCmdlet
         if (shouldProcess)
         {
             var result = service.ConvertAndAnalyze(request);
-            WriteSummary(result.RootPath, result.Report, result.EncodingConversion, result.LineEndingConversion);
+            WriteDisplayLines(new ProjectConsistencyDisplayService().CreateSummary(
+                result.RootPath,
+                result.Report,
+                result.EncodingConversion,
+                result.LineEndingConversion,
+                ExportPath));
             WriteObject(new ProjectConsistencyConversionResult(result.Report, result.EncodingConversion, result.LineEndingConversion));
             return;
         }
@@ -179,36 +183,10 @@ public sealed class ConvertProjectConsistencyCommand : PSCmdlet
             null));
     }
 
-    private void WriteSummary(string root, ProjectConsistencyReport report, ProjectConversionResult? encodingResult, ProjectConversionResult? lineEndingResult)
+    private void WriteDisplayLines(IReadOnlyList<ProjectConsistencyDisplayLine> lines)
     {
-        var s = report.Summary;
-        HostWriteLineSafe("Project Consistency Conversion", ConsoleColor.Cyan);
-        HostWriteLineSafe($"Project: {root}");
-        HostWriteLineSafe($"Target encoding: {s.RecommendedEncoding}");
-        HostWriteLineSafe($"Target line ending: {s.RecommendedLineEnding}");
-
-        if (encodingResult is not null)
-            HostWriteLineSafe(
-                $"Encoding conversion: {encodingResult.Converted}/{encodingResult.Total} converted, {encodingResult.Skipped} skipped, {encodingResult.Errors} errors",
-                encodingResult.Errors == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-
-        if (lineEndingResult is not null)
-            HostWriteLineSafe(
-                $"Line ending conversion: {lineEndingResult.Converted}/{lineEndingResult.Total} converted, {lineEndingResult.Skipped} skipped, {lineEndingResult.Errors} errors",
-                lineEndingResult.Errors == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Consistency summary:", ConsoleColor.Cyan);
-        HostWriteLineSafe(
-            $"  Files compliant: {s.FilesCompliant} ({s.CompliancePercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)",
-            s.CompliancePercentage >= 90 ? ConsoleColor.Green : s.CompliancePercentage >= 70 ? ConsoleColor.Yellow : ConsoleColor.Red);
-        HostWriteLineSafe($"  Files needing attention: {s.FilesWithIssues}", s.FilesWithIssues == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-
-        if (!string.IsNullOrWhiteSpace(ExportPath) && File.Exists(ExportPath!))
-        {
-            HostWriteLineSafe("");
-            HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
-        }
+        foreach (var line in lines)
+            HostWriteLineSafe(line.Text, line.Color);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)

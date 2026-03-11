@@ -43,7 +43,18 @@ public sealed partial class InvokeProjectBuildCommand
     {
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var title = unicode ? "✅ GitHub Summary" : "GitHub Summary";
+        var summary = new ProjectBuildGitHubPublishSummary
+        {
+            PerProject = perProject,
+            SummaryTag = tag,
+            SummaryReleaseUrl = releaseUrl,
+            SummaryAssetsCount = assetsCount
+        };
+        foreach (var result in results)
+            summary.Results.Add(result);
+
+        var display = new ProjectBuildGitHubDisplayService().CreateSummary(summary);
+        var title = unicode ? $"✅ {display.Title}" : display.Title;
         AnsiConsole.Write(new Rule($"[green]{title}[/]").LeftJustified());
 
         var table = new Table()
@@ -51,23 +62,8 @@ public sealed partial class InvokeProjectBuildCommand
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        if (!perProject)
-        {
-            table.AddRow("Mode", "Single");
-            table.AddRow("Tag", Markup.Escape(tag ?? string.Empty));
-            table.AddRow("Assets", assetsCount.ToString());
-            if (!string.IsNullOrWhiteSpace(releaseUrl))
-                table.AddRow("Release", Markup.Escape(releaseUrl!));
-        }
-        else
-        {
-            var ok = results.Count(result => result.Success);
-            var fail = results.Count(result => !result.Success);
-            table.AddRow("Mode", "PerProject");
-            table.AddRow("Projects", results.Count.ToString());
-            table.AddRow("Succeeded", ok.ToString());
-            table.AddRow("Failed", fail.ToString());
-        }
+        foreach (var row in display.Rows)
+            table.AddRow(row.Label, Markup.Escape(row.Value));
 
         AnsiConsole.Write(table);
     }

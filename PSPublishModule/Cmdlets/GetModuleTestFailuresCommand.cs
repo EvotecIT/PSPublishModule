@@ -1,5 +1,5 @@
 using System;
-using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 using PowerForge;
@@ -94,32 +94,26 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
     {
         try
         {
-            var analyzer = new ModuleTestFailureAnalyzer();
             var serializer = new ModuleTestFailureSerializationService();
-            ModuleTestFailureAnalysis analysis;
-
-            if (ParameterSetName == ParameterSetTestResults)
+            var display = new ModuleTestFailureDisplayService();
+            var workflow = new ModuleTestFailureWorkflowService();
+            var workflowResult = workflow.Execute(new ModuleTestFailureWorkflowRequest
             {
-                analysis = AnalyzeTestResults(analyzer, TestResults);
-            }
-            else
-            {
-                var projectPath = ResolveProjectPath();
-                var resultsPath = ResolveResultsPath(Path, projectPath);        
-                if (resultsPath is null)
-                    return;
+                UseTestResultsInput = ParameterSetName == ParameterSetTestResults,
+                TestResults = TestResults,
+                ExplicitPath = Path,
+                ProjectPath = ProjectPath,
+                ModuleBasePath = MyInvocation?.MyCommand?.Module?.ModuleBase,
+                CurrentDirectory = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory()
+            });
 
-                if (!File.Exists(resultsPath))
-                {
-                    // Missing results file should be non-fatal (for example: first run, partial pipelines).
-                    // Use a warning rather than an error to avoid turning this into a terminating exception
-                    // when ErrorActionPreference is set to Stop (common in CI/test runners).
-                    WriteWarning($"Test results file not found: {resultsPath}");
-                    return;
-                }
+            foreach (var warning in workflowResult.WarningMessages)
+                WriteWarning(warning);
 
-                analysis = analyzer.AnalyzeFromXmlFile(resultsPath);
-            }
+            if (workflowResult.Analysis is null)
+                return;
+
+            var analysis = workflowResult.Analysis;
 
             switch (OutputFormat)
             {
@@ -127,10 +121,10 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
                     WriteObject(serializer.ToJson(analysis), enumerateCollection: false);
                     break;
                 case ModuleTestFailureOutputFormat.Summary:
-                    WriteSummary(analysis, ShowSuccessful.IsPresent);
+                    WriteDisplayLines(display.CreateSummary(analysis, ShowSuccessful.IsPresent));
                     break;
                 case ModuleTestFailureOutputFormat.Detailed:
-                    WriteDetails(analysis);
+                    WriteDisplayLines(display.CreateDetailed(analysis));
                     break;
             }
 
@@ -146,161 +140,10 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
         }
     }
 
-    private static ModuleTestFailureAnalysis AnalyzeTestResults(
-        ModuleTestFailureAnalyzer analyzer,
-        object? testResults)
+    private void WriteDisplayLines(IReadOnlyList<ModuleTestFailureDisplayLine> lines)
     {
-        if (testResults is ModuleTestFailureAnalysis analysis)
-            return analysis;
-
-        if (testResults is ModuleTestSuiteResult suite)
-        {
-            if (suite.FailureAnalysis is not null)
-                return suite.FailureAnalysis;
-
-            var xmlPath = suite.ResultsXmlPath;
-            if (xmlPath is not null && File.Exists(xmlPath))
-                return analyzer.AnalyzeFromXmlFile(xmlPath);
-
-            return new ModuleTestFailureAnalysis
-            {
-                Source = "ModuleTestSuiteResult",
-                Timestamp = DateTime.Now,
-                TotalCount = suite.TotalCount,
-                PassedCount = suite.PassedCount,
-                FailedCount = suite.FailedCount,
-                SkippedCount = suite.SkippedCount,
-                FailedTests = Array.Empty<ModuleTestFailureInfo>()
-            };
-        }
-
-        return analyzer.AnalyzeFromPesterResults(testResults);
-    }
-
-    private string ResolveProjectPath()
-    {
-        if (!string.IsNullOrWhiteSpace(ProjectPath))
-            return System.IO.Path.GetFullPath(ProjectPath!.Trim().Trim('"'));
-
-        try
-        {
-            var moduleBase = MyInvocation?.MyCommand?.Module?.ModuleBase;
-            if (!string.IsNullOrWhiteSpace(moduleBase))
-                return moduleBase!;
-        }
-        catch
-        {
-            // ignore
-        }
-
-        return SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory();
-    }
-
-    private string? ResolveResultsPath(string? explicitPath, string projectPath)
-    {
-        if (!string.IsNullOrWhiteSpace(explicitPath))
-            return System.IO.Path.GetFullPath(explicitPath!.Trim().Trim('"'));
-
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(projectPath, "TestResults.xml"),
-            System.IO.Path.Combine(projectPath, "Tests", "TestResults.xml"),
-            System.IO.Path.Combine(projectPath, "Test", "TestResults.xml"),
-            System.IO.Path.Combine(projectPath, "Tests", "Results", "TestResults.xml")
-        };
-
-        foreach (var p in candidates)
-        {
-            if (File.Exists(p))
-                return p;
-        }
-
-        WriteWarning("No test results file found. Searched in:");
-        foreach (var p in candidates)
-            WriteWarning($"  {p}");
-
-        return null;
-    }
-
-    private void WriteSummary(ModuleTestFailureAnalysis analysis, bool showSuccessful)
-    {
-        HostWriteLineSafe("=== Module Test Results Summary ===", ConsoleColor.Cyan);
-        HostWriteLineSafe($"Source: {analysis.Source}", ConsoleColor.DarkGray);
-        HostWriteLineSafe(string.Empty);
-
-        HostWriteLineSafe("Test Statistics:", ConsoleColor.Yellow);
-        HostWriteLineSafe($"   Total Tests: {analysis.TotalCount}");
-        HostWriteLineSafe($"   Passed: {analysis.PassedCount}", ConsoleColor.Green);
-        HostWriteLineSafe($"   Failed: {analysis.FailedCount}", analysis.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green);
-        if (analysis.SkippedCount > 0)
-            HostWriteLineSafe($"   Skipped: {analysis.SkippedCount}", ConsoleColor.Yellow);
-
-        if (analysis.TotalCount > 0)
-        {
-            var rate = Math.Round((double)analysis.PassedCount / analysis.TotalCount * 100, 1);
-            var color = rate == 100 ? ConsoleColor.Green : (rate >= 80 ? ConsoleColor.Yellow : ConsoleColor.Red);
-            HostWriteLineSafe($"   Success Rate: {rate.ToString("0.0", CultureInfo.InvariantCulture)}%", color);
-        }
-
-        HostWriteLineSafe(string.Empty);
-        if (analysis.FailedCount > 0)
-        {
-            HostWriteLineSafe("Failed Tests:", ConsoleColor.Red);
-            foreach (var f in analysis.FailedTests)
-                HostWriteLineSafe($"   - {f.Name}", ConsoleColor.Red);
-            HostWriteLineSafe(string.Empty);
-        }
-        else if (showSuccessful && analysis.PassedCount > 0)
-        {
-            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
-        }
-    }
-
-    private void WriteDetails(ModuleTestFailureAnalysis analysis)
-    {
-        HostWriteLineSafe("=== Module Test Failure Analysis ===", ConsoleColor.Cyan);
-        HostWriteLineSafe($"Source: {analysis.Source}", ConsoleColor.DarkGray);
-        HostWriteLineSafe($"Analysis Time: {analysis.Timestamp}", ConsoleColor.DarkGray);
-        HostWriteLineSafe(string.Empty);
-
-        if (analysis.TotalCount == 0)
-        {
-            HostWriteLineSafe("No test results found", ConsoleColor.Yellow);
-            return;
-        }
-
-        var color = analysis.FailedCount == 0 ? ConsoleColor.Green : ConsoleColor.Yellow;
-        HostWriteLineSafe($"Summary: {analysis.PassedCount}/{analysis.TotalCount} tests passed", color);
-        HostWriteLineSafe(string.Empty);
-
-        if (analysis.FailedCount == 0)
-        {
-            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
-            return;
-        }
-
-        HostWriteLineSafe($"Failed Tests ({analysis.FailedCount}):", ConsoleColor.Red);
-        HostWriteLineSafe(string.Empty);
-
-        foreach (var f in analysis.FailedTests)
-        {
-            HostWriteLineSafe($"- {f.Name}", ConsoleColor.Red);
-            if (!string.IsNullOrWhiteSpace(f.ErrorMessage) && !string.Equals(f.ErrorMessage, "No error message available", StringComparison.Ordinal))
-            {
-                foreach (var line in f.ErrorMessage.Split(new[] { '\n' }, StringSplitOptions.None))
-                {
-                    var trimmed = line.Trim();
-                    if (trimmed.Length > 0)
-                        HostWriteLineSafe($"   {trimmed}", ConsoleColor.Yellow);
-                }
-            }
-
-            if (f.Duration.HasValue)
-                HostWriteLineSafe($"   Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
-            HostWriteLineSafe(string.Empty);
-        }
-
-        HostWriteLineSafe($"=== Summary: {analysis.FailedCount} test{(analysis.FailedCount != 1 ? "s" : string.Empty)} failed ===", ConsoleColor.Red);
+        foreach (var line in lines)
+            HostWriteLineSafe(line.Text, line.Color);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
