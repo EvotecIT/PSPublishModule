@@ -108,7 +108,15 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                 Succeeded: true,
                 Summary: "No publish targets were detected for this queue item.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
-                Receipts: []);
+                Receipts: [
+                    SkippedReceipt(
+                        queueItem.RootPath,
+                        queueItem.RepositoryName,
+                        "Publish",
+                        "Publish",
+                        null,
+                        "No external publish targets were detected for this queue item, so verification can be skipped.")
+                ]);
         }
 
         if (!IsPublishEnabled())
@@ -314,6 +322,21 @@ public sealed partial class ReleasePublishExecutionService
             Destination: destination,
             SourcePath: null,
             Status: ReleasePublishReceiptStatus.Failed,
+            Summary: summary,
+            PublishedAtUtc: DateTimeOffset.UtcNow);
+    }
+
+    private static ReleasePublishReceipt SkippedReceipt(string rootPath, string repositoryName, string adapterKind, string targetKind, string? destination, string summary)
+    {
+        return new ReleasePublishReceipt(
+            RootPath: rootPath,
+            RepositoryName: repositoryName,
+            AdapterKind: adapterKind,
+            TargetName: targetKind,
+            TargetKind: targetKind,
+            Destination: destination,
+            SourcePath: null,
+            Status: ReleasePublishReceiptStatus.Skipped,
             Summary: summary,
             PublishedAtUtc: DateTimeOffset.UtcNow);
     }

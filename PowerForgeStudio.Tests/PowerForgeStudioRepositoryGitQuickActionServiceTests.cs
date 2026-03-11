@@ -67,6 +67,35 @@ public sealed class PowerForgeStudioRepositoryGitQuickActionServiceTests
         Assert.All(actions, action => Assert.NotEqual(RepositoryGitQuickActionKind.BrowserUrl, action.Kind));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_UsesSharedPowerShellRunnerContract()
+    {
+        var action = new RepositoryGitQuickAction(
+            Title: "Inspect current git state",
+            Summary: "Inspect status.",
+            Kind: RepositoryGitQuickActionKind.GitCommand,
+            Payload: "git status --short --branch",
+            ExecuteLabel: "Run",
+            IsPrimary: true);
+        var invocations = new List<(string WorkingDirectory, string Script)>();
+        var service = new RepositoryGitQuickActionExecutionService((workingDirectory, script, _) => {
+            invocations.Add((workingDirectory, script));
+            return Task.FromResult(new PowerShellExecutionResult(
+                0,
+                TimeSpan.Zero,
+                "## codex/release-ops-studio-foundation",
+                string.Empty));
+        });
+
+        var result = await service.ExecuteAsync(@"C:\Support\GitHub\PSPublishModule", action);
+
+        Assert.True(result.Succeeded);
+        Assert.Single(invocations);
+        Assert.Equal(@"C:\Support\GitHub\PSPublishModule", invocations[0].WorkingDirectory);
+        Assert.Equal("git status --short --branch", invocations[0].Script);
+        Assert.Contains("completed successfully", result.Summary);
+    }
+
     private static RepositoryPortfolioItem CreateRepository(
         string branchName,
         RepositoryGitHubInbox? gitHubInbox)

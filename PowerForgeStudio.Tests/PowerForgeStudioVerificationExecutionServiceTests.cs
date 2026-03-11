@@ -101,6 +101,39 @@ public sealed class PowerForgeStudioVerificationExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_SkippedPublishReceipt_SkipsVerificationInsteadOfFailing()
+    {
+        var publishResult = new ReleasePublishExecutionResult(
+            RootPath: @"C:\Support\GitHub\PSPublishModule",
+            Succeeded: true,
+            Summary: "Nothing needed publishing.",
+            SourceCheckpointStateJson: "{}",
+            Receipts: [
+                new ReleasePublishReceipt(
+                    RootPath: @"C:\Support\GitHub\PSPublishModule",
+                    RepositoryName: "PSPublishModule",
+                    AdapterKind: "Publish",
+                    TargetName: "Publish",
+                    TargetKind: "Publish",
+                    Destination: null,
+                    SourcePath: null,
+                    Status: ReleasePublishReceiptStatus.Skipped,
+                    Summary: "No external publish targets were detected for this queue item, so verification can be skipped.",
+                    PublishedAtUtc: DateTimeOffset.UtcNow)
+            ]);
+
+        var queueItem = CreateVerifyReadyQueueItem(publishResult.RootPath, "PSPublishModule", ReleaseRepositoryKind.Mixed, JsonSerializer.Serialize(publishResult));
+        var service = new ReleaseVerificationExecutionService();
+
+        var result = await service.ExecuteAsync(queueItem);
+
+        Assert.True(result.Succeeded);
+        var receipt = Assert.Single(result.Receipts);
+        Assert.Equal(ReleaseVerificationReceiptStatus.Skipped, receipt.Status);
+        Assert.Contains("verification can be skipped", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CustomNuGetV3Feed_VerifiesPackageAgainstConfiguredFeed()
     {
         using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");

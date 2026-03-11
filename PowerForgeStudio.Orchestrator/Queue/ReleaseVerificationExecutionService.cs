@@ -144,6 +144,15 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
 
     private async Task<ReleaseVerificationReceipt> VerifyReceiptAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
     {
+        if (publishReceipt.Status == ReleasePublishReceiptStatus.Skipped)
+        {
+            return SkippedReceipt(
+                publishReceipt,
+                string.IsNullOrWhiteSpace(publishReceipt.Summary)
+                    ? "Publish was intentionally skipped, so verification is not required."
+                    : publishReceipt.Summary);
+        }
+
         if (publishReceipt.Status != ReleasePublishReceiptStatus.Published)
         {
             return FailedReceipt(

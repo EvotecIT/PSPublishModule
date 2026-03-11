@@ -5,6 +5,21 @@ namespace PowerForgeStudio.Orchestrator.Portfolio;
 
 public sealed class RepositoryGitQuickActionExecutionService : IRepositoryGitQuickActionExecutionService
 {
+    private readonly Func<string, string, CancellationToken, Task<PowerShellExecutionResult>> _runPowerShellAsync;
+
+    public RepositoryGitQuickActionExecutionService()
+        : this(null)
+    {
+    }
+
+    internal RepositoryGitQuickActionExecutionService(
+        Func<string, string, CancellationToken, Task<PowerShellExecutionResult>>? runPowerShellAsync)
+    {
+        var runner = new PowerShellCommandRunner();
+        _runPowerShellAsync = runPowerShellAsync
+            ?? ((workingDirectory, script, cancellationToken) => runner.RunCommandAsync(workingDirectory, script, cancellationToken));
+    }
+
     public async Task<RepositoryGitQuickActionExecutionResult> ExecuteAsync(
         string repositoryRoot,
         RepositoryGitQuickAction action,
@@ -27,35 +42,18 @@ public sealed class RepositoryGitQuickActionExecutionService : IRepositoryGitQui
                     Summary: $"Opened {action.Title}.");
             }
 
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo {
-                FileName = "powershell",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{EscapeForPowerShell(action.Payload)}\"",
-                WorkingDirectory = repositoryRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            process.Start();
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            var output = await outputTask.ConfigureAwait(false);
-            var error = await errorTask.ConfigureAwait(false);
-
-            return process.ExitCode == 0
+            var result = await _runPowerShellAsync(repositoryRoot, action.Payload, cancellationToken).ConfigureAwait(false);
+            return result.ExitCode == 0
                 ? new RepositoryGitQuickActionExecutionResult(
                     Succeeded: true,
                     Summary: $"{action.Title} completed successfully.",
-                    OutputTail: Tail(output),
-                    ErrorTail: Tail(error))
+                    OutputTail: Tail(result.StandardOutput),
+                    ErrorTail: Tail(result.StandardError))
                 : new RepositoryGitQuickActionExecutionResult(
                     Succeeded: false,
-                    Summary: $"{action.Title} failed with exit code {process.ExitCode}.",
-                    OutputTail: Tail(output),
-                    ErrorTail: Tail(error));
+                    Summary: $"{action.Title} failed with exit code {result.ExitCode}.",
+                    OutputTail: Tail(result.StandardOutput),
+                    ErrorTail: Tail(result.StandardError));
         }
         catch (Exception exception)
         {
@@ -65,9 +63,6 @@ public sealed class RepositoryGitQuickActionExecutionService : IRepositoryGitQui
                 ErrorTail: exception.Message);
         }
     }
-
-    private static string EscapeForPowerShell(string value)
-        => value.Replace("\"", "`\"", StringComparison.Ordinal);
 
     private static string? Tail(string? value)
     {
