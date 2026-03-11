@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -94,6 +95,7 @@ public sealed class RemoveProjectFilesCommand : PSCmdlet
     /// <summary>Executes the cleanup.</summary>
     protected override void ProcessRecord()
     {
+        var display = new ProjectCleanupDisplayService();
         var root = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ProjectPath);
         if (!Directory.Exists(root))
             throw new PSArgumentException($"Project path '{ProjectPath}' not found or is not a directory");
@@ -120,14 +122,7 @@ public sealed class RemoveProjectFilesCommand : PSCmdlet
             WhatIf = isWhatIf
         };
 
-        if (Internal.IsPresent)
-        {
-            WriteVerbose($"Processing project cleanup for: {Path.GetFullPath(root)}");
-        }
-        else
-        {
-            WriteHostLine($"Processing project cleanup for: {Path.GetFullPath(root)}", ConsoleColor.Cyan);
-        }
+        WriteDisplayLines(display.CreateHeader(Path.GetFullPath(root)));
 
         var service = new ProjectCleanupService();
         var output = service.Clean(
@@ -137,14 +132,11 @@ public sealed class RemoveProjectFilesCommand : PSCmdlet
 
         if (output.Summary.TotalItems == 0)
         {
-            if (Internal.IsPresent)
-                WriteVerbose("No files or folders found matching the specified criteria.");
-            else
-                WriteHostLine("No files or folders found matching the specified criteria.", ConsoleColor.Yellow);
+            WriteDisplayLines(display.CreateNoMatchesLines(Internal.IsPresent));
             return;
         }
 
-        WriteSummary(output, isWhatIf);
+        WriteDisplayLines(display.CreateSummaryLines(output, isWhatIf, Internal.IsPresent));
 
         if (PassThru.IsPresent)
             WriteObject(output, enumerateCollection: false);
@@ -152,85 +144,23 @@ public sealed class RemoveProjectFilesCommand : PSCmdlet
 
     private void OnItemProcessed(int current, int total, ProjectCleanupItemResult item)
     {
-        if (Internal.IsPresent)
-        {
-            switch (item.Status)
-            {
-                case ProjectCleanupStatus.WhatIf:
-                    WriteVerbose($"Would remove: {item.RelativePath}");
-                    break;
-                case ProjectCleanupStatus.Removed:
-                    WriteVerbose($"Removed: {item.RelativePath}");
-                    break;
-                case ProjectCleanupStatus.Failed:
-                case ProjectCleanupStatus.Error:
-                    WriteWarning($"Failed to remove: {item.RelativePath}");
-                    break;
-            }
-            return;
-        }
-
-        switch (item.Status)
-        {
-            case ProjectCleanupStatus.WhatIf:
-                WriteHostLine($"  [WOULD REMOVE] {item.RelativePath}", ConsoleColor.Yellow);
-                break;
-            case ProjectCleanupStatus.Removed:
-                WriteHostLine($"  [{current}/{total}] [REMOVED] {item.RelativePath}", ConsoleColor.Red);
-                break;
-            case ProjectCleanupStatus.Failed:
-                WriteHostLine($"  [{current}/{total}] [FAILED] {item.RelativePath}", ConsoleColor.Red);
-                break;
-            case ProjectCleanupStatus.Error:
-                WriteHostLine($"  [{current}/{total}] [ERROR] {item.RelativePath}: {item.Error}", ConsoleColor.Red);
-                break;
-        }
+        WriteDisplayLines(new ProjectCleanupDisplayService().CreateItemLines(item, current, total, Internal.IsPresent));
     }
 
-    private void WriteSummary(ProjectCleanupOutput output, bool isWhatIf)
+    private void WriteDisplayLines(IReadOnlyList<ProjectCleanupDisplayLine> lines)
     {
-        if (Internal.IsPresent)
+        foreach (var line in lines)
         {
-            WriteVerbose($"Cleanup Summary: Project path: {output.Summary.ProjectPath}");
-            WriteVerbose($"Cleanup type: {output.Summary.ProjectType}");
-            WriteVerbose($"Total items processed: {output.Summary.TotalItems}");
-
-            if (isWhatIf)
+            if (Internal.IsPresent)
             {
-                WriteVerbose($"Would remove: {output.Summary.TotalItems} items");
-                WriteVerbose($"Would free: {Math.Round(output.Results.Where(r => r.Type == ProjectCleanupItemType.File).Sum(r => r.Size) / (1024d * 1024d), 2)} MB");
+                if (line.IsWarning)
+                    WriteWarning(line.Text);
+                else
+                    WriteVerbose(line.Text);
+                continue;
             }
-            else
-            {
-                WriteVerbose($"Successfully removed: {output.Summary.Removed}");
-                WriteVerbose($"Errors: {output.Summary.Errors}");
-                WriteVerbose($"Space freed: {output.Summary.SpaceFreedMB} MB");
-                if (!string.IsNullOrWhiteSpace(output.Summary.BackupDirectory))
-                    WriteVerbose($"Backups created in: {output.Summary.BackupDirectory}");
-            }
-            return;
-        }
 
-        WriteHostLine(string.Empty, ConsoleColor.White);
-        WriteHostLine("Cleanup Summary:", ConsoleColor.Cyan);
-        WriteHostLine($"  Project path: {output.Summary.ProjectPath}", ConsoleColor.White);
-        WriteHostLine($"  Cleanup type: {output.Summary.ProjectType}", ConsoleColor.White);
-        WriteHostLine($"  Total items processed: {output.Summary.TotalItems}", ConsoleColor.White);
-
-        if (isWhatIf)
-        {
-            var totalSizeMb = Math.Round(output.Results.Where(r => r.Type == ProjectCleanupItemType.File).Sum(r => r.Size) / (1024d * 1024d), 2);
-            WriteHostLine($"  Would remove: {output.Summary.TotalItems} items", ConsoleColor.Yellow);
-            WriteHostLine($"  Would free: {totalSizeMb} MB", ConsoleColor.Yellow);
-            WriteHostLine("Run without -WhatIf to actually remove these items.", ConsoleColor.Cyan);
-        }
-        else
-        {
-            WriteHostLine($"  Successfully removed: {output.Summary.Removed}", ConsoleColor.Green);
-            WriteHostLine($"  Errors: {output.Summary.Errors}", ConsoleColor.Red);
-            WriteHostLine($"  Space freed: {output.Summary.SpaceFreedMB} MB", ConsoleColor.Green);
-            if (!string.IsNullOrWhiteSpace(output.Summary.BackupDirectory))
-                WriteHostLine($"  Backups created in: {output.Summary.BackupDirectory}", ConsoleColor.Blue);
+            WriteHostLine(line.Text, line.Color ?? ConsoleColor.White);
         }
     }
 
