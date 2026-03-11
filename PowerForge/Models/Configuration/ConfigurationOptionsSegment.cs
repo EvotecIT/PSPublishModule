@@ -74,6 +74,11 @@ public sealed class DeliveryOptionsConfiguration
     /// <summary>Enables delivery metadata.</summary>
     public bool Enable { get; set; }
 
+    /// <summary>
+    /// When true, the build signs files under <see cref="InternalsPath"/> using the configured module signing certificate/settings.
+    /// </summary>
+    public bool Sign { get; set; }
+
     /// <summary>Relative path inside the module that contains internal deliverables.</summary>
     public string InternalsPath { get; set; } = "Internals";
 
@@ -153,7 +158,7 @@ public sealed class DeliveryOptionsConfiguration
     public string? UpdateCommandName { get; set; }
 
     /// <summary>Schema version string used by delivery metadata.</summary>
-    public string Schema { get; set; } = "1.3";
+    public string Schema { get; set; } = "1.4";
 }
 
 /// <summary>

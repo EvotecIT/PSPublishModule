@@ -9416,6 +9416,18 @@ Example: Config/**.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Sign</maml:name>
+          <maml:description>
+            <maml:para>When set, requests signing for files under InternalsPath using the configured module signing settings/certificate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateCommandName</maml:name>
           <maml:description>
             <maml:para>Optional override name for the generated update command. When empty, defaults to Update-&lt;ModuleName&gt;.</maml:para>
@@ -9703,6 +9715,18 @@ Example: Config/**.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Sign</maml:name>
+        <maml:description>
+          <maml:para>When set, requests signing for files under InternalsPath using the configured module signing settings/certificate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>UpdateCommandName</maml:name>
         <maml:description>
           <maml:para>Optional override name for the generated update command. When empty, defaults to Update-&lt;ModuleName&gt;.</maml:para>
@@ -9761,9 +9785,9 @@ Example: Config/**.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Bundle Internals and generate Install/Update commands</maml:title>
-        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand</dev:code>
+        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign</dev:code>
         <dev:remarks>
-          <maml:para>Generates public Install/Update helpers and bundles README/CHANGELOG into the module.</maml:para>
+          <maml:para>Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>

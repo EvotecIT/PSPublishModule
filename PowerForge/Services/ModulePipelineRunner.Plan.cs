@@ -616,6 +616,17 @@ public sealed partial class ModulePipelineRunner
             _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
         }
 
+        if (delivery?.Sign == true)
+        {
+            signing = ApplyDeliverySigningPreference(signing, delivery);
+
+            if (!signModule)
+            {
+                signModule = true;
+                _logger.Info("Delivery signing requested; enabling signing so bundled internals are also signed.");
+            }
+        }
+
         ModuleSkipConfiguration? moduleSkip = null;
         if (moduleSkipForce || moduleSkipFailOnMissingCommands || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
         {

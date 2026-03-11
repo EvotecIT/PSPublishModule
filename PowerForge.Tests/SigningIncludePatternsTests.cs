@@ -76,4 +76,48 @@ public sealed class SigningIncludePatternsTests
 
         Assert.Equal(new[] { "*.ps1", "*.dll" }, patterns);
     }
+
+    [Fact]
+    public void BuildSigningExcludeSubstrings_UsesConfiguredDeliveryInternalsPath()
+    {
+        var signing = new SigningOptionsConfiguration
+        {
+            IncludeInternals = false
+        };
+        var delivery = new DeliveryOptionsConfiguration
+        {
+            Enable = true,
+            InternalsPath = "Assets"
+        };
+
+        var excludes = ModulePipelineRunner.BuildSigningExcludeSubstrings(signing, delivery);
+
+        Assert.Contains("Assets", excludes);
+        Assert.DoesNotContain("Internals", excludes);
+        Assert.Contains("Modules", excludes);
+    }
+
+    [Fact]
+    public void ApplyDeliverySigningPreference_EnablesInternalsAndRemovesInternalsExclude()
+    {
+        var signing = new SigningOptionsConfiguration
+        {
+            IncludeInternals = false,
+            ExcludePaths = new[] { "Internals", "Modules", "IgnoreMe" }
+        };
+        var delivery = new DeliveryOptionsConfiguration
+        {
+            Enable = true,
+            Sign = true,
+            InternalsPath = "Internals"
+        };
+
+        var effective = ModulePipelineRunner.ApplyDeliverySigningPreference(signing, delivery);
+
+        Assert.NotNull(effective);
+        Assert.True(effective!.IncludeInternals);
+        Assert.DoesNotContain("Internals", effective.ExcludePaths!);
+        Assert.Contains("Modules", effective.ExcludePaths!);
+        Assert.Contains("IgnoreMe", effective.ExcludePaths!);
+    }
 }

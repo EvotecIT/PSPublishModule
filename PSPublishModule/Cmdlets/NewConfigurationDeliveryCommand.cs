@@ -25,8 +25,8 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Bundle Internals and generate Install/Update commands</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand</code>
-/// <para>Generates public Install/Update helpers and bundles README/CHANGELOG into the module.</para>
+/// <code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign</code>
+/// <para>Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.</para>
 /// </example>
 /// <example>
 /// <summary>Configure repository-backed docs display</summary>
@@ -48,6 +48,11 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
 
     /// <summary>Relative path inside the module that contains internal deliverables.</summary>
     [Parameter] public string InternalsPath { get; set; } = "Internals";
+
+    /// <summary>
+    /// When set, requests signing for files under <see cref="InternalsPath"/> using the configured module signing settings/certificate.
+    /// </summary>
+    [Parameter] public SwitchParameter Sign { get; set; }
 
     /// <summary>Include module root README.* during installation.</summary>
     [Parameter] public SwitchParameter IncludeRootReadme { get; set; }
@@ -133,6 +138,7 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
         var delivery = new DeliveryOptionsConfiguration
         {
             Enable = true,
+            Sign = Sign.IsPresent,
             InternalsPath = InternalsPath,
             IncludeRootReadme = IncludeRootReadme.IsPresent,
             IncludeRootChangelog = IncludeRootChangelog.IsPresent,
@@ -154,7 +160,7 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             GenerateUpdateCommand = GenerateUpdateCommand.IsPresent || !string.IsNullOrWhiteSpace(UpdateCommandName),
             InstallCommandName = string.IsNullOrWhiteSpace(InstallCommandName) ? null : InstallCommandName!.Trim(),
             UpdateCommandName = string.IsNullOrWhiteSpace(UpdateCommandName) ? null : UpdateCommandName!.Trim(),
-            Schema = "1.3"
+            Schema = "1.4"
         };
 
         WriteObject(new ConfigurationOptionsSegment
