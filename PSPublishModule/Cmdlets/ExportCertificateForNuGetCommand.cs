@@ -83,22 +83,8 @@ public sealed class ExportCertificateForNuGetCommand : PSCmdlet
             WriteWarning("Certificate does not appear to have Code Signing capability. This may not work for NuGet package signing.");
         }
 
-        HostWriteLineSafe($"Certificate exported successfully to: {result.CertificatePath}", ConsoleColor.Green);
-        HostWriteLineSafe(string.Empty);
-        HostWriteLineSafe("Next steps to register with NuGet.org:", ConsoleColor.Yellow);
-        HostWriteLineSafe("1. Go to https://www.nuget.org and sign in");
-        HostWriteLineSafe("2. Go to Account Settings > Certificates");
-        HostWriteLineSafe("3. Click 'Register new'");
-        HostWriteLineSafe($"4. Upload the file: {result.CertificatePath}");
-        HostWriteLineSafe("5. Once registered, all future packages must be signed with this certificate");
-        HostWriteLineSafe(string.Empty);
-        HostWriteLineSafe("Certificate details:", ConsoleColor.Cyan);
-        HostWriteLineSafe($"  Subject: {result.Subject}");
-        HostWriteLineSafe($"  Issuer: {result.Issuer}");
-        HostWriteLineSafe($"  Thumbprint: {result.Certificate?.Thumbprint}");
-        HostWriteLineSafe($"  SHA256: {result.Sha256}");
-        HostWriteLineSafe($"  Valid From: {result.NotBefore}");
-        HostWriteLineSafe($"  Valid To: {result.NotAfter}");
+        foreach (var line in new NuGetCertificateExportDisplayService().CreateSuccessSummary(result))
+            HostWriteLineSafe(line.Text, line.Color);
 
         WriteObject(result);
     }

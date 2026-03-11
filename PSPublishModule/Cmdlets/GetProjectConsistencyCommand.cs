@@ -1,7 +1,5 @@
 using System;
-using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -95,10 +93,6 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         var patterns = ProjectConsistencyWorkflowService.ResolvePatterns(ProjectType, CustomExtensions);
         WriteVerbose($"Project type: {ProjectType} with patterns: {string.Join(", ", patterns)}");
 
-        HostWriteLineSafe("🔎 Analyzing project consistency...", ConsoleColor.Cyan);
-        HostWriteLineSafe($"Project: {root}");
-        HostWriteLineSafe($"Type: {ProjectType}");
-
         ProjectConsistencyWorkflowResult workflow;
         try
         {
@@ -110,6 +104,7 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         }
 
         var report = workflow.Report;
+        var displayService = new ProjectConsistencyDisplayService();
 
         if (report.Summary.TotalFiles == 0)
         {
@@ -117,53 +112,8 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
             return;
         }
 
-        var s = report.Summary;
-
-        HostWriteLineSafe($"Target encoding: {s.RecommendedEncoding}");
-        HostWriteLineSafe($"Target line ending: {s.RecommendedLineEnding}");
-
-        // Display summary (preserve existing UX: always prints to host).
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Project Consistency Summary:", ConsoleColor.Cyan);
-        HostWriteLineSafe($"  Total files analyzed: {s.TotalFiles}");
-        HostWriteLineSafe(
-            $"  Files compliant with standards: {s.FilesCompliant} ({s.CompliancePercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)",
-            s.CompliancePercentage >= 90 ? ConsoleColor.Green : s.CompliancePercentage >= 70 ? ConsoleColor.Yellow : ConsoleColor.Red);
-        HostWriteLineSafe($"  Files needing attention: {s.FilesWithIssues}", s.FilesWithIssues == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Encoding Issues:", ConsoleColor.Cyan);
-        HostWriteLineSafe(
-            $"  Files needing encoding conversion: {s.FilesNeedingEncodingConversion}",
-            s.FilesNeedingEncodingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe($"  Target encoding: {s.RecommendedEncoding}");
-
-        HostWriteLineSafe("");
-        HostWriteLineSafe("Line Ending Issues:", ConsoleColor.Cyan);
-        HostWriteLineSafe(
-            $"  Files needing line ending conversion: {s.FilesNeedingLineEndingConversion}",
-            s.FilesNeedingLineEndingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe(
-            $"  Files with mixed line endings: {s.FilesWithMixedLineEndings}",
-            s.FilesWithMixedLineEndings == 0 ? ConsoleColor.Green : ConsoleColor.Red);
-        HostWriteLineSafe(
-            $"  Files missing final newline: {s.FilesMissingFinalNewline}",
-            s.FilesMissingFinalNewline == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
-        HostWriteLineSafe($"  Target line ending: {s.RecommendedLineEnding}");
-
-        if (s.ExtensionIssues.Length > 0)
-        {
-            HostWriteLineSafe("");
-            HostWriteLineSafe("Extensions with Issues:", ConsoleColor.Yellow);
-            foreach (var issue in s.ExtensionIssues.OrderByDescending(i => i.Total))
-                HostWriteLineSafe($"  {issue.Extension}: {issue.Total} files");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ExportPath) && File.Exists(ExportPath!))
-        {
-            HostWriteLineSafe("");
-            HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
-        }
+        foreach (var line in displayService.CreateAnalysisSummary(root, ProjectType, report, ExportPath))
+            HostWriteLineSafe(line.Text, line.Color);
 
         WriteObject(report);
     }

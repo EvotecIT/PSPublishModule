@@ -1,10 +1,56 @@
 using System;
+using System.IO;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class ProjectConsistencyDisplayServiceTests
 {
+    [Fact]
+    public void CreateAnalysisSummary_FormatsIssueBreakdownAndExportDetails()
+    {
+        var report = CreateReport(
+            filesCompliant: 7,
+            filesWithIssues: 3,
+            compliancePercentage: 70.0,
+            filesNeedingEncodingConversion: 2,
+            filesNeedingLineEndingConversion: 1,
+            filesWithMixedLineEndings: 1,
+            filesMissingFinalNewline: 1,
+            extensionIssues: new[]
+            {
+                new ProjectConsistencyExtensionIssue(".ps1", 2, 1, 1, 0, 1),
+                new ProjectConsistencyExtensionIssue(".cs", 1, 1, 0, 1, 0)
+            });
+        var exportPath = Path.Combine(Path.GetTempPath(), $"consistency-{Guid.NewGuid():N}.csv");
+        File.WriteAllText(exportPath, "report");
+
+        try
+        {
+            var lines = new ProjectConsistencyDisplayService().CreateAnalysisSummary(
+                rootPath: @"C:\Repo",
+                projectType: "Mixed",
+                report: report,
+                exportPath: exportPath);
+
+            Assert.Contains(lines, line => line.Text == "Analyzing project consistency..." && line.Color == ConsoleColor.Cyan);
+            Assert.Contains(lines, line => line.Text == "Project: C:\\Repo");
+            Assert.Contains(lines, line => line.Text == "Type: Mixed");
+            Assert.Contains(lines, line => line.Text == "  Total files analyzed: 10");
+            Assert.Contains(lines, line => line.Text == "  Files compliant with standards: 7 (70.0%)" && line.Color == ConsoleColor.Yellow);
+            Assert.Contains(lines, line => line.Text == "  Files needing attention: 3" && line.Color == ConsoleColor.Red);
+            Assert.Contains(lines, line => line.Text == "  Files needing encoding conversion: 2" && line.Color == ConsoleColor.Yellow);
+            Assert.Contains(lines, line => line.Text == "  Files with mixed line endings: 1" && line.Color == ConsoleColor.Red);
+            Assert.Contains(lines, line => line.Text == "Extensions with Issues:" && line.Color == ConsoleColor.Yellow);
+            Assert.Contains(lines, line => line.Text == "  .ps1: 2 files");
+            Assert.Contains(lines, line => line.Text == $"Detailed report exported to: {exportPath}" && line.Color == ConsoleColor.Green);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
     [Fact]
     public void CreateSummary_FormatsConversionAndComplianceDetails()
     {
@@ -42,7 +88,15 @@ public sealed class ProjectConsistencyDisplayServiceTests
         Assert.Contains(lines, line => line.Text == "  Files compliant: 7 (75.0%)" && line.Color == ConsoleColor.Yellow);
     }
 
-    private static ProjectConsistencyReport CreateReport(int filesCompliant, int filesWithIssues, double compliancePercentage)
+    private static ProjectConsistencyReport CreateReport(
+        int filesCompliant,
+        int filesWithIssues,
+        double compliancePercentage,
+        int filesNeedingEncodingConversion = 0,
+        int filesNeedingLineEndingConversion = 0,
+        int filesWithMixedLineEndings = 0,
+        int filesMissingFinalNewline = 0,
+        ProjectConsistencyExtensionIssue[]? extensionIssues = null)
     {
         var summary = new ProjectConsistencySummary(
             projectPath: @"C:\Repo",
@@ -54,14 +108,14 @@ public sealed class ProjectConsistencyDisplayServiceTests
             filesWithIssues: filesWithIssues,
             compliancePercentage: compliancePercentage,
             currentEncodingDistribution: Array.Empty<ProjectEncodingDistributionItem>(),
-            filesNeedingEncodingConversion: 0,
+            filesNeedingEncodingConversion: filesNeedingEncodingConversion,
             recommendedEncoding: TextEncodingKind.UTF8BOM,
             currentLineEndingDistribution: Array.Empty<ProjectLineEndingDistributionItem>(),
-            filesNeedingLineEndingConversion: 0,
-            filesWithMixedLineEndings: 0,
-            filesMissingFinalNewline: 0,
+            filesNeedingLineEndingConversion: filesNeedingLineEndingConversion,
+            filesWithMixedLineEndings: filesWithMixedLineEndings,
+            filesMissingFinalNewline: filesMissingFinalNewline,
             recommendedLineEnding: FileConsistencyLineEnding.CRLF,
-            extensionIssues: Array.Empty<ProjectConsistencyExtensionIssue>());
+            extensionIssues: extensionIssues ?? Array.Empty<ProjectConsistencyExtensionIssue>());
 
         return new ProjectConsistencyReport(
             summary,
