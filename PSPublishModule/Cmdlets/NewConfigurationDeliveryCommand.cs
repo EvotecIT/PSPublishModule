@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -133,11 +131,9 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     /// <summary>Emits delivery configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        if (!Enable.IsPresent) return;
-
-        var delivery = new DeliveryOptionsConfiguration
+        var settings = new DeliveryConfigurationFactory().Create(new DeliveryConfigurationRequest
         {
-            Enable = true,
+            Enable = Enable.IsPresent,
             Sign = Sign.IsPresent,
             InternalsPath = InternalsPath,
             IncludeRootReadme = IncludeRootReadme.IsPresent,
@@ -146,7 +142,7 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             ReadmeDestination = ReadmeDestination,
             ChangelogDestination = ChangelogDestination,
             LicenseDestination = LicenseDestination,
-            ImportantLinks = NormalizeImportantLinks(ImportantLinks),
+            ImportantLinks = ImportantLinks,
             IntroText = IntroText,
             UpgradeText = UpgradeText,
             IntroFile = IntroFile,
@@ -154,51 +150,15 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             RepositoryPaths = RepositoryPaths,
             RepositoryBranch = RepositoryBranch,
             DocumentationOrder = DocumentationOrder,
-            PreservePaths = NormalizeStringArray(PreservePaths),
-            OverwritePaths = NormalizeStringArray(OverwritePaths),
-            GenerateInstallCommand = GenerateInstallCommand.IsPresent || !string.IsNullOrWhiteSpace(InstallCommandName),
-            GenerateUpdateCommand = GenerateUpdateCommand.IsPresent || !string.IsNullOrWhiteSpace(UpdateCommandName),
-            InstallCommandName = string.IsNullOrWhiteSpace(InstallCommandName) ? null : InstallCommandName!.Trim(),
-            UpdateCommandName = string.IsNullOrWhiteSpace(UpdateCommandName) ? null : UpdateCommandName!.Trim(),
-            Schema = "1.4"
-        };
-
-        WriteObject(new ConfigurationOptionsSegment
-        {
-            Options = new ConfigurationOptions
-            {
-                Delivery = delivery
-            }
+            PreservePaths = PreservePaths,
+            OverwritePaths = OverwritePaths,
+            GenerateInstallCommand = GenerateInstallCommand.IsPresent,
+            GenerateUpdateCommand = GenerateUpdateCommand.IsPresent,
+            InstallCommandName = InstallCommandName,
+            UpdateCommandName = UpdateCommandName
         });
-    }
 
-    private static DeliveryImportantLink[]? NormalizeImportantLinks(DeliveryImportantLink[]? links)
-    {
-        if (links is null || links.Length == 0) return null;
-
-        var output = new List<DeliveryImportantLink>();
-        foreach (var link in links)
-        {
-            if (link is null) continue;
-            if (string.IsNullOrWhiteSpace(link.Title) || string.IsNullOrWhiteSpace(link.Url))
-                continue;
-
-            output.Add(new DeliveryImportantLink { Title = link.Title.Trim(), Url = link.Url.Trim() });
-        }
-
-        return output.Count == 0 ? null : output.ToArray();
-    }
-
-    private static string[]? NormalizeStringArray(string[]? values)
-    {
-        if (values is null || values.Length == 0) return null;
-
-        var output = values
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return output.Length == 0 ? null : output;
+        if (settings is not null)
+            WriteObject(settings);
     }
 }
