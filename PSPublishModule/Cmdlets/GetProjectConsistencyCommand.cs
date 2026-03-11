@@ -79,36 +79,37 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var root = System.IO.Path.GetFullPath(Path.Trim().Trim('"'));
-        if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Project path '{root}' not found or is not a directory");
-
-        if (RecommendedEncoding == TextEncodingKind.Any)
-            throw new PSArgumentException("RecommendedEncoding cannot be Any for project consistency analysis.");
-
-        var patterns = ResolvePatterns(ProjectType, CustomExtensions);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var service = new ProjectConsistencyWorkflowService(logger);
+        var request = new ProjectConsistencyWorkflowRequest
+        {
+            Path = Path,
+            ProjectType = ProjectType,
+            CustomExtensions = CustomExtensions,
+            ExcludeDirectories = ExcludeDirectories,
+            RecommendedEncoding = RecommendedEncoding,
+            RecommendedLineEnding = RecommendedLineEnding,
+            IncludeDetails = ShowDetails.IsPresent,
+            ExportPath = ExportPath
+        };
+        var patterns = ProjectConsistencyWorkflowService.ResolvePatterns(ProjectType, CustomExtensions);
         WriteVerbose($"Project type: {ProjectType} with patterns: {string.Join(", ", patterns)}");
 
         HostWriteLineSafe("🔎 Analyzing project consistency...", ConsoleColor.Cyan);
         HostWriteLineSafe($"Project: {root}");
         HostWriteLineSafe($"Type: {ProjectType}");
 
-        var enumeration = new ProjectEnumeration(
-            rootPath: root,
-            kind: ResolveKind(ProjectType),
-            customExtensions: ProjectType.Equals("Custom", StringComparison.OrdinalIgnoreCase) ? patterns : null,
-            excludeDirectories: ExcludeDirectories);
+        ProjectConsistencyWorkflowResult workflow;
+        try
+        {
+            workflow = service.Analyze(request);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new PSArgumentException(ex.Message, ex);
+        }
 
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var analyzer = new ProjectConsistencyAnalyzer(logger);
-        var report = analyzer.Analyze(
-            enumeration: enumeration,
-            projectType: ProjectType,
-            recommendedEncoding: RecommendedEncoding,
-            recommendedLineEnding: RecommendedLineEnding,
-            includeDetails: ShowDetails.IsPresent,
-            exportPath: ExportPath,
-            encodingOverrides: null,
-            lineEndingOverrides: null);
+        var report = workflow.Report;
 
         if (report.Summary.TotalFiles == 0)
         {
@@ -165,32 +166,6 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         }
 
         WriteObject(report);
-    }
-
-    private static string[] ResolvePatterns(string projectType, string[]? custom)
-    {
-        if (projectType.Equals("Custom", StringComparison.OrdinalIgnoreCase))
-            return (custom is null || custom.Length == 0) ? Array.Empty<string>() : custom;
-
-        return projectType switch
-        {
-            "PowerShell" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" },
-            "CSharp" => new[] { "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.resx" },
-            "Mixed" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" },
-            "All" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.js", "*.ts", "*.py", "*.rb", "*.java", "*.cpp", "*.h", "*.hpp", "*.sql", "*.md", "*.txt", "*.yaml", "*.yml" },
-            _ => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" }
-        };
-    }
-
-    private static ProjectKind ResolveKind(string projectType)
-    {
-        return projectType switch
-        {
-            "PowerShell" => ProjectKind.PowerShell,
-            "CSharp" => ProjectKind.CSharp,
-            "All" => ProjectKind.All,
-            _ => ProjectKind.Mixed
-        };
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)

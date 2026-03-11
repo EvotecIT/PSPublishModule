@@ -1,9 +1,7 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -132,168 +130,53 @@ public sealed class ConvertProjectConsistencyCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var service = new ProjectConsistencyWorkflowService(logger);
         var root = System.IO.Path.GetFullPath(Path.Trim().Trim('"'));
-        if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Project path '{root}' not found or is not a directory");
-
-        var patterns = ResolvePatterns(ProjectType, CustomExtensions);
-        var kind = ResolveKind(ProjectType);
-
-        var enumeration = new ProjectEnumeration(
-            rootPath: root,
-            kind: kind,
-            customExtensions: ProjectType.Equals("Custom", StringComparison.OrdinalIgnoreCase) ? patterns : null,
-            excludeDirectories: ExcludeDirectories,
-            excludeFiles: ExcludeFiles);
-
-        var applyEncoding = FixEncoding.IsPresent || (!FixEncoding.IsPresent && !FixLineEndings.IsPresent);
-        var applyLineEndings = FixLineEndings.IsPresent || (!FixEncoding.IsPresent && !FixLineEndings.IsPresent);
-
-        var encodingOverrides = ParseEncodingOverrides(EncodingOverrides);
-        var lineEndingOverrides = ParseLineEndingOverrides(LineEndingOverrides);
-
-        ProjectConversionResult? encodingResult = null;
-        ProjectConversionResult? lineEndingResult = null;
+        var request = new ProjectConsistencyWorkflowRequest
+        {
+            Path = Path,
+            ProjectType = ProjectType,
+            CustomExtensions = CustomExtensions,
+            ExcludeDirectories = ExcludeDirectories,
+            ExcludeFiles = ExcludeFiles,
+            IncludeDetails = ShowDetails.IsPresent,
+            ExportPath = ExportPath,
+            RecommendedEncoding = RequiredEncoding.ToTextEncodingKind(),
+            RecommendedLineEnding = RequiredLineEnding,
+            EncodingOverrides = ProjectConsistencyWorkflowService.ParseEncodingOverrides(EncodingOverrides),
+            LineEndingOverrides = ProjectConsistencyWorkflowService.ParseLineEndingOverrides(LineEndingOverrides),
+            FixEncodingSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(FixEncoding)),
+            FixEncoding = FixEncoding.IsPresent,
+            FixLineEndingsSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(FixLineEndings)),
+            FixLineEndings = FixLineEndings.IsPresent,
+            SourceEncoding = SourceEncoding,
+            RequiredEncoding = RequiredEncoding,
+            RequiredLineEnding = RequiredLineEnding,
+            CreateBackups = CreateBackups.IsPresent,
+            BackupDirectory = BackupDirectory,
+            Force = Force.IsPresent,
+            NoRollbackOnMismatch = NoRollbackOnMismatch.IsPresent,
+            OnlyMixedLineEndings = OnlyMixedLineEndings.IsPresent,
+            EnsureFinalNewline = EnsureFinalNewline.IsPresent,
+            OnlyMissingFinalNewline = OnlyMissingFinalNewline.IsPresent
+        };
 
         var shouldProcess = ShouldProcess(root, "Convert project consistency");
         if (shouldProcess)
         {
-            if (applyEncoding)
-            {
-                var converter = new EncodingConverter();
-                var encOptions = new EncodingConversionOptions(
-                    enumeration: enumeration,
-                    sourceEncoding: SourceEncoding,
-                    targetEncoding: RequiredEncoding.ToTextEncodingKind(),
-                    createBackups: CreateBackups.IsPresent,
-                    backupDirectory: BackupDirectory,
-                    force: Force.IsPresent,
-                    noRollbackOnMismatch: NoRollbackOnMismatch.IsPresent,
-                    preferUtf8BomForPowerShell: RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-
-                if (encodingOverrides is { Count: > 0 })
-                {
-                    encOptions.TargetEncodingResolver = path =>
-                    {
-                        var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                        var overrideEncoding = FileConsistencyOverrideResolver.ResolveEncodingOverride(rel, encodingOverrides);
-                        return overrideEncoding?.ToTextEncodingKind();
-                    };
-                }
-
-                encodingResult = converter.Convert(encOptions);
-            }
-
-            if (applyLineEndings)
-            {
-                var converter = new LineEndingConverter();
-                var lineOptions = new LineEndingConversionOptions(
-                    enumeration: enumeration,
-                    target: RequiredLineEnding.ToLineEnding(),
-                    createBackups: CreateBackups.IsPresent,
-                    backupDirectory: BackupDirectory,
-                    force: Force.IsPresent,
-                    onlyMixed: OnlyMixedLineEndings.IsPresent,
-                    ensureFinalNewline: EnsureFinalNewline.IsPresent,
-                    onlyMissingNewline: OnlyMissingFinalNewline.IsPresent,
-                    preferUtf8BomForPowerShell: RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-
-                if (lineEndingOverrides is { Count: > 0 })
-                {
-                    lineOptions.TargetResolver = path =>
-                    {
-                        var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                        var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
-                        return overrideLineEnding?.ToLineEnding();
-                    };
-                }
-
-                lineEndingResult = converter.Convert(lineOptions);
-            }
+            var result = service.ConvertAndAnalyze(request);
+            WriteSummary(result.RootPath, result.Report, result.EncodingConversion, result.LineEndingConversion);
+            WriteObject(new ProjectConsistencyConversionResult(result.Report, result.EncodingConversion, result.LineEndingConversion));
+            return;
         }
 
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var analyzer = new ProjectConsistencyAnalyzer(logger);
-        var report = analyzer.Analyze(
-            enumeration: enumeration,
-            projectType: ProjectType,
-            recommendedEncoding: RequiredEncoding.ToTextEncodingKind(),
-            recommendedLineEnding: RequiredLineEnding,
-            includeDetails: ShowDetails.IsPresent,
-            exportPath: ExportPath,
-            encodingOverrides: encodingOverrides,
-            lineEndingOverrides: lineEndingOverrides);
-
-        WriteSummary(root, report, encodingResult, lineEndingResult);
-
-        WriteObject(new ProjectConsistencyConversionResult(report, encodingResult, lineEndingResult));
-    }
-
-    private static Dictionary<string, FileConsistencyEncoding>? ParseEncodingOverrides(IDictionary? overrides)
-    {
-        if (overrides is null || overrides.Count == 0) return null;
-        var dict = new Dictionary<string, FileConsistencyEncoding>(StringComparer.OrdinalIgnoreCase);
-        foreach (DictionaryEntry entry in overrides)
-        {
-            var key = entry.Key?.ToString();
-            if (string.IsNullOrWhiteSpace(key)) continue;
-            if (TryParseEnum(entry.Value, out FileConsistencyEncoding value))
-                dict[key!] = value;
-        }
-        return dict.Count == 0 ? null : dict;
-    }
-
-    private static Dictionary<string, FileConsistencyLineEnding>? ParseLineEndingOverrides(IDictionary? overrides)
-    {
-        if (overrides is null || overrides.Count == 0) return null;
-        var dict = new Dictionary<string, FileConsistencyLineEnding>(StringComparer.OrdinalIgnoreCase);
-        foreach (DictionaryEntry entry in overrides)
-        {
-            var key = entry.Key?.ToString();
-            if (string.IsNullOrWhiteSpace(key)) continue;
-            if (TryParseEnum(entry.Value, out FileConsistencyLineEnding value))
-                dict[key!] = value;
-        }
-        return dict.Count == 0 ? null : dict;
-    }
-
-    private static bool TryParseEnum<T>(object? raw, out T value) where T : struct
-    {
-        value = default;
-        if (raw is null) return false;
-        if (raw is T typed)
-        {
-            value = typed;
-            return true;
-        }
-        var text = raw.ToString();
-        return !string.IsNullOrWhiteSpace(text) && Enum.TryParse(text, true, out value);
-    }
-
-    private static string[] ResolvePatterns(string projectType, string[]? custom)
-    {
-        if (projectType.Equals("Custom", StringComparison.OrdinalIgnoreCase))
-            return (custom is null || custom.Length == 0) ? Array.Empty<string>() : custom;
-
-        return projectType switch
-        {
-            "PowerShell" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" },
-            "CSharp" => new[] { "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.resx" },
-            "Mixed" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" },
-            "All" => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml", "*.js", "*.ts", "*.py", "*.rb", "*.java", "*.cpp", "*.h", "*.hpp", "*.sql", "*.md", "*.txt", "*.yaml", "*.yml" },
-            _ => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" }
-        };
-    }
-
-    private static ProjectKind ResolveKind(string projectType)
-    {
-        return projectType switch
-        {
-            "PowerShell" => ProjectKind.PowerShell,
-            "CSharp" => ProjectKind.CSharp,
-            "All" => ProjectKind.All,
-            _ => ProjectKind.Mixed
-        };
+        WriteVerbose($"Project type: {ProjectType} with patterns: {string.Join(", ", ProjectConsistencyWorkflowService.ResolvePatterns(ProjectType, CustomExtensions))}");
+        WriteWarning("WhatIf/ShouldProcess declined project consistency conversion.");
+        WriteObject(new ProjectConsistencyConversionResult(
+            service.Analyze(request).Report,
+            null,
+            null));
     }
 
     private void WriteSummary(string root, ProjectConsistencyReport report, ProjectConversionResult? encodingResult, ProjectConversionResult? lineEndingResult)
