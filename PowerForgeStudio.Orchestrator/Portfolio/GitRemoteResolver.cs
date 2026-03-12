@@ -1,9 +1,21 @@
-using System.Diagnostics;
+using PowerForge;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
 
 internal sealed class GitRemoteResolver : IGitRemoteResolver
 {
+    private readonly Func<string, string, CancellationToken, Task<GitCommandResult>> _getRemoteUrlAsync;
+
+    public GitRemoteResolver()
+        : this((repositoryRoot, remoteName, cancellationToken) => new GitClient().GetRemoteUrlAsync(repositoryRoot, remoteName, cancellationToken))
+    {
+    }
+
+    internal GitRemoteResolver(Func<string, string, CancellationToken, Task<GitCommandResult>> getRemoteUrlAsync)
+    {
+        _getRemoteUrlAsync = getRemoteUrlAsync;
+    }
+
     public async Task<string?> ResolveOriginUrlAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
@@ -13,26 +25,9 @@ internal sealed class GitRemoteResolver : IGitRemoteResolver
 
         try
         {
-            using var process = new Process();
-            process.StartInfo = new ProcessStartInfo {
-                FileName = "git",
-                WorkingDirectory = repositoryRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            process.StartInfo.ArgumentList.Add("remote");
-            process.StartInfo.ArgumentList.Add("get-url");
-            process.StartInfo.ArgumentList.Add("origin");
-
-            process.Start();
-            var standardOutput = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            var _ = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-
-            return process.ExitCode == 0
-                ? standardOutput.Trim()
+            var result = await _getRemoteUrlAsync(repositoryRoot, "origin", cancellationToken).ConfigureAwait(false);
+            return result.Succeeded
+                ? result.StdOut.Trim()
                 : null;
         }
         catch

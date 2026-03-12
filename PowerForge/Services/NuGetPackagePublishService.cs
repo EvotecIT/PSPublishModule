@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -96,103 +94,11 @@ internal sealed class NuGetPackagePublishService
 
     private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        var result = new DotNetNuGetClient()
+            .PushPackageAsync(new DotNetNuGetPushRequest(packagePath, apiKey, source, skipDuplicate))
+            .GetAwaiter()
+            .GetResult();
 
-#if NET472
-        var args = new List<string>
-        {
-            "nuget", "push", packagePath,
-            "--api-key", apiKey,
-            "--source", source
-        };
-        if (skipDuplicate)
-            args.Add("--skip-duplicate");
-        psi.Arguments = BuildWindowsArgumentString(args);
-#else
-        psi.ArgumentList.Add("nuget");
-        psi.ArgumentList.Add("push");
-        psi.ArgumentList.Add(packagePath);
-        psi.ArgumentList.Add("--api-key");
-        psi.ArgumentList.Add(apiKey);
-        psi.ArgumentList.Add("--source");
-        psi.ArgumentList.Add(source);
-        if (skipDuplicate)
-            psi.ArgumentList.Add("--skip-duplicate");
-#endif
-
-        using var process = Process.Start(psi);
-        if (process is null)
-        {
-            return new DotNetRepositoryReleaseService.PackagePushResult
-            {
-                Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
-                Message = "Failed to start dotnet."
-            };
-        }
-
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(process.ExitCode, skipDuplicate, stdErr, stdOut);
+        return DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(result.ExitCode, skipDuplicate, result.StdErr, result.StdOut);
     }
-
-#if NET472
-    private static string BuildWindowsArgumentString(IEnumerable<string> arguments)
-        => string.Join(" ", arguments.Select(EscapeWindowsArgument));
-
-    private static string EscapeWindowsArgument(string arg)
-    {
-        if (arg is null)
-            return "\"\"";
-        if (arg.Length == 0)
-            return "\"\"";
-
-        var needsQuotes = arg.Any(ch => char.IsWhiteSpace(ch) || ch == '"');
-        if (!needsQuotes)
-            return arg;
-
-        var sb = new System.Text.StringBuilder();
-        sb.Append('"');
-
-        var backslashCount = 0;
-        foreach (var ch in arg)
-        {
-            if (ch == '\\')
-            {
-                backslashCount++;
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                sb.Append('\\', backslashCount * 2 + 1);
-                sb.Append('"');
-                backslashCount = 0;
-                continue;
-            }
-
-            if (backslashCount > 0)
-            {
-                sb.Append('\\', backslashCount);
-                backslashCount = 0;
-            }
-
-            sb.Append(ch);
-        }
-
-        if (backslashCount > 0)
-            sb.Append('\\', backslashCount * 2);
-
-        sb.Append('"');
-        return sb.ToString();
-    }
-#endif
 }

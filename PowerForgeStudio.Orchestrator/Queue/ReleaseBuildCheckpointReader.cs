@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 
@@ -6,28 +5,12 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed class ReleaseBuildCheckpointReader
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() {
-        PropertyNameCaseInsensitive = true
-    };
+    private readonly ReleaseQueueCheckpointSerializer _checkpointSerializer = new();
 
     public ReleaseBuildExecutionResult? TryReadBuildResult(ReleaseQueueItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-
-        if (!string.Equals(item.CheckpointKey, "sign.waiting.usb", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(item.CheckpointStateJson))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<ReleaseBuildExecutionResult>(item.CheckpointStateJson, SerializerOptions);
-        }
-        catch
-        {
-            return null;
-        }
+        return _checkpointSerializer.TryRead<ReleaseBuildExecutionResult>(item, "sign.waiting.usb");
     }
 
     public IReadOnlyList<ReleaseSigningArtifact> BuildSigningManifest(IEnumerable<ReleaseQueueItem> queueItems)

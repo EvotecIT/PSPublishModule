@@ -2,6 +2,8 @@ using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Domain.Signing;
+using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Storage;
 
 namespace PowerForgeStudio.Tests;
@@ -11,11 +13,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     [Fact]
     public async Task PersistPortfolioSnapshotAsync_RoundTripsGitHubAndDriftSignals()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         var portfolio = new[] {
             new RepositoryPortfolioItem(
@@ -78,11 +76,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     [Fact]
     public async Task PersistPortfolioViewStateAsync_RoundTripsFocusAndSearch()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         var viewState = new RepositoryPortfolioViewState(
             PresetKey: "ready-today",
@@ -104,11 +98,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     [Fact]
     public async Task PersistQueueSessionAsync_RoundTripsScopeMetadata()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         var session = new ReleaseQueueSession(
             SessionId: Guid.NewGuid().ToString("N"),
@@ -144,11 +134,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     [Fact]
     public async Task PersistPublishReceiptsAsync_RoundTripsSourcePath()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         await stateDatabase.PersistPublishReceiptsAsync(
             "session-1",
@@ -174,13 +160,64 @@ public sealed class PowerForgeStudioStateDatabaseTests
     }
 
     [Fact]
+    public async Task PersistSigningReceiptsAsync_RoundTripsArtifactMetadata()
+    {
+        var stateDatabase = await CreateStateDatabaseAsync();
+
+        await stateDatabase.PersistSigningReceiptsAsync(
+            "session-1",
+            [
+                new ReleaseSigningReceipt(
+                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RepositoryName: "DbaClientX",
+                    AdapterKind: "ModuleBuild",
+                    ArtifactPath: @"C:\Temp\DbaClientX\DbaClientX.psd1",
+                    ArtifactKind: "ModuleManifest",
+                    Status: ReleaseSigningReceiptStatus.Signed,
+                    Summary: "Signed manifest.",
+                    SignedAtUtc: DateTimeOffset.UtcNow)
+            ]);
+
+        var receipts = await stateDatabase.LoadSigningReceiptsAsync("session-1");
+
+        var receipt = Assert.Single(receipts);
+        Assert.Equal(@"C:\Temp\DbaClientX\DbaClientX.psd1", receipt.ArtifactPath);
+        Assert.Equal("ModuleManifest", receipt.ArtifactKind);
+        Assert.Equal(ReleaseSigningReceiptStatus.Signed, receipt.Status);
+    }
+
+    [Fact]
+    public async Task PersistVerificationReceiptsAsync_RoundTripsDestinationAndStatus()
+    {
+        var stateDatabase = await CreateStateDatabaseAsync();
+
+        await stateDatabase.PersistVerificationReceiptsAsync(
+            "session-1",
+            [
+                new ReleaseVerificationReceipt(
+                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RepositoryName: "DbaClientX",
+                    AdapterKind: "ModulePublish",
+                    TargetName: "PSGallery",
+                    TargetKind: "PowerShellRepository",
+                    Destination: "https://www.powershellgallery.com/api/v2",
+                    Status: ReleaseVerificationReceiptStatus.Verified,
+                    Summary: "Verified published module.",
+                    VerifiedAtUtc: DateTimeOffset.UtcNow)
+            ]);
+
+        var receipts = await stateDatabase.LoadVerificationReceiptsAsync("session-1");
+
+        var receipt = Assert.Single(receipts);
+        Assert.Equal("https://www.powershellgallery.com/api/v2", receipt.Destination);
+        Assert.Equal(ReleaseVerificationReceiptStatus.Verified, receipt.Status);
+        Assert.Equal("PSGallery", receipt.TargetName);
+    }
+
+    [Fact]
     public async Task PersistGitQuickActionReceiptAsync_RoundTripsLatestAction()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         await stateDatabase.PersistGitQuickActionReceiptAsync(
             new RepositoryGitQuickActionReceipt(
@@ -205,11 +242,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     [Fact]
     public async Task PersistPortfolioSnapshotAsync_RollsBackWhenSnapshotWriteFails()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
-        Directory.CreateDirectory(testDirectory);
-        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync();
+        var stateDatabase = await CreateStateDatabaseAsync();
 
         var originalPortfolio = new[] {
             CreatePortfolioItem(
@@ -235,6 +268,72 @@ public sealed class PowerForgeStudioStateDatabaseTests
         Assert.Equal("DbaClientX", snapshot.Name);
         Assert.Equal(@"C:\Support\GitHub\DbaClientX", snapshot.RootPath);
         Assert.Equal("Original snapshot.", snapshot.ReadinessReason);
+    }
+
+    [Fact]
+    public async Task PersistPlanSnapshotsAsync_ReplacesExistingRows()
+    {
+        var stateDatabase = await CreateStateDatabaseAsync();
+
+        var originalPortfolio = new[] {
+            CreatePortfolioItem(
+                rootPath: @"C:\Support\GitHub\DbaClientX",
+                repositoryName: "DbaClientX",
+                readinessKind: RepositoryReadinessKind.Ready,
+                readinessReason: "Original snapshot.") with {
+                    PlanResults = [
+                        new RepositoryPlanResult(
+                            RepositoryPlanAdapterKind.ProjectPlan,
+                            RepositoryPlanStatus.Succeeded,
+                            "Original plan.",
+                            PlanPath: @"C:\Temp\original.plan.json",
+                            ExitCode: 0,
+                            DurationSeconds: 1.0)
+                    ]
+                }
+        };
+
+        var replacementPortfolio = new[] {
+            CreatePortfolioItem(
+                rootPath: @"C:\Support\GitHub\PSPublishModule",
+                repositoryName: "PSPublishModule",
+                readinessKind: RepositoryReadinessKind.Attention,
+                readinessReason: "Replacement snapshot.") with {
+                    PlanResults = [
+                        new RepositoryPlanResult(
+                            RepositoryPlanAdapterKind.ModuleJsonExport,
+                            RepositoryPlanStatus.Failed,
+                            "Replacement plan.",
+                            PlanPath: @"C:\Temp\replacement.plan.json",
+                            ExitCode: 1,
+                            DurationSeconds: 2.0)
+                    ]
+                }
+        };
+
+        await stateDatabase.PersistPortfolioSnapshotAsync(originalPortfolio);
+        await stateDatabase.PersistPlanSnapshotsAsync(originalPortfolio);
+        await stateDatabase.PersistPortfolioSnapshotAsync(replacementPortfolio);
+        await stateDatabase.PersistPlanSnapshotsAsync(replacementPortfolio);
+
+        var loaded = await stateDatabase.LoadPortfolioSnapshotAsync();
+
+        var reloaded = Assert.Single(loaded);
+        Assert.Equal("PSPublishModule", reloaded.Name);
+        var plan = Assert.Single(reloaded.PlanResults!);
+        Assert.Equal(RepositoryPlanAdapterKind.ModuleJsonExport, plan.AdapterKind);
+        Assert.Equal("Replacement plan.", plan.Summary);
+        Assert.Equal(@"C:\Temp\replacement.plan.json", plan.PlanPath);
+    }
+
+    private static async Task<ReleaseStateDatabase> CreateStateDatabaseAsync()
+    {
+        var testDirectory = Path.Combine(Path.GetTempPath(), "PowerForgeStudioTests");
+        Directory.CreateDirectory(testDirectory);
+        var databasePath = Path.Combine(testDirectory, $"{Guid.NewGuid():N}.db");
+        var stateDatabase = new ReleaseStateDatabase(databasePath);
+        await stateDatabase.InitializeAsync();
+        return stateDatabase;
     }
 
     private static RepositoryPortfolioItem CreatePortfolioItem(string rootPath, string repositoryName, RepositoryReadinessKind readinessKind, string readinessReason)

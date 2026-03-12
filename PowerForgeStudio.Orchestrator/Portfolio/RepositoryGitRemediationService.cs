@@ -13,7 +13,8 @@ public sealed class RepositoryGitRemediationService
                 new RepositoryGitRemediationStep(
                     Title: "Select a repository",
                     Summary: "Choose a managed repository to see git remediation guidance and exact command suggestions.",
-                    CommandText: "git status --short --branch")
+                    CommandText: "git status --short --branch",
+                    GitOperation: RepositoryGitOperationKind.StatusShortBranch)
             ];
         }
 
@@ -28,7 +29,8 @@ public sealed class RepositoryGitRemediationService
             Title: "Inspect current git state",
             Summary: "Start by confirming the branch, upstream, and local file status before changing anything.",
             CommandText: "git status --short --branch",
-            IsPrimary: repository.Git.GitDiagnostics.Count == 0));
+            IsPrimary: repository.Git.GitDiagnostics.Count == 0,
+            GitOperation: RepositoryGitOperationKind.StatusShortBranch));
 
         foreach (var diagnostic in repository.Git.GitDiagnostics)
         {
@@ -38,7 +40,8 @@ public sealed class RepositoryGitRemediationService
                     steps.Add(new RepositoryGitRemediationStep(
                         Title: "Verify repository root",
                         Summary: "Open the expected repo/worktree folder and confirm git can see it before any release action runs.",
-                        CommandText: "git rev-parse --show-toplevel"));
+                        CommandText: "git rev-parse --show-toplevel",
+                        GitOperation: RepositoryGitOperationKind.ShowTopLevel));
                     break;
 
                 case RepositoryGitDiagnosticCode.DetachedHead:
@@ -46,7 +49,9 @@ public sealed class RepositoryGitRemediationService
                         Title: "Create a working branch",
                         Summary: "Detached HEAD should be turned into a named branch before build, tag, or publish work continues.",
                         CommandText: $"git switch -c {suggestedBranch}",
-                        IsPrimary: true));
+                        IsPrimary: true,
+                        GitOperation: RepositoryGitOperationKind.CreateBranch,
+                        GitOperationArgument: suggestedBranch));
                     break;
 
                 case RepositoryGitDiagnosticCode.NoUpstream:
@@ -65,7 +70,8 @@ public sealed class RepositoryGitRemediationService
                         Title: "Inspect local changes",
                         Summary: "Review modified and untracked files before deciding whether they belong in this release flow.",
                         CommandText: "git status --short",
-                        IsPrimary: true));
+                        IsPrimary: true,
+                        GitOperation: RepositoryGitOperationKind.StatusShort));
                     break;
 
                 case RepositoryGitDiagnosticCode.BehindUpstream:
@@ -73,7 +79,8 @@ public sealed class RepositoryGitRemediationService
                         Title: "Rebase onto upstream",
                         Summary: "Sync with remote commits so the release run starts from the latest shared branch state.",
                         CommandText: "git pull --rebase",
-                        IsPrimary: true));
+                        IsPrimary: true,
+                        GitOperation: RepositoryGitOperationKind.PullRebase));
                     break;
 
                 case RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow:
@@ -81,13 +88,17 @@ public sealed class RepositoryGitRemediationService
                         Title: "Move work to a PR branch",
                         Summary: "Protected base branches usually need a feature/worktree branch before you can push or open a PR.",
                         CommandText: $"git switch -c {suggestedBranch}",
-                        IsPrimary: repository.Git.AheadCount > 0));
+                        IsPrimary: repository.Git.AheadCount > 0,
+                        GitOperation: RepositoryGitOperationKind.CreateBranch,
+                        GitOperationArgument: suggestedBranch));
 
                     steps.Add(new RepositoryGitRemediationStep(
                         Title: "Publish the PR branch",
                         Summary: "Push the new branch with tracking so GitHub can open a PR and run required checks.",
                         CommandText: $"git push --set-upstream origin {suggestedBranch}",
-                        IsPrimary: repository.Git.AheadCount > 0));
+                        IsPrimary: repository.Git.AheadCount > 0,
+                        GitOperation: RepositoryGitOperationKind.SetUpstream,
+                        GitOperationArgument: suggestedBranch));
                     break;
             }
         }

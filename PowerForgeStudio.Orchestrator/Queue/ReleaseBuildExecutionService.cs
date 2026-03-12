@@ -1,16 +1,34 @@
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using PowerForge;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
-using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 {
-    private readonly RepositoryCatalogScanner _catalogScanner = new();
-    private readonly PowerShellCommandRunner _commandRunner = new();
+    private readonly RepositoryCatalogScanner _catalogScanner;
+    private readonly ProjectBuildHostService _projectBuildHostService;
+    private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
+    private readonly ModuleBuildHostService _moduleBuildHostService;
+
+    public ReleaseBuildExecutionService()
+        : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
+    {
+    }
+
+    internal ReleaseBuildExecutionService(
+        RepositoryCatalogScanner catalogScanner,
+        ProjectBuildHostService projectBuildHostService,
+        ProjectBuildCommandHostService projectBuildCommandHostService,
+        ModuleBuildHostService moduleBuildHostService)
+    {
+        _catalogScanner = catalogScanner;
+        _projectBuildHostService = projectBuildHostService;
+        _projectBuildCommandHostService = projectBuildCommandHostService;
+        _moduleBuildHostService = moduleBuildHostService;
+    }
 
     public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
@@ -40,57 +58,73 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             results.Add(await ExecuteModuleBuildAsync(repository, cancellationToken));
         }
 
-        var succeeded = results.Count > 0 && results.All(result => result.Succeeded);
-        var summary = succeeded
-            ? $"Build completed for {results.Count} adapter(s) without publish/install side effects."
-            : FirstLine(results.FirstOrDefault(result => !result.Succeeded)?.ErrorTail
-                ?? results.FirstOrDefault(result => !result.Succeeded)?.OutputTail
-                ?? "Build execution failed.");
-
-        return new ReleaseBuildExecutionResult(
-            RootPath: repositoryRoot,
-            Succeeded: succeeded,
-            Summary: summary,
-            DurationSeconds: Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
-            AdapterResults: results);
+        return ReleaseQueueExecutionResultFactory.CreateBuildResult(
+            repositoryRoot,
+            DateTimeOffset.UtcNow - startedAt,
+            results);
     }
 
     private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
     {
         var scriptPath = repository.ProjectBuildScriptPath!;
-        var configPath = Path.Combine(Path.GetDirectoryName(scriptPath)!, "project.build.json");
-        string? sanitizedConfigPath = null;
+        var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(scriptPath, repository.RootPath);
 
-        if (File.Exists(configPath))
+        if (!string.IsNullOrWhiteSpace(configPath))
         {
-            sanitizedConfigPath = PrepareProjectRuntimeConfig(repository.Name, configPath);
+            var execution = _projectBuildHostService.Execute(new ProjectBuildHostRequest {
+                ConfigPath = configPath,
+                ExecuteBuild = true,
+                PlanOnly = false,
+                UpdateVersions = false,
+                Build = true,
+                PublishNuget = false,
+                PublishGitHub = false
+            });
+            var artifactInfo = CollectProjectArtifacts(execution);
+
+            return new ReleaseBuildAdapterResult(
+                AdapterKind: ReleaseBuildAdapterKind.ProjectBuild,
+                Succeeded: execution.Success,
+                Summary: execution.Success ? "Project build completed with publish disabled." : "Project build failed.",
+                ExitCode: execution.Success ? 0 : 1,
+                DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
+                ArtifactDirectories: artifactInfo.Directories,
+                ArtifactFiles: artifactInfo.Files,
+                OutputTail: null,
+                ErrorTail: TrimTail(execution.ErrorMessage ?? execution.Result.Release?.ErrorMessage));
         }
 
-        var script = BuildProjectScript(repository.RootPath, sanitizedConfigPath, ResolvePSPublishModulePath());
-        var execution = await _commandRunner.RunCommandAsync(repository.RootPath, script, cancellationToken);
-        var artifactInfo = CollectProjectArtifacts(sanitizedConfigPath, configPath);
-        var succeeded = execution.ExitCode == 0;
+        var powerShellExecution = await _projectBuildCommandHostService.ExecuteBuildAsync(new ProjectBuildCommandBuildRequest {
+            RepositoryRoot = repository.RootPath,
+            ConfigPath = configPath,
+            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
+        }, cancellationToken);
+        var fallbackArtifactInfo = CollectProjectArtifacts(repository.RootPath);
+        var succeeded = powerShellExecution.Succeeded;
 
         return new ReleaseBuildAdapterResult(
             AdapterKind: ReleaseBuildAdapterKind.ProjectBuild,
             Succeeded: succeeded,
             Summary: succeeded ? "Project build completed with publish disabled." : "Project build failed.",
-            ExitCode: execution.ExitCode,
-            DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
-            ArtifactDirectories: artifactInfo.Directories,
-            ArtifactFiles: artifactInfo.Files,
-            OutputTail: TrimTail(execution.StandardOutput),
-            ErrorTail: TrimTail(execution.StandardError));
+            ExitCode: powerShellExecution.ExitCode,
+            DurationSeconds: Math.Round(powerShellExecution.Duration.TotalSeconds, 2),
+            ArtifactDirectories: fallbackArtifactInfo.Directories,
+            ArtifactFiles: fallbackArtifactInfo.Files,
+            OutputTail: TrimTail(powerShellExecution.StandardOutput),
+            ErrorTail: TrimTail(powerShellExecution.StandardError));
     }
 
     private async Task<ReleaseBuildAdapterResult> ExecuteModuleBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
     {
         var scriptPath = repository.ModuleBuildScriptPath!;
-        var modulePath = ResolvePSPublishModulePath();
-        var script = BuildModuleScript(repository.RootPath, scriptPath, modulePath);
-        var execution = await _commandRunner.RunCommandAsync(repository.RootPath, script, cancellationToken);
+        var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
+        var execution = await _moduleBuildHostService.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = repository.RootPath,
+            ScriptPath = scriptPath,
+            ModulePath = modulePath
+        }, cancellationToken);
         var artifactInfo = CollectModuleArtifacts(scriptPath);
-        var succeeded = execution.ExitCode == 0;
+        var succeeded = execution.Succeeded;
 
         return new ReleaseBuildAdapterResult(
             AdapterKind: ReleaseBuildAdapterKind.ModuleBuild,
@@ -104,118 +138,26 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ErrorTail: TrimTail(execution.StandardError));
     }
 
-    private static string BuildProjectScript(string repositoryRoot, string? configPath, string modulePath)
-    {
-        var parts = new List<string> {
-            "$ErrorActionPreference = 'Stop'",
-            BuildModuleImportClause(modulePath),
-            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(repositoryRoot)}"
-        };
-
-        var command = new StringBuilder();
-        command.Append("Invoke-ProjectBuild -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false");
-        if (!string.IsNullOrWhiteSpace(configPath))
-        {
-            command.Append(" -ConfigPath ").Append(PowerShellScriptEscaping.QuoteLiteral(configPath));
-        }
-
-        parts.Add(command.ToString());
-        return string.Join(Environment.NewLine, parts);
-    }
-
-    private static string BuildModuleScript(string repositoryRoot, string scriptPath, string modulePath)
-    {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
-        return string.Join(Environment.NewLine, new[] {
-            "$ErrorActionPreference = 'Stop'",
-            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(moduleRoot)}",
-            BuildModuleImportClause(modulePath),
-            "function New-ConfigurationBuild {",
-            "  param([Parameter(ValueFromRemainingArguments = $true)][object[]]$RemainingArgs)",
-            "  $cmd = Get-Command -Name New-ConfigurationBuild -Module PSPublishModule",
-            "  if ($RemainingArgs.Count -eq 1 -and $RemainingArgs[0] -is [System.Collections.IDictionary]) {",
-            "    $params = @{}",
-            "    foreach ($key in $RemainingArgs[0].Keys) { $params[$key] = $RemainingArgs[0][$key] }",
-            "    $params['SignModule'] = $false",
-            "    $params['CertificateThumbprint'] = $null",
-            "    & $cmd @params",
-            "    return",
-            "  }",
-            "  & $cmd @RemainingArgs -SignModule:$false",
-            "}",
-            $". {PowerShellScriptEscaping.QuoteLiteral(scriptPath)}"
-        });
-    }
-
-    private static string PrepareProjectRuntimeConfig(string repositoryName, string originalConfigPath)
-    {
-        var json = JsonNode.Parse(File.ReadAllText(originalConfigPath))?.AsObject()
-                   ?? throw new InvalidOperationException($"Unable to parse project config {originalConfigPath}.");
-        var configDirectory = Path.GetDirectoryName(originalConfigPath)!;
-
-        NormalizeProjectPath(json, "RootPath", configDirectory);
-        NormalizeProjectPath(json, "OutputPath", configDirectory);
-        NormalizeProjectPath(json, "StagingPath", configDirectory);
-        NormalizeProjectPath(json, "PlanOutputPath", configDirectory);
-
-        json["Build"] = true;
-        json["UpdateVersions"] = false;
-        json["PublishNuget"] = false;
-        json["PublishGitHub"] = false;
-        json["CertificateThumbprint"] = null;
-        json["CertificatePFXPath"] = null;
-        json["CertificatePFXBase64"] = null;
-        json["CertificatePFXPassword"] = null;
-
-        var runtimeDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PowerForgeStudio",
-            "runtime",
-            SanitizePathSegment(repositoryName),
-            "project");
-        Directory.CreateDirectory(runtimeDirectory);
-
-        var runtimeConfigPath = Path.Combine(runtimeDirectory, "project.build.runtime.json");
-        File.WriteAllText(runtimeConfigPath, json.ToJsonString(new JsonSerializerOptions {
-            WriteIndented = true
-        }));
-
-        return runtimeConfigPath;
-    }
-
-    private static void NormalizeProjectPath(JsonObject json, string propertyName, string configDirectory)
-    {
-        if (json[propertyName] is not JsonValue value || !value.TryGetValue<string>(out var propertyValue) || string.IsNullOrWhiteSpace(propertyValue))
-        {
-            return;
-        }
-
-        if (Path.IsPathRooted(propertyValue))
-        {
-            return;
-        }
-
-        json[propertyName] = Path.GetFullPath(Path.Combine(configDirectory, propertyValue));
-    }
-
-    private static ArtifactCollection CollectProjectArtifacts(string? sanitizedConfigPath, string originalConfigPath)
+    private static ArtifactCollection CollectProjectArtifacts(ProjectBuildHostExecutionResult execution)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrWhiteSpace(sanitizedConfigPath) && File.Exists(sanitizedConfigPath))
-        {
-            var json = JsonNode.Parse(File.ReadAllText(sanitizedConfigPath))?.AsObject();
-            AddArtifactDirectory(json?["StagingPath"], directories);
-            AddArtifactDirectory(json?["OutputPath"], directories);
-        }
+        AddArtifactDirectory(execution.StagingPath, directories);
+        AddArtifactDirectory(execution.OutputPath, directories);
+        AddArtifactDirectory(execution.ReleaseZipOutputPath, directories);
+        AddArtifactDirectory(Path.Combine(execution.RootPath, "Artefacts", "ProjectBuild"), directories);
 
-        var defaultProjectBuild = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(originalConfigPath)!, "..", "Artefacts", "ProjectBuild"));
-        if (Directory.Exists(defaultProjectBuild))
-        {
-            directories.Add(defaultProjectBuild);
-        }
+        AddReleaseArtifactFiles(execution.Result.Release, files);
+        CollectArtifactFiles(directories, files);
+        return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
 
+    private static ArtifactCollection CollectProjectArtifacts(string repositoryRoot)
+    {
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddArtifactDirectory(Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild"), directories);
         CollectArtifactFiles(directories, files);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
@@ -246,9 +188,9 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static void AddArtifactDirectory(JsonNode? node, ISet<string> directories)
+    private static void AddArtifactDirectory(string? path, ISet<string> directories)
     {
-        if (node is not JsonValue value || !value.TryGetValue<string>(out var path) || string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
@@ -256,6 +198,24 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (Directory.Exists(path))
         {
             directories.Add(path);
+        }
+    }
+
+    private static void AddReleaseArtifactFiles(DotNetRepositoryReleaseResult? release, ISet<string> files)
+    {
+        if (release is null)
+        {
+            return;
+        }
+
+        foreach (var package in release.Projects.SelectMany(project => project.Packages).Where(File.Exists))
+        {
+            files.Add(package);
+        }
+
+        foreach (var zip in release.Projects.Select(project => project.ReleaseZipPath).Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path!)))
+        {
+            files.Add(zip!);
         }
     }
 
@@ -273,37 +233,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
     }
 
-    private static string BuildModuleImportClause(string modulePath)
-    {
-        if (File.Exists(modulePath))
-        {
-            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
-        }
-
-        return "Import-Module PSPublishModule -Force -ErrorAction Stop";
-    }
-
-    private static string ResolvePSPublishModulePath()
-    {
-        return PSPublishModuleLocator.ResolveModulePath();
-    }
-
-    private static string SanitizePathSegment(string value)
-    {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(value.Length);
-        foreach (var character in value)
-        {
-            builder.Append(invalidCharacters.Contains(character) ? '_' : character);
-        }
-
-        return builder.ToString();
-    }
-
-    private static string FirstLine(string value)
-        => value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? value;
-
-    private static string? TrimTail(string text)
+    private static string? TrimTail(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

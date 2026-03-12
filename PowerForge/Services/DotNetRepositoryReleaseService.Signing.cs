@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -45,51 +43,18 @@ public sealed partial class DotNetRepositoryReleaseService
         out string stdErr,
         out string stdOut)
     {
-        stdErr = string.Empty;
-        stdOut = string.Empty;
+        var result = new DotNetNuGetClient()
+            .SignPackageAsync(new DotNetNuGetSignRequest(
+                packagePath: packagePath,
+                certificateFingerprint: sha256,
+                certificateStoreLocation: store,
+                timeStampServer: timeStampServer))
+            .GetAwaiter()
+            .GetResult();
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(psi);
-
-#if NET472
-        var args = new List<string>
-        {
-            "nuget", "sign", packagePath,
-            "--certificate-fingerprint", sha256,
-            "--certificate-store-location", store,
-            "--certificate-store-name", "My",
-            "--timestamper", timeStampServer,
-            "--overwrite"
-        };
-        psi.Arguments = BuildWindowsArgumentString(args);
-#else
-        psi.ArgumentList.Add("nuget");
-        psi.ArgumentList.Add("sign");
-        psi.ArgumentList.Add(packagePath);
-        psi.ArgumentList.Add("--certificate-fingerprint");
-        psi.ArgumentList.Add(sha256);
-        psi.ArgumentList.Add("--certificate-store-location");
-        psi.ArgumentList.Add(store);
-        psi.ArgumentList.Add("--certificate-store-name");
-        psi.ArgumentList.Add("My");
-        psi.ArgumentList.Add("--timestamper");
-        psi.ArgumentList.Add(timeStampServer);
-        psi.ArgumentList.Add("--overwrite");
-#endif
-
-        using var p = Process.Start(psi);
-        if (p is null) return 1;
-        stdOut = p.StandardOutput.ReadToEnd();
-        stdErr = p.StandardError.ReadToEnd();
-        p.WaitForExit();
-        return p.ExitCode;
+        stdErr = result.StdErr;
+        stdOut = result.StdOut;
+        return result.ExitCode;
     }
 
     private static string? GetCertificateSha256(string thumbprint, CertificateStoreLocation storeLocation)

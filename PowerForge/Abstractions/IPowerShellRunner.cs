@@ -6,23 +6,121 @@ using System.Threading.Tasks;
 namespace PowerForge;
 
 /// <summary>
+/// Supported PowerShell invocation modes.
+/// </summary>
+public enum PowerShellInvocationMode
+{
+    /// <summary>
+    /// Executes a script path via <c>-File</c>.
+    /// </summary>
+    File = 0,
+
+    /// <summary>
+    /// Executes inline PowerShell text via <c>-Command</c>.
+    /// </summary>
+    Command = 1
+}
+
+/// <summary>
 /// Request to execute a PowerShell script out-of-process.
 /// </summary>
 public sealed class PowerShellRunRequest
 {
     /// <summary>Path to the script to execute with <c>-File</c>.</summary>
-    public string ScriptPath { get; }
+    public string? ScriptPath { get; }
+    /// <summary>Inline PowerShell text to execute with <c>-Command</c>.</summary>
+    public string? CommandText { get; }
     /// <summary>Arguments passed to the script (after <c>-File</c>).</summary>
     public IReadOnlyList<string> Arguments { get; }
     /// <summary>Maximum allowed execution time before killing the process.</summary>
     public TimeSpan Timeout { get; }
     /// <summary>When true, prefer <c>pwsh</c>; otherwise use Windows PowerShell first on Windows.</summary>
     public bool PreferPwsh { get; }
+    /// <summary>Optional working directory for the PowerShell process.</summary>
+    public string? WorkingDirectory { get; }
+    /// <summary>Optional environment variable overrides for the PowerShell process.</summary>
+    public IReadOnlyDictionary<string, string?>? EnvironmentVariables { get; }
+    /// <summary>Optional explicit executable name or path.</summary>
+    public string? ExecutableOverride { get; }
+    /// <summary>Gets the invocation mode for the request.</summary>
+    public PowerShellInvocationMode InvocationMode { get; }
     /// <summary>
-    /// Creates a new request.
+    /// Creates a new file-based request.
     /// </summary>
-    public PowerShellRunRequest(string scriptPath, IReadOnlyList<string> arguments, TimeSpan timeout, bool preferPwsh = true)
-    { ScriptPath = scriptPath; Arguments = arguments; Timeout = timeout; PreferPwsh = preferPwsh; }
+    public PowerShellRunRequest(
+        string scriptPath,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        bool preferPwsh = true,
+        string? workingDirectory = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        string? executableOverride = null)
+    {
+        ScriptPath = scriptPath;
+        CommandText = null;
+        Arguments = arguments;
+        Timeout = timeout;
+        PreferPwsh = preferPwsh;
+        WorkingDirectory = workingDirectory;
+        EnvironmentVariables = environmentVariables;
+        ExecutableOverride = executableOverride;
+        InvocationMode = PowerShellInvocationMode.File;
+    }
+
+    /// <summary>
+    /// Creates a new command-based request.
+    /// </summary>
+    /// <param name="commandText">Inline PowerShell text to execute with <c>-Command</c>.</param>
+    /// <param name="timeout">Maximum allowed execution time before killing the process.</param>
+    /// <param name="preferPwsh">When true, prefer <c>pwsh</c>; otherwise use Windows PowerShell first on Windows.</param>
+    /// <param name="workingDirectory">Optional working directory for the PowerShell process.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="executableOverride">Optional explicit executable name or path.</param>
+    /// <returns>PowerShell command request.</returns>
+    public static PowerShellRunRequest ForCommand(
+        string commandText,
+        TimeSpan timeout,
+        bool preferPwsh = true,
+        string? workingDirectory = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        string? executableOverride = null)
+    {
+        if (string.IsNullOrWhiteSpace(commandText))
+            throw new ArgumentException("Command text is required.", nameof(commandText));
+
+        return new PowerShellRunRequest(
+            scriptPath: null,
+            commandText: commandText,
+            arguments: Array.Empty<string>(),
+            timeout: timeout,
+            preferPwsh: preferPwsh,
+            workingDirectory: workingDirectory,
+            environmentVariables: environmentVariables,
+            executableOverride: executableOverride,
+            invocationMode: PowerShellInvocationMode.Command);
+    }
+
+    private PowerShellRunRequest(
+        string? scriptPath,
+        string? commandText,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        bool preferPwsh,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        string? executableOverride,
+        PowerShellInvocationMode invocationMode)
+    {
+        ScriptPath = scriptPath;
+        CommandText = commandText;
+        Arguments = arguments;
+        Timeout = timeout;
+        PreferPwsh = preferPwsh;
+        WorkingDirectory = workingDirectory;
+        EnvironmentVariables = environmentVariables;
+        ExecutableOverride = executableOverride;
+        InvocationMode = invocationMode;
+    }
 }
 /// <summary>
 /// Result of a PowerShell process execution.
@@ -58,126 +156,52 @@ public interface IPowerShellRunner
 /// </summary>
 public sealed class PowerShellRunner : IPowerShellRunner
 {
+    private readonly IProcessRunner _processRunner;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PowerShellRunner"/> class.
+    /// </summary>
+    /// <param name="processRunner">Optional external process runner implementation.</param>
+    public PowerShellRunner(IProcessRunner? processRunner = null)
+    {
+        _processRunner = processRunner ?? new ProcessRunner();
+    }
+
     /// <inheritdoc />
     public PowerShellRunResult Run(PowerShellRunRequest request)
     {
-        var exe = ResolveExecutable(request.PreferPwsh);
+        var exe = ResolveExecutable(request.PreferPwsh, request.ExecutableOverride);
         if (exe is null)
         {
             return new PowerShellRunResult(127, string.Empty, "No PowerShell executable found (pwsh or powershell.exe).", string.Empty);
         }
 
-        var psi = new ProcessStartInfo();
-        psi.FileName = exe;
-        psi.RedirectStandardOutput = true;
-        psi.RedirectStandardError = true;
-        psi.UseShellExecute = false;
-        psi.CreateNoWindow = true;
-        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        var arguments = BuildArguments(request);
+        var processResult = _processRunner.RunAsync(
+            new ProcessRunRequest(
+                exe,
+                request.WorkingDirectory ?? Environment.CurrentDirectory,
+                arguments,
+                request.Timeout,
+                request.EnvironmentVariables)).GetAwaiter().GetResult();
 
-#if NET472
-        // Build classic argument string for net472
-        var sb = new System.Text.StringBuilder();
-        void AddArg(string s)
-        {
-            if (sb.Length > 0) sb.Append(' ');
-            if (string.IsNullOrEmpty(s))
-            {
-                sb.Append("\"\"");
-                return;
-            }
-            if (s.IndexOf(' ') >= 0 || s.IndexOf('"') >= 0)
-            {
-                sb.Append('"').Append(s.Replace("\"", "\\\"")).Append('"');
-            }
-            else sb.Append(s);
-        }
-        AddArg("-NoProfile");
-        AddArg("-NonInteractive");
-        AddArg("-ExecutionPolicy");
-        AddArg("Bypass");
-        AddArg("-File");
-        AddArg(request.ScriptPath);
-        foreach (var arg in request.Arguments)
-        {
-            AddArg(arg);
-        }
-        psi.Arguments = sb.ToString();
-#else
-        psi.ArgumentList.Add("-NoProfile");
-        psi.ArgumentList.Add("-NonInteractive");
-        psi.ArgumentList.Add("-ExecutionPolicy");
-        psi.ArgumentList.Add("Bypass");
-        psi.ArgumentList.Add("-File");
-        psi.ArgumentList.Add(request.ScriptPath);
-        foreach (var arg in request.Arguments)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-#endif
-
-        using var p = new Process { StartInfo = psi };
-
-        try { p.Start(); }
-        catch (Exception ex)
-        {
-            return new PowerShellRunResult(127, string.Empty, ex.Message, exe);
-        }
-
-        // Read output asynchronously to avoid deadlocks when the child process writes a lot of data.
-        // (Waiting for exit before draining stdout/stderr can cause the child process to block on full buffers.)
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-
-        var timeoutMs = (int)Math.Max(1, Math.Min(int.MaxValue, request.Timeout.TotalMilliseconds));
-        if (!p.WaitForExit(timeoutMs))
-        {
-            try
-            {
-#if NET472
-                p.Kill();
-#else
-                p.Kill(entireProcessTree: true);
-#endif
-            }
-            catch { /* ignore */ }
-
-            try { p.WaitForExit(5000); } catch { /* ignore */ }
-
-            var stdout = TryGetCompletedTaskResult(stdoutTask);
-            var stderr = TryGetCompletedTaskResult(stderrTask);
-            if (string.IsNullOrWhiteSpace(stderr)) stderr = "Timeout";
-
-            return new PowerShellRunResult(124, stdout, stderr, exe);
-        }
-
-        // Ensure the async readers have completed after process exit.
-        try { Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000); } catch { /* ignore */ }
-
-        var finalStdout = TryGetCompletedTaskResult(stdoutTask);
-        var finalStderr = TryGetCompletedTaskResult(stderrTask);
-        return new PowerShellRunResult(p.ExitCode, finalStdout, finalStderr, exe);
-    }
-
-    private static string TryGetCompletedTaskResult(Task<string> task)
-    {
-        if (task is null) return string.Empty;
-
-        try
-        {
-            if (task.Status == TaskStatus.RanToCompletion) return task.Result ?? string.Empty;
-            if (task.Wait(10_000)) return task.Result ?? string.Empty;
-        }
-        catch { /* ignore */ }
-
-        return string.Empty;
+        return new PowerShellRunResult(processResult.ExitCode, processResult.StdOut, processResult.StdErr, exe);
     }
 
     /// <summary>
     /// Resolves pwsh or Windows PowerShell on PATH depending on <paramref name="preferPwsh"/>.
     /// </summary>
-    private static string? ResolveExecutable(bool preferPwsh)
+    private static string? ResolveExecutable(bool preferPwsh, string? executableOverride)
     {
+        if (!string.IsNullOrWhiteSpace(executableOverride))
+        {
+            var overridePath = ResolveOnPath(executableOverride);
+            if (overridePath is not null)
+                return overridePath;
+            if (File.Exists(executableOverride))
+                return executableOverride;
+        }
+
         var isWindows = Path.DirectorySeparatorChar == '\\';
         string[] candidates = preferPwsh
             ? (isWindows ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" })
@@ -189,6 +213,30 @@ public sealed class PowerShellRunner : IPowerShellRunner
             if (full is not null) return full;
         }
         return null;
+    }
+
+    private static IReadOnlyList<string> BuildArguments(PowerShellRunRequest request)
+    {
+        var arguments = new List<string> {
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass"
+        };
+
+        if (request.InvocationMode == PowerShellInvocationMode.Command)
+        {
+            arguments.Add("-Command");
+            arguments.Add(request.CommandText ?? string.Empty);
+            return arguments;
+        }
+
+        arguments.Add("-File");
+        arguments.Add(request.ScriptPath ?? string.Empty);
+        foreach (var arg in request.Arguments)
+            arguments.Add(arg);
+
+        return arguments;
     }
 
     /// <summary>

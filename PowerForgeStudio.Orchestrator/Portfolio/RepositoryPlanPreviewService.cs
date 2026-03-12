@@ -1,12 +1,30 @@
-using System.Text;
+using PowerForge;
 using PowerForgeStudio.Domain.Portfolio;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
 
 public sealed class RepositoryPlanPreviewService
 {
-    private readonly PowerShellCommandRunner _commandRunner = new();
+    private readonly ProjectBuildHostService _projectBuildHostService;
+    private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
+    private readonly ModuleBuildHostService _moduleBuildHostService;
+
+    public RepositoryPlanPreviewService()
+        : this(new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
+    {
+    }
+
+    internal RepositoryPlanPreviewService(
+        ProjectBuildHostService projectBuildHostService,
+        ProjectBuildCommandHostService projectBuildCommandHostService,
+        ModuleBuildHostService moduleBuildHostService)
+    {
+        _projectBuildHostService = projectBuildHostService;
+        _projectBuildCommandHostService = projectBuildCommandHostService;
+        _moduleBuildHostService = moduleBuildHostService;
+    }
 
     public async Task<IReadOnlyList<RepositoryPortfolioItem>> PopulatePlanPreviewAsync(
         IEnumerable<RepositoryPortfolioItem> items,
@@ -65,31 +83,67 @@ public sealed class RepositoryPlanPreviewService
 
     private async Task<RepositoryPlanResult> RunModulePlanAsync(RepositoryPortfolioItem item, CancellationToken cancellationToken)
     {
-        var modulePath = ResolvePSPublishModulePath();
+        var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
         var outputPath = BuildPlanOutputPath(item.Name, RepositoryPlanAdapterKind.ModuleJsonExport, "powerforge.json");
-        var script = BuildModuleScript(item.Repository.RootPath, item.Repository.ModuleBuildScriptPath!, outputPath, modulePath);
-        var execution = await _commandRunner.RunCommandAsync(item.Repository.RootPath, script, cancellationToken);
+        var execution = await _moduleBuildHostService.ExportPipelineJsonAsync(new ModuleBuildHostExportRequest {
+            RepositoryRoot = item.Repository.RootPath,
+            ScriptPath = item.Repository.ModuleBuildScriptPath!,
+            ModulePath = modulePath,
+            OutputPath = outputPath
+        }, cancellationToken);
+        var success = execution.Succeeded && File.Exists(outputPath);
 
-        return BuildResult(
-            RepositoryPlanAdapterKind.ModuleJsonExport,
-            outputPath,
-            execution,
-            successSummary: "Module JSON config exported.",
-            failureSummary: "Module JSON export failed.");
+        return new RepositoryPlanResult(
+            AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
+            Status: success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
+            Summary: success ? "Module JSON config exported." : "Module JSON export failed.",
+            PlanPath: success ? outputPath : null,
+            ExitCode: execution.ExitCode,
+            DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
+            OutputTail: TrimTail(execution.StandardOutput),
+            ErrorTail: TrimTail(execution.StandardError));
     }
 
     private async Task<RepositoryPlanResult> RunProjectPlanAsync(RepositoryPortfolioItem item, CancellationToken cancellationToken)
     {
-        var modulePath = ResolvePSPublishModulePath();
         var outputPath = BuildPlanOutputPath(item.Name, RepositoryPlanAdapterKind.ProjectPlan, "project.plan.json");
         var configPath = ResolveProjectConfigPath(item.Repository.ProjectBuildScriptPath!, item.Repository.RootPath);
-        var script = BuildProjectScript(item.Repository.RootPath, outputPath, modulePath, configPath);
-        var execution = await _commandRunner.RunCommandAsync(item.Repository.RootPath, script, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(configPath))
+        {
+            var execution = _projectBuildHostService.Execute(new ProjectBuildHostRequest {
+                ConfigPath = configPath,
+                PlanOutputPath = outputPath,
+                ExecuteBuild = false,
+                PlanOnly = true,
+                UpdateVersions = false,
+                Build = false,
+                PublishNuget = false,
+                PublishGitHub = false
+            });
+
+            var success = execution.Success && File.Exists(outputPath);
+            return new RepositoryPlanResult(
+                AdapterKind: RepositoryPlanAdapterKind.ProjectPlan,
+                Status: success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
+                Summary: success ? "Project build plan generated." : "Project build plan failed.",
+                PlanPath: success ? outputPath : null,
+                ExitCode: success ? 0 : 1,
+                DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
+                OutputTail: null,
+                ErrorTail: success ? null : execution.ErrorMessage);
+        }
+
+        var powerShellExecution = await _projectBuildCommandHostService.GeneratePlanAsync(new ProjectBuildCommandPlanRequest {
+            RepositoryRoot = item.Repository.RootPath,
+            PlanOutputPath = outputPath,
+            ConfigPath = configPath,
+            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
+        }, cancellationToken);
 
         return BuildResult(
             RepositoryPlanAdapterKind.ProjectPlan,
             outputPath,
-            execution,
+            powerShellExecution,
             successSummary: "Project build plan generated.",
             failureSummary: "Project build plan failed.");
     }
@@ -97,7 +151,7 @@ public sealed class RepositoryPlanPreviewService
     private static RepositoryPlanResult BuildResult(
         RepositoryPlanAdapterKind adapterKind,
         string outputPath,
-        PowerShellExecutionResult execution,
+        ProjectBuildCommandHostExecutionResult execution,
         string successSummary,
         string failureSummary)
     {
@@ -115,15 +169,7 @@ public sealed class RepositoryPlanPreviewService
 
     private static string BuildPlanOutputPath(string repositoryName, RepositoryPlanAdapterKind adapterKind, string fileName)
     {
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PowerForgeStudio",
-            "plans",
-            SanitizePathSegment(repositoryName),
-            adapterKind.ToString());
-
-        Directory.CreateDirectory(root);
-        return Path.Combine(root, fileName);
+        return PowerForgeStudioHostPaths.GetPlansFilePath(repositoryName, adapterKind.ToString(), fileName);
     }
 
     internal static string? ResolveProjectConfigPath(string projectBuildScriptPath, string repositoryRoot)
@@ -143,120 +189,6 @@ public sealed class RepositoryPlanPreviewService
 
         var rootConfig = Path.Combine(repositoryRoot, "Build", "project.build.json");
         return File.Exists(rootConfig) ? rootConfig : null;
-    }
-
-    private static string BuildProjectScript(string repositoryRoot, string outputPath, string modulePath, string? configPath)
-    {
-        var lines = new List<string> {
-            "$ErrorActionPreference = 'Stop'",
-            BuildModuleImportClause(modulePath),
-            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(repositoryRoot)}"
-        };
-
-        var command = new StringBuilder("Invoke-ProjectBuild -Plan:$true -PlanPath ");
-        command.Append(PowerShellScriptEscaping.QuoteLiteral(outputPath));
-        if (!string.IsNullOrWhiteSpace(configPath))
-        {
-            command.Append(" -ConfigPath ").Append(PowerShellScriptEscaping.QuoteLiteral(configPath));
-        }
-
-        lines.Add(command.ToString());
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private static string BuildModuleScript(string repositoryRoot, string scriptPath, string outputPath, string modulePath)
-    {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
-        return string.Join(Environment.NewLine, new[] {
-            "$ErrorActionPreference = 'Stop'",
-            $"Set-Location -LiteralPath {PowerShellScriptEscaping.QuoteLiteral(moduleRoot)}",
-            BuildModuleImportClause(modulePath),
-            $"$targetJson = {PowerShellScriptEscaping.QuoteLiteral(outputPath)}",
-            "function Invoke-ModuleBuild {",
-            "  [CmdletBinding(PositionalBinding = $false)]",
-            "  param(",
-            "    [Parameter(Position = 0)][string]$ModuleName,",
-            "    [Parameter(Position = 1)][scriptblock]$Settings,",
-            "    [string]$Path,",
-            "    [switch]$ExitCode,",
-            "    [Parameter(ValueFromRemainingArguments = $true)][object[]]$RemainingArgs",
-            "  )",
-            "  if (-not $Settings -and $RemainingArgs.Count -gt 0 -and $RemainingArgs[0] -is [scriptblock]) {",
-            "    $Settings = [scriptblock]$RemainingArgs[0]",
-            "    if ($RemainingArgs.Count -gt 1) {",
-            "      $RemainingArgs = $RemainingArgs[1..($RemainingArgs.Count - 1)]",
-            "    } else {",
-            "      $RemainingArgs = @()",
-            "    }",
-            "  }",
-            "  $cmd = Get-Command -Name Invoke-ModuleBuild -CommandType Cmdlet -Module PSPublishModule",
-            "  $invokeArgs = @{ ModuleName = $ModuleName; JsonOnly = $true; JsonPath = $targetJson; NoInteractive = $true }",
-            "  if ($null -ne $Settings) { $invokeArgs.Settings = $Settings }",
-            "  if (-not [string]::IsNullOrWhiteSpace($Path)) { $invokeArgs.Path = $Path }",
-            "  if ($ExitCode) { $invokeArgs.ExitCode = $true }",
-            "  if ($RemainingArgs.Count -gt 0) {",
-            "    & $cmd @invokeArgs @RemainingArgs",
-            "  } else {",
-            "    & $cmd @invokeArgs",
-            "  }",
-            "}",
-            "function Build-Module {",
-            "  [CmdletBinding(PositionalBinding = $false)]",
-            "  param(",
-            "    [Parameter(Position = 0)][string]$ModuleName,",
-            "    [Parameter(Position = 1)][scriptblock]$Settings,",
-            "    [string]$Path,",
-            "    [switch]$ExitCode,",
-            "    [Parameter(ValueFromRemainingArguments = $true)][object[]]$RemainingArgs",
-            "  )",
-            "  if (-not $Settings -and $RemainingArgs.Count -gt 0 -and $RemainingArgs[0] -is [scriptblock]) {",
-            "    $Settings = [scriptblock]$RemainingArgs[0]",
-            "    if ($RemainingArgs.Count -gt 1) {",
-            "      $RemainingArgs = $RemainingArgs[1..($RemainingArgs.Count - 1)]",
-            "    } else {",
-            "      $RemainingArgs = @()",
-            "    }",
-            "  }",
-            "  $forwardArgs = @{ ModuleName = $ModuleName }",
-            "  if ($null -ne $Settings) { $forwardArgs.Settings = $Settings }",
-            "  if (-not [string]::IsNullOrWhiteSpace($Path)) { $forwardArgs.Path = $Path }",
-            "  if ($ExitCode) { $forwardArgs.ExitCode = $true }",
-            "  if ($RemainingArgs.Count -gt 0) {",
-            "    Invoke-ModuleBuild @forwardArgs @RemainingArgs",
-            "  } else {",
-            "    Invoke-ModuleBuild @forwardArgs",
-            "  }",
-            "}",
-            "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
-            $". {PowerShellScriptEscaping.QuoteLiteral(scriptPath)}"
-        });
-    }
-
-    private static string BuildModuleImportClause(string modulePath)
-    {
-        if (File.Exists(modulePath))
-        {
-            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
-        }
-
-        return "Import-Module PSPublishModule -Force -ErrorAction Stop";
-    }
-
-    private static string ResolvePSPublishModulePath()
-    {
-        return PSPublishModuleLocator.ResolveModulePath();
-    }
-
-    private static string SanitizePathSegment(string value)
-    {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(value.Length);
-        foreach (var character in value)
-        {
-            builder.Append(invalidCharacters.Contains(character) ? '_' : character);
-        }
-
-        return builder.ToString();
     }
 
     private static string? TrimTail(string text)
