@@ -100,96 +100,43 @@ runs:
     - name: Cleanup runner working sets
       if: ${{ inputs.cleanup-runner == 'true' }}
       shell: pwsh
-      run: |
-        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
-        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
-
-        $args = @(
-          'run', '--project', $project, '-c', 'Release', '--no-build', '--',
-          'github', 'runner', 'cleanup'
-        )
-
-        if ('${{ inputs.apply }}' -eq 'true') { $args += '--apply' } else { $args += '--dry-run' }
-        if ('${{ inputs.min-free-gb }}') { $args += @('--min-free-gb', '${{ inputs.min-free-gb }}') }
-        if ('${{ inputs.runner-aggressive-threshold-gb }}') { $args += @('--aggressive-threshold-gb', '${{ inputs.runner-aggressive-threshold-gb }}') }
-        if ('${{ inputs.allow-sudo }}' -eq 'true') { $args += '--allow-sudo' }
-
-        dotnet @args
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode runner
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_MIN_FREE_GB: ${{ inputs.min-free-gb }}
+        INPUT_RUNNER_AGGRESSIVE_THRESHOLD_GB: ${{ inputs.runner-aggressive-threshold-gb }}
+        INPUT_ALLOW_SUDO: ${{ inputs.allow-sudo }}
 
     - name: Cleanup GitHub caches
       if: ${{ inputs.cleanup-caches == 'true' }}
       shell: pwsh
-      run: |
-        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
-        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
-
-        $repository = '${{ inputs.repo }}'
-        if ([string]::IsNullOrWhiteSpace($repository)) { $repository = '${{ github.repository }}' }
-
-        $token = $env:POWERFORGE_GITHUB_TOKEN
-        if ([string]::IsNullOrWhiteSpace($token)) {
-          Write-Error 'GitHub token is required for cache cleanup.'
-          exit 1
-        }
-
-        $args = @(
-          'run', '--project', $project, '-c', 'Release', '--no-build', '--',
-          'github', 'caches', 'prune',
-          '--repo', $repository,
-          '--token', $token,
-          '--keep', '${{ inputs.cache-keep }}',
-          '--max-age-days', '${{ inputs.cache-max-age-days }}',
-          '--max-delete', '${{ inputs.cache-max-delete }}'
-        )
-
-        if ('${{ inputs.apply }}' -eq 'true') { $args += '--apply' } else { $args += '--dry-run' }
-        if ('${{ inputs.cache-key }}') { $args += @('--key', '${{ inputs.cache-key }}') }
-        if ('${{ inputs.cache-exclude }}') { $args += @('--exclude', '${{ inputs.cache-exclude }}') }
-
-        dotnet @args
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode caches
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_CACHE_KEEP: ${{ inputs.cache-keep }}
+        INPUT_CACHE_MAX_AGE_DAYS: ${{ inputs.cache-max-age-days }}
+        INPUT_CACHE_MAX_DELETE: ${{ inputs.cache-max-delete }}
+        INPUT_CACHE_KEY: ${{ inputs.cache-key }}
+        INPUT_CACHE_EXCLUDE: ${{ inputs.cache-exclude }}
         POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
 
     - name: Cleanup GitHub artifacts
       if: ${{ inputs.cleanup-artifacts == 'true' }}
       shell: pwsh
-      run: |
-        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
-        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
-
-        $repository = '${{ inputs.repo }}'
-        if ([string]::IsNullOrWhiteSpace($repository)) { $repository = '${{ github.repository }}' }
-
-        $token = $env:POWERFORGE_GITHUB_TOKEN
-        if ([string]::IsNullOrWhiteSpace($token)) {
-          Write-Error 'GitHub token is required for artifact cleanup.'
-          exit 1
-        }
-
-        $args = @(
-          'run', '--project', $project, '-c', 'Release', '--no-build', '--',
-          'github', 'artifacts', 'prune',
-          '--repo', $repository,
-          '--token', $token,
-          '--keep', '${{ inputs.artifact-keep }}',
-          '--max-age-days', '${{ inputs.artifact-max-age-days }}',
-          '--max-delete', '${{ inputs.artifact-max-delete }}'
-        )
-
-        if ('${{ inputs.apply }}' -eq 'true') { $args += '--apply' } else { $args += '--dry-run' }
-        if ('${{ inputs.artifact-name }}') { $args += @('--name', '${{ inputs.artifact-name }}') }
-        if ('${{ inputs.artifact-exclude }}') { $args += @('--exclude', '${{ inputs.artifact-exclude }}') }
-
-        dotnet @args
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode artifacts
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_ARTIFACT_KEEP: ${{ inputs.artifact-keep }}
+        INPUT_ARTIFACT_MAX_AGE_DAYS: ${{ inputs.artifact-max-age-days }}
+        INPUT_ARTIFACT_MAX_DELETE: ${{ inputs.artifact-max-delete }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_ARTIFACT_EXCLUDE: ${{ inputs.artifact-exclude }}
         POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
