@@ -34,6 +34,8 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(DotNetPublishFailure))]
 [JsonSerializable(typeof(DotNetPublishConfigScaffoldResult))]
 [JsonSerializable(typeof(GitHubArtifactCleanupResult))]
+[JsonSerializable(typeof(GitHubActionsCacheCleanupResult))]
+[JsonSerializable(typeof(RunnerHousekeepingResult))]
 [JsonSerializable(typeof(ArtefactBuildResult[]))]
 [JsonSerializable(typeof(NormalizationResult[]))]
 [JsonSerializable(typeof(FormatterResult[]))]

@@ -143,6 +143,32 @@ powerforge github artifacts prune --name "test-results*,coverage*,github-pages"
 powerforge github artifacts prune --apply --keep 5 --max-age-days 7 --max-delete 200
 ```
 
+GitHub cache cleanup and runner housekeeping:
+
+```powershell
+# GitHub Actions cache cleanup (dry-run by default)
+powerforge github caches prune --key "ubuntu-*,windows-*" --keep 1 --max-age-days 14
+
+# Runner cleanup for hosted/self-hosted GitHub Actions runners
+powerforge github runner cleanup --apply --min-free-gb 20
+```
+
+If you want the shortest workflow possible across repos, use the reusable composite action:
+
+```yaml
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  housekeeping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/github-housekeeping@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell
