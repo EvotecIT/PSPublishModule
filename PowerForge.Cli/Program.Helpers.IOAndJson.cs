@@ -156,6 +156,31 @@ internal static partial class Program
         return null;
     }
 
+    static string? FindDefaultGitHubHousekeepingConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "github-housekeeping.json",
+            Path.Combine(".powerforge", "github-housekeeping.json"),
+            Path.Combine(".github", "powerforge", "github-housekeeping.json"),
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
     static IEnumerable<string> EnumerateSelfAndParents(string? baseDir)       
     {
         string current;
@@ -238,6 +263,14 @@ internal static partial class Program
         return (spec, full);
     }
 
+    static (GitHubHousekeepingSpec Value, string FullPath) LoadGitHubHousekeepingSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.GitHubHousekeepingSpec, full);
+        return (spec, full);
+    }
+
     static (ModuleInstallSpec Value, string FullPath) LoadInstallSpecWithPath(string path)
     {
         var full = ResolveExistingFilePath(path);
@@ -252,6 +285,20 @@ internal static partial class Program
         var json = File.ReadAllText(full);
         var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleTestSuiteSpec, full);
         return (spec, full);
+    }
+
+    static void ResolveGitHubHousekeepingSpecPaths(GitHubHousekeepingSpec spec, string configFullPath)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+        var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+        if (spec.Runner is null) return;
+
+        spec.Runner.RunnerTempPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.RunnerTempPath);
+        spec.Runner.WorkRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.WorkRootPath);
+        spec.Runner.RunnerRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.RunnerRootPath);
+        spec.Runner.DiagnosticsRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.DiagnosticsRootPath);
+        spec.Runner.ToolCachePath = ResolvePathFromBaseNullable(baseDir, spec.Runner.ToolCachePath);
     }
 
     static (string[] Names, string? Version, bool Prerelease, string[] Repositories)? ParseFindArgs(string[] argv)

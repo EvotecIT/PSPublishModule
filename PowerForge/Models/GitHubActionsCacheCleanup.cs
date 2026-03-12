@@ -183,6 +183,11 @@ public sealed class GitHubActionsCacheCleanupResult
     public GitHubActionsCacheUsage? UsageBefore { get; set; }
 
     /// <summary>
+    /// Cache usage reported by GitHub after cleanup finished.
+    /// </summary>
+    public GitHubActionsCacheUsage? UsageAfter { get; set; }
+
+    /// <summary>
     /// Total caches scanned from GitHub.
     /// </summary>
     public int ScannedCaches { get; set; }

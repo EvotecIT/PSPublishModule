@@ -43,6 +43,9 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>Resolved csproj path.</summary>
     public string CsprojPath { get; set; } = string.Empty;
 
+    /// <summary>Resolved NuGet package identifier.</summary>
+    public string PackageId { get; set; } = string.Empty;
+
     /// <summary>Whether the project is considered packable.</summary>
     public bool IsPackable { get; set; }
 

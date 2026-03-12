@@ -2,12 +2,14 @@ using PowerForge;
 using PowerForge.Cli;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 internal static partial class Program
 {
     private const string GitHubArtifactsPruneUsage = "Usage: powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
     private const string GitHubCachesPruneUsage = "Usage: powerforge github caches prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--key <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
+    private const string GitHubHousekeepingUsage = "Usage: powerforge github housekeeping [--config <file>] [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--dry-run|--apply] [--output json]";
     private const string GitHubRunnerCleanupUsage = "Usage: powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>] [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--diag-retention-days <N>] [--actions-retention-days <N>] [--tool-cache-retention-days <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache] [--skip-docker] [--no-docker-volumes] [--output json]";
 
     private static int CommandGitHub(string[] filteredArgs, CliOptions cli, ILogger logger)
@@ -17,6 +19,7 @@ internal static partial class Program
         {
             Console.WriteLine(GitHubArtifactsPruneUsage);
             Console.WriteLine(GitHubCachesPruneUsage);
+            Console.WriteLine(GitHubHousekeepingUsage);
             Console.WriteLine(GitHubRunnerCleanupUsage);
             return 2;
         }
@@ -25,6 +28,7 @@ internal static partial class Program
         {
             "artifacts" => CommandGitHubArtifacts(argv.Skip(1).ToArray(), cli, logger),
             "caches" => CommandGitHubCaches(argv.Skip(1).ToArray(), cli, logger),
+            "housekeeping" => CommandGitHubHousekeeping(argv.Skip(1).ToArray(), cli, logger),
             "runner" => CommandGitHubRunner(argv.Skip(1).ToArray(), cli, logger),
             _ => UnknownGitHubCommand()
         };
@@ -239,10 +243,76 @@ internal static partial class Program
         }
     }
 
+    private static int CommandGitHubHousekeeping(string[] argv, CliOptions cli, ILogger logger)
+    {
+        var outputJson = IsJsonOutput(argv);
+        if (argv.Length > 0 && IsHelpArg(argv[0]))
+        {
+            Console.WriteLine(GitHubHousekeepingUsage);
+            return 2;
+        }
+
+        GitHubHousekeepingSpec spec;
+        try
+        {
+            spec = ParseGitHubHousekeepingArgs(argv);
+        }
+        catch (Exception ex)
+        {
+            return WriteGitHubCommandArgumentError(outputJson, "github.housekeeping", ex.Message, GitHubHousekeepingUsage, logger);
+        }
+
+        try
+        {
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var service = new GitHubHousekeepingService(cmdLogger);
+            var statusText = spec.DryRun ? "Planning GitHub housekeeping" : "Running GitHub housekeeping";
+            var result = RunWithStatus(outputJson, cli, statusText, () => service.Run(spec));
+            var exitCode = result.Success ? 0 : 1;
+
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "github.housekeeping",
+                    Success = result.Success,
+                    ExitCode = exitCode,
+                    Result = CliJson.SerializeToElement(result, CliJson.Context.GitHubHousekeepingResult),
+                    Logs = LogsToJsonElement(logBuffer)
+                });
+                return exitCode;
+            }
+
+            var mode = result.DryRun ? "Dry run" : "Applied";
+            logger.Info($"{mode}: {result.Repository ?? "(runner-only)"}");
+            logger.Info($"Requested sections: {string.Join(", ", result.RequestedSections)}");
+            if (result.CompletedSections.Length > 0)
+                logger.Info($"Completed sections: {string.Join(", ", result.CompletedSections)}");
+            if (result.FailedSections.Length > 0)
+                logger.Warn($"Failed sections: {string.Join(", ", result.FailedSections)}");
+
+            if (result.Caches?.UsageBefore is not null)
+                logger.Info($"GitHub cache usage before cleanup: {result.Caches.UsageBefore.ActiveCachesCount} caches, {result.Caches.UsageBefore.ActiveCachesSizeInBytes} bytes");
+            if (result.Caches?.UsageAfter is not null)
+                logger.Info($"GitHub cache usage after cleanup: {result.Caches.UsageAfter.ActiveCachesCount} caches, {result.Caches.UsageAfter.ActiveCachesSizeInBytes} bytes");
+
+            if (!string.IsNullOrWhiteSpace(result.Message))
+                logger.Warn(result.Message!);
+
+            return exitCode;
+        }
+        catch (Exception ex)
+        {
+            return WriteGitHubCommandFailure(outputJson, "github.housekeeping", ex.Message, logger);
+        }
+    }
+
     private static int UnknownGitHubCommand()
     {
         Console.WriteLine(GitHubArtifactsPruneUsage);
         Console.WriteLine(GitHubCachesPruneUsage);
+        Console.WriteLine(GitHubHousekeepingUsage);
         Console.WriteLine(GitHubRunnerCleanupUsage);
         return 2;
     }
@@ -453,6 +523,71 @@ internal static partial class Program
         spec.IncludeKeys = NormalizeCsvValues(include);
         spec.ExcludeKeys = NormalizeCsvValues(exclude);
         ResolveGitHubIdentity(spec, tokenEnv, repoEnv);
+        return spec;
+    }
+
+    private static GitHubHousekeepingSpec ParseGitHubHousekeepingArgs(string[] argv)
+    {
+        var configPath = TryGetOptionValue(argv, "--config");
+        if (string.IsNullOrWhiteSpace(configPath))
+            configPath = FindDefaultGitHubHousekeepingConfig(Directory.GetCurrentDirectory());
+        if (string.IsNullOrWhiteSpace(configPath))
+            throw new InvalidOperationException("Housekeeping config file not found. Provide --config or add .powerforge/github-housekeeping.json.");
+
+        var (spec, fullConfigPath) = LoadGitHubHousekeepingSpecWithPath(configPath!);
+        ResolveGitHubHousekeepingSpecPaths(spec, fullConfigPath);
+
+        var tokenEnv = string.IsNullOrWhiteSpace(spec.TokenEnvName) ? "GITHUB_TOKEN" : spec.TokenEnvName.Trim();
+
+        for (var i = 0; i < argv.Length; i++)
+        {
+            var arg = argv[i];
+            switch (arg.ToLowerInvariant())
+            {
+                case "--config":
+                    i++;
+                    break;
+                case "--repo":
+                case "--repository":
+                    spec.Repository = ++i < argv.Length ? argv[i] : string.Empty;
+                    break;
+                case "--token":
+                    spec.Token = ++i < argv.Length ? argv[i] : string.Empty;
+                    break;
+                case "--token-env":
+                    tokenEnv = ++i < argv.Length ? argv[i] : tokenEnv;
+                    break;
+                case "--api-base-url":
+                case "--api-url":
+                    spec.ApiBaseUrl = ++i < argv.Length ? argv[i] : string.Empty;
+                    break;
+                case "--dry-run":
+                    spec.DryRun = true;
+                    break;
+                case "--apply":
+                    spec.DryRun = false;
+                    break;
+                case "--output":
+                    i++;
+                    break;
+                case "--output-json":
+                case "--json":
+                    break;
+                default:
+                    ThrowOnUnknownOption(arg);
+                    break;
+            }
+        }
+
+        if ((spec.Artifacts?.Enabled ?? false) || (spec.Caches?.Enabled ?? false))
+        {
+            if (string.IsNullOrWhiteSpace(spec.Repository))
+                spec.Repository = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY")?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(spec.Token) && !string.IsNullOrWhiteSpace(tokenEnv))
+                spec.Token = Environment.GetEnvironmentVariable(tokenEnv)?.Trim() ?? string.Empty;
+        }
+
+        spec.TokenEnvName = tokenEnv;
         return spec;
     }
 

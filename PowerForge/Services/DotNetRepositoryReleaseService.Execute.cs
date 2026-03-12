@@ -124,6 +124,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
+                            PackageId = ResolvePackageId(item.Path, item.Name),
                             IsPackable = IsPackable(item.Path),
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
@@ -138,6 +139,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
+                    PackageId = ResolvePackageId(entry.Path, entry.Name),
                     IsPackable = IsPackable(entry.Path)
                 });
             }
@@ -298,7 +300,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         continue;
                     }
 
-                    var filtered = FilterPackages(packResult.Packages, project.ProjectName, project.NewVersion!);
+                    var filtered = FilterPackages(packResult.Packages, project.PackageId, project.NewVersion!);
                     if (filtered.Count == 0)
                     {
                         project.ErrorMessage = $"No packages found for version {project.NewVersion}.";

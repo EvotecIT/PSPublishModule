@@ -9,14 +9,6 @@ on:
         description: 'Apply deletions (true/false)'
         required: false
         default: 'true'
-      artifact_max_age_days:
-        description: 'Delete artifacts older than N days'
-        required: false
-        default: '7'
-      cache_max_age_days:
-        description: 'Delete caches older than N days'
-        required: false
-        default: '14'
 
 permissions:
   actions: write
@@ -28,16 +20,10 @@ concurrency:
 
 jobs:
   housekeeping:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run PowerForge housekeeping
-        uses: ./.github/actions/github-housekeeping
-        with:
-          apply: ${{ github.event_name == 'workflow_dispatch' && inputs.apply || 'true' }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          cleanup-runner: 'false'
-          artifact-max-age-days: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_max_age_days || '7' }}
-          cache-max-age-days: ${{ github.event_name == 'workflow_dispatch' && inputs.cache_max_age_days || '14' }}
+    uses: ./.github/workflows/reusable-github-housekeeping.yml
+    with:
+      config-path: ./.powerforge/github-housekeeping.json
+      apply: ${{ github.event_name == 'workflow_dispatch' && inputs.apply == 'true' || github.event_name != 'workflow_dispatch' }}
+      powerforge-ref: ${{ github.sha }}
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

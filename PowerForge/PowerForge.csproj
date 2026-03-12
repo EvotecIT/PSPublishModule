@@ -8,9 +8,17 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
     <VersionPrefix>1.0.0</VersionPrefix>
+    <PackageId>PowerForge</PackageId>
     <Description>PowerForge core library: reusable engine for building, formatting, packaging and publishing PowerShell modules.</Description>
     <AssemblyName>PowerForge</AssemblyName>
     <RootNamespace>PowerForge</RootNamespace>
+    <Authors>Przemyslaw Klys</Authors>
+    <Company>Evotec Services sp. z o.o.</Company>
+    <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
+    <PackageTags>powershell;build;publishing;automation;github</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <!-- NativeAOT publish (for PowerForge.Cli) must not evaluate the net472 TFM. -->

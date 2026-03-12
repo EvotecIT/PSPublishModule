@@ -1,81 +1,17 @@
 name: PowerForge GitHub Housekeeping
-description: Clean GitHub Actions caches and runner working sets using PowerForge.Cli.
+description: Run config-driven GitHub housekeeping using PowerForge.Cli.
 
 inputs:
+  config-path:
+    description: Path to the housekeeping config file inside the checked-out repository.
+    required: false
+    default: ".powerforge/github-housekeeping.json"
   apply:
     description: When true, apply deletions. When false, run in dry-run mode.
     required: false
     default: "true"
-  cleanup-runner:
-    description: When true, clean local runner working sets.
-    required: false
-    default: "true"
-  cleanup-artifacts:
-    description: When true, prune GitHub Actions artifacts for the repository.
-    required: false
-    default: "true"
-  cleanup-caches:
-    description: When true, prune GitHub Actions caches for the repository.
-    required: false
-    default: "true"
-  repo:
-    description: Repository in owner/repo format. Defaults to the current repository.
-    required: false
-    default: ""
   github-token:
-    description: Token used for GitHub cache cleanup. Defaults to github.token.
-    required: false
-    default: ""
-  min-free-gb:
-    description: Minimum free disk required after runner cleanup.
-    required: false
-    default: "20"
-  runner-aggressive-threshold-gb:
-    description: Free disk threshold below which aggressive runner cleanup is enabled.
-    required: false
-    default: ""
-  allow-sudo:
-    description: Allow sudo for deleting protected directories on Unix runners.
-    required: false
-    default: "false"
-  cache-keep:
-    description: Number of newest caches to keep per cache key.
-    required: false
-    default: "1"
-  cache-max-age-days:
-    description: Minimum cache age before deletion is allowed.
-    required: false
-    default: "14"
-  cache-max-delete:
-    description: Maximum number of caches to delete in one run.
-    required: false
-    default: "200"
-  cache-key:
-    description: Optional cache key include patterns (comma-separated).
-    required: false
-    default: ""
-  cache-exclude:
-    description: Optional cache key exclude patterns (comma-separated).
-    required: false
-    default: ""
-  artifact-keep:
-    description: Number of newest artifacts to keep per artifact name.
-    required: false
-    default: "5"
-  artifact-max-age-days:
-    description: Minimum artifact age before deletion is allowed.
-    required: false
-    default: "7"
-  artifact-max-delete:
-    description: Maximum number of artifacts to delete in one run.
-    required: false
-    default: "200"
-  artifact-name:
-    description: Optional artifact include patterns (comma-separated).
-    required: false
-    default: ""
-  artifact-exclude:
-    description: Optional artifact exclude patterns (comma-separated).
+    description: Optional token override for remote GitHub cleanup.
     required: false
     default: ""
 
@@ -97,46 +33,12 @@ runs:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
-    - name: Cleanup runner working sets
-      if: ${{ inputs.cleanup-runner == 'true' }}
+    - name: Run GitHub housekeeping
       shell: pwsh
-      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode runner
+      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
         INPUT_APPLY: ${{ inputs.apply }}
-        INPUT_MIN_FREE_GB: ${{ inputs.min-free-gb }}
-        INPUT_RUNNER_AGGRESSIVE_THRESHOLD_GB: ${{ inputs.runner-aggressive-threshold-gb }}
-        INPUT_ALLOW_SUDO: ${{ inputs.allow-sudo }}
-
-    - name: Cleanup GitHub caches
-      if: ${{ inputs.cleanup-caches == 'true' }}
-      shell: pwsh
-      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode caches
-      env:
-        DOTNET_NOLOGO: true
-        DOTNET_CLI_TELEMETRY_OPTOUT: 1
-        INPUT_APPLY: ${{ inputs.apply }}
-        INPUT_REPO: ${{ inputs.repo }}
-        INPUT_CACHE_KEEP: ${{ inputs.cache-keep }}
-        INPUT_CACHE_MAX_AGE_DAYS: ${{ inputs.cache-max-age-days }}
-        INPUT_CACHE_MAX_DELETE: ${{ inputs.cache-max-delete }}
-        INPUT_CACHE_KEY: ${{ inputs.cache-key }}
-        INPUT_CACHE_EXCLUDE: ${{ inputs.cache-exclude }}
-        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
-
-    - name: Cleanup GitHub artifacts
-      if: ${{ inputs.cleanup-artifacts == 'true' }}
-      shell: pwsh
-      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1 -Mode artifacts
-      env:
-        DOTNET_NOLOGO: true
-        DOTNET_CLI_TELEMETRY_OPTOUT: 1
-        INPUT_APPLY: ${{ inputs.apply }}
-        INPUT_REPO: ${{ inputs.repo }}
-        INPUT_ARTIFACT_KEEP: ${{ inputs.artifact-keep }}
-        INPUT_ARTIFACT_MAX_AGE_DAYS: ${{ inputs.artifact-max-age-days }}
-        INPUT_ARTIFACT_MAX_DELETE: ${{ inputs.artifact-max-delete }}
-        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
-        INPUT_ARTIFACT_EXCLUDE: ${{ inputs.artifact-exclude }}
-        POWERFORGE_GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}

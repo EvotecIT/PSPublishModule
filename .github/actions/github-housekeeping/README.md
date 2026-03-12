@@ -1,15 +1,31 @@
 # PowerForge GitHub Housekeeping
 
-Reusable composite action that wraps the new C# housekeeping commands from `PowerForge.Cli`.
+Reusable composite action that runs the config-driven `powerforge github housekeeping` command from `PowerForge.Cli`.
 
 ## What it does
 
-- Cleans runner working sets (`powerforge github runner cleanup`)
-- Prunes GitHub Actions caches (`powerforge github caches prune`)
-- Prunes GitHub Actions artifacts (`powerforge github artifacts prune`)
-- Builds the CLI from this repository, so other repos can consume the action with one `uses:` step
+- Loads housekeeping settings from a repo config file, typically `.powerforge/github-housekeeping.json`
+- Runs artifact cleanup, cache cleanup, and optional runner cleanup from one C# entrypoint
+- Writes a workflow summary with the requested sections plus before/after cleanup stats
 
-## Minimal usage
+## Recommended usage
+
+Use the reusable workflow for the leanest repo wiring:
+
+```yaml
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  housekeeping:
+    uses: EvotecIT/PSPublishModule/.github/workflows/reusable-github-housekeeping.yml@main
+    with:
+      config-path: ./.powerforge/github-housekeeping.json
+    secrets: inherit
+```
+
+## Direct action usage
 
 ```yaml
 permissions:
@@ -20,33 +36,15 @@ jobs:
   housekeeping:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: EvotecIT/PSPublishModule/.github/actions/github-housekeeping@main
         with:
+          config-path: ./.powerforge/github-housekeeping.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## Typical self-hosted usage
-
-```yaml
-permissions:
-  contents: read
-  actions: write
-
-jobs:
-  housekeeping:
-    runs-on: [self-hosted, ubuntu]
-    steps:
-      - uses: EvotecIT/PSPublishModule/.github/actions/github-housekeeping@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          min-free-gb: "20"
-          cache-max-age-days: "14"
-          cache-max-delete: "200"
 ```
 
 ## Notes
 
-- Cache deletion needs `actions: write`.
+- Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
-- Set `cleanup-runner: "false"` if you only want remote GitHub storage cleanup.
-- Set `cleanup-caches: "false"` or `cleanup-artifacts: "false"` to narrow what gets pruned.
+- Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.

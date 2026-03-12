@@ -45,6 +45,25 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
+    private static string ResolvePackageId(string csprojPath, string fallbackProjectName)
+    {
+        try
+        {
+            var doc = XDocument.Load(csprojPath);
+            var packageId = doc.Descendants()
+                .FirstOrDefault(e => e.Name.LocalName.Equals("PackageId", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+            return string.IsNullOrWhiteSpace(packageId)
+                ? fallbackProjectName
+                : (packageId ?? string.Empty).Trim();
+        }
+        catch
+        {
+            return fallbackProjectName;
+        }
+    }
+
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec)
     {
         var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
@@ -53,7 +72,8 @@ public sealed partial class DotNetRepositoryReleaseService
             ? Path.Combine(csprojDir, "bin", cfg)
             : spec.ReleaseZipOutputPath!;
         var version = string.IsNullOrWhiteSpace(project.NewVersion) ? "0.0.0" : project.NewVersion;
-        return Path.Combine(releasePath, $"{project.ProjectName}.{version}.zip");
+        var assetName = string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId;
+        return Path.Combine(releasePath, $"{assetName}.{version}.zip");
     }
 
     private static bool TryCreateReleaseZip(

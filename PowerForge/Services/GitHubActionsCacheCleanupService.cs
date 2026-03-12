@@ -142,6 +142,7 @@ public sealed class GitHubActionsCacheCleanupService
         result.DeletedCaches = deleted.Count;
         result.DeletedBytes = deleted.Sum(c => c.SizeInBytes);
         result.FailedDeletes = failed.Count;
+        result.UsageAfter = TryGetUsage(normalized.ApiBaseUri, normalized.Repository, normalized.Token);
         result.Success = failed.Count == 0 || !normalized.FailOnDeleteError;
 
         if (!result.Success)
