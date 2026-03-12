@@ -218,6 +218,19 @@ For release/build packaging, this repo now also ships a standard project-build e
 .\Build\Build-Project.ps1 -PublishNuget $true -PublishGitHub $true
 ```
 
+For downloadable CLI binaries, use the tool release builders:
+
+```powershell
+# Build PowerForge.exe / PowerForge for one runtime
+.\Build\Build-PowerForge.ps1 -Tool PowerForge -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+
+# Build PowerForgeWeb.exe / PowerForgeWeb
+.\Build\Build-PowerForgeWeb.ps1 -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+
+# Optional: publish the generated zip assets to GitHub releases
+.\Build\Build-PowerForge.ps1 -Tool All -Runtime win-x64,linux-x64,osx-arm64 -Framework net8.0 -Flavor SingleFx -Zip -PublishGitHub
+```
+
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell
