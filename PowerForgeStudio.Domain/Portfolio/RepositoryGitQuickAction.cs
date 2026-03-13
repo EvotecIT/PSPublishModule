@@ -6,7 +6,9 @@ public sealed record RepositoryGitQuickAction(
     RepositoryGitQuickActionKind Kind,
     string Payload,
     string ExecuteLabel,
-    bool IsPrimary = false)
+    bool IsPrimary = false,
+    RepositoryGitOperationKind? GitOperation = null,
+    string? GitOperationArgument = null)
 {
     public string KindDisplay => Kind == RepositoryGitQuickActionKind.BrowserUrl ? "Browser" : "Git";
 }

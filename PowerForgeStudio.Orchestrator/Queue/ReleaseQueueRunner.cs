@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
@@ -8,6 +7,14 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed class ReleaseQueueRunner
 {
+    private readonly ReleaseQueueCheckpointSerializer _checkpointSerializer = new();
+    private readonly ReleaseQueueItemTransitionFactory _itemTransitionFactory;
+
+    public ReleaseQueueRunner()
+    {
+        _itemTransitionFactory = new ReleaseQueueItemTransitionFactory(_checkpointSerializer);
+    }
+
     public ReleaseQueueTransitionResult AdvanceNextReadyItem(ReleaseQueueSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -29,27 +36,27 @@ public sealed class ReleaseQueueRunner
         switch (item.Stage)
         {
             case ReleaseQueueStage.Build:
-                updatedItem = item with {
-                    Stage = ReleaseQueueStage.Sign,
-                    Status = ReleaseQueueItemStatus.WaitingApproval,
-                    Summary = "Build stage completed in orchestration mode. USB signing approval is now required.",
-                    CheckpointKey = "sign.waiting.usb",
-                    CheckpointStateJson = SerializeCheckpoint("Build", "Sign", timestamp),
-                    UpdatedAtUtc = timestamp
-                };
+                updatedItem = _itemTransitionFactory.CreateTransition(
+                    item,
+                    fromStage: "Build",
+                    targetStage: ReleaseQueueStage.Sign,
+                    targetStatus: ReleaseQueueItemStatus.WaitingApproval,
+                    summary: "Build stage completed in orchestration mode. USB signing approval is now required.",
+                    checkpointKey: "sign.waiting.usb",
+                    timestamp: timestamp);
                 message = $"Advanced {item.RepositoryName} from Build to Sign and paused for USB approval.";
                 break;
             case ReleaseQueueStage.Sign:
                 return new ReleaseQueueTransitionResult(session, false, $"{item.RepositoryName} is marked Sign/ReadyToRun, but signing requires the USB approval gate before execution can continue.");
             case ReleaseQueueStage.Publish:
-                updatedItem = item with {
-                    Stage = ReleaseQueueStage.Verify,
-                    Status = ReleaseQueueItemStatus.ReadyToRun,
-                    Summary = "Publish step completed in orchestration mode. Verification is ready to run.",
-                    CheckpointKey = "verify.ready",
-                    CheckpointStateJson = SerializeCheckpoint("Publish", "Verify", timestamp),
-                    UpdatedAtUtc = timestamp
-                };
+                updatedItem = _itemTransitionFactory.CreateTransition(
+                    item,
+                    fromStage: "Publish",
+                    targetStage: ReleaseQueueStage.Verify,
+                    targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+                    summary: "Publish step completed in orchestration mode. Verification is ready to run.",
+                    checkpointKey: "verify.ready",
+                    timestamp: timestamp);
                 message = $"Advanced {item.RepositoryName} from Publish to Verify.";
                 break;
             case ReleaseQueueStage.Verify:
@@ -74,16 +81,16 @@ public sealed class ReleaseQueueRunner
             return new ReleaseQueueTransitionResult(session, false, "No queue item is currently waiting on USB approval.");
         }
 
-        var item = nextEntry.Item;
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = item with {
-            Stage = ReleaseQueueStage.Publish,
-            Status = ReleaseQueueItemStatus.ReadyToRun,
-            Summary = "USB approval recorded. Publish stage is ready to run.",
-            CheckpointKey = "publish.ready",
-            CheckpointStateJson = SerializeCheckpoint("Sign", "Publish", timestamp),
-            UpdatedAtUtc = timestamp
-        };
+        var item = nextEntry.Item;
+        var updatedItem = _itemTransitionFactory.CreateTransition(
+            item,
+            fromStage: "Sign",
+            targetStage: ReleaseQueueStage.Publish,
+            targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+            summary: "USB approval recorded. Publish stage is ready to run.",
+            checkpointKey: "publish.ready",
+            timestamp: timestamp);
 
         return BuildResult(session, nextEntry.Index, updatedItem, $"USB approval recorded for {item.RepositoryName}. Publish is now ready.", timestamp);
     }
@@ -94,9 +101,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(buildResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -104,14 +109,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Sign,
-            Status = ReleaseQueueItemStatus.WaitingApproval,
-            Summary = buildResult.Summary,
-            CheckpointKey = "sign.waiting.usb",
-            CheckpointStateJson = JsonSerializer.Serialize(buildResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Sign,
+            targetStatus: ReleaseQueueItemStatus.WaitingApproval,
+            summary: buildResult.Summary,
+            checkpointKey: "sign.waiting.usb",
+            checkpoint: buildResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Build completed for {entry.Item.RepositoryName}. USB signing approval is now required.", timestamp);
     }
@@ -122,9 +127,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(buildResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -132,14 +135,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Build,
-            Status = ReleaseQueueItemStatus.Failed,
-            Summary = buildResult.Summary,
-            CheckpointKey = "build.failed",
-            CheckpointStateJson = JsonSerializer.Serialize(buildResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Build,
+            targetStatus: ReleaseQueueItemStatus.Failed,
+            summary: buildResult.Summary,
+            checkpointKey: "build.failed",
+            checkpoint: buildResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Build failed for {entry.Item.RepositoryName}. Review the captured queue state before retrying.", timestamp);
     }
@@ -150,9 +153,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(signingResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -160,14 +161,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Publish,
-            Status = ReleaseQueueItemStatus.ReadyToRun,
-            Summary = signingResult.Summary,
-            CheckpointKey = "publish.ready",
-            CheckpointStateJson = JsonSerializer.Serialize(signingResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Publish,
+            targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+            summary: signingResult.Summary,
+            checkpointKey: "publish.ready",
+            checkpoint: signingResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Signing completed for {entry.Item.RepositoryName}. Publish is now ready.", timestamp);
     }
@@ -178,9 +179,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(signingResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -188,14 +187,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Sign,
-            Status = ReleaseQueueItemStatus.Failed,
-            Summary = signingResult.Summary,
-            CheckpointKey = "sign.failed",
-            CheckpointStateJson = JsonSerializer.Serialize(signingResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Sign,
+            targetStatus: ReleaseQueueItemStatus.Failed,
+            summary: signingResult.Summary,
+            checkpointKey: "sign.failed",
+            checkpoint: signingResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Signing failed for {entry.Item.RepositoryName}. Review signing receipts before retrying.", timestamp);
     }
@@ -206,9 +205,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(publishResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -216,14 +213,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Verify,
-            Status = ReleaseQueueItemStatus.ReadyToRun,
-            Summary = publishResult.Summary,
-            CheckpointKey = "verify.ready",
-            CheckpointStateJson = JsonSerializer.Serialize(publishResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Verify,
+            targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+            summary: publishResult.Summary,
+            checkpointKey: "verify.ready",
+            checkpoint: publishResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Publish completed for {entry.Item.RepositoryName}. Verification is now ready.", timestamp);
     }
@@ -234,9 +231,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(publishResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -244,14 +239,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Publish,
-            Status = ReleaseQueueItemStatus.Failed,
-            Summary = publishResult.Summary,
-            CheckpointKey = "publish.failed",
-            CheckpointStateJson = JsonSerializer.Serialize(publishResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Publish,
+            targetStatus: ReleaseQueueItemStatus.Failed,
+            summary: publishResult.Summary,
+            checkpointKey: "publish.failed",
+            checkpoint: publishResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Publish failed for {entry.Item.RepositoryName}. Review publish receipts before retrying.", timestamp);
     }
@@ -262,9 +257,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(verificationResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -272,14 +265,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Completed,
-            Status = ReleaseQueueItemStatus.Succeeded,
-            Summary = verificationResult.Summary,
-            CheckpointKey = "completed",
-            CheckpointStateJson = JsonSerializer.Serialize(verificationResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Completed,
+            targetStatus: ReleaseQueueItemStatus.Succeeded,
+            summary: verificationResult.Summary,
+            checkpointKey: "completed",
+            checkpoint: verificationResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Verification completed for {entry.Item.RepositoryName}. Queue item is now closed.", timestamp);
     }
@@ -290,9 +283,7 @@ public sealed class ReleaseQueueRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(verificationResult);
 
-        var entry = session.Items
-            .Select((item, index) => new QueueLookupEntry(item, index))
-            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
+        var entry = FindEntry(session, rootPath);
 
         if (entry is null)
         {
@@ -300,14 +291,14 @@ public sealed class ReleaseQueueRunner
         }
 
         var timestamp = DateTimeOffset.UtcNow;
-        var updatedItem = entry.Item with {
-            Stage = ReleaseQueueStage.Verify,
-            Status = ReleaseQueueItemStatus.Failed,
-            Summary = verificationResult.Summary,
-            CheckpointKey = "verify.failed",
-            CheckpointStateJson = JsonSerializer.Serialize(verificationResult),
-            UpdatedAtUtc = timestamp
-        };
+        var updatedItem = _itemTransitionFactory.CreateCheckpointUpdate(
+            entry.Item,
+            targetStage: ReleaseQueueStage.Verify,
+            targetStatus: ReleaseQueueItemStatus.Failed,
+            summary: verificationResult.Summary,
+            checkpointKey: "verify.failed",
+            checkpoint: verificationResult,
+            timestamp: timestamp);
 
         return BuildResult(session, entry.Index, updatedItem, $"Verification failed for {entry.Item.RepositoryName}. Review verification receipts before retrying.", timestamp);
     }
@@ -373,10 +364,7 @@ public sealed class ReleaseQueueRunner
             return new ReleaseQueueTransitionResult(session, false, "Matching failed queue items were found, but none could be safely rearmed.");
         }
 
-        var updatedSession = session with {
-            Items = items,
-            Summary = BuildSummary(items)
-        };
+        var updatedSession = ReleaseQueueSessionFactory.WithItems(session, items);
 
         return new ReleaseQueueTransitionResult(updatedSession, true, $"Rearmed {retried} failed queue item(s) for retry.");
     }
@@ -390,42 +378,19 @@ public sealed class ReleaseQueueRunner
     {
         var items = session.Items.ToList();
         items[index] = updatedItem;
-        var updatedSession = session with {
-            Items = items,
-            Summary = BuildSummary(items)
-        };
+        var updatedSession = ReleaseQueueSessionFactory.WithItems(session, items);
 
         return new ReleaseQueueTransitionResult(updatedSession, true, message);
     }
 
-    private static ReleaseQueueSummary BuildSummary(IReadOnlyList<ReleaseQueueItem> items)
-    {
-        return new ReleaseQueueSummary(
-            TotalItems: items.Count,
-            BuildReadyItems: items.Count(item => item.Stage == ReleaseQueueStage.Build && item.Status == ReleaseQueueItemStatus.ReadyToRun),
-            PreparePendingItems: items.Count(item => item.Stage == ReleaseQueueStage.Prepare && item.Status == ReleaseQueueItemStatus.Pending),
-            WaitingApprovalItems: items.Count(item => item.Status == ReleaseQueueItemStatus.WaitingApproval),
-            BlockedItems: items.Count(item => item.Status == ReleaseQueueItemStatus.Blocked || item.Status == ReleaseQueueItemStatus.Failed),
-            VerificationReadyItems: items.Count(item => item.Stage == ReleaseQueueStage.Verify && item.Status == ReleaseQueueItemStatus.ReadyToRun));
-    }
-
-    private static string SerializeCheckpoint(string fromStage, string toStage, DateTimeOffset timestamp)
-    {
-        return JsonSerializer.Serialize(new Dictionary<string, string> {
-            ["from"] = fromStage,
-            ["to"] = toStage,
-            ["updatedAtUtc"] = timestamp.ToString("O")
-        });
-    }
-
-    private static ReleaseQueueTransitionResult RetryBuild(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
+    private ReleaseQueueTransitionResult RetryBuild(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
     {
         var updatedItem = BuildRetryItem(entry.Item, timestamp)!;
 
         return BuildResult(session, entry.Index, updatedItem, $"Build retry armed for {entry.Item.RepositoryName}.", timestamp);
     }
 
-    private static ReleaseQueueTransitionResult RetrySigning(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
+    private ReleaseQueueTransitionResult RetrySigning(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
     {
         var updatedItem = BuildRetryItem(entry.Item, timestamp);
         if (updatedItem is null)
@@ -436,7 +401,7 @@ public sealed class ReleaseQueueRunner
         return BuildResult(session, entry.Index, updatedItem, $"Signing retry armed for {entry.Item.RepositoryName}. USB approval is required again.", timestamp);
     }
 
-    private static ReleaseQueueTransitionResult RetryPublish(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
+    private ReleaseQueueTransitionResult RetryPublish(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
     {
         var updatedItem = BuildRetryItem(entry.Item, timestamp);
         if (updatedItem is null)
@@ -447,7 +412,7 @@ public sealed class ReleaseQueueRunner
         return BuildResult(session, entry.Index, updatedItem, $"Publish retry armed for {entry.Item.RepositoryName}.", timestamp);
     }
 
-    private static ReleaseQueueTransitionResult RetryVerification(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
+    private ReleaseQueueTransitionResult RetryVerification(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
     {
         var updatedItem = BuildRetryItem(entry.Item, timestamp);
         if (updatedItem is null)
@@ -458,92 +423,82 @@ public sealed class ReleaseQueueRunner
         return BuildResult(session, entry.Index, updatedItem, $"Verification retry armed for {entry.Item.RepositoryName}.", timestamp);
     }
 
-    private static ReleaseQueueItem? BuildRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
+    private ReleaseQueueItem? BuildRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
         => item.Stage switch
         {
-            ReleaseQueueStage.Build => item with {
-                Stage = ReleaseQueueStage.Build,
-                Status = ReleaseQueueItemStatus.ReadyToRun,
-                Summary = "Build retry armed. The item is ready to rerun the build stage.",
-                CheckpointKey = "build.ready",
-                CheckpointStateJson = null,
-                UpdatedAtUtc = timestamp
-            },
+            ReleaseQueueStage.Build => _itemTransitionFactory.CreateStateUpdate(
+                item,
+                targetStage: ReleaseQueueStage.Build,
+                targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+                summary: "Build retry armed. The item is ready to rerun the build stage.",
+                checkpointKey: "build.ready",
+                checkpointStateJson: null,
+                timestamp: timestamp),
             ReleaseQueueStage.Sign => BuildSigningRetryItem(item, timestamp),
             ReleaseQueueStage.Publish => BuildPublishRetryItem(item, timestamp),
             ReleaseQueueStage.Verify => BuildVerificationRetryItem(item, timestamp),
             _ => null
         };
 
-    private static ReleaseQueueItem? BuildSigningRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
+    private ReleaseQueueItem? BuildSigningRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
     {
-        var signingResult = TryDeserialize<ReleaseSigningExecutionResult>(item.CheckpointStateJson);
+        var signingResult = _checkpointSerializer.TryDeserialize<ReleaseSigningExecutionResult>(item.CheckpointStateJson);
         if (string.IsNullOrWhiteSpace(signingResult?.SourceCheckpointStateJson))
         {
             return null;
         }
 
-        return item with {
-            Stage = ReleaseQueueStage.Sign,
-            Status = ReleaseQueueItemStatus.WaitingApproval,
-            Summary = "Signing retry armed. USB approval is required again before signing resumes.",
-            CheckpointKey = "sign.waiting.usb",
-            CheckpointStateJson = signingResult.SourceCheckpointStateJson,
-            UpdatedAtUtc = timestamp
-        };
+        return _itemTransitionFactory.CreateStateUpdate(
+            item,
+            targetStage: ReleaseQueueStage.Sign,
+            targetStatus: ReleaseQueueItemStatus.WaitingApproval,
+            summary: "Signing retry armed. USB approval is required again before signing resumes.",
+            checkpointKey: "sign.waiting.usb",
+            checkpointStateJson: signingResult.SourceCheckpointStateJson,
+            timestamp: timestamp);
     }
 
-    private static ReleaseQueueItem? BuildPublishRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
+    private ReleaseQueueItem? BuildPublishRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
     {
-        var publishResult = TryDeserialize<ReleasePublishExecutionResult>(item.CheckpointStateJson);
+        var publishResult = _checkpointSerializer.TryDeserialize<ReleasePublishExecutionResult>(item.CheckpointStateJson);
         if (string.IsNullOrWhiteSpace(publishResult?.SourceCheckpointStateJson))
         {
             return null;
         }
 
-        return item with {
-            Stage = ReleaseQueueStage.Publish,
-            Status = ReleaseQueueItemStatus.ReadyToRun,
-            Summary = "Publish retry armed. The item is ready to rerun the publish stage.",
-            CheckpointKey = "publish.ready",
-            CheckpointStateJson = publishResult.SourceCheckpointStateJson,
-            UpdatedAtUtc = timestamp
-        };
+        return _itemTransitionFactory.CreateStateUpdate(
+            item,
+            targetStage: ReleaseQueueStage.Publish,
+            targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+            summary: "Publish retry armed. The item is ready to rerun the publish stage.",
+            checkpointKey: "publish.ready",
+            checkpointStateJson: publishResult.SourceCheckpointStateJson,
+            timestamp: timestamp);
     }
 
-    private static ReleaseQueueItem? BuildVerificationRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
+    private ReleaseQueueItem? BuildVerificationRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
     {
-        var verificationResult = TryDeserialize<ReleaseVerificationExecutionResult>(item.CheckpointStateJson);
+        var verificationResult = _checkpointSerializer.TryDeserialize<ReleaseVerificationExecutionResult>(item.CheckpointStateJson);
         if (string.IsNullOrWhiteSpace(verificationResult?.SourceCheckpointStateJson))
         {
             return null;
         }
 
-        return item with {
-            Stage = ReleaseQueueStage.Verify,
-            Status = ReleaseQueueItemStatus.ReadyToRun,
-            Summary = "Verification retry armed. The item is ready to rerun the verification stage.",
-            CheckpointKey = "verify.ready",
-            CheckpointStateJson = verificationResult.SourceCheckpointStateJson,
-            UpdatedAtUtc = timestamp
-        };
+        return _itemTransitionFactory.CreateStateUpdate(
+            item,
+            targetStage: ReleaseQueueStage.Verify,
+            targetStatus: ReleaseQueueItemStatus.ReadyToRun,
+            summary: "Verification retry armed. The item is ready to rerun the verification stage.",
+            checkpointKey: "verify.ready",
+            checkpointStateJson: verificationResult.SourceCheckpointStateJson,
+            timestamp: timestamp);
     }
 
-    private static T? TryDeserialize<T>(string? json)
+    private static QueueLookupEntry? FindEntry(ReleaseQueueSession session, string rootPath)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return default;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<T>(json);
-        }
-        catch
-        {
-            return default;
-        }
+        return session.Items
+            .Select((item, index) => new QueueLookupEntry(item, index))
+            .FirstOrDefault(candidate => string.Equals(candidate.Item.RootPath, rootPath, StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed record QueueLookupEntry(ReleaseQueueItem Item, int Index);

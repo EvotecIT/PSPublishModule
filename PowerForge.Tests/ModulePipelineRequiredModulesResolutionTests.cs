@@ -167,7 +167,8 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
-            var script = File.ReadAllText(request.ScriptPath);
+            Assert.NotNull(request.ScriptPath);
+            var script = File.ReadAllText(request.ScriptPath!);
 
             if (script.Contains(InstalledModuleInfoMarker, StringComparison.Ordinal))
             {

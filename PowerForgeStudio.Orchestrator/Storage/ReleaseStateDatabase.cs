@@ -1,6 +1,8 @@
 using DBAClientX;
+using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
@@ -8,6 +10,7 @@ using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Domain.Verification;
+using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Storage;
 
@@ -17,6 +20,198 @@ public sealed class ReleaseStateDatabase
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
+    private static readonly ReceiptTableDefinition<ReleaseSigningReceipt> SigningReceiptTable = new(
+        TableName: "release_signing_receipt",
+        InsertSql:
+        """
+        INSERT INTO release_signing_receipt(
+            session_id,
+            root_path,
+            repository_name,
+            adapter_kind,
+            artifact_path,
+            artifact_kind,
+            status,
+            summary,
+            signed_at_utc)
+        VALUES (
+            @SessionId,
+            @RootPath,
+            @RepositoryName,
+            @AdapterKind,
+            @ArtifactPath,
+            @ArtifactKind,
+            @Status,
+            @Summary,
+            @SignedAtUtc);
+        """,
+        QuerySql:
+        """
+        SELECT root_path,
+               repository_name,
+               adapter_kind,
+               artifact_path,
+               artifact_kind,
+               status,
+               summary,
+               signed_at_utc
+        FROM release_signing_receipt
+        WHERE session_id = @SessionId
+        ORDER BY signed_at_utc DESC, repository_name, artifact_path;
+        """,
+        BuildParameters: static (sessionId, receipt) => new Dictionary<string, object?> {
+            ["@SessionId"] = sessionId,
+            ["@RootPath"] = receipt.RootPath,
+            ["@RepositoryName"] = receipt.RepositoryName,
+            ["@AdapterKind"] = receipt.AdapterKind,
+            ["@ArtifactPath"] = receipt.ArtifactPath,
+            ["@ArtifactKind"] = receipt.ArtifactKind,
+            ["@Status"] = receipt.Status.ToString(),
+            ["@Summary"] = receipt.Summary,
+            ["@SignedAtUtc"] = receipt.SignedAtUtc.ToString("O")
+        },
+        Map: static reader => new ReleaseSigningReceipt(
+            RootPath: reader.GetString(0),
+            RepositoryName: reader.GetString(1),
+            AdapterKind: reader.GetString(2),
+            ArtifactPath: reader.GetString(3),
+            ArtifactKind: reader.GetString(4),
+            Status: Enum.Parse<ReleaseSigningReceiptStatus>(reader.GetString(5), ignoreCase: true),
+            Summary: reader.GetString(6),
+            SignedAtUtc: DateTimeOffset.Parse(reader.GetString(7))));
+    private static readonly ReceiptTableDefinition<ReleasePublishReceipt> PublishReceiptTable = new(
+        TableName: "release_publish_receipt",
+        InsertSql:
+        """
+        INSERT INTO release_publish_receipt(
+            session_id,
+            root_path,
+            repository_name,
+            adapter_kind,
+            target_name,
+            target_kind,
+            destination,
+            source_path,
+            status,
+            summary,
+            published_at_utc)
+        VALUES (
+            @SessionId,
+            @RootPath,
+            @RepositoryName,
+            @AdapterKind,
+            @TargetName,
+            @TargetKind,
+            @Destination,
+            @SourcePath,
+            @Status,
+            @Summary,
+            @PublishedAtUtc);
+        """,
+        QuerySql:
+        """
+        SELECT root_path,
+               repository_name,
+               adapter_kind,
+               target_name,
+               target_kind,
+               destination,
+               source_path,
+               status,
+               summary,
+               published_at_utc
+        FROM release_publish_receipt
+        WHERE session_id = @SessionId
+        ORDER BY published_at_utc DESC, repository_name, target_name;
+        """,
+        BuildParameters: static (sessionId, receipt) => new Dictionary<string, object?> {
+            ["@SessionId"] = sessionId,
+            ["@RootPath"] = receipt.RootPath,
+            ["@RepositoryName"] = receipt.RepositoryName,
+            ["@AdapterKind"] = receipt.AdapterKind,
+            ["@TargetName"] = receipt.TargetName,
+            ["@TargetKind"] = receipt.TargetKind,
+            ["@Destination"] = receipt.Destination,
+            ["@SourcePath"] = receipt.SourcePath,
+            ["@Status"] = receipt.Status.ToString(),
+            ["@Summary"] = receipt.Summary,
+            ["@PublishedAtUtc"] = receipt.PublishedAtUtc.ToString("O")
+        },
+        Map: static reader => new ReleasePublishReceipt(
+            RootPath: reader.GetString(0),
+            RepositoryName: reader.GetString(1),
+            AdapterKind: reader.GetString(2),
+            TargetName: reader.GetString(3),
+            TargetKind: reader.GetString(4),
+            Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
+            SourcePath: reader.IsDBNull(6) ? null : reader.GetString(6),
+            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(7), ignoreCase: true),
+            Summary: reader.GetString(8),
+            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(9))));
+    private static readonly ReceiptTableDefinition<ReleaseVerificationReceipt> VerificationReceiptTable = new(
+        TableName: "release_verification_receipt",
+        InsertSql:
+        """
+        INSERT INTO release_verification_receipt(
+            session_id,
+            root_path,
+            repository_name,
+            adapter_kind,
+            target_name,
+            target_kind,
+            destination,
+            status,
+            summary,
+            verified_at_utc)
+        VALUES (
+            @SessionId,
+            @RootPath,
+            @RepositoryName,
+            @AdapterKind,
+            @TargetName,
+            @TargetKind,
+            @Destination,
+            @Status,
+            @Summary,
+            @VerifiedAtUtc);
+        """,
+        QuerySql:
+        """
+        SELECT root_path,
+               repository_name,
+               adapter_kind,
+               target_name,
+               target_kind,
+               destination,
+               status,
+               summary,
+               verified_at_utc
+        FROM release_verification_receipt
+        WHERE session_id = @SessionId
+        ORDER BY verified_at_utc DESC, repository_name, target_name;
+        """,
+        BuildParameters: static (sessionId, receipt) => new Dictionary<string, object?> {
+            ["@SessionId"] = sessionId,
+            ["@RootPath"] = receipt.RootPath,
+            ["@RepositoryName"] = receipt.RepositoryName,
+            ["@AdapterKind"] = receipt.AdapterKind,
+            ["@TargetName"] = receipt.TargetName,
+            ["@TargetKind"] = receipt.TargetKind,
+            ["@Destination"] = receipt.Destination,
+            ["@Status"] = receipt.Status.ToString(),
+            ["@Summary"] = receipt.Summary,
+            ["@VerifiedAtUtc"] = receipt.VerifiedAtUtc.ToString("O")
+        },
+        Map: static reader => new ReleaseVerificationReceipt(
+            RootPath: reader.GetString(0),
+            RepositoryName: reader.GetString(1),
+            AdapterKind: reader.GetString(2),
+            TargetName: reader.GetString(3),
+            TargetKind: reader.GetString(4),
+            Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
+            Status: Enum.Parse<ReleaseVerificationReceiptStatus>(reader.GetString(6), ignoreCase: true),
+            Summary: reader.GetString(7),
+            VerifiedAtUtc: DateTimeOffset.Parse(reader.GetString(8))));
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AllowedSchemaColumns =
         new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase) {
             ["release_portfolio_view_state"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
@@ -48,8 +243,7 @@ public sealed class ReleaseStateDatabase
 
     public static string GetDefaultDatabasePath()
     {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "PowerForgeStudio", "releaseops.db");
+        return PowerForgeStudioHostPaths.GetDefaultDatabasePath();
     }
 
     public static async ValueTask<IAsyncDisposable> AcquireExclusiveAccessAsync(
@@ -511,144 +705,135 @@ public sealed class ReleaseStateDatabase
         await _sqlite.BeginTransactionAsync(DatabasePath, cancellationToken).ConfigureAwait(false);
         try
         {
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                "DELETE FROM release_portfolio_snapshot;",
+            await ReplaceRowsAsync(
+                deleteSql: "DELETE FROM release_portfolio_snapshot;",
+                deleteParameters: null,
+                insertSql:
+                """
+                INSERT INTO release_portfolio_snapshot(
+                    root_path,
+                    name,
+                    repository_kind,
+                    workspace_kind,
+                    module_build_script_path,
+                    project_build_script_path,
+                    is_worktree,
+                    has_website_signals,
+                    is_git_repository,
+                    branch_name,
+                    upstream_branch,
+                    ahead_count,
+                    behind_count,
+                    tracked_change_count,
+                    untracked_change_count,
+                    readiness_kind,
+                    readiness_reason,
+                    scanned_at_utc)
+                VALUES (
+                    @RootPath,
+                    @Name,
+                    @RepositoryKind,
+                    @WorkspaceKind,
+                    @ModuleBuildScriptPath,
+                    @ProjectBuildScriptPath,
+                    @IsWorktree,
+                    @HasWebsiteSignals,
+                    @IsGitRepository,
+                    @BranchName,
+                    @UpstreamBranch,
+                    @AheadCount,
+                    @BehindCount,
+                    @TrackedChangeCount,
+                    @UntrackedChangeCount,
+                    @ReadinessKind,
+                    @ReadinessReason,
+                    @ScannedAtUtc);
+                """,
+                rows: materializedItems,
+                buildParameters: item => new Dictionary<string, object?> {
+                    ["@RootPath"] = item.RootPath,
+                    ["@Name"] = item.Name,
+                    ["@RepositoryKind"] = item.RepositoryKind.ToString(),
+                    ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
+                    ["@ModuleBuildScriptPath"] = item.Repository.ModuleBuildScriptPath,
+                    ["@ProjectBuildScriptPath"] = item.Repository.ProjectBuildScriptPath,
+                    ["@IsWorktree"] = item.Repository.IsWorktree ? 1 : 0,
+                    ["@HasWebsiteSignals"] = item.Repository.HasWebsiteSignals ? 1 : 0,
+                    ["@IsGitRepository"] = item.Git.IsGitRepository ? 1 : 0,
+                    ["@BranchName"] = item.Git.BranchName,
+                    ["@UpstreamBranch"] = item.Git.UpstreamBranch,
+                    ["@AheadCount"] = item.Git.AheadCount,
+                    ["@BehindCount"] = item.Git.BehindCount,
+                    ["@TrackedChangeCount"] = item.Git.TrackedChangeCount,
+                    ["@UntrackedChangeCount"] = item.Git.UntrackedChangeCount,
+                    ["@ReadinessKind"] = item.Readiness.Kind.ToString(),
+                    ["@ReadinessReason"] = item.Readiness.Reason,
+                    ["@ScannedAtUtc"] = scannedAtUtc
+                },
                 useTransaction: true,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                "DELETE FROM release_portfolio_signal_snapshot;",
+            await ReplaceRowsAsync(
+                deleteSql: "DELETE FROM release_portfolio_signal_snapshot;",
+                deleteParameters: null,
+                insertSql:
+                """
+                INSERT INTO release_portfolio_signal_snapshot(
+                    root_path,
+                    github_repository_slug,
+                    github_status,
+                    github_open_pr_count,
+                    github_latest_workflow_failed,
+                    github_latest_release_tag,
+                    github_default_branch,
+                    github_probed_branch,
+                    github_is_default_branch,
+                    github_branch_protection_enabled,
+                    github_summary,
+                    github_detail,
+                    drift_status,
+                    drift_summary,
+                    drift_detail,
+                    scanned_at_utc)
+                VALUES (
+                    @RootPath,
+                    @GitHubRepositorySlug,
+                    @GitHubStatus,
+                    @GitHubOpenPullRequestCount,
+                    @GitHubLatestWorkflowFailed,
+                    @GitHubLatestReleaseTag,
+                    @GitHubDefaultBranch,
+                    @GitHubProbedBranch,
+                    @GitHubIsDefaultBranch,
+                    @GitHubBranchProtectionEnabled,
+                    @GitHubSummary,
+                    @GitHubDetail,
+                    @DriftStatus,
+                    @DriftSummary,
+                    @DriftDetail,
+                    @ScannedAtUtc);
+                """,
+                rows: materializedItems,
+                buildParameters: item => new Dictionary<string, object?> {
+                    ["@RootPath"] = item.RootPath,
+                    ["@GitHubRepositorySlug"] = item.GitHubInbox?.RepositorySlug,
+                    ["@GitHubStatus"] = item.GitHubInbox?.Status.ToString(),
+                    ["@GitHubOpenPullRequestCount"] = item.GitHubInbox?.OpenPullRequestCount,
+                    ["@GitHubLatestWorkflowFailed"] = item.GitHubInbox?.LatestWorkflowFailed is null ? null : item.GitHubInbox.LatestWorkflowFailed.Value ? 1 : 0,
+                    ["@GitHubLatestReleaseTag"] = item.GitHubInbox?.LatestReleaseTag,
+                    ["@GitHubDefaultBranch"] = item.GitHubInbox?.DefaultBranch,
+                    ["@GitHubProbedBranch"] = item.GitHubInbox?.ProbedBranch,
+                    ["@GitHubIsDefaultBranch"] = item.GitHubInbox?.IsDefaultBranch is null ? null : item.GitHubInbox.IsDefaultBranch.Value ? 1 : 0,
+                    ["@GitHubBranchProtectionEnabled"] = item.GitHubInbox?.BranchProtectionEnabled is null ? null : item.GitHubInbox.BranchProtectionEnabled.Value ? 1 : 0,
+                    ["@GitHubSummary"] = item.GitHubInbox?.Summary,
+                    ["@GitHubDetail"] = item.GitHubInbox?.Detail,
+                    ["@DriftStatus"] = item.ReleaseDrift?.Status.ToString(),
+                    ["@DriftSummary"] = item.ReleaseDrift?.Summary,
+                    ["@DriftDetail"] = item.ReleaseDrift?.Detail,
+                    ["@ScannedAtUtc"] = scannedAtUtc
+                },
                 useTransaction: true,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            foreach (var item in materializedItems)
-            {
-                await _sqlite.ExecuteNonQueryAsync(
-                    DatabasePath,
-                    """
-                    INSERT INTO release_portfolio_snapshot(
-                        root_path,
-                        name,
-                        repository_kind,
-                        workspace_kind,
-                        module_build_script_path,
-                        project_build_script_path,
-                        is_worktree,
-                        has_website_signals,
-                        is_git_repository,
-                        branch_name,
-                        upstream_branch,
-                        ahead_count,
-                        behind_count,
-                        tracked_change_count,
-                        untracked_change_count,
-                        readiness_kind,
-                        readiness_reason,
-                        scanned_at_utc)
-                    VALUES (
-                        @RootPath,
-                        @Name,
-                        @RepositoryKind,
-                        @WorkspaceKind,
-                        @ModuleBuildScriptPath,
-                        @ProjectBuildScriptPath,
-                        @IsWorktree,
-                        @HasWebsiteSignals,
-                        @IsGitRepository,
-                        @BranchName,
-                        @UpstreamBranch,
-                        @AheadCount,
-                        @BehindCount,
-                        @TrackedChangeCount,
-                        @UntrackedChangeCount,
-                        @ReadinessKind,
-                        @ReadinessReason,
-                        @ScannedAtUtc);
-                    """,
-                    new Dictionary<string, object?> {
-                        ["@RootPath"] = item.RootPath,
-                        ["@Name"] = item.Name,
-                        ["@RepositoryKind"] = item.RepositoryKind.ToString(),
-                        ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
-                        ["@ModuleBuildScriptPath"] = item.Repository.ModuleBuildScriptPath,
-                        ["@ProjectBuildScriptPath"] = item.Repository.ProjectBuildScriptPath,
-                        ["@IsWorktree"] = item.Repository.IsWorktree ? 1 : 0,
-                        ["@HasWebsiteSignals"] = item.Repository.HasWebsiteSignals ? 1 : 0,
-                        ["@IsGitRepository"] = item.Git.IsGitRepository ? 1 : 0,
-                        ["@BranchName"] = item.Git.BranchName,
-                        ["@UpstreamBranch"] = item.Git.UpstreamBranch,
-                        ["@AheadCount"] = item.Git.AheadCount,
-                        ["@BehindCount"] = item.Git.BehindCount,
-                        ["@TrackedChangeCount"] = item.Git.TrackedChangeCount,
-                        ["@UntrackedChangeCount"] = item.Git.UntrackedChangeCount,
-                        ["@ReadinessKind"] = item.Readiness.Kind.ToString(),
-                        ["@ReadinessReason"] = item.Readiness.Reason,
-                        ["@ScannedAtUtc"] = scannedAtUtc
-                    },
-                    useTransaction: true,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                await _sqlite.ExecuteNonQueryAsync(
-                    DatabasePath,
-                    """
-                    INSERT INTO release_portfolio_signal_snapshot(
-                        root_path,
-                        github_repository_slug,
-                        github_status,
-                        github_open_pr_count,
-                        github_latest_workflow_failed,
-                        github_latest_release_tag,
-                        github_default_branch,
-                        github_probed_branch,
-                        github_is_default_branch,
-                        github_branch_protection_enabled,
-                        github_summary,
-                        github_detail,
-                        drift_status,
-                        drift_summary,
-                        drift_detail,
-                        scanned_at_utc)
-                    VALUES (
-                        @RootPath,
-                        @GitHubRepositorySlug,
-                        @GitHubStatus,
-                        @GitHubOpenPullRequestCount,
-                        @GitHubLatestWorkflowFailed,
-                        @GitHubLatestReleaseTag,
-                        @GitHubDefaultBranch,
-                        @GitHubProbedBranch,
-                        @GitHubIsDefaultBranch,
-                        @GitHubBranchProtectionEnabled,
-                        @GitHubSummary,
-                        @GitHubDetail,
-                        @DriftStatus,
-                        @DriftSummary,
-                        @DriftDetail,
-                        @ScannedAtUtc);
-                    """,
-                    new Dictionary<string, object?> {
-                        ["@RootPath"] = item.RootPath,
-                        ["@GitHubRepositorySlug"] = item.GitHubInbox?.RepositorySlug,
-                        ["@GitHubStatus"] = item.GitHubInbox?.Status.ToString(),
-                        ["@GitHubOpenPullRequestCount"] = item.GitHubInbox?.OpenPullRequestCount,
-                        ["@GitHubLatestWorkflowFailed"] = item.GitHubInbox?.LatestWorkflowFailed is null ? null : item.GitHubInbox.LatestWorkflowFailed.Value ? 1 : 0,
-                        ["@GitHubLatestReleaseTag"] = item.GitHubInbox?.LatestReleaseTag,
-                        ["@GitHubDefaultBranch"] = item.GitHubInbox?.DefaultBranch,
-                        ["@GitHubProbedBranch"] = item.GitHubInbox?.ProbedBranch,
-                        ["@GitHubIsDefaultBranch"] = item.GitHubInbox?.IsDefaultBranch is null ? null : item.GitHubInbox.IsDefaultBranch.Value ? 1 : 0,
-                        ["@GitHubBranchProtectionEnabled"] = item.GitHubInbox?.BranchProtectionEnabled is null ? null : item.GitHubInbox.BranchProtectionEnabled.Value ? 1 : 0,
-                        ["@GitHubSummary"] = item.GitHubInbox?.Summary,
-                        ["@GitHubDetail"] = item.GitHubInbox?.Detail,
-                        ["@DriftStatus"] = item.ReleaseDrift?.Status.ToString(),
-                        ["@DriftSummary"] = item.ReleaseDrift?.Summary,
-                        ["@DriftDetail"] = item.ReleaseDrift?.Detail,
-                        ["@ScannedAtUtc"] = scannedAtUtc
-                    },
-                    useTransaction: true,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
 
             await _sqlite.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -849,56 +1034,52 @@ public sealed class ReleaseStateDatabase
     public async Task PersistPlanSnapshotsAsync(IEnumerable<RepositoryPortfolioItem> items, CancellationToken cancellationToken = default)
     {
         var scannedAtUtc = DateTime.UtcNow.ToString("O");
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_plan_snapshot;",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var rows = items
+            .SelectMany(item => (item.PlanResults ?? []).Select(result => new PlanSnapshotWriteRow(item.RootPath, result)))
+            .ToArray();
 
-        foreach (var item in items)
-        {
-            foreach (var result in item.PlanResults ?? [])
-            {
-                await _sqlite.ExecuteNonQueryAsync(
-                    DatabasePath,
-                    """
-                    INSERT INTO release_plan_snapshot(
-                        root_path,
-                        adapter_kind,
-                        status,
-                        summary,
-                        plan_path,
-                        exit_code,
-                        duration_seconds,
-                        output_tail,
-                        error_tail,
-                        scanned_at_utc)
-                    VALUES (
-                        @RootPath,
-                        @AdapterKind,
-                        @Status,
-                        @Summary,
-                        @PlanPath,
-                        @ExitCode,
-                        @DurationSeconds,
-                        @OutputTail,
-                        @ErrorTail,
-                        @ScannedAtUtc);
-                    """,
-                    new Dictionary<string, object?> {
-                        ["@RootPath"] = item.RootPath,
-                        ["@AdapterKind"] = result.AdapterKind.ToString(),
-                        ["@Status"] = result.Status.ToString(),
-                        ["@Summary"] = result.Summary,
-                        ["@PlanPath"] = result.PlanPath,
-                        ["@ExitCode"] = result.ExitCode,
-                        ["@DurationSeconds"] = result.DurationSeconds,
-                        ["@OutputTail"] = result.OutputTail,
-                        ["@ErrorTail"] = result.ErrorTail,
-                        ["@ScannedAtUtc"] = scannedAtUtc
-                    },
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-        }
+        await ReplaceRowsAsync(
+            deleteSql: "DELETE FROM release_plan_snapshot;",
+            deleteParameters: null,
+            insertSql:
+            """
+            INSERT INTO release_plan_snapshot(
+                root_path,
+                adapter_kind,
+                status,
+                summary,
+                plan_path,
+                exit_code,
+                duration_seconds,
+                output_tail,
+                error_tail,
+                scanned_at_utc)
+            VALUES (
+                @RootPath,
+                @AdapterKind,
+                @Status,
+                @Summary,
+                @PlanPath,
+                @ExitCode,
+                @DurationSeconds,
+                @OutputTail,
+                @ErrorTail,
+                @ScannedAtUtc);
+            """,
+            rows: rows,
+            buildParameters: row => new Dictionary<string, object?> {
+                ["@RootPath"] = row.RootPath,
+                ["@AdapterKind"] = row.Result.AdapterKind.ToString(),
+                ["@Status"] = row.Result.Status.ToString(),
+                ["@Summary"] = row.Result.Summary,
+                ["@PlanPath"] = row.Result.PlanPath,
+                ["@ExitCode"] = row.Result.ExitCode,
+                ["@DurationSeconds"] = row.Result.DurationSeconds,
+                ["@OutputTail"] = row.Result.OutputTail,
+                ["@ErrorTail"] = row.Result.ErrorTail,
+                ["@ScannedAtUtc"] = scannedAtUtc
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PersistQueueSessionAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
@@ -957,62 +1138,56 @@ public sealed class ReleaseStateDatabase
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_queue_item WHERE session_id = @SessionId;",
-            new Dictionary<string, object?> {
+        await ReplaceRowsAsync(
+            deleteSql: "DELETE FROM release_queue_item WHERE session_id = @SessionId;",
+            deleteParameters: new Dictionary<string, object?> {
                 ["@SessionId"] = session.SessionId
             },
+            insertSql:
+            """
+            INSERT INTO release_queue_item(
+                session_id,
+                root_path,
+                repository_name,
+                repository_kind,
+                workspace_kind,
+                queue_order,
+                stage,
+                status,
+                summary,
+                checkpoint_key,
+                checkpoint_state_json,
+                updated_at_utc)
+            VALUES (
+                @SessionId,
+                @RootPath,
+                @RepositoryName,
+                @RepositoryKind,
+                @WorkspaceKind,
+                @QueueOrder,
+                @Stage,
+                @Status,
+                @Summary,
+                @CheckpointKey,
+                @CheckpointStateJson,
+                @UpdatedAtUtc);
+            """,
+            rows: session.Items,
+            buildParameters: item => new Dictionary<string, object?> {
+                ["@SessionId"] = session.SessionId,
+                ["@RootPath"] = item.RootPath,
+                ["@RepositoryName"] = item.RepositoryName,
+                ["@RepositoryKind"] = item.RepositoryKind.ToString(),
+                ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
+                ["@QueueOrder"] = item.QueueOrder,
+                ["@Stage"] = item.Stage.ToString(),
+                ["@Status"] = item.Status.ToString(),
+                ["@Summary"] = item.Summary,
+                ["@CheckpointKey"] = item.CheckpointKey,
+                ["@CheckpointStateJson"] = item.CheckpointStateJson,
+                ["@UpdatedAtUtc"] = item.UpdatedAtUtc.ToString("O")
+            },
             cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var item in session.Items)
-        {
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                """
-                INSERT INTO release_queue_item(
-                    session_id,
-                    root_path,
-                    repository_name,
-                    repository_kind,
-                    workspace_kind,
-                    queue_order,
-                    stage,
-                    status,
-                    summary,
-                    checkpoint_key,
-                    checkpoint_state_json,
-                    updated_at_utc)
-                VALUES (
-                    @SessionId,
-                    @RootPath,
-                    @RepositoryName,
-                    @RepositoryKind,
-                    @WorkspaceKind,
-                    @QueueOrder,
-                    @Stage,
-                    @Status,
-                    @Summary,
-                    @CheckpointKey,
-                    @CheckpointStateJson,
-                    @UpdatedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@SessionId"] = session.SessionId,
-                    ["@RootPath"] = item.RootPath,
-                    ["@RepositoryName"] = item.RepositoryName,
-                    ["@RepositoryKind"] = item.RepositoryKind.ToString(),
-                    ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
-                    ["@QueueOrder"] = item.QueueOrder,
-                    ["@Stage"] = item.Stage.ToString(),
-                    ["@Status"] = item.Status.ToString(),
-                    ["@Summary"] = item.Summary,
-                    ["@CheckpointKey"] = item.CheckpointKey,
-                    ["@CheckpointStateJson"] = item.CheckpointStateJson,
-                    ["@UpdatedAtUtc"] = item.UpdatedAtUtc.ToString("O")
-                },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
     }
 
     public async Task<ReleaseQueueSession?> LoadLatestQueueSessionAsync(CancellationToken cancellationToken = default)
@@ -1090,284 +1265,43 @@ public sealed class ReleaseStateDatabase
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return new ReleaseQueueSession(
-            SessionId: sessionRow.SessionId,
-            WorkspaceRoot: sessionRow.WorkspaceRoot,
-            CreatedAtUtc: sessionRow.CreatedAtUtc,
-            Summary: new ReleaseQueueSummary(
-                TotalItems: sessionRow.TotalItems,
-                BuildReadyItems: sessionRow.BuildReadyItems,
-                PreparePendingItems: sessionRow.PreparePendingItems,
-                WaitingApprovalItems: sessionRow.WaitingApprovalItems,
-                BlockedItems: sessionRow.BlockedItems,
-                VerificationReadyItems: sessionRow.VerificationReadyItems),
-            Items: items,
-            ScopeKey: sessionRow.ScopeKey,
-            ScopeDisplayName: sessionRow.ScopeDisplayName);
+        return ReleaseQueueSessionFactory.Create(
+            workspaceRoot: sessionRow.WorkspaceRoot,
+            items: items,
+            createdAtUtc: sessionRow.CreatedAtUtc,
+            scopeKey: sessionRow.ScopeKey,
+            scopeDisplayName: sessionRow.ScopeDisplayName,
+            sessionId: sessionRow.SessionId);
     }
 
     public async Task PersistSigningReceiptsAsync(string sessionId, IEnumerable<ReleaseSigningReceipt> receipts, CancellationToken cancellationToken = default)
     {
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_signing_receipt WHERE session_id = @SessionId;",
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var receipt in receipts)
-        {
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                """
-                INSERT INTO release_signing_receipt(
-                    session_id,
-                    root_path,
-                    repository_name,
-                    adapter_kind,
-                    artifact_path,
-                    artifact_kind,
-                    status,
-                    summary,
-                    signed_at_utc)
-                VALUES (
-                    @SessionId,
-                    @RootPath,
-                    @RepositoryName,
-                    @AdapterKind,
-                    @ArtifactPath,
-                    @ArtifactKind,
-                    @Status,
-                    @Summary,
-                    @SignedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@SessionId"] = sessionId,
-                    ["@RootPath"] = receipt.RootPath,
-                    ["@RepositoryName"] = receipt.RepositoryName,
-                    ["@AdapterKind"] = receipt.AdapterKind,
-                    ["@ArtifactPath"] = receipt.ArtifactPath,
-                    ["@ArtifactKind"] = receipt.ArtifactKind,
-                    ["@Status"] = receipt.Status.ToString(),
-                    ["@Summary"] = receipt.Summary,
-                    ["@SignedAtUtc"] = receipt.SignedAtUtc.ToString("O")
-                },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
+        await PersistReceiptRowsAsync(sessionId, receipts, SigningReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ReleaseSigningReceipt>> LoadSigningReceiptsAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        return await _sqlite.QueryReadOnlyAsListAsync(
-            DatabasePath,
-            """
-            SELECT root_path,
-                   repository_name,
-                   adapter_kind,
-                   artifact_path,
-                   artifact_kind,
-                   status,
-                   summary,
-                   signed_at_utc
-            FROM release_signing_receipt
-            WHERE session_id = @SessionId
-            ORDER BY signed_at_utc DESC, repository_name, artifact_path;
-            """,
-            reader => new ReleaseSigningReceipt(
-                RootPath: reader.GetString(0),
-                RepositoryName: reader.GetString(1),
-                AdapterKind: reader.GetString(2),
-                ArtifactPath: reader.GetString(3),
-                ArtifactKind: reader.GetString(4),
-                Status: Enum.Parse<ReleaseSigningReceiptStatus>(reader.GetString(5), ignoreCase: true),
-                Summary: reader.GetString(6),
-                SignedAtUtc: DateTimeOffset.Parse(reader.GetString(7))),
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return await LoadReceiptRowsAsync(sessionId, SigningReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PersistPublishReceiptsAsync(string sessionId, IEnumerable<ReleasePublishReceipt> receipts, CancellationToken cancellationToken = default)
     {
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_publish_receipt WHERE session_id = @SessionId;",
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var receipt in receipts)
-        {
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                """
-                INSERT INTO release_publish_receipt(
-                    session_id,
-                    root_path,
-                    repository_name,
-                    adapter_kind,
-                    target_name,
-                    target_kind,
-                    destination,
-                    source_path,
-                    status,
-                    summary,
-                    published_at_utc)
-                VALUES (
-                    @SessionId,
-                    @RootPath,
-                    @RepositoryName,
-                    @AdapterKind,
-                    @TargetName,
-                    @TargetKind,
-                    @Destination,
-                    @SourcePath,
-                    @Status,
-                    @Summary,
-                    @PublishedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@SessionId"] = sessionId,
-                    ["@RootPath"] = receipt.RootPath,
-                    ["@RepositoryName"] = receipt.RepositoryName,
-                    ["@AdapterKind"] = receipt.AdapterKind,
-                    ["@TargetName"] = receipt.TargetName,
-                    ["@TargetKind"] = receipt.TargetKind,
-                    ["@Destination"] = receipt.Destination,
-                    ["@SourcePath"] = receipt.SourcePath,
-                    ["@Status"] = receipt.Status.ToString(),
-                    ["@Summary"] = receipt.Summary,
-                    ["@PublishedAtUtc"] = receipt.PublishedAtUtc.ToString("O")
-                },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
+        await PersistReceiptRowsAsync(sessionId, receipts, PublishReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ReleasePublishReceipt>> LoadPublishReceiptsAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        return await _sqlite.QueryReadOnlyAsListAsync(
-            DatabasePath,
-            """
-            SELECT root_path,
-                   repository_name,
-                   adapter_kind,
-                   target_name,
-                   target_kind,
-                   destination,
-                   source_path,
-                   status,
-                   summary,
-                   published_at_utc
-            FROM release_publish_receipt
-            WHERE session_id = @SessionId
-            ORDER BY published_at_utc DESC, repository_name, target_name;
-            """,
-            reader => new ReleasePublishReceipt(
-                RootPath: reader.GetString(0),
-                RepositoryName: reader.GetString(1),
-                AdapterKind: reader.GetString(2),
-                TargetName: reader.GetString(3),
-                TargetKind: reader.GetString(4),
-                Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
-                SourcePath: reader.IsDBNull(6) ? null : reader.GetString(6),
-                Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(7), ignoreCase: true),
-                Summary: reader.GetString(8),
-                PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(9))),
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return await LoadReceiptRowsAsync(sessionId, PublishReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PersistVerificationReceiptsAsync(string sessionId, IEnumerable<ReleaseVerificationReceipt> receipts, CancellationToken cancellationToken = default)
     {
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            "DELETE FROM release_verification_receipt WHERE session_id = @SessionId;",
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        foreach (var receipt in receipts)
-        {
-            await _sqlite.ExecuteNonQueryAsync(
-                DatabasePath,
-                """
-                INSERT INTO release_verification_receipt(
-                    session_id,
-                    root_path,
-                    repository_name,
-                    adapter_kind,
-                    target_name,
-                    target_kind,
-                    destination,
-                    status,
-                    summary,
-                    verified_at_utc)
-                VALUES (
-                    @SessionId,
-                    @RootPath,
-                    @RepositoryName,
-                    @AdapterKind,
-                    @TargetName,
-                    @TargetKind,
-                    @Destination,
-                    @Status,
-                    @Summary,
-                    @VerifiedAtUtc);
-                """,
-                new Dictionary<string, object?> {
-                    ["@SessionId"] = sessionId,
-                    ["@RootPath"] = receipt.RootPath,
-                    ["@RepositoryName"] = receipt.RepositoryName,
-                    ["@AdapterKind"] = receipt.AdapterKind,
-                    ["@TargetName"] = receipt.TargetName,
-                    ["@TargetKind"] = receipt.TargetKind,
-                    ["@Destination"] = receipt.Destination,
-                    ["@Status"] = receipt.Status.ToString(),
-                    ["@Summary"] = receipt.Summary,
-                    ["@VerifiedAtUtc"] = receipt.VerifiedAtUtc.ToString("O")
-                },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
+        await PersistReceiptRowsAsync(sessionId, receipts, VerificationReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ReleaseVerificationReceipt>> LoadVerificationReceiptsAsync(string sessionId, CancellationToken cancellationToken = default)
     {
-        return await _sqlite.QueryReadOnlyAsListAsync(
-            DatabasePath,
-            """
-            SELECT root_path,
-                   repository_name,
-                   adapter_kind,
-                   target_name,
-                   target_kind,
-                   destination,
-                   status,
-                   summary,
-                   verified_at_utc
-            FROM release_verification_receipt
-            WHERE session_id = @SessionId
-            ORDER BY verified_at_utc DESC, repository_name, target_name;
-            """,
-            reader => new ReleaseVerificationReceipt(
-                RootPath: reader.GetString(0),
-                RepositoryName: reader.GetString(1),
-                AdapterKind: reader.GetString(2),
-                TargetName: reader.GetString(3),
-                TargetKind: reader.GetString(4),
-                Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
-                Status: Enum.Parse<ReleaseVerificationReceiptStatus>(reader.GetString(6), ignoreCase: true),
-                Summary: reader.GetString(7),
-                VerifiedAtUtc: DateTimeOffset.Parse(reader.GetString(8))),
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return await LoadReceiptRowsAsync(sessionId, VerificationReceiptTable, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PersistGitQuickActionReceiptAsync(RepositoryGitQuickActionReceipt receipt, CancellationToken cancellationToken = default)
@@ -1464,6 +1398,121 @@ public sealed class ReleaseStateDatabase
         int VerificationReadyItems,
         DateTimeOffset CreatedAtUtc);
 
+    private readonly record struct ReceiptTableDefinition<TReceipt>(
+        string TableName,
+        string InsertSql,
+        string QuerySql,
+        Func<string, TReceipt, Dictionary<string, object?>> BuildParameters,
+        Func<DbDataReader, TReceipt> Map);
+
+    private async Task PersistReceiptRowsAsync<TReceipt>(
+        string sessionId,
+        IEnumerable<TReceipt> receipts,
+        ReceiptTableDefinition<TReceipt> table,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(table.BuildParameters);
+
+        await ReplaceReceiptRowsAsync(
+            sessionId,
+            table.TableName,
+            table.InsertSql,
+            receipts,
+            receipt => table.BuildParameters(sessionId, receipt),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<TReceipt>> LoadReceiptRowsAsync<TReceipt>(
+        string sessionId,
+        ReceiptTableDefinition<TReceipt> table,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(table.Map);
+
+        return await LoadReceiptRowsAsync(
+            sessionId,
+            table.QuerySql,
+            table.Map,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReplaceReceiptRowsAsync<TReceipt>(
+        string sessionId,
+        string tableName,
+        string insertSql,
+        IEnumerable<TReceipt> receipts,
+        Func<TReceipt, Dictionary<string, object?>> buildParameters,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(insertSql);
+        ArgumentNullException.ThrowIfNull(receipts);
+        ArgumentNullException.ThrowIfNull(buildParameters);
+
+        await ReplaceRowsAsync(
+            deleteSql: $"DELETE FROM {tableName} WHERE session_id = @SessionId;",
+            deleteParameters: new Dictionary<string, object?> {
+                ["@SessionId"] = sessionId
+            },
+            insertSql: insertSql,
+            rows: receipts,
+            buildParameters: buildParameters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReplaceRowsAsync<TRow>(
+        string deleteSql,
+        IReadOnlyDictionary<string, object?>? deleteParameters,
+        string insertSql,
+        IEnumerable<TRow> rows,
+        Func<TRow, Dictionary<string, object?>> buildParameters,
+        bool useTransaction = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deleteSql);
+        ArgumentException.ThrowIfNullOrWhiteSpace(insertSql);
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(buildParameters);
+
+        await _sqlite.ExecuteNonQueryAsync(
+            DatabasePath,
+            deleteSql,
+            deleteParameters is null ? null : new Dictionary<string, object?>(deleteParameters),
+            useTransaction: useTransaction,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        foreach (var row in rows)
+        {
+            await _sqlite.ExecuteNonQueryAsync(
+                DatabasePath,
+                insertSql,
+                buildParameters(row),
+                useTransaction: useTransaction,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<IReadOnlyList<TReceipt>> LoadReceiptRowsAsync<TReceipt>(
+        string sessionId,
+        string querySql,
+        Func<DbDataReader, TReceipt> map,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(querySql);
+        ArgumentNullException.ThrowIfNull(map);
+
+        return await _sqlite.QueryReadOnlyAsListAsync(
+            DatabasePath,
+            querySql,
+            map,
+            new Dictionary<string, object?> {
+                ["@SessionId"] = sessionId
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
     private readonly record struct PortfolioSnapshotRow(
         string RootPath,
         string Name,
@@ -1493,6 +1542,10 @@ public sealed class ReleaseStateDatabase
         double DurationSeconds,
         string? OutputTail,
         string? ErrorTail);
+
+    private readonly record struct PlanSnapshotWriteRow(
+        string RootPath,
+        RepositoryPlanResult Result);
 
     private readonly record struct SignalSnapshotRow(
         string RootPath,

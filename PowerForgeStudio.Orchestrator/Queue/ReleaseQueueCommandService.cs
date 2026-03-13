@@ -6,6 +6,7 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
 {
+    private readonly ReleaseQueueCommandStateService _commandStateService;
     private readonly ReleaseQueuePlanner _queuePlanner;
     private readonly ReleaseQueueRunner _queueRunner;
     private readonly IReleaseBuildExecutionService _buildExecutionService;
@@ -31,6 +32,7 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         IReleasePublishExecutionService publishExecutionService,
         IReleaseVerificationExecutionService verificationExecutionService)
     {
+        _commandStateService = new ReleaseQueueCommandStateService();
         _queuePlanner = queuePlanner;
         _queueRunner = queueRunner;
         _buildExecutionService = buildExecutionService;
@@ -41,19 +43,18 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
 
     public async Task<ReleaseQueueCommandResult> RunNextReadyItemAsync(string databasePath, CancellationToken cancellationToken = default)
     {
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var stateDatabase = await _commandStateService.OpenDatabaseAsync(databasePath, cancellationToken).ConfigureAwait(false);
 
         var currentSession = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false);
         if (currentSession is null)
         {
-            return EmptyResult("Queue state is not available yet. Prepare the queue first.");
+            return _commandStateService.EmptyResult("Queue state is not available yet. Prepare the queue first.");
         }
 
         var nextReadyItem = currentSession.Items.FirstOrDefault(item => item.Status == ReleaseQueueItemStatus.ReadyToRun);
         if (nextReadyItem is null)
         {
-            return await LoadResultAsync(
+            return await _commandStateService.LoadResultAsync(
                 stateDatabase,
                 currentSession,
                 changed: false,
@@ -90,24 +91,23 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
             transition = _queueRunner.AdvanceNextReadyItem(currentSession);
         }
 
-        return await PersistTransitionResultAsync(stateDatabase, currentSession, transition, cancellationToken).ConfigureAwait(false);
+        return await _commandStateService.PersistTransitionResultAsync(stateDatabase, currentSession, transition, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ReleaseQueueCommandResult> ApproveUsbAsync(string databasePath, CancellationToken cancellationToken = default)
     {
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var stateDatabase = await _commandStateService.OpenDatabaseAsync(databasePath, cancellationToken).ConfigureAwait(false);
 
         var currentSession = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false);
         if (currentSession is null)
         {
-            return EmptyResult("Queue state is not available yet. Prepare the queue first.");
+            return _commandStateService.EmptyResult("Queue state is not available yet. Prepare the queue first.");
         }
 
         var waitingItem = currentSession.Items.FirstOrDefault(item => item.Stage == ReleaseQueueStage.Sign && item.Status == ReleaseQueueItemStatus.WaitingApproval);
         if (waitingItem is null)
         {
-            return await LoadResultAsync(
+            return await _commandStateService.LoadResultAsync(
                 stateDatabase,
                 currentSession,
                 changed: false,
@@ -122,7 +122,7 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
             ? _queueRunner.CompleteSigning(currentSession, waitingItem.RootPath, signingResult)
             : _queueRunner.FailSigning(currentSession, waitingItem.RootPath, signingResult);
 
-        return await PersistTransitionResultAsync(stateDatabase, currentSession, transition, cancellationToken).ConfigureAwait(false);
+        return await _commandStateService.PersistTransitionResultAsync(stateDatabase, currentSession, transition, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<ReleaseQueueCommandResult> RetryFailedAsync(string databasePath, CancellationToken cancellationToken = default)
@@ -151,11 +151,10 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
 
         if (portfolioItems.Count == 0)
         {
-            return EmptyResult("No portfolio items are currently available for queue preparation.");
+            return _commandStateService.EmptyResult("No portfolio items are currently available for queue preparation.");
         }
 
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var stateDatabase = await _commandStateService.OpenDatabaseAsync(databasePath, cancellationToken).ConfigureAwait(false);
 
         var queueSession = _queuePlanner.CreateDraftQueue(
             workspaceRoot,
@@ -164,7 +163,7 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
             scopeDisplayName);
 
         await stateDatabase.PersistQueueSessionAsync(queueSession, cancellationToken).ConfigureAwait(false);
-        return await LoadResultAsync(
+        return await _commandStateService.LoadResultAsync(
             stateDatabase,
             queueSession,
             changed: true,
@@ -179,69 +178,15 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         Func<ReleaseQueueSession, ReleaseQueueTransitionResult> transition,
         CancellationToken cancellationToken)
     {
-        var stateDatabase = new ReleaseStateDatabase(databasePath);
-        await stateDatabase.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var stateDatabase = await _commandStateService.OpenDatabaseAsync(databasePath, cancellationToken).ConfigureAwait(false);
 
         var currentSession = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false);
         if (currentSession is null)
         {
-            return EmptyResult("Queue state is not available yet. Prepare the queue first.");
+            return _commandStateService.EmptyResult("Queue state is not available yet. Prepare the queue first.");
         }
 
         var result = transition(currentSession);
-        return await PersistTransitionResultAsync(stateDatabase, currentSession, result, cancellationToken).ConfigureAwait(false);
+        return await _commandStateService.PersistTransitionResultAsync(stateDatabase, currentSession, result, cancellationToken).ConfigureAwait(false);
     }
-
-    private static async Task<ReleaseQueueCommandResult> PersistTransitionResultAsync(
-        ReleaseStateDatabase stateDatabase,
-        ReleaseQueueSession currentSession,
-        ReleaseQueueTransitionResult transition,
-        CancellationToken cancellationToken)
-    {
-        if (!transition.Changed)
-        {
-            return await LoadResultAsync(stateDatabase, currentSession, false, transition.Message, cancellationToken).ConfigureAwait(false);
-        }
-
-        await stateDatabase.PersistQueueSessionAsync(transition.Session, cancellationToken).ConfigureAwait(false);
-        return await LoadResultAsync(stateDatabase, transition.Session, true, transition.Message, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task<ReleaseQueueCommandResult> LoadResultAsync(
-        ReleaseStateDatabase stateDatabase,
-        ReleaseQueueSession? fallbackSession,
-        bool changed,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var persistedQueue = fallbackSession is null
-            ? null
-            : await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false) ?? fallbackSession;
-
-        if (persistedQueue is null)
-        {
-            return EmptyResult(message);
-        }
-
-        var signingReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
-        var publishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
-        var verificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
-
-        return new ReleaseQueueCommandResult(
-            Changed: changed,
-            Message: message,
-            QueueSession: persistedQueue,
-            SigningReceipts: signingReceipts,
-            PublishReceipts: publishReceipts,
-            VerificationReceipts: verificationReceipts);
-    }
-
-    private static ReleaseQueueCommandResult EmptyResult(string message)
-        => new(
-            Changed: false,
-            Message: message,
-            QueueSession: null,
-            SigningReceipts: [],
-            PublishReceipts: [],
-            VerificationReceipts: []);
 }

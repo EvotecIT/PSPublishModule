@@ -40,6 +40,7 @@ public sealed class ModuleInformationReader
         string? moduleVersion = null;
         string? rootModule = null;
         string? powerShellVersion = null;
+        string? preRelease = null;
         Guid? guid = null;
         RequiredModuleReference[] requiredModules = Array.Empty<RequiredModuleReference>();
         string? manifestText = null;
@@ -52,6 +53,15 @@ public sealed class ModuleInformationReader
                 rootModule = rm;
             if (ManifestEditor.TryGetTopLevelString(manifestPath, "PowerShellVersion", out var psv))
                 powerShellVersion = psv;
+            if (ManifestEditor.TryGetPsDataStringArray(manifestPath, "Prerelease", out var prereleaseValues) &&
+                prereleaseValues is { Length: > 0 })
+            {
+                preRelease = prereleaseValues[0];
+            }
+            else if (ManifestEditor.TryGetTopLevelString(manifestPath, "Prerelease", out var topLevelPrerelease))
+            {
+                preRelease = topLevelPrerelease;
+            }
             if (ManifestEditor.TryGetTopLevelString(manifestPath, "GUID", out var guidString))
             {
                 if (System.Guid.TryParse(guidString, out var g))
@@ -82,6 +92,7 @@ public sealed class ModuleInformationReader
             moduleVersion: moduleVersion,
             rootModule: rootModule,
             powerShellVersion: powerShellVersion,
+            preRelease: preRelease,
             guid: guid,
             requiredModules: requiredModules,
             manifestText: manifestText);
