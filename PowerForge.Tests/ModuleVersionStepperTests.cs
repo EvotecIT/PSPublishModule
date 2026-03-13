@@ -22,6 +22,22 @@ public sealed class ModuleVersionStepperTests
         Assert.Equal("3.0.0", result.CurrentVersion);
     }
 
+    [Fact]
+    public void Step_UsesReservedPowerShellGalleryVersionWhenFeedOmitsIt()
+    {
+        using var client = new HttpClient(new FakeReservedPowerShellGalleryHandler());
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "2.0.27"), string.Empty, "pwsh.exe")),
+            client);
+
+        var result = stepper.Step("3.0.X", moduleName: "PSPublishModule", localPsd1Path: null, repository: "PSGallery");
+
+        Assert.Equal("3.0.1", result.Version);
+        Assert.Equal(ModuleVersionSource.Repository, result.CurrentVersionSource);
+        Assert.Equal("3.0.0", result.CurrentVersion);
+    }
+
     private static string VisibleRepositoryItem(string name, string version)
         => string.Join("::", new[]
         {
@@ -58,6 +74,11 @@ public sealed class ModuleVersionStepperTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri?.ToString() ?? string.Empty;
+            if (!uri.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
             var body = uri.Contains("$skip=100", StringComparison.OrdinalIgnoreCase)
                 ? BuildSecondPage()
                 : BuildFirstPage();
@@ -102,5 +123,60 @@ public sealed class ModuleVersionStepperTests
                  </entry>
                </feed>
                """;
+    }
+
+    private sealed class FakeReservedPowerShellGalleryHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+
+            if (uri.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                        <?xml version="1.0" encoding="utf-8"?>
+                        <feed xmlns="http://www.w3.org/2005/Atom"
+                              xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+                              xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+                          <entry>
+                            <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/PSPublishModule/2.0.27" />
+                            <m:properties>
+                              <d:Version>2.0.27</d:Version>
+                              <d:IsPrerelease>false</d:IsPrerelease>
+                              <d:Published m:type="Edm.DateTime">2026-03-10T10:00:00</d:Published>
+                            </m:properties>
+                          </entry>
+                        </feed>
+                        """, Encoding.UTF8, "application/atom+xml")
+                });
+            }
+
+            if (uri.Contains("Packages(", StringComparison.OrdinalIgnoreCase) &&
+                uri.Contains("PSPublishModule", StringComparison.OrdinalIgnoreCase) &&
+                uri.Contains("3.0.0", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                        <?xml version="1.0" encoding="utf-8"?>
+                        <entry xml:base="https://www.powershellgallery.com/api/v2"
+                               xmlns="http://www.w3.org/2005/Atom"
+                               xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+                               xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+                          <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/PSPublishModule/3.0.0" />
+                          <m:properties>
+                            <d:Version>3.0.0</d:Version>
+                            <d:IsPrerelease>false</d:IsPrerelease>
+                            <d:Published m:type="Edm.DateTime">1900-01-01T00:00:00</d:Published>
+                          </m:properties>
+                        </entry>
+                        """, Encoding.UTF8, "application/atom+xml")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
     }
 }
