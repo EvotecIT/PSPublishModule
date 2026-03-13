@@ -19,6 +19,8 @@ public sealed class ModuleInformation
     public string? RootModule { get; }
     /// <summary>PowerShell version requirement from the manifest (PowerShellVersion).</summary>
     public string? PowerShellVersion { get; }
+    /// <summary>Prerelease label from the manifest when present.</summary>
+    public string? PreRelease { get; }
     /// <summary>GUID value from the manifest (GUID), when present and parseable.</summary>
     public Guid? Guid { get; }
     /// <summary>Typed RequiredModules entries extracted from the manifest.</summary>
@@ -36,6 +38,7 @@ public sealed class ModuleInformation
         string? moduleVersion,
         string? rootModule,
         string? powerShellVersion,
+        string? preRelease,
         Guid? guid,
         RequiredModuleReference[] requiredModules,
         string? manifestText)
@@ -46,6 +49,7 @@ public sealed class ModuleInformation
         ModuleVersion = moduleVersion;
         RootModule = rootModule;
         PowerShellVersion = powerShellVersion;
+        PreRelease = preRelease;
         Guid = guid;
         RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
         ManifestText = manifestText;
