@@ -1,23 +1,41 @@
 param(
-    [string] $ConfigPath = "$PSScriptRoot\project.build.json",
-    [Nullable[bool]] $UpdateVersions,
-    [Nullable[bool]] $Build,
-    [Nullable[bool]] $PublishNuget = $false,
-    [Nullable[bool]] $PublishGitHub = $false,
-    [Nullable[bool]] $Plan,
-    [string] $PlanPath
+    [string] $ConfigPath,
+    [switch] $Plan,
+    [switch] $Validate,
+    [switch] $PackagesOnly,
+    [switch] $ToolsOnly,
+    [switch] $PublishNuget,
+    [switch] $PublishGitHub,
+    [switch] $PublishToolGitHub,
+    [string[]] $Target,
+    [string[]] $Runtime,
+    [string[]] $Framework,
+    [ValidateSet('SingleContained', 'SingleFx', 'Portable', 'Fx')]
+    [string[]] $Flavor
 )
 
-Import-Module PSPublishModule -Force -ErrorAction Stop
-
-$invokeParams = @{
-    ConfigPath = $ConfigPath
+if (-not $PSBoundParameters.ContainsKey('ConfigPath') -or [string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $PSScriptRoot 'release.json'
 }
-if ($null -ne $UpdateVersions) { $invokeParams.UpdateVersions = $UpdateVersions }
-if ($null -ne $Build) { $invokeParams.Build = $Build }
-if ($null -ne $PublishNuget) { $invokeParams.PublishNuget = $PublishNuget }
-if ($null -ne $PublishGitHub) { $invokeParams.PublishGitHub = $PublishGitHub }
-if ($null -ne $Plan) { $invokeParams.Plan = $Plan }
-if ($PlanPath) { $invokeParams.PlanPath = $PlanPath }
 
-Invoke-ProjectBuild @invokeParams
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$project = Join-Path $repoRoot 'PowerForge.Cli\PowerForge.Cli.csproj'
+
+$args = @(
+    'run', '--project', $project, '-c', 'Release', '--framework', 'net10.0', '--no-launch-profile', '--',
+    'release', '--config', $ConfigPath
+)
+if ($Plan) { $args += '--plan' }
+if ($Validate) { $args += '--validate' }
+if ($PackagesOnly) { $args += '--packages-only' }
+if ($ToolsOnly) { $args += '--tools-only' }
+if ($PublishNuget) { $args += '--publish-nuget' }
+if ($PublishGitHub) { $args += '--publish-project-github' }
+if ($PublishToolGitHub) { $args += '--publish-tool-github' }
+foreach ($entry in $Target) { $args += @('--target', $entry) }
+foreach ($entry in $Runtime) { $args += @('--rid', $entry) }
+foreach ($entry in $Framework) { $args += @('--framework', $entry) }
+foreach ($entry in $Flavor) { $args += @('--flavor', $entry) }
+
+dotnet @args
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -17,6 +17,8 @@ internal static partial class Program
       powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]
       powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]
       powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]
+      powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--tools-only] [--publish-nuget] [--publish-project-github] [--publish-tool-github]
+                        [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
       powerforge normalize <files...>   Normalize encodings and line endings [--output json]
       powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
       powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
@@ -53,6 +55,7 @@ internal static partial class Program
       Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json
       in the current directory and parent directories.
       DotNet publish searches for powerforge.dotnetpublish.json / .powerforge/dotnetpublish.json.
+      Release searches for powerforge.release.json / .powerforge/release.json / Build/release.json.
     ");
     }
 

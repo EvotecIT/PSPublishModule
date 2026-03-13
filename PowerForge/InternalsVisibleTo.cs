@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("PowerForge.Tests")]
+[assembly: InternalsVisibleTo("PowerForge.Cli")]
 [assembly: InternalsVisibleTo("PowerForge.PowerShell")]
+[assembly: InternalsVisibleTo("PowerForgeStudio.Tests")]
 [assembly: InternalsVisibleTo("PSPublishModule")]

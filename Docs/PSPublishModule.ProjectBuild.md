@@ -1,12 +1,19 @@
 # Project Build (Repository Pipeline)
 
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
+For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
+see `Build/release.json` and `powerforge release`.
 
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
 see `Docs/PSPublishModule.ModuleDocumentation.md`.
 
 Schema
 - Location: `Schemas/project.build.schema.json`
+
+Unified release entrypoint
+- Schema: `Schemas/powerforge.release.schema.json`
+- Wrapper: `Build/Build-Project.ps1`
+- CLI: `powerforge release --config .\Build\release.json`
 
 Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,
