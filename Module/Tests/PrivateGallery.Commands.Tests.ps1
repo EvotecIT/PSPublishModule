@@ -2,11 +2,7 @@ Describe 'Private gallery command metadata' {
     BeforeAll {
         $existingCommand = Get-Command Connect-ModuleRepository -ErrorAction SilentlyContinue
         $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
-        $installedModule = Get-Module -ListAvailable PSPublishModule |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-
-        $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
+        $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
         $tfm = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
         $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "../../PSPublishModule/bin/Release/$tfm") -ChildPath 'PSPublishModule.dll'
@@ -15,8 +11,6 @@ Describe 'Private gallery command metadata' {
             $script:PrivateGalleryTestModule = $existingCommand.Module
         } elseif ($loadedModule) {
             $script:PrivateGalleryTestModule = $loadedModule
-        } elseif ($installedModule) {
-            $script:PrivateGalleryTestModule = Import-Module $installedModule.Path -Force -PassThru -ErrorAction Stop
         } elseif (Test-Path -LiteralPath $binaryModule) {
             try {
                 $script:PrivateGalleryTestModule = Import-Module $binaryModule -Force -PassThru -ErrorAction Stop

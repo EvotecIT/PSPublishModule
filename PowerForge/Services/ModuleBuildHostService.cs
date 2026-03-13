@@ -28,7 +28,7 @@ public sealed class ModuleBuildHostService
     /// </summary>
     public Task<ModuleBuildHostExecutionResult> ExportPipelineJsonAsync(ModuleBuildHostExportRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
         ValidateRequiredPath(request.ScriptPath, nameof(request.ScriptPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
@@ -43,7 +43,7 @@ public sealed class ModuleBuildHostService
     /// </summary>
     public Task<ModuleBuildHostExecutionResult> ExecuteBuildAsync(ModuleBuildHostBuildRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
         ValidateRequiredPath(request.ScriptPath, nameof(request.ScriptPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
@@ -58,7 +58,7 @@ public sealed class ModuleBuildHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: !OperatingSystem.IsWindows(),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();

@@ -573,13 +573,13 @@ internal sealed class PowerForgeToolReleaseService
         Directory.CreateDirectory(destination);
         foreach (var directory in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
         {
-            var relative = Path.GetRelativePath(source, directory);
+            var relative = FrameworkCompatibility.GetRelativePath(source, directory);
             Directory.CreateDirectory(Path.Combine(destination, relative));
         }
 
         foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
-            var relative = Path.GetRelativePath(source, file);
+            var relative = FrameworkCompatibility.GetRelativePath(source, file);
             var targetPath = Path.Combine(destination, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
             File.Copy(file, targetPath, overwrite: true);

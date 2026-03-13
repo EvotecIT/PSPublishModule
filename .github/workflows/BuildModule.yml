@@ -72,12 +72,33 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
+
+      - name: Verify net472 compatibility
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          dotnet build .\PowerForge\PowerForge.csproj -c Release -f net472 --nologo
+          dotnet build .\PowerForge.PowerShell\PowerForge.PowerShell.csproj -c Release -f net472 --nologo
+          dotnet build .\PSPublishModule\PSPublishModule.csproj -c Release -f net472 --nologo
+
+      - name: Run net472 C# smoke tests
+        shell: pwsh
+        timeout-minutes: 10
+        run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
+
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
         run: .\Build\Build-Module.ps1
 
-      - name: Test with Pester
+      - name: Test with Windows PowerShell 5.1
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File .\PSPublishModule.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test with PowerShell 7
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1

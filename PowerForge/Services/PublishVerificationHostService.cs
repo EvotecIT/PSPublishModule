@@ -76,7 +76,7 @@ public sealed class PublishVerificationHostService : IDisposable
     /// </summary>
     public Task<PublishVerificationResult> VerifyAsync(PublishVerificationRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
 
         return request.TargetKind switch
         {
@@ -128,13 +128,15 @@ public sealed class PublishVerificationHostService : IDisposable
             return Skipped("NuGet destination URL was not recorded, so remote verification was skipped.");
         }
 
-        var identity = TryReadPackageIdentity(request.SourcePath);
+        var sourcePath = request.SourcePath!;
+        var identity = TryReadPackageIdentity(sourcePath);
         if (identity is null)
         {
             return Failed("NuGet package identity could not be read from the .nupkg.");
         }
 
-        var probeUri = await ResolveNuGetPackageProbeUriAsync(request.Destination, identity, cancellationToken).ConfigureAwait(false);
+        var destination = request.Destination!;
+        var probeUri = await ResolveNuGetPackageProbeUriAsync(destination, identity, cancellationToken).ConfigureAwait(false);
         if (probeUri is null)
         {
             return Skipped($"PowerForgeStudio could not derive a probeable package endpoint from {request.Destination}.");
@@ -252,7 +254,7 @@ public sealed class PublishVerificationHostService : IDisposable
                 return null;
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var stream = await FrameworkCompatibility.ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
             if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             {
@@ -268,7 +270,7 @@ public sealed class PublishVerificationHostService : IDisposable
 
                 var type = typeElement.GetString();
                 if (string.IsNullOrWhiteSpace(type) ||
-                    !type.StartsWith("PackageBaseAddress/", StringComparison.OrdinalIgnoreCase))
+                    !type!.StartsWith("PackageBaseAddress/", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -360,9 +362,11 @@ public sealed class PublishVerificationHostService : IDisposable
             var metadata = xml.Root?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
             var id = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))?.Value;
             var version = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("version", StringComparison.OrdinalIgnoreCase))?.Value;
-            return string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version)
+            var packageId = id;
+            var packageVersion = version;
+            return string.IsNullOrWhiteSpace(packageId) || string.IsNullOrWhiteSpace(packageVersion)
                 ? null
-                : new NuGetPackageIdentity(id.Trim(), version.Trim());
+                : new NuGetPackageIdentity(packageId!.Trim(), packageVersion!.Trim());
         }
         catch
         {
@@ -379,10 +383,31 @@ public sealed class PublishVerificationHostService : IDisposable
     private static PublishVerificationResult Skipped(string summary)
         => new() { Status = PublishVerificationStatus.Skipped, Summary = summary };
 
-    private sealed record NuGetPackageIdentity(string Id, string Version);
-
-    private readonly record struct ProbeResponse(bool Succeeded, HttpStatusCode? StatusCode)
+    private sealed class NuGetPackageIdentity
     {
+        public NuGetPackageIdentity(string id, string version)
+        {
+            Id = id;
+            Version = version;
+        }
+
+        public string Id { get; }
+
+        public string Version { get; }
+    }
+
+    private struct ProbeResponse
+    {
+        public ProbeResponse(bool succeeded, HttpStatusCode? statusCode)
+        {
+            Succeeded = succeeded;
+            StatusCode = statusCode;
+        }
+
+        public bool Succeeded { get; }
+
+        public HttpStatusCode? StatusCode { get; }
+
         public static ProbeResponse Failed => new(false, null);
     }
 }

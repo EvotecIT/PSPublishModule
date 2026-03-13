@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForgeStudio.Cli", "Pow
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.PowerShell", "PowerForge.PowerShell\PowerForge.PowerShell.csproj", "{4BA6DB6C-56AF-4C4C-B4CD-506A25DD7A43}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.Net472SmokeTests", "PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj", "{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -195,6 +197,18 @@ Global
 		{4BA6DB6C-56AF-4C4C-B4CD-506A25DD7A43}.Release|x64.Build.0 = Release|Any CPU
 		{4BA6DB6C-56AF-4C4C-B4CD-506A25DD7A43}.Release|x86.ActiveCfg = Release|Any CPU
 		{4BA6DB6C-56AF-4C4C-B4CD-506A25DD7A43}.Release|x86.Build.0 = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|x64.Build.0 = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Debug|x86.Build.0 = Debug|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|x64.ActiveCfg = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|x64.Build.0 = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|x86.ActiveCfg = Release|Any CPU
+		{FD12E32E-6FCF-4D27-86C6-5F153C740F2C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

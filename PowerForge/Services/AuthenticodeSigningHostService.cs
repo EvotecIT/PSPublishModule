@@ -27,7 +27,7 @@ public sealed class AuthenticodeSigningHostService
     /// </summary>
     public async Task<AuthenticodeSigningHostResult> SignAsync(AuthenticodeSigningHostRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequired(request.SigningPath, nameof(request.SigningPath));
         ValidateRequired(request.ModulePath, nameof(request.ModulePath));
         ValidateRequired(request.Thumbprint, nameof(request.Thumbprint));
@@ -45,7 +45,7 @@ public sealed class AuthenticodeSigningHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: !OperatingSystem.IsWindows(),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: request.SigningPath,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();

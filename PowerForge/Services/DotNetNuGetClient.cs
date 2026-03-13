@@ -26,9 +26,7 @@ public sealed class DotNetNuGetClient
         _processRunner = processRunner ?? new ProcessRunner();
         _dotNetExecutable = string.IsNullOrWhiteSpace(dotNetExecutable) ? "dotnet" : dotNetExecutable;
         _defaultTimeout = defaultTimeout ?? TimeSpan.FromMinutes(10);
-        _runtimeDirectoryRoot = string.IsNullOrWhiteSpace(runtimeDirectoryRoot)
-            ? Path.Combine(Path.GetTempPath(), "PowerForge", "runtime", "dotnet-nuget")
-            : runtimeDirectoryRoot;
+        _runtimeDirectoryRoot = NormalizeRuntimeDirectoryRoot(runtimeDirectoryRoot);
     }
 
     /// <summary>
@@ -159,11 +157,11 @@ public sealed class DotNetNuGetClient
     private static string ResolveWorkingDirectory(string? workingDirectory, string packagePath)
     {
         if (!string.IsNullOrWhiteSpace(workingDirectory))
-            return workingDirectory;
+            return workingDirectory!;
 
         var packageDirectory = Path.GetDirectoryName(packagePath);
         if (!string.IsNullOrWhiteSpace(packageDirectory))
-            return packageDirectory;
+            return packageDirectory!;
 
         return Environment.CurrentDirectory;
     }
@@ -189,6 +187,16 @@ public sealed class DotNetNuGetClient
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        return value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+        var nonEmptyValue = value!;
+
+        return nonEmptyValue
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()
+            ?.Trim();
     }
+
+    private static string NormalizeRuntimeDirectoryRoot(string? runtimeDirectoryRoot)
+        => string.IsNullOrWhiteSpace(runtimeDirectoryRoot)
+            ? Path.Combine(Path.GetTempPath(), "PowerForge", "runtime", "dotnet-nuget")
+            : runtimeDirectoryRoot!;
 }

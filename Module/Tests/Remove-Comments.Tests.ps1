@@ -8,7 +8,7 @@
         }
 
         # Always import the local module from the repository to avoid picking up an installed copy.
-        $ModuleToLoad = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'PSPublishModule.psd1'
+        $ModuleToLoad = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         Import-Module $ModuleToLoad -Force
     }
 

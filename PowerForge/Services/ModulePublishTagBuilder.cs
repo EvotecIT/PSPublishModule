@@ -15,7 +15,7 @@ public sealed class ModulePublishTagBuilder
     /// <returns>Resolved tag name.</returns>
     public string BuildTag(PublishConfiguration publish, string moduleName, string resolvedVersion, string? preRelease)
     {
-        ArgumentNullException.ThrowIfNull(publish);
+        FrameworkCompatibility.NotNull(publish, nameof(publish));
 
         var versionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
             ? resolvedVersion

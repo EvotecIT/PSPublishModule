@@ -164,23 +164,23 @@ public sealed class GitClient
         var trackedChangeCount = 0;
         var untrackedChangeCount = 0;
 
-        foreach (var line in result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in result.StdOut.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
         {
             if (line.StartsWith("# branch.head ", StringComparison.Ordinal))
             {
-                branchName = line["# branch.head ".Length..].Trim();
+                branchName = line.Substring("# branch.head ".Length).Trim();
                 continue;
             }
 
             if (line.StartsWith("# branch.upstream ", StringComparison.Ordinal))
             {
-                upstreamBranch = line["# branch.upstream ".Length..].Trim();
+                upstreamBranch = line.Substring("# branch.upstream ".Length).Trim();
                 continue;
             }
 
             if (line.StartsWith("# branch.ab ", StringComparison.Ordinal))
             {
-                ParseAheadBehind(line["# branch.ab ".Length..], out aheadCount, out behindCount);
+                ParseAheadBehind(line.Substring("# branch.ab ".Length), out aheadCount, out behindCount);
                 continue;
             }
 
@@ -206,13 +206,13 @@ public sealed class GitClient
         aheadCount = 0;
         behindCount = 0;
 
-        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var part in parts)
         {
-            if (part.StartsWith('+') && int.TryParse(part[1..], out var ahead))
+            if (part.StartsWith("+", StringComparison.Ordinal) && int.TryParse(part.Substring(1), out var ahead))
                 aheadCount = ahead;
 
-            if (part.StartsWith('-') && int.TryParse(part[1..], out var behind))
+            if (part.StartsWith("-", StringComparison.Ordinal) && int.TryParse(part.Substring(1), out var behind))
                 behindCount = behind;
         }
     }

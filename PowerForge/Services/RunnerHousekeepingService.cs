@@ -515,7 +515,8 @@ public sealed class RunnerHousekeepingService
         if (string.IsNullOrEmpty(path))
             return Path.DirectorySeparatorChar.ToString();
 
-        return path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
+        return path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            || path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
             ? path
             : path + Path.DirectorySeparatorChar;
     }

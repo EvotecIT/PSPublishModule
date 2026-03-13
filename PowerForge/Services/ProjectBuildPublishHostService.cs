@@ -37,7 +37,7 @@ public sealed class ProjectBuildPublishHostService
     /// </summary>
     public ProjectBuildPublishHostConfiguration LoadConfiguration(string configPath)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+        FrameworkCompatibility.NotNullOrWhiteSpace(configPath, nameof(configPath));
 
         var resolvedConfigPath = Path.GetFullPath(configPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(resolvedConfigPath);
@@ -45,13 +45,17 @@ public sealed class ProjectBuildPublishHostService
             throw new InvalidOperationException($"Unable to resolve the configuration directory for '{resolvedConfigPath}'.");
 
         var config = new ProjectBuildSupportService(_logger).LoadConfig(resolvedConfigPath);
+        var publishSource = string.IsNullOrWhiteSpace(config.PublishSource)
+            ? "https://api.nuget.org/v3/index.json"
+            : config.PublishSource!.Trim();
+        var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode)
+            ? "Single"
+            : config.GitHubReleaseMode!.Trim();
         return new ProjectBuildPublishHostConfiguration {
             ConfigPath = resolvedConfigPath,
             PublishNuget = config.PublishNuget == true,
             PublishGitHub = config.PublishGitHub == true,
-            PublishSource = string.IsNullOrWhiteSpace(config.PublishSource)
-                ? "https://api.nuget.org/v3/index.json"
-                : config.PublishSource.Trim(),
+            PublishSource = publishSource,
             PublishApiKey = ProjectBuildSupportService.ResolveSecret(
                 config.PublishApiKey,
                 config.PublishApiKeyFilePath,
@@ -70,7 +74,7 @@ public sealed class ProjectBuildPublishHostService
             GitHubReleaseName = TrimOrNull(config.GitHubReleaseName),
             GitHubTagName = TrimOrNull(config.GitHubTagName),
             GitHubTagTemplate = TrimOrNull(config.GitHubTagTemplate),
-            GitHubReleaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode) ? "Single" : config.GitHubReleaseMode.Trim(),
+            GitHubReleaseMode = releaseMode,
             GitHubPrimaryProject = TrimOrNull(config.GitHubPrimaryProject),
             GitHubTagConflictPolicy = TrimOrNull(config.GitHubTagConflictPolicy)
         };
@@ -81,8 +85,8 @@ public sealed class ProjectBuildPublishHostService
     /// </summary>
     public ProjectBuildGitHubPublishSummary PublishGitHub(ProjectBuildPublishHostConfiguration configuration, DotNetRepositoryReleaseResult release)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(release);
+        FrameworkCompatibility.NotNull(configuration, nameof(configuration));
+        FrameworkCompatibility.NotNull(release, nameof(release));
 
         var request = new ProjectBuildGitHubPublishRequest {
             Owner = configuration.GitHubUsername ?? string.Empty,
@@ -104,5 +108,5 @@ public sealed class ProjectBuildPublishHostService
     }
 
     private static string? TrimOrNull(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 }

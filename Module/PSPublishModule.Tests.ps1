@@ -1,5 +1,26 @@
 ﻿$script:SourceRoot = $PSScriptRoot
-$script:CopiedSourceLib = $false
+
+function Test-ModulePayloadUsableForCurrentHost {
+    param(
+        [Parameter(Mandatory)][string] $ModuleRoot
+    )
+
+    $libRoot = Join-Path $ModuleRoot 'Lib'
+    if (-not (Test-Path -LiteralPath $libRoot -PathType Container)) {
+        return $false
+    }
+
+    $directories = Get-ChildItem -Path $libRoot -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    $hasCore = $directories -contains 'Core'
+    $hasDefault = $directories -contains 'Default'
+    $hasStandard = $directories -contains 'Standard'
+
+    if ($PSEdition -eq 'Core') {
+        return $hasCore -or $hasStandard
+    }
+
+    return $hasDefault -or $hasStandard
+}
 
 function Get-ModulePayloadRootForTests {
     param(
@@ -11,49 +32,61 @@ function Get-ModulePayloadRootForTests {
         throw "Path $SourceRoot doesn't contain a PSD1 file. Failing tests."
     }
 
-    $sourceLibRoot = Join-Path $SourceRoot 'Lib'
-    $hasSourceLibraries = (Test-Path -LiteralPath $sourceLibRoot -PathType Container) -and
-        (Get-ChildItem -Path $sourceLibRoot -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
-    if ($hasSourceLibraries) {
+    $moduleName = $sourceManifest.BaseName
+    $artefactModule = Get-ChildItem -Path (Join-Path $SourceRoot 'Artefacts\Unpacked') -Filter '*.psd1' -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.BaseName -eq $moduleName } |
+        Sort-Object -Property @(
+            @{ Expression = 'LastWriteTimeUtc'; Descending = $true },
+            @{ Expression = 'FullName'; Descending = $true }
+        ) |
+        Select-Object -First 1
+    if ($artefactModule) {
+        $artefactRoot = Split-Path -Path $artefactModule.FullName -Parent
+        if (Test-ModulePayloadUsableForCurrentHost -ModuleRoot $artefactRoot) {
+            return $artefactRoot
+        }
+    }
+
+    if (Test-ModulePayloadUsableForCurrentHost -ModuleRoot $SourceRoot) {
         return $SourceRoot
     }
 
-    $moduleName = $sourceManifest.BaseName
-    $installedModule = Get-Module -ListAvailable -Name $moduleName |
-        Sort-Object Version -Descending |
-        Where-Object { $_.ModuleBase -and $_.ModuleBase -ne $SourceRoot } |
-        Select-Object -First 1
-    if ($installedModule) {
-        return $installedModule.ModuleBase
+    if ($env:PSPUBLISHMODULE_TEST_ALLOW_INSTALLED_FALLBACK -eq '1') {
+        $installedModule = Get-Module -ListAvailable -Name $moduleName |
+            Sort-Object Version -Descending |
+            Where-Object { $_.ModuleBase -and $_.ModuleBase -ne $SourceRoot } |
+            Select-Object -First 1
+        if ($installedModule) {
+            Write-Warning "Falling back to installed module payload for tests: $($installedModule.ModuleBase)"
+            return $installedModule.ModuleBase
+        }
     }
 
-    $artefactModule = Get-ChildItem -Path (Join-Path $SourceRoot 'Artefacts\Unpacked') -Filter '*.psd1' -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.BaseName -eq $moduleName } |
-        Sort-Object FullName -Descending |
-        Select-Object -First 1
-    if ($artefactModule) {
-        return Split-Path -Path $artefactModule.FullName -Parent
+    throw "No usable module payload found for $moduleName on PowerShell edition '$PSEdition'. Build the module first so the host-compatible payload exists."
+}
+
+function Get-ResolvedModuleManifestPath {
+    param(
+        [Parameter(Mandatory)][string] $ModuleRoot
+    )
+
+    $manifestPath = Get-ChildItem -Path $ModuleRoot -Filter '*.psd1' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $manifestPath) {
+        throw "Path $ModuleRoot doesn't contain a PSD1 file. Failing tests."
     }
 
-    return $SourceRoot
+    return $manifestPath.FullName
 }
 
 $PayloadRoot = Get-ModulePayloadRootForTests -SourceRoot $script:SourceRoot
-$sourceLibRoot = Join-Path $script:SourceRoot 'Lib'
-$payloadLibRoot = Join-Path $PayloadRoot 'Lib'
-
-if (($PayloadRoot -ne $script:SourceRoot) -and (Test-Path -LiteralPath $payloadLibRoot -PathType Container) -and (-not (Test-Path -LiteralPath $sourceLibRoot))) {
-    Copy-Item -Path $payloadLibRoot -Destination $sourceLibRoot -Recurse -Force
-    $script:CopiedSourceLib = $true
-}
-
-$ModuleRoot = $script:SourceRoot
-$PrimaryModule = Get-ChildItem -Path $ModuleRoot -Filter '*.psd1' -File -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $PrimaryModule) {
-    throw "Path $ModuleRoot doesn't contain a PSD1 file. Failing tests."
-}
+$ModuleRoot = $PayloadRoot
+$PrimaryModulePath = Get-ResolvedModuleManifestPath -ModuleRoot $ModuleRoot
+$PrimaryModule = Get-Item -LiteralPath $PrimaryModulePath
 
 $ModuleName = $PrimaryModule.BaseName
+$env:PSPUBLISHMODULE_TEST_MANIFEST_PATH = $PrimaryModule.FullName
+$env:PSPUBLISHMODULE_TEST_MODULE_ROOT = $ModuleRoot
+$env:PSPUBLISHMODULE_TEST_SOURCE_ROOT = $script:SourceRoot
 $PSDInformation = Import-PowerShellDataFile -Path $PrimaryModule.FullName
 $RequiredModules = @(
     'Pester'
@@ -139,7 +172,7 @@ if ($result.FailedCount -gt 0) {
         }
     }
 } finally {
-    if ($script:CopiedSourceLib -and (Test-Path -LiteralPath $sourceLibRoot)) {
-        Remove-Item -LiteralPath $sourceLibRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    Remove-Item Env:PSPUBLISHMODULE_TEST_MANIFEST_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:PSPUBLISHMODULE_TEST_MODULE_ROOT -ErrorAction SilentlyContinue
+    Remove-Item Env:PSPUBLISHMODULE_TEST_SOURCE_ROOT -ErrorAction SilentlyContinue
 }
