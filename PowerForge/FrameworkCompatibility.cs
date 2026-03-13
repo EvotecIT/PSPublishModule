@@ -39,6 +39,7 @@ internal static class FrameworkCompatibility
             + Path.DirectorySeparatorChar;
         var baseUri = new Uri(basePath);
         var targetUri = new Uri(Path.GetFullPath(path));
+        // Note: this URI-based fallback does not round-trip literal '%' path segments on .NET Framework.
         return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString())
             .Replace('/', Path.DirectorySeparatorChar);
 #else
@@ -60,6 +61,8 @@ internal static class FrameworkCompatibility
     public static Task<Stream> ReadAsStreamAsync(HttpContent content, CancellationToken cancellationToken)
     {
 #if NET472
+        // NET472: HttpContent.ReadAsStreamAsync does not accept a CancellationToken.
+        // Cancellation is only checked eagerly before the read begins.
         cancellationToken.ThrowIfCancellationRequested();
         return content.ReadAsStreamAsync();
 #else

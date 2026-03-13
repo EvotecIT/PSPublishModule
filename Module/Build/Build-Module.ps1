@@ -79,6 +79,8 @@ if ($preferBinaryImport) {
         $importPath = $binaryModule
     }
 } elseif (Test-Path -LiteralPath $sourceLibRoot) {
+    # Keep the source-manifest path for regular repo builds where Module\Lib is intentionally populated.
+    # Build-ModuleSelf now prefers binary import to avoid in-place refreshes of loaded repo DLLs.
     $importPath = $sourceManifest
 } else {
     if (-not (Test-Path -LiteralPath $binaryModule)) {
