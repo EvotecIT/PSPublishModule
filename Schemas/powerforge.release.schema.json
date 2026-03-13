@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge Unified Release Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Packages": { "$ref": "project.build.schema.json" },
+    "Tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ProjectRoot": { "type": [ "string", "null" ] },
+        "Configuration": { "type": "string", "enum": [ "Release", "Debug" ] },
+        "Targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "Name", "ProjectPath", "OutputName", "Runtimes", "Frameworks" ],
+            "properties": {
+              "Name": { "type": "string" },
+              "ProjectPath": { "type": "string" },
+              "OutputName": { "type": "string" },
+              "CommandAlias": { "type": [ "string", "null" ] },
+              "Runtimes": { "type": "array", "items": { "type": "string" } },
+              "Frameworks": { "type": "array", "items": { "type": "string" } },
+              "Flavor": { "type": "string", "enum": [ "SingleContained", "SingleFx", "Portable", "Fx" ] },
+              "Flavors": {
+                "type": "array",
+                "items": { "type": "string", "enum": [ "SingleContained", "SingleFx", "Portable", "Fx" ] }
+              },
+              "ArtifactRootPath": { "type": [ "string", "null" ] },
+              "OutputPath": { "type": [ "string", "null" ] },
+              "UseStaging": { "type": "boolean" },
+              "ClearOutput": { "type": "boolean" },
+              "Zip": { "type": "boolean" },
+              "ZipPath": { "type": [ "string", "null" ] },
+              "ZipNameTemplate": { "type": [ "string", "null" ] },
+              "KeepSymbols": { "type": "boolean" },
+              "KeepDocs": { "type": "boolean" },
+              "CreateCommandAliasOnUnix": { "type": "boolean" },
+              "MsBuildProperties": {
+                "type": [ "object", "null" ],
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "GitHub": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Publish": { "type": "boolean" },
+            "Owner": { "type": [ "string", "null" ] },
+            "Repository": { "type": [ "string", "null" ] },
+            "Token": { "type": [ "string", "null" ] },
+            "TokenFilePath": { "type": [ "string", "null" ] },
+            "TokenEnvName": { "type": [ "string", "null" ] },
+            "GenerateReleaseNotes": { "type": "boolean" },
+            "IsPreRelease": { "type": "boolean" },
+            "TagTemplate": { "type": [ "string", "null" ] },
+            "ReleaseNameTemplate": { "type": [ "string", "null" ] }
+          }
+        }
+      }
+    }
+  }
+}

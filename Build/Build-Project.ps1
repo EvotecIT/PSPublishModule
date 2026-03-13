@@ -1,23 +1,41 @@
 param(
-    [string] $ConfigPath = "$PSScriptRoot\project.build.json",
-    [Nullable[bool]] $UpdateVersions,
-    [Nullable[bool]] $Build,
-    [Nullable[bool]] $PublishNuget = $false,
-    [Nullable[bool]] $PublishGitHub = $false,
-    [Nullable[bool]] $Plan,
-    [string] $PlanPath
+    [string] $ConfigPath,
+    [switch] $Plan,
+    [switch] $Validate,
+    [switch] $PackagesOnly,
+    [switch] $ToolsOnly,
+    [switch] $PublishNuget,
+    [switch] $PublishGitHub,
+    [switch] $PublishToolGitHub,
+    [string[]] $Target,
+    [string[]] $Runtime,
+    [string[]] $Framework,
+    [ValidateSet('SingleContained', 'SingleFx', 'Portable', 'Fx')]
+    [string[]] $Flavor
 )
 
-Import-Module PSPublishModule -Force -ErrorAction Stop
-
-$invokeParams = @{
-    ConfigPath = $ConfigPath
+if (-not $PSBoundParameters.ContainsKey('ConfigPath') -or [string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $PSScriptRoot 'release.json'
 }
-if ($null -ne $UpdateVersions) { $invokeParams.UpdateVersions = $UpdateVersions }
-if ($null -ne $Build) { $invokeParams.Build = $Build }
-if ($null -ne $PublishNuget) { $invokeParams.PublishNuget = $PublishNuget }
-if ($null -ne $PublishGitHub) { $invokeParams.PublishGitHub = $PublishGitHub }
-if ($null -ne $Plan) { $invokeParams.Plan = $Plan }
-if ($PlanPath) { $invokeParams.PlanPath = $PlanPath }
 
-Invoke-ProjectBuild @invokeParams
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$project = Join-Path $repoRoot 'PowerForge.Cli\PowerForge.Cli.csproj'
+
+$dotnetArgs = @(
+    'run', '--project', $project, '-c', 'Release', '--framework', 'net10.0', '--no-launch-profile', '--',
+    'release', '--config', $ConfigPath
+)
+if ($Plan) { $dotnetArgs += '--plan' }
+if ($Validate) { $dotnetArgs += '--validate' }
+if ($PackagesOnly) { $dotnetArgs += '--packages-only' }
+if ($ToolsOnly) { $dotnetArgs += '--tools-only' }
+if ($PublishNuget) { $dotnetArgs += '--publish-nuget' }
+if ($PublishGitHub) { $dotnetArgs += '--publish-project-github' }
+if ($PublishToolGitHub) { $dotnetArgs += '--publish-tool-github' }
+foreach ($entry in $Target) { $dotnetArgs += @('--target', $entry) }
+foreach ($entry in $Runtime) { $dotnetArgs += @('--rid', $entry) }
+foreach ($entry in $Framework) { $dotnetArgs += @('--framework', $entry) }
+foreach ($entry in $Flavor) { $dotnetArgs += @('--flavor', $entry) }
+
+dotnet @dotnetArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -100,6 +100,48 @@ public sealed class RunnerHousekeepingServiceTests
         }
     }
 
+    [Fact]
+    public void GuardedSudoDelete_RejectsTargetsOutsideAllowedRoot()
+    {
+        var service = new RunnerHousekeepingService(new NullLogger());
+        var method = typeof(RunnerHousekeepingService).GetMethod("EnsureDeleteTargetWithinRoot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var root = CreateSandbox();
+        try
+        {
+            var allowedRoot = Path.Combine(root, "allowed");
+            var outsideTarget = Path.Combine(root, "outside", "temp");
+            Directory.CreateDirectory(allowedRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(outsideTarget)!);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { outsideTarget, allowedRoot }));
+
+            Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("outside", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(0L, "0.0")]
+    [InlineData(536_870_912L, "0.5")]
+    [InlineData(1_610_612_736L, "1.5")]
+    public void FormatGiB_PreservesFractionalValues(long bytes, string expected)
+    {
+        var method = typeof(RunnerHousekeepingService).GetMethod("FormatGiB", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var value = method!.Invoke(null, new object?[] { bytes });
+        Assert.Equal(expected, Assert.IsType<string>(value));
+    }
+
     private static string CreateSandbox()
     {
         var path = Path.Combine(Path.GetTempPath(), "PowerForge.RunnerHousekeepingTests", Guid.NewGuid().ToString("N"));

@@ -181,6 +181,32 @@ internal static partial class Program
         return null;
     }
 
+    static string? FindDefaultReleaseConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "powerforge.release.json",
+            Path.Combine(".powerforge", "release.json"),
+            Path.Combine("Build", "release.json"),
+            "release.json"
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
     static IEnumerable<string> EnumerateSelfAndParents(string? baseDir)       
     {
         string current;
@@ -268,6 +294,14 @@ internal static partial class Program
         var full = ResolveExistingFilePath(path);
         var json = File.ReadAllText(full);
         var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.GitHubHousekeepingSpec, full);
+        return (spec, full);
+    }
+
+    static (PowerForgeReleaseSpec Value, string FullPath) LoadPowerForgeReleaseSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.PowerForgeReleaseSpec, full);
         return (spec, full);
     }
 

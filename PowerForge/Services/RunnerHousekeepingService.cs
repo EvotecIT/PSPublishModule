@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -273,7 +274,7 @@ public sealed class RunnerHousekeepingService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: false);
+        return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: false, allowedRootPath: rootPath);
     }
 
     private RunnerHousekeepingStepResult DeleteDirectoryContents(string id, string title, string? rootPath, bool dryRun)
@@ -285,7 +286,7 @@ public sealed class RunnerHousekeepingService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: null);
+        return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: null, allowedRootPath: rootPath);
     }
 
     private RunnerHousekeepingStepResult DeleteDirectoriesOlderThan(string id, string title, string? rootPath, int retentionDays, bool dryRun, bool allowSudo)
@@ -299,10 +300,10 @@ public sealed class RunnerHousekeepingService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true);
+        return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
     }
 
-    private RunnerHousekeepingStepResult DeleteTargets(string id, string title, string[] targets, bool dryRun, bool allowSudo, bool? isDirectory)
+    private RunnerHousekeepingStepResult DeleteTargets(string id, string title, string[] targets, bool dryRun, bool allowSudo, bool? isDirectory, string? allowedRootPath)
     {
         if (targets.Length == 0)
             return SkippedStep(id, title, "Nothing to clean.");
@@ -321,23 +322,41 @@ public sealed class RunnerHousekeepingService
             };
         }
 
+        var deleted = new List<string>(targets.Length);
+        var failures = new List<string>();
+
         foreach (var target in targets)
         {
-            DeleteTarget(target, allowSudo, isDirectory);
+            try
+            {
+                DeleteTarget(target, allowSudo, isDirectory, allowedRootPath);
+                deleted.Add(target);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{target}: {ex.Message}");
+            }
         }
 
-        _logger.Info($"{title}: deleted {targets.Length} item(s).");
+        if (failures.Count == 0)
+            _logger.Info($"{title}: deleted {deleted.Count} item(s).");
+        else
+            _logger.Warn($"{title}: deleted {deleted.Count} item(s), failed {failures.Count} item(s).");
+
         return new RunnerHousekeepingStepResult
         {
             Id = id,
             Title = title,
-            EntriesAffected = targets.Length,
-            Message = $"Deleted {targets.Length} item(s).",
+            Success = failures.Count == 0,
+            EntriesAffected = deleted.Count,
+            Message = failures.Count == 0
+                ? $"Deleted {deleted.Count} item(s)."
+                : $"Deleted {deleted.Count} item(s); failed {failures.Count} item(s): {string.Join(" | ", failures)}",
             Targets = targets
         };
     }
 
-    private void DeleteTarget(string target, bool allowSudo, bool? isDirectory)
+    private void DeleteTarget(string target, bool allowSudo, bool? isDirectory, string? allowedRootPath)
     {
         try
         {
@@ -352,7 +371,7 @@ public sealed class RunnerHousekeepingService
         }
         catch when (allowSudo && CanUseSudo() && (isDirectory == true || Directory.Exists(target)))
         {
-            RunSudoDelete(target);
+            RunSudoDelete(target, allowedRootPath);
         }
     }
 
@@ -428,8 +447,8 @@ public sealed class RunnerHousekeepingService
     private static long ToGiBBytes(int gibibytes)
         => gibibytes <= 0 ? 0 : (long)gibibytes * 1024L * 1024L * 1024L;
 
-    private static long FormatGiB(long bytes)
-        => bytes <= 0 ? 0 : bytes / 1024L / 1024L / 1024L;
+    private static string FormatGiB(long bytes)
+        => (bytes <= 0 ? 0d : bytes / 1024d / 1024d / 1024d).ToString("N1", CultureInfo.InvariantCulture);
 
     private static string? ResolvePathOrNull(string? value)
     {
@@ -471,11 +490,34 @@ public sealed class RunnerHousekeepingService
     private static bool CanUseSudo()
         => !RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && CommandExists("sudo");
 
-    private void RunSudoDelete(string target)
+    private void RunSudoDelete(string target, string? allowedRootPath)
     {
+        EnsureDeleteTargetWithinRoot(target, allowedRootPath);
         var result = RunProcess("sudo", new[] { "rm", "-rf", target }, workingDirectory: Path.GetDirectoryName(target) ?? Environment.CurrentDirectory);
         if (result.ExitCode != 0)
             throw new IOException(string.IsNullOrWhiteSpace(result.StdErr) ? $"sudo rm -rf failed for '{target}'." : result.StdErr.Trim());
+    }
+
+    private static void EnsureDeleteTargetWithinRoot(string target, string? allowedRootPath)
+    {
+        var root = ResolvePathOrNull(allowedRootPath);
+        if (string.IsNullOrWhiteSpace(root))
+            throw new InvalidOperationException($"Refusing sudo delete for '{target}' because no safe root was supplied.");
+
+        var fullRoot = AppendDirectorySeparator(root!);
+        var fullTarget = Path.GetFullPath(target);
+        if (!fullTarget.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Refusing sudo delete for '{target}' because it is outside '{root}'.");
+    }
+
+    private static string AppendDirectorySeparator(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return Path.DirectorySeparatorChar.ToString();
+
+        return path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
+            ? path
+            : path + Path.DirectorySeparatorChar;
     }
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, IReadOnlyList<string> arguments, string workingDirectory)

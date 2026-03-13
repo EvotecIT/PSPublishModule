@@ -1,0 +1,85 @@
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json",
+  "SchemaVersion": 1,
+  "Packages": {
+    "RootPath": "..",
+    "ExpectedVersionMap": {
+      "PowerForge": "1.0.X",
+      "PowerForge.PowerShell": "1.0.X",
+      "PowerForge.Cli": "1.0.X",
+      "PowerForge.Blazor": "1.0.X",
+      "PowerForge.Web": "1.0.X",
+      "PowerForge.Web.Cli": "1.0.X"
+    },
+    "ExpectedVersionMapAsInclude": true,
+    "ExpectedVersionMapUseWildcards": false,
+    "Configuration": "Release",
+    "StagingPath": "Artefacts/ProjectBuild",
+    "CleanStaging": true,
+    "PlanOutputPath": "Artefacts/ProjectBuild/project.build.plan.json",
+    "UpdateVersions": true,
+    "Build": true,
+    "PublishNuget": false,
+    "PublishGitHub": false,
+    "CreateReleaseZip": true,
+    "CertificateThumbprint": "483292C9E317AA13B07BB7A96AE9D1A5ED9E7703",
+    "CertificateStore": "CurrentUser",
+    "TimeStampServer": "http://timestamp.digicert.com",
+    "PublishSource": "https://api.nuget.org/v3/index.json",
+    "PublishApiKeyFilePath": "C:\\Support\\Important\\NugetOrgEvotec.txt",
+    "SkipDuplicate": true,
+    "PublishFailFast": true,
+    "GitHubAccessTokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
+    "GitHubUsername": "EvotecIT",
+    "GitHubRepositoryName": "PSPublishModule",
+    "GitHubIsPreRelease": false,
+    "GitHubIncludeProjectNameInTag": false,
+    "GitHubGenerateReleaseNotes": true,
+    "GitHubReleaseMode": "Single",
+    "GitHubPrimaryProject": "PowerForge.Cli",
+    "GitHubTagTemplate": "{Repo}-v{PrimaryVersion}",
+    "GitHubReleaseName": "{Repo} {PrimaryVersion}"
+  },
+  "Tools": {
+    "ProjectRoot": "..",
+    "Configuration": "Release",
+    "Targets": [
+      {
+        "Name": "PowerForge",
+        "ProjectPath": "PowerForge.Cli/PowerForge.Cli.csproj",
+        "OutputName": "PowerForge",
+        "CommandAlias": "powerforge",
+        "Runtimes": [ "win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64" ],
+        "Frameworks": [ "net10.0" ],
+        "Flavor": "SingleContained",
+        "ArtifactRootPath": "Artifacts/PowerForge",
+        "Zip": true,
+        "UseStaging": true,
+        "ClearOutput": true
+      },
+      {
+        "Name": "PowerForgeWeb",
+        "ProjectPath": "PowerForge.Web.Cli/PowerForge.Web.Cli.csproj",
+        "OutputName": "PowerForgeWeb",
+        "CommandAlias": "powerforge-web",
+        "Runtimes": [ "win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64" ],
+        "Frameworks": [ "net10.0" ],
+        "Flavor": "SingleContained",
+        "ArtifactRootPath": "Artifacts/PowerForgeWeb",
+        "Zip": true,
+        "UseStaging": true,
+        "ClearOutput": true
+      }
+    ],
+    "GitHub": {
+      "Publish": false,
+      "Owner": "EvotecIT",
+      "Repository": "PSPublishModule",
+      "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
+      "GenerateReleaseNotes": true,
+      "IsPreRelease": false,
+      "TagTemplate": "{Target}-v{Version}",
+      "ReleaseNameTemplate": "{Target} {Version}"
+    }
+  }
+}

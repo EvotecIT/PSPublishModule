@@ -122,8 +122,8 @@ if ($env:INPUT_APPLY -eq 'true') {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_GITHUB_TOKEN)) {
-    $null = $arguments.Add('--token')
-    $null = $arguments.Add($env:POWERFORGE_GITHUB_TOKEN)
+    $null = $arguments.Add('--token-env')
+    $null = $arguments.Add('POWERFORGE_GITHUB_TOKEN')
 }
 
 $null = $arguments.Add('--output')

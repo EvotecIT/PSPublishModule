@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace PowerForge;
 
@@ -36,12 +37,20 @@ public sealed class GitHubActionsCacheCleanupService
     /// <param name="spec">Cleanup specification.</param>
     /// <returns>Run summary with planned/deleted items and counters.</returns>
     public GitHubActionsCacheCleanupResult Prune(GitHubActionsCacheCleanupSpec spec)
+        => PruneAsync(spec).ConfigureAwait(false).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Executes a cleanup run against GitHub Actions caches.
+    /// </summary>
+    /// <param name="spec">Cleanup specification.</param>
+    /// <returns>Run summary with planned/deleted items and counters.</returns>
+    public async Task<GitHubActionsCacheCleanupResult> PruneAsync(GitHubActionsCacheCleanupSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
 
         var normalized = NormalizeSpec(spec);
-        var usageBefore = TryGetUsage(normalized.ApiBaseUri, normalized.Repository, normalized.Token);
-        var allCaches = ListCaches(normalized.ApiBaseUri, normalized.Repository, normalized.Token, normalized.PageSize);
+        var usageBefore = await TryGetUsageAsync(normalized.ApiBaseUri, normalized.Repository, normalized.Token).ConfigureAwait(false);
+        var allCaches = await ListCachesAsync(normalized.ApiBaseUri, normalized.Repository, normalized.Token, normalized.PageSize).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
         var ageCutoff = normalized.MaxAgeDays is > 0
             ? now.AddDays(-normalized.MaxAgeDays.Value)
@@ -123,7 +132,7 @@ public sealed class GitHubActionsCacheCleanupService
 
         foreach (var item in orderedPlanned)
         {
-            var deleteResult = DeleteCache(normalized.ApiBaseUri, normalized.Repository, normalized.Token, item.Id);
+            var deleteResult = await DeleteCacheAsync(normalized.ApiBaseUri, normalized.Repository, normalized.Token, item.Id).ConfigureAwait(false);
             if (deleteResult.Ok)
             {
                 deleted.Add(item);
@@ -142,7 +151,7 @@ public sealed class GitHubActionsCacheCleanupService
         result.DeletedCaches = deleted.Count;
         result.DeletedBytes = deleted.Sum(c => c.SizeInBytes);
         result.FailedDeletes = failed.Count;
-        result.UsageAfter = TryGetUsage(normalized.ApiBaseUri, normalized.Repository, normalized.Token);
+        result.UsageAfter = await TryGetUsageAsync(normalized.ApiBaseUri, normalized.Repository, normalized.Token).ConfigureAwait(false);
         result.Success = failed.Count == 0 || !normalized.FailOnDeleteError;
 
         if (!result.Success)
@@ -205,7 +214,7 @@ public sealed class GitHubActionsCacheCleanupService
         };
     }
 
-    private GitHubActionsCacheUsage? TryGetUsage(Uri apiBaseUri, string repository, string token)
+    private async Task<GitHubActionsCacheUsage?> TryGetUsageAsync(Uri apiBaseUri, string repository, string token)
     {
         try
         {
@@ -213,8 +222,8 @@ public sealed class GitHubActionsCacheCleanupService
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            using var response = _client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
-            var body = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            using var response = await _client.SendAsync(request).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.Verbose($"GitHub cache usage lookup failed: HTTP {(int)response.StatusCode}.");
@@ -236,7 +245,7 @@ public sealed class GitHubActionsCacheCleanupService
         }
     }
 
-    private GitHubActionsCacheRecord[] ListCaches(Uri apiBaseUri, string repository, string token, int pageSize)
+    private async Task<GitHubActionsCacheRecord[]> ListCachesAsync(Uri apiBaseUri, string repository, string token, int pageSize)
     {
         var records = new List<GitHubActionsCacheRecord>();
         var page = 1;
@@ -248,8 +257,8 @@ public sealed class GitHubActionsCacheCleanupService
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            using var response = _client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
-            var body = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            using var response = await _client.SendAsync(request).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw BuildHttpFailure("listing caches", response, body);
 
@@ -280,17 +289,17 @@ public sealed class GitHubActionsCacheCleanupService
         return records.ToArray();
     }
 
-    private (bool Ok, int? StatusCode, string? Error) DeleteCache(Uri apiBaseUri, string repository, string token, long cacheId)
+    private async Task<(bool Ok, int? StatusCode, string? Error)> DeleteCacheAsync(Uri apiBaseUri, string repository, string token, long cacheId)
     {
         var uri = BuildApiUri(apiBaseUri, repository, $"actions/caches/{cacheId}");
         using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = _client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+        using var response = await _client.SendAsync(request).ConfigureAwait(false);
         if (response.IsSuccessStatusCode)
             return (true, (int)response.StatusCode, null);
 
-        var body = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var error = BuildHttpFailure("deleting cache", response, body).Message;
         return (false, (int)response.StatusCode, error);
     }

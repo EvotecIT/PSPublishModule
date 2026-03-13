@@ -210,25 +210,28 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-For release/build packaging, this repo now also ships a standard project-build entrypoint:
+For release/build packaging, this repo now uses one unified release entrypoint:
 
 ```powershell
 .\Build\Build-Project.ps1
 .\Build\Build-Project.ps1 -Plan
 .\Build\Build-Project.ps1 -PublishNuget $true -PublishGitHub $true
+.\Build\Build-Project.ps1 -ToolsOnly -PublishToolGitHub $true
 ```
 
-For downloadable CLI binaries, use the tool release builders:
+`Build\release.json` is the source of truth for both package releases and downloadable tool binaries.
+
+For targeted tool-only runs, the convenience wrappers still exist:
 
 ```powershell
 # Build PowerForge.exe / PowerForge for one runtime
-.\Build\Build-PowerForge.ps1 -Tool PowerForge -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+.\Build\Build-PowerForge.ps1 -Tool PowerForge -Runtime win-x64 -Framework net10.0 -Flavor SingleContained
 
 # Build PowerForgeWeb.exe / PowerForgeWeb
-.\Build\Build-PowerForgeWeb.ps1 -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+.\Build\Build-PowerForgeWeb.ps1 -Runtime win-x64 -Framework net10.0 -Flavor SingleContained
 
 # Optional: publish the generated zip assets to GitHub releases
-.\Build\Build-PowerForge.ps1 -Tool All -Runtime win-x64,linux-x64,osx-arm64 -Framework net8.0 -Flavor SingleFx -Zip -PublishGitHub
+.\Build\Build-PowerForge.ps1 -Tool All -Runtime win-x64,linux-x64,osx-arm64 -Framework net10.0 -Flavor SingleContained -PublishGitHub
 ```
 
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
