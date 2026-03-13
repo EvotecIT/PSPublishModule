@@ -1,4 +1,5 @@
 using System.Text;
+using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
@@ -178,6 +179,46 @@ public sealed class PowerForgeReleaseServiceTests
         {
             TryDelete(zipA);
             TryDelete(zipB);
+        }
+    }
+
+    [Fact]
+    public void ToolReleaseRunProcess_CapturesStdOutAndStdErrWithoutBlocking()
+    {
+        var method = typeof(PowerForgeToolReleaseService).GetMethod("RunProcess", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var tempScript = Path.Combine(Path.GetTempPath(), $"powerforge-toolrelease-{Guid.NewGuid():N}.cmd");
+        try
+        {
+            File.WriteAllText(tempScript, "@echo stdout-line\r\n@echo stderr-line 1>&2\r\n", new UTF8Encoding(false));
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("/c");
+            psi.ArgumentList.Add(tempScript);
+
+            var result = method!.Invoke(null, new object?[] { psi });
+            Assert.NotNull(result);
+
+            var exitCode = (int)result.GetType().GetProperty("ExitCode")!.GetValue(result)!;
+            var stdOut = (string)result.GetType().GetProperty("StdOut")!.GetValue(result)!;
+            var stdErr = (string)result.GetType().GetProperty("StdErr")!.GetValue(result)!;
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("stdout-line", stdOut, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("stderr-line", stdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(tempScript))
+                File.Delete(tempScript);
         }
     }
 

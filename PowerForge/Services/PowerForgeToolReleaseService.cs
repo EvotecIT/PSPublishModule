@@ -605,10 +605,13 @@ internal sealed class PowerForgeToolReleaseService
         if (process is null)
             return new ProcessExecutionResult(1, string.Empty, "Failed to start process.");
 
-        var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
-        return new ProcessExecutionResult(process.ExitCode, stdOut, stdErr);
+        return new ProcessExecutionResult(
+            process.ExitCode,
+            stdOutTask.GetAwaiter().GetResult(),
+            stdErrTask.GetAwaiter().GetResult());
     }
 
     private static string TrimForMessage(string? stdErr, string? stdOut)
