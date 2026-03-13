@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Xml.Linq;
+using System.Globalization;
 
 namespace PowerForge;
 
@@ -9,6 +10,7 @@ namespace PowerForge;
 public sealed class PowerShellGalleryVersionFeedClient
 {
     private const string FindPackagesByIdTemplate = "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='{0}'";
+    private const string ExactPackageTemplate = "https://www.powershellgallery.com/api/v2/Packages(Id='{0}',Version='{1}')";
     private const string UnlistedPublishedMarker = "1900-01-01T00:00:00";
     private static readonly HttpClient SharedClient = CreateSharedClient();
     private readonly HttpClient _client;
@@ -68,6 +70,43 @@ public sealed class PowerShellGalleryVersionFeedClient
         }
 
         return versions;
+    }
+
+    /// <summary>
+    /// Checks whether the exact package/version exists in the gallery metadata endpoint,
+    /// including versions that are unlisted or removed from the public feed listing.
+    /// </summary>
+    public bool VersionExists(
+        string packageId,
+        string version,
+        TimeSpan? timeout = null)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+            throw new ArgumentException("PackageId is required.", nameof(packageId));
+        if (string.IsNullOrWhiteSpace(version))
+            throw new ArgumentException("Version is required.", nameof(version));
+
+        using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+        var token = cts?.Token ?? CancellationToken.None;
+        var requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            ExactPackageTemplate,
+            Uri.EscapeDataString(packageId.Trim()),
+            Uri.EscapeDataString(version.Trim()));
+
+        try
+        {
+            using var response = _client.GetAsync(requestUri, token).GetAwaiter().GetResult();
+            return response.IsSuccessStatusCode;
+        }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
     }
 
     private static IEnumerable<PowerShellGalleryPackageVersion> ParseEntries(XDocument document, bool includePrerelease)

@@ -68,7 +68,7 @@ public sealed class ModuleVersionStepper
                 usedAutoVersioning: false);
         }
 
-        var (current, source) = ResolveCurrentVersion(moduleName, localPsd1Path, repository, prerelease);
+        var (current, source) = ResolveCurrentVersion(expectedVersion, moduleName, localPsd1Path, repository, prerelease);
         var proposed = ComputeNextVersion(expectedVersion, current);
 
         return new ModuleVersionStepResult(
@@ -80,6 +80,7 @@ public sealed class ModuleVersionStepper
     }
 
     private (Version? Version, ModuleVersionSource Source) ResolveCurrentVersion(
+        string expectedVersion,
         string? moduleName,
         string? localPsd1Path,
         string repository,
@@ -121,6 +122,13 @@ public sealed class ModuleVersionStepper
             try
             {
                 var galleryVersion = TryResolveCurrentVersionFromPowerShellGalleryFeed(moduleName!, prerelease);
+                var reservedVersion = TryResolveReservedPowerShellGalleryVersion(expectedVersion, moduleName!, galleryVersion, prerelease);
+                if (reservedVersion is not null && (galleryVersion is null || reservedVersion.CompareTo(galleryVersion) > 0))
+                {
+                    _logger.Verbose($"PowerShell Gallery reserved version for '{moduleName}' was resolved from the exact package metadata endpoint ({reservedVersion}).");
+                    return (reservedVersion, ModuleVersionSource.Repository);
+                }
+
                 if (galleryVersion is not null)
                     return (galleryVersion, ModuleVersionSource.Repository);
             }
@@ -153,6 +161,49 @@ public sealed class ModuleVersionStepper
             _logger.Warn($"Couldn't resolve current version from repository: {ex.Message}");
             return (null, ModuleVersionSource.Repository);
         }
+    }
+
+    private Version? TryResolveReservedPowerShellGalleryVersion(
+        string expectedVersion,
+        string moduleName,
+        Version? currentVersion,
+        bool prerelease)
+    {
+        if (prerelease)
+            return null;
+
+        Version? latestReserved = null;
+        Version? cursor = currentVersion;
+        var missCount = 0;
+        var hitCount = 0;
+        const int maxProbeCount = 12;
+        const int maxConsecutiveMissesAfterHit = 3;
+        const int maxConsecutiveMissesBeforeHit = 4;
+
+        for (var index = 0; index < maxProbeCount; index++)
+        {
+            var candidateText = ComputeNextVersion(expectedVersion, cursor);
+            if (!TryParseRepositoryVersion(candidateText, out var candidateVersion))
+                break;
+
+            if (_powerShellGalleryFeed.VersionExists(moduleName, candidateText, timeout: TimeSpan.FromSeconds(20)))
+            {
+                latestReserved = candidateVersion;
+                cursor = candidateVersion;
+                hitCount++;
+                missCount = 0;
+                continue;
+            }
+
+            cursor = candidateVersion;
+            missCount++;
+            if (hitCount > 0 && missCount >= maxConsecutiveMissesAfterHit)
+                break;
+            if (hitCount == 0 && missCount >= maxConsecutiveMissesBeforeHit)
+                break;
+        }
+
+        return latestReserved;
     }
 
     private Version? TryResolveCurrentVersionFromPowerShellGalleryFeed(string moduleName, bool prerelease)
