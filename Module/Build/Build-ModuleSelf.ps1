@@ -55,37 +55,6 @@ $moduleProject = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule\PSPublish
 if (-not (Test-Path -LiteralPath $cliProject)) { throw "PowerForge.Cli project not found: $cliProject" }
 if (-not (Test-Path -LiteralPath $moduleProject)) { throw "PSPublishModule project not found: $moduleProject" }
 
-function Sync-LocalModuleLib {
-    param(
-        [Parameter(Mandatory)][string] $RepoRoot,
-        [Parameter(Mandatory)][string] $ConfigurationName,
-        [Parameter(Mandatory)][string] $PrimaryFramework
-    )
-
-    $moduleLibRoot = Join-Path -Path $RepoRoot -ChildPath 'Module\Lib'
-    New-Item -Path $moduleLibRoot -ItemType Directory -Force | Out-Null
-
-    $frameworkMappings = @(
-        @{ Output = $PrimaryFramework; Folder = 'Core' }
-        @{ Output = 'net472'; Folder = 'Default' }
-    )
-
-    foreach ($mapping in $frameworkMappings) {
-        $outputPath = Join-Path -Path $RepoRoot -ChildPath ("PSPublishModule\bin\{0}\{1}" -f $ConfigurationName, $mapping.Output)
-        if (-not (Test-Path -LiteralPath $outputPath)) {
-            continue
-        }
-
-        $targetPath = Join-Path -Path $moduleLibRoot -ChildPath $mapping.Folder
-        if (Test-Path -LiteralPath $targetPath) {
-            Remove-Item -LiteralPath $targetPath -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        New-Item -Path $targetPath -ItemType Directory -Force | Out-Null
-        Copy-Item -Path (Join-Path -Path $outputPath -ChildPath '*') -Destination $targetPath -Recurse -Force
-    }
-}
-
 if ($Framework -eq 'auto') {
     $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
     $Framework = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
@@ -118,8 +87,6 @@ if (-not $NoBuild) {
         if ($LASTEXITCODE -ne 0) { $moduleOutput | Out-Host; exit $LASTEXITCODE }
         Write-Host "$ok Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
     }
-
-    Sync-LocalModuleLib -RepoRoot $repoRoot -ConfigurationName $Configuration -PrimaryFramework $Framework
 }
 
 $cliDir = Join-Path -Path $repoRoot -ChildPath ("PowerForge.Cli\\bin\\{0}\\{1}" -f $Configuration, $Framework)

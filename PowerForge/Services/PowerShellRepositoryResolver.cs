@@ -32,8 +32,8 @@ public sealed class PowerShellRepositoryResolver
     /// </summary>
     public async Task<PowerShellRepositoryResolution?> ResolveAsync(string workingDirectory, string repositoryName, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
-        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryName);
+        FrameworkCompatibility.NotNullOrWhiteSpace(workingDirectory, nameof(workingDirectory));
+        FrameworkCompatibility.NotNullOrWhiteSpace(repositoryName, nameof(repositoryName));
 
         if (Uri.TryCreate(repositoryName, UriKind.Absolute, out var directUri))
         {
@@ -66,7 +66,7 @@ public sealed class PowerShellRepositoryResolver
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(2),
-            preferPwsh: !OperatingSystem.IsWindows(),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();

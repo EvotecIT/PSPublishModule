@@ -48,27 +48,29 @@ public sealed class ReleaseSigningHostSettingsResolver
 
         if (string.IsNullOrWhiteSpace(thumbprint))
         {
+            var unresolvedModulePath = modulePath ?? string.Empty;
             return new ReleaseSigningHostSettings {
                 IsConfigured = false,
                 StoreName = storeName,
                 TimeStampServer = timeStampServer,
-                ModulePath = modulePath,
+                ModulePath = unresolvedModulePath,
                 MissingConfigurationMessage = "Signing is not configured. Set RELEASE_OPS_STUDIO_SIGN_THUMBPRINT first."
             };
         }
 
+        var resolvedModulePath = modulePath ?? string.Empty;
         return new ReleaseSigningHostSettings {
             IsConfigured = true,
             Thumbprint = thumbprint,
             StoreName = storeName,
             TimeStampServer = timeStampServer,
-            ModulePath = modulePath
+            ModulePath = resolvedModulePath
         };
     }
 
     private static string? TrimOrNull(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
     private static string TrimOrDefault(string? value, string defaultValue)
-        => string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? defaultValue : value!.Trim();
 }

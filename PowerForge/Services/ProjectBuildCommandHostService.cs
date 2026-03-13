@@ -28,7 +28,7 @@ public sealed class ProjectBuildCommandHostService
     /// </summary>
     public Task<ProjectBuildCommandHostExecutionResult> GeneratePlanAsync(ProjectBuildCommandPlanRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
         ValidateRequiredPath(request.PlanOutputPath, nameof(request.PlanOutputPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
@@ -37,7 +37,8 @@ public sealed class ProjectBuildCommandHostService
         command.Append(QuoteLiteral(request.PlanOutputPath));
         if (!string.IsNullOrWhiteSpace(request.ConfigPath))
         {
-            command.Append(" -ConfigPath ").Append(QuoteLiteral(request.ConfigPath));
+            var configPath = request.ConfigPath!;
+            command.Append(" -ConfigPath ").Append(QuoteLiteral(configPath));
         }
 
         return RunCommandAsync(
@@ -51,14 +52,15 @@ public sealed class ProjectBuildCommandHostService
     /// </summary>
     public Task<ProjectBuildCommandHostExecutionResult> ExecuteBuildAsync(ProjectBuildCommandBuildRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
         var command = new StringBuilder("Invoke-ProjectBuild -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false");
         if (!string.IsNullOrWhiteSpace(request.ConfigPath))
         {
-            command.Append(" -ConfigPath ").Append(QuoteLiteral(request.ConfigPath));
+            var configPath = request.ConfigPath!;
+            command.Append(" -ConfigPath ").Append(QuoteLiteral(configPath));
         }
 
         return RunCommandAsync(
@@ -73,7 +75,7 @@ public sealed class ProjectBuildCommandHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: !OperatingSystem.IsWindows(),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();

@@ -4,7 +4,7 @@
         Get-Module PSPublishModule | Remove-Module -Force -ErrorAction SilentlyContinue
 
         # Import the module fresh
-        $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
+        $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         Import-Module $moduleManifest -Force
     }
 

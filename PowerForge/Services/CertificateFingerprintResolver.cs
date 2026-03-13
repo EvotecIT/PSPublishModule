@@ -49,7 +49,7 @@ public sealed class CertificateFingerprintResolver
         store.Open(OpenFlags.ReadOnly);
         var certificate = store.Certificates.Cast<X509Certificate2>()
             .FirstOrDefault(candidate => NormalizeThumbprint(candidate.Thumbprint) == normalizedThumbprint);
-        return certificate?.GetCertHashString(HashAlgorithmName.SHA256);
+        return certificate is null ? null : FrameworkCompatibility.GetSha256Hex(certificate);
     }
 
     private static StoreLocation ParseStoreLocation(string storeName)

@@ -195,7 +195,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
     {
         if (!string.IsNullOrWhiteSpace(executableOverride))
         {
-            var overridePath = ResolveOnPath(executableOverride);
+            var overridePath = ResolveOnPath(executableOverride!);
             if (overridePath is not null)
                 return overridePath;
             if (File.Exists(executableOverride))
