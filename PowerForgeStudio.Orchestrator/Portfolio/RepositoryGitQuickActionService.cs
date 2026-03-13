@@ -67,7 +67,9 @@ public sealed class RepositoryGitQuickActionService
                 Kind: RepositoryGitQuickActionKind.GitCommand,
                 Payload: step.CommandText,
                 ExecuteLabel: "Run Here",
-                IsPrimary: step.IsPrimary));
+                IsPrimary: step.IsPrimary,
+                GitOperation: step.GitOperation ?? InferGitOperation(step.CommandText),
+                GitOperationArgument: step.GitOperationArgument));
         }
 
         return actions
@@ -80,6 +82,24 @@ public sealed class RepositoryGitQuickActionService
             .ThenBy(action => action.Kind)
             .ThenBy(action => action.Title, Comparer)
             .ToArray();
+    }
+
+    private static RepositoryGitOperationKind? InferGitOperation(string commandText)
+    {
+        if (string.Equals(commandText, "git status --short --branch", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.StatusShortBranch;
+        if (string.Equals(commandText, "git status --short", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.StatusShort;
+        if (string.Equals(commandText, "git rev-parse --show-toplevel", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.ShowTopLevel;
+        if (string.Equals(commandText, "git pull --rebase", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.PullRebase;
+        if (commandText.StartsWith("git switch -c ", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.CreateBranch;
+        if (commandText.StartsWith("git push --set-upstream ", StringComparison.OrdinalIgnoreCase))
+            return RepositoryGitOperationKind.SetUpstream;
+
+        return null;
     }
 
     private static bool CanExecuteDirectly(string commandText)

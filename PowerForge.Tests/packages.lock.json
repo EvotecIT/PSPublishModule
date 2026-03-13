@@ -855,7 +855,7 @@
           "YamlDotNet": "[15.1.2, )"
         }
       },
-      "powerforge.web.cli": {
+      "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
           "PowerForge.Web": "[1.0.0, )"

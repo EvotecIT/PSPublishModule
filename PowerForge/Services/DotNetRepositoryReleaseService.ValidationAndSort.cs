@@ -66,7 +66,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
 
             var latest = _resolver.ResolveLatest(
-                packageId: project.ProjectName,
+                packageId: string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId,
                 sources: versionSources,
                 credential: spec.VersionSourceCredential,
                 includePrerelease: spec.IncludePrerelease);

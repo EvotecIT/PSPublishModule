@@ -35,6 +35,13 @@ internal static partial class Program
       powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>]
                                        [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply]
                                        [--fail-on-delete-error] [--output json]
+      powerforge github caches prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--key <pattern[,pattern...]>]
+                                     [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply]
+                                     [--fail-on-delete-error] [--output json]
+      powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>]
+                                      [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo]
+                                      [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
+                                      [--skip-docker] [--no-docker-volumes] [--output json]
       --verbose, -Verbose              Enable verbose diagnostics
       --diagnostics                    Include logs in JSON output
       --quiet, -q                      Suppress non-essential output

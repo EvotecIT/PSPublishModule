@@ -143,6 +143,94 @@ powerforge github artifacts prune --name "test-results*,coverage*,github-pages"
 powerforge github artifacts prune --apply --keep 5 --max-age-days 7 --max-delete 200
 ```
 
+GitHub cache cleanup, runner housekeeping, and config-driven orchestration:
+
+```powershell
+# GitHub Actions cache cleanup (dry-run by default)
+powerforge github caches prune --key "ubuntu-*,windows-*" --keep 1 --max-age-days 14
+
+# Runner cleanup for hosted/self-hosted GitHub Actions runners
+powerforge github runner cleanup --apply --min-free-gb 20
+
+# Config-driven housekeeping (auto-loads .powerforge/github-housekeeping.json when present)
+powerforge github housekeeping --apply
+```
+
+The recommended cross-repo setup is one config file plus one reusable workflow:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
+  "repository": "EvotecIT/OfficeIMO",
+  "tokenEnvName": "GITHUB_TOKEN",
+  "artifacts": {
+    "enabled": true,
+    "keepLatestPerName": 10,
+    "maxAgeDays": 7
+  },
+  "caches": {
+    "enabled": true,
+    "keepLatestPerKey": 2,
+    "maxAgeDays": 14
+  },
+  "runner": {
+    "enabled": false
+  }
+}
+```
+
+```yaml
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  housekeeping:
+    uses: EvotecIT/PSPublishModule/.github/workflows/reusable-github-housekeeping.yml@main
+    with:
+      config-path: ./.powerforge/github-housekeeping.json
+    secrets: inherit
+```
+
+If you need direct action usage instead of the reusable workflow:
+
+```yaml
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  housekeeping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EvotecIT/PSPublishModule/.github/actions/github-housekeeping@main
+        with:
+          config-path: ./.powerforge/github-housekeeping.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+For release/build packaging, this repo now also ships a standard project-build entrypoint:
+
+```powershell
+.\Build\Build-Project.ps1
+.\Build\Build-Project.ps1 -Plan
+.\Build\Build-Project.ps1 -PublishNuget $true -PublishGitHub $true
+```
+
+For downloadable CLI binaries, use the tool release builders:
+
+```powershell
+# Build PowerForge.exe / PowerForge for one runtime
+.\Build\Build-PowerForge.ps1 -Tool PowerForge -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+
+# Build PowerForgeWeb.exe / PowerForgeWeb
+.\Build\Build-PowerForgeWeb.ps1 -Runtime win-x64 -Framework net8.0 -Flavor SingleFx -Zip
+
+# Optional: publish the generated zip assets to GitHub releases
+.\Build\Build-PowerForge.ps1 -Tool All -Runtime win-x64,linux-x64,osx-arm64 -Framework net8.0 -Flavor SingleFx -Zip -PublishGitHub
+```
+
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell

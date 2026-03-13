@@ -72,6 +72,8 @@ Staging and outputs
 - `StagingPath`: root directory for pipeline outputs (recommended).
   - Packages go to `<StagingPath>\packages` when `OutputPath` is not set.
   - Release zips go to `<StagingPath>\releases` when `ReleaseZipOutputPath` is not set.
+- When a project defines `<PackageId>`, project-build uses that package identity for NuGet version lookup,
+  planned `.nupkg` names, and release zip names. Otherwise it falls back to the csproj file name.
 - `CleanStaging`: if true, deletes the staging directory before a run.
 - `PlanOutputPath`: optional file path for a JSON plan output.
 

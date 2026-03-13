@@ -1,0 +1,29 @@
+name: GitHub Housekeeping
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Apply deletions (true/false)'
+        required: false
+        default: 'true'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: github-housekeeping-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  housekeeping:
+    uses: ./.github/workflows/reusable-github-housekeeping.yml
+    with:
+      config-path: ./.powerforge/github-housekeeping.json
+      apply: ${{ github.event_name == 'workflow_dispatch' && inputs.apply == 'true' || github.event_name != 'workflow_dispatch' }}
+      powerforge-ref: ${{ github.sha }}
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

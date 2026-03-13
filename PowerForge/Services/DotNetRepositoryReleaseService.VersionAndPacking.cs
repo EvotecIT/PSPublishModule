@@ -40,7 +40,7 @@ public sealed partial class DotNetRepositoryReleaseService
             return exact.ToString();
 
         var current = _resolver.ResolveLatest(
-            packageId: project.ProjectName,
+            packageId: string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId,
             sources: spec.VersionSources,
             credential: spec.VersionSourceCredential,
             includePrerelease: spec.IncludePrerelease);
@@ -97,7 +97,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 : Path.Combine(spec.RootPath, spec.OutputPath));
 
         if (string.IsNullOrWhiteSpace(outputPath)) return null;
-        return Path.Combine(outputPath, $"{project.ProjectName}.{version}.nupkg");
+        var packageId = string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId;
+        return Path.Combine(outputPath, $"{packageId}.{version}.nupkg");
     }
 
     private static int RunDotnetPack(string csproj, string workingDirectory, string configuration, string? outputPath, out string stdErr, out string stdOut)

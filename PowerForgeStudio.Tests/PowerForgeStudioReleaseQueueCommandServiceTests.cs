@@ -114,13 +114,7 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
             SessionId: Guid.NewGuid().ToString("N"),
             WorkspaceRoot: @"C:\Support\GitHub",
             CreatedAtUtc: DateTimeOffset.UtcNow,
-            Summary: new ReleaseQueueSummary(
-                TotalItems: 1,
-                BuildReadyItems: item.Stage == ReleaseQueueStage.Build && item.Status == ReleaseQueueItemStatus.ReadyToRun ? 1 : 0,
-                PreparePendingItems: item.Stage == ReleaseQueueStage.Prepare && item.Status == ReleaseQueueItemStatus.Pending ? 1 : 0,
-                WaitingApprovalItems: item.Status == ReleaseQueueItemStatus.WaitingApproval ? 1 : 0,
-                BlockedItems: item.Status is ReleaseQueueItemStatus.Blocked or ReleaseQueueItemStatus.Failed ? 1 : 0,
-                VerificationReadyItems: item.Stage == ReleaseQueueStage.Verify && item.Status == ReleaseQueueItemStatus.ReadyToRun ? 1 : 0),
+            Summary: ReleaseQueueSummaryFactory.Create([item]),
             Items: [item]);
 
     private static void DeleteParentDirectory(string databasePath)

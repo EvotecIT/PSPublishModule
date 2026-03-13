@@ -2,11 +2,11 @@ using System.Text.Json;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using PowerForge;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Verification;
-using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
@@ -158,7 +158,7 @@ public sealed class PowerForgeStudioVerificationExecutionServiceTests
 
         var queueItem = CreateVerifyReadyQueueItem(publishResult.RootPath, "Contoso.ReleaseOps", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(publishResult));
         using var client = new HttpClient(new StubHttpMessageHandler(request => CreateResponse(request.RequestUri)));
-        var service = new ReleaseVerificationExecutionService(client, (_, _, _) => Task.FromResult(new PowerShellExecutionResult(1, TimeSpan.Zero, string.Empty, string.Empty)));
+        var service = new ReleaseVerificationExecutionService(client, new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
 
         var result = await service.ExecuteAsync(queueItem);
 
@@ -193,30 +193,20 @@ public sealed class PowerForgeStudioVerificationExecutionServiceTests
 
         var queueItem = CreateVerifyReadyQueueItem(publishResult.RootPath, "ContosoModule", ReleaseRepositoryKind.Module, JsonSerializer.Serialize(publishResult));
         using var client = new HttpClient(new StubHttpMessageHandler(request => CreateResponse(request.RequestUri)));
-        Task<PowerShellExecutionResult> PowerShellResolver(string _, string script, CancellationToken __)
-        {
-            if (script.Contains("Get-PSResourceRepository", StringComparison.Ordinal))
-            {
-                return Task.FromResult(new PowerShellExecutionResult(
-                    0,
-                    TimeSpan.Zero,
-                    "{\"Name\":\"PrivateGallery\",\"SourceUri\":\"https://packages.contoso.test/powershell/v3/index.json\",\"PublishUri\":\"https://packages.contoso.test/powershell/api/v2/package\"}",
-                    string.Empty));
-            }
+        var service = new ReleaseVerificationExecutionService(
+            client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(request => {
+                if (request.CommandText is not null && request.CommandText.Contains("Get-PSResourceRepository", StringComparison.Ordinal))
+                {
+                    return new PowerShellRunResult(
+                        0,
+                        "{\"Name\":\"PrivateGallery\",\"SourceUri\":\"https://packages.contoso.test/powershell/v3/index.json\",\"PublishUri\":\"https://packages.contoso.test/powershell/api/v2/package\"}",
+                        string.Empty,
+                        "pwsh");
+                }
 
-            if (script.Contains("Import-PowerShellDataFile", StringComparison.Ordinal))
-            {
-                return Task.FromResult(new PowerShellExecutionResult(
-                    0,
-                    TimeSpan.Zero,
-                    "{\"ModuleName\":\"ContosoModule\",\"ModuleVersion\":\"2.5.0\",\"PreRelease\":\"preview1\"}",
-                    string.Empty));
-            }
-
-            return Task.FromResult(new PowerShellExecutionResult(1, TimeSpan.Zero, string.Empty, "Unexpected script"));
-        }
-
-        var service = new ReleaseVerificationExecutionService(client, PowerShellResolver);
+                return new PowerShellRunResult(1, string.Empty, "Unexpected script", "pwsh");
+            })));
         var result = await service.ExecuteAsync(queueItem);
 
         Assert.True(result.Succeeded);
@@ -304,6 +294,19 @@ public sealed class PowerForgeStudioVerificationExecutionServiceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(responseFactory(request));
+    }
+
+    private sealed class StubPowerShellRunner : IPowerShellRunner
+    {
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _execute;
+
+        public StubPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> execute)
+        {
+            _execute = execute;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _execute(request);
     }
 
     private sealed class TemporaryPackageScope(string rootPath, string packagePath) : IDisposable

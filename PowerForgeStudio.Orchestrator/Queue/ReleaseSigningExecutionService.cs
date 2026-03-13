@@ -1,18 +1,42 @@
-using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
+using PowerForge;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
-using PowerForgeStudio.Orchestrator.Portfolio;
-using PowerForgeStudio.Orchestrator.PowerShell;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionService
 {
     private static readonly string[] AuthenticodeDirectoryIncludes = ["*.ps1", "*.psm1", "*.psd1", "*.dll", "*.exe", "*.cat"];
-    private readonly ReleaseBuildCheckpointReader _checkpointReader = new();
-    private readonly PowerShellCommandRunner _powerShellCommandRunner = new();
+    private readonly ReleaseBuildCheckpointReader _checkpointReader;
+    private readonly ReleaseSigningHostSettingsResolver _settingsResolver;
+    private readonly CertificateFingerprintResolver _certificateFingerprintResolver;
+    private readonly Func<AuthenticodeSigningHostRequest, CancellationToken, Task<AuthenticodeSigningHostResult>> _signAuthenticodeAsync;
+    private readonly Func<DotNetNuGetSignRequest, CancellationToken, Task<DotNetNuGetSignResult>> _signNuGetPackageAsync;
+
+    public ReleaseSigningExecutionService()
+        : this(
+            new ReleaseBuildCheckpointReader(),
+            new ReleaseSigningHostSettingsResolver(PowerForgeStudioHostPaths.ResolvePSPublishModulePath),
+            new CertificateFingerprintResolver(),
+            (request, cancellationToken) => new AuthenticodeSigningHostService().SignAsync(request, cancellationToken),
+            (request, cancellationToken) => new DotNetNuGetClient().SignPackageAsync(request, cancellationToken))
+    {
+    }
+
+    internal ReleaseSigningExecutionService(
+        ReleaseBuildCheckpointReader checkpointReader,
+        ReleaseSigningHostSettingsResolver settingsResolver,
+        CertificateFingerprintResolver certificateFingerprintResolver,
+        Func<AuthenticodeSigningHostRequest, CancellationToken, Task<AuthenticodeSigningHostResult>> signAuthenticodeAsync,
+        Func<DotNetNuGetSignRequest, CancellationToken, Task<DotNetNuGetSignResult>> signNuGetPackageAsync)
+    {
+        _checkpointReader = checkpointReader;
+        _settingsResolver = settingsResolver;
+        _certificateFingerprintResolver = certificateFingerprintResolver;
+        _signAuthenticodeAsync = signAuthenticodeAsync;
+        _signNuGetPackageAsync = signNuGetPackageAsync;
+    }
 
     public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
     {
@@ -29,7 +53,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
                 Receipts: []);
         }
 
-        var settings = ResolveSettings();
+        var settings = _settingsResolver.Resolve();
         if (!settings.IsConfigured)
         {
             return new ReleaseSigningExecutionResult(
@@ -73,7 +97,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
     private async Task<ReleaseSigningReceipt> SignArtifactAsync(
         string rootPath,
         ReleaseSigningArtifact artifact,
-        SigningSettings settings,
+        ReleaseSigningHostSettings settings,
         CancellationToken cancellationToken)
     {
         var timestamp = DateTimeOffset.UtcNow;
@@ -139,7 +163,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
         ReleaseSigningArtifact artifact,
         string signingPath,
         IReadOnlyList<string> includePatterns,
-        SigningSettings settings,
+        ReleaseSigningHostSettings settings,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken)
     {
@@ -148,9 +172,15 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             return FailedReceipt(rootPath, artifact, $"Signing path '{signingPath}' was not found.", timestamp);
         }
 
-        var script = BuildRegisterCertificateScript(signingPath, includePatterns, settings);
-        var execution = await _powerShellCommandRunner.RunCommandAsync(signingPath, script, cancellationToken);
-        var succeeded = execution.ExitCode == 0;
+        var execution = await _signAuthenticodeAsync(new AuthenticodeSigningHostRequest {
+            SigningPath = signingPath,
+            IncludePatterns = includePatterns,
+            ModulePath = settings.ModulePath,
+            Thumbprint = settings.Thumbprint!,
+            StoreName = settings.StoreName,
+            TimeStampServer = settings.TimeStampServer
+        }, cancellationToken);
+        var succeeded = execution.Succeeded;
         var detail = succeeded
             ? "Authenticode signing completed."
             : FirstLine(execution.StandardError) ?? FirstLine(execution.StandardOutput) ?? "Register-Certificate failed.";
@@ -166,64 +196,34 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             SignedAtUtc: timestamp);
     }
 
-    private static string BuildRegisterCertificateScript(string signingPath, IReadOnlyList<string> includePatterns, SigningSettings settings)
-    {
-        var includes = string.Join(", ", includePatterns.Select(pattern => PowerShellScriptEscaping.QuoteLiteral(pattern)));
-        return string.Join("; ", new[] {
-            "$ErrorActionPreference = 'Stop'",
-            BuildModuleImportClause(settings.ModulePath),
-            $"Register-Certificate -Path {PowerShellScriptEscaping.QuoteLiteral(signingPath)} -LocalStore {settings.StoreName} -Thumbprint {PowerShellScriptEscaping.QuoteLiteral(settings.Thumbprint!)} -TimeStampServer {PowerShellScriptEscaping.QuoteLiteral(settings.TimeStampServer)} -Include @({includes}) -Confirm:$false -WarningAction Stop -ErrorAction Stop | Out-Null"
-        });
-    }
-
-    private async Task<(bool Succeeded, string? ErrorMessage)> SignNuGetPackageAsync(ReleaseSigningArtifact artifact, SigningSettings settings, CancellationToken cancellationToken)
+    private async Task<(bool Succeeded, string? ErrorMessage)> SignNuGetPackageAsync(ReleaseSigningArtifact artifact, ReleaseSigningHostSettings settings, CancellationToken cancellationToken)
     {
         if (!File.Exists(artifact.ArtifactPath))
         {
             return (false, $"Package '{artifact.ArtifactPath}' was not found.");
         }
 
-        var sha256 = TryGetCertificateSha256(settings.Thumbprint!, settings.StoreName);
+        var sha256 = _certificateFingerprintResolver.ResolveSha256(settings.Thumbprint!, settings.StoreName);
         if (string.IsNullOrWhiteSpace(sha256))
         {
             return (false, $"Unable to resolve SHA256 certificate fingerprint for thumbprint {settings.Thumbprint}.");
         }
 
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo {
-            FileName = "dotnet",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        process.StartInfo.ArgumentList.Add("nuget");
-        process.StartInfo.ArgumentList.Add("sign");
-        process.StartInfo.ArgumentList.Add(artifact.ArtifactPath);
-        process.StartInfo.ArgumentList.Add("--certificate-fingerprint");
-        process.StartInfo.ArgumentList.Add(sha256);
-        process.StartInfo.ArgumentList.Add("--certificate-store-location");
-        process.StartInfo.ArgumentList.Add(settings.StoreName);
-        process.StartInfo.ArgumentList.Add("--certificate-store-name");
-        process.StartInfo.ArgumentList.Add("My");
-        process.StartInfo.ArgumentList.Add("--timestamper");
-        process.StartInfo.ArgumentList.Add(settings.TimeStampServer);
-        process.StartInfo.ArgumentList.Add("--overwrite");
+        var result = await _signNuGetPackageAsync(
+            new DotNetNuGetSignRequest(
+                packagePath: artifact.ArtifactPath,
+                certificateFingerprint: sha256,
+                certificateStoreLocation: settings.StoreName,
+                timeStampServer: settings.TimeStampServer,
+                workingDirectory: Path.GetDirectoryName(artifact.ArtifactPath)),
+            cancellationToken).ConfigureAwait(false);
 
-        process.Start();
-        var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        var stdOut = await stdOutTask;
-        var stdErr = await stdErrTask;
-
-        if (process.ExitCode == 0)
+        if (result.Succeeded)
         {
             return (true, null);
         }
 
-        var error = FirstLine(stdErr) ?? FirstLine(stdOut) ?? $"dotnet nuget sign failed with exit code {process.ExitCode}.";
-        return (false, error);
+        return (false, result.ErrorMessage);
     }
 
     private static bool IsAuthenticodeFile(string extension)
@@ -251,68 +251,6 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             SignedAtUtc: timestamp);
     }
 
-    private static SigningSettings ResolveSettings()
-    {
-        var thumbprint = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_SIGN_THUMBPRINT");
-        var storeName = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_SIGN_STORE");
-        var timeStampServer = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_SIGN_TIMESTAMP_URL");
-        var modulePath = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_PSPUBLISHMODULE_PATH");
-
-        modulePath = string.IsNullOrWhiteSpace(modulePath)
-            ? PSPublishModuleLocator.ResolveModulePath()
-            : modulePath;
-
-        if (string.IsNullOrWhiteSpace(timeStampServer))
-        {
-            timeStampServer = "http://timestamp.digicert.com";
-        }
-
-        if (string.IsNullOrWhiteSpace(storeName))
-        {
-            storeName = "CurrentUser";
-        }
-
-        if (string.IsNullOrWhiteSpace(thumbprint))
-        {
-            return new SigningSettings(false, null, storeName, timeStampServer, modulePath, "Signing is not configured. Set RELEASE_OPS_STUDIO_SIGN_THUMBPRINT first.");
-        }
-
-        return new SigningSettings(true, thumbprint, storeName, timeStampServer, modulePath, null);
-    }
-
-    private static string? TryGetCertificateSha256(string thumbprint, string storeName)
-    {
-        try
-        {
-            var location = string.Equals(storeName, "LocalMachine", StringComparison.OrdinalIgnoreCase)
-                ? StoreLocation.LocalMachine
-                : StoreLocation.CurrentUser;
-            using var store = new X509Store(StoreName.My, location);
-            store.Open(OpenFlags.ReadOnly);
-            var normalized = NormalizeThumbprint(thumbprint);
-            var certificate = store.Certificates.Cast<X509Certificate2>()
-                .FirstOrDefault(candidate => NormalizeThumbprint(candidate.Thumbprint) == normalized);
-            return certificate?.GetCertHashString(HashAlgorithmName.SHA256);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string NormalizeThumbprint(string? thumbprint)
-        => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
-
-    private static string BuildModuleImportClause(string modulePath)
-    {
-        if (File.Exists(modulePath))
-        {
-            return $"try {{ Import-Module {PowerShellScriptEscaping.QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}";
-        }
-
-        return "Import-Module PSPublishModule -Force -ErrorAction Stop";
-    }
-
     private static string? FirstLine(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -322,12 +260,4 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
 
         return value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
     }
-
-    private sealed record SigningSettings(
-        bool IsConfigured,
-        string? Thumbprint,
-        string StoreName,
-        string TimeStampServer,
-        string ModulePath,
-        string? MissingConfigurationMessage);
 }

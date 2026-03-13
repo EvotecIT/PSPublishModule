@@ -1,0 +1,44 @@
+name: PowerForge GitHub Housekeeping
+description: Run config-driven GitHub housekeeping using PowerForge.Cli.
+
+inputs:
+  config-path:
+    description: Path to the housekeeping config file inside the checked-out repository.
+    required: false
+    default: ".powerforge/github-housekeeping.json"
+  apply:
+    description: When true, apply deletions. When false, run in dry-run mode.
+    required: false
+    default: "true"
+  github-token:
+    description: Optional token override for remote GitHub cleanup.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: ${{ github.action_path }}/../../global.json
+
+    - name: Build PowerForge CLI
+      shell: pwsh
+      run: |
+        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
+        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
+        dotnet build $project -c Release
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    - name: Run GitHub housekeeping
+      shell: pwsh
+      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
+        INPUT_APPLY: ${{ inputs.apply }}
+        POWERFORGE_GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}

@@ -8,6 +8,9 @@ Last updated: 2026-03-09
 PowerForge/PSPublishModule module builds, project builds, signing, publish approvals, and repo health
 across the maintainer's GitHub workspace.
 
+Architecture regroup note:
+- before adding more Studio execution features, follow `Docs\PowerForgeStudio.RegroupPlan.md` as the boundary contract for shared PowerForge reuse, thin cmdlets, and future provider integrations.
+
 The name is intentionally provisional. The architecture should assume the product name may change
 without forcing namespace or storage rewrites outside the new app projects.
 

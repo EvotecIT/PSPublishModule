@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitHub Housekeeping Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "ApiBaseUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Repository": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Token": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "TokenEnvName": {
+      "type": "string"
+    },
+    "DryRun": {
+      "type": "boolean"
+    },
+    "Artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IncludeNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ExcludeNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "KeepLatestPerName": { "type": "integer", "minimum": 0 },
+        "MaxAgeDays": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "MaxDelete": { "type": "integer", "minimum": 1 },
+        "PageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "FailOnDeleteError": { "type": "boolean" }
+      }
+    },
+    "Caches": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IncludeKeys": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ExcludeKeys": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "KeepLatestPerKey": { "type": "integer", "minimum": 0 },
+        "MaxAgeDays": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "MaxDelete": { "type": "integer", "minimum": 1 },
+        "PageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "FailOnDeleteError": { "type": "boolean" }
+      }
+    },
+    "Runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "RunnerTempPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "WorkRootPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "RunnerRootPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "DiagnosticsRootPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ToolCachePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "MinFreeGb": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "AggressiveThresholdGb": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "DiagnosticsRetentionDays": { "type": "integer", "minimum": 0 },
+        "ActionsRetentionDays": { "type": "integer", "minimum": 0 },
+        "ToolCacheRetentionDays": { "type": "integer", "minimum": 0 },
+        "Aggressive": { "type": "boolean" },
+        "CleanDiagnostics": { "type": "boolean" },
+        "CleanRunnerTemp": { "type": "boolean" },
+        "CleanActionsCache": { "type": "boolean" },
+        "CleanToolCache": { "type": "boolean" },
+        "ClearDotNetCaches": { "type": "boolean" },
+        "PruneDocker": { "type": "boolean" },
+        "IncludeDockerVolumes": { "type": "boolean" },
+        "AllowSudo": { "type": "boolean" }
+      }
+    }
+  }
+}

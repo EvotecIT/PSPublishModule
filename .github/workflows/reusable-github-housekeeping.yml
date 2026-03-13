@@ -1,0 +1,48 @@
+name: Reusable GitHub Housekeeping
+
+on:
+  workflow_call:
+    inputs:
+      config-path:
+        description: Path to the housekeeping config file in the caller repository.
+        required: false
+        default: ".powerforge/github-housekeeping.json"
+        type: string
+      apply:
+        description: Whether the run should apply deletions.
+        required: false
+        default: true
+        type: boolean
+      powerforge-ref:
+        description: PSPublishModule ref used to resolve the shared housekeeping action.
+        required: false
+        default: "main"
+        type: string
+    secrets:
+      github-token:
+        required: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  housekeeping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout PSPublishModule
+        uses: actions/checkout@v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs['powerforge-ref'] }}
+          path: .powerforge/pspublishmodule
+
+      - name: Run PowerForge housekeeping
+        uses: ./.powerforge/pspublishmodule/.github/actions/github-housekeeping
+        with:
+          config-path: ${{ inputs['config-path'] }}
+          apply: ${{ inputs.apply && 'true' || 'false' }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
