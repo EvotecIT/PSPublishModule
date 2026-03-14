@@ -74,7 +74,7 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            EnsureBuildDependenciesInstalledIfNeeded(plan);
+            var dependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
 
             ModuleBuildPipeline.StagingResult staged;
             SafeStart(reporter, startedKeys, stageStep);
@@ -104,7 +104,8 @@ public sealed partial class ModulePipelineRunner
                 throw;
             }
 
-            var mergedScripts = plan.BuildSpec.RefreshManifestOnly ? false : ApplyMerge(plan, buildResult);
+            var mergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
+            var mergedScripts = mergeExecution.MergedModule;
             if (!plan.BuildSpec.RefreshManifestOnly)
                 ApplyPlaceholders(plan, buildResult);
 
@@ -280,8 +281,6 @@ public sealed partial class ModulePipelineRunner
                 _logger.Warn($"Post-format manifest patch failed. {ex.Message}");
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
-
-            SyncRefreshManifestToProjectRoot(plan);
 
             if (plan.SignModule)
             {
@@ -725,10 +724,6 @@ public sealed partial class ModulePipelineRunner
                     throw;
                 }
             }
-
-            SyncPublishedManifestToProjectRoot(
-                plan,
-                publishResults);
         }
 
         ModuleInstallerResult? installResult = null;
@@ -779,6 +774,8 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        var projectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
+
         return BuildPipelineResult(
             spec,
             plan,
@@ -800,7 +797,11 @@ public sealed partial class ModulePipelineRunner
             projectFileConsistencyStatus,
             projectFileConsistencyEncodingFix,
             projectFileConsistencyLineEndingFix,
-            signingResult);
+            signingResult,
+            dependencyInstallResults,
+            staged,
+            mergeExecution,
+            projectManifestSyncMessage);
         }
         catch (Exception ex)
         {

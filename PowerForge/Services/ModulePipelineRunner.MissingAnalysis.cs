@@ -530,4 +530,58 @@ public sealed partial class ModulePipelineRunner
         public bool HasScripts => ScriptFiles.Length > 0;
     }
 
+    private sealed class MergeExecutionResult
+    {
+        internal static readonly MergeExecutionResult None = new(
+            mergedModule: false,
+            usedExistingPsm1: false,
+            retainedBootstrapperBecauseBinaryOutputsDetected: false,
+            requiredModules: Array.Empty<RequiredModuleReference>(),
+            approvedModules: Array.Empty<string>(),
+            dependentModules: Array.Empty<string>(),
+            topLevelInlinedFunctions: 0,
+            totalInlinedFunctions: 0,
+            scriptFilesDetected: 0,
+            hasBinaryOutputs: false,
+            hasScriptSources: false);
+
+        internal bool MergedModule { get; }
+        internal bool UsedExistingPsm1 { get; }
+        internal bool RetainedBootstrapperBecauseBinaryOutputsDetected { get; }
+        internal RequiredModuleReference[] RequiredModules { get; }
+        internal string[] ApprovedModules { get; }
+        internal string[] DependentModules { get; }
+        internal int TopLevelInlinedFunctions { get; }
+        internal int TotalInlinedFunctions { get; }
+        internal int ScriptFilesDetected { get; }
+        internal bool HasBinaryOutputs { get; }
+        internal bool HasScriptSources { get; }
+
+        internal MergeExecutionResult(
+            bool mergedModule,
+            bool usedExistingPsm1,
+            bool retainedBootstrapperBecauseBinaryOutputsDetected,
+            RequiredModuleReference[] requiredModules,
+            string[] approvedModules,
+            string[] dependentModules,
+            int topLevelInlinedFunctions,
+            int totalInlinedFunctions,
+            int scriptFilesDetected,
+            bool hasBinaryOutputs,
+            bool hasScriptSources)
+        {
+            MergedModule = mergedModule;
+            UsedExistingPsm1 = usedExistingPsm1;
+            RetainedBootstrapperBecauseBinaryOutputsDetected = retainedBootstrapperBecauseBinaryOutputsDetected;
+            RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
+            ApprovedModules = approvedModules ?? Array.Empty<string>();
+            DependentModules = dependentModules ?? Array.Empty<string>();
+            TopLevelInlinedFunctions = topLevelInlinedFunctions;
+            TotalInlinedFunctions = totalInlinedFunctions;
+            ScriptFilesDetected = scriptFilesDetected;
+            HasBinaryOutputs = hasBinaryOutputs;
+            HasScriptSources = hasScriptSources;
+        }
+    }
+
 }

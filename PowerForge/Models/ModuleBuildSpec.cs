@@ -79,6 +79,17 @@ public sealed class ModuleBuildSpec
     public string[] BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Declared module names that should be treated as higher-priority during binary conflict analysis.
+    /// This helps distinguish true module dependency overlap from unrelated locally installed modules.
+    /// </summary>
+    public string[] BinaryConflictPriorityModuleNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional project-root path used for writing human-readable binary conflict reports.
+    /// </summary>
+    public string? BinaryConflictReportRoot { get; set; }
+
+    /// <summary>
     /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
     /// </summary>
     public string[] ExcludeLibraryFilter { get; set; } = Array.Empty<string>();

@@ -530,6 +530,12 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
+            BinaryConflictPriorityModuleNames = requiredModulesDraft
+                .Select(static module => module.ModuleName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            BinaryConflictReportRoot = projectRoot,
             KeepStaging = spec.Build.KeepStaging,
             RefreshManifestOnly = refreshPsd1Only
         };

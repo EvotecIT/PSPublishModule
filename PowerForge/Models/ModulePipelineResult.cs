@@ -116,6 +116,11 @@ public sealed class ModulePipelineResult
     public ArtefactBuildResult[] ArtefactResults { get; }
 
     /// <summary>
+    /// Owner-facing notes captured during the run for the final summary.
+    /// </summary>
+    public ModuleOwnerNote[] OwnerNotes { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModulePipelineResult(
@@ -140,7 +145,8 @@ public sealed class ModulePipelineResult
         CheckStatus? projectRootFileConsistencyStatus = null,
         ProjectConversionResult? projectRootFileConsistencyEncodingFix = null,  
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null,
-        ModuleSigningResult? signingResult = null)
+        ModuleSigningResult? signingResult = null,
+        ModuleOwnerNote[]? ownerNotes = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -164,5 +170,6 @@ public sealed class ModulePipelineResult
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;
+        OwnerNotes = ownerNotes ?? Array.Empty<ModuleOwnerNote>();
     }
 }

@@ -14,14 +14,20 @@ public sealed class ModuleBuildResult
     /// <summary>Exports detected and written into the manifest.</summary>
     public ExportSet Exports { get; }
 
+    internal ModuleOwnerNote[] BuildNotes { get; }
+
     /// <summary>
     /// Creates a new result instance.
     /// </summary>
-    public ModuleBuildResult(string stagingPath, string manifestPath, ExportSet exports)
+    public ModuleBuildResult(
+        string stagingPath,
+        string manifestPath,
+        ExportSet exports,
+        ModuleOwnerNote[]? buildNotes = null)
     {
         StagingPath = stagingPath;
         ManifestPath = manifestPath;
         Exports = exports;
+        BuildNotes = buildNotes ?? System.Array.Empty<ModuleOwnerNote>();
     }
 }
-
