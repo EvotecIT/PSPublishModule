@@ -322,6 +322,8 @@ public sealed class ModuleBuildPipeline
         catch (Exception ex)
         {
             _logger.Warn($"Mixed line-ending normalization in staging failed: {ex.Message}");
+            // This outer catch can fire before the converter returns per-file totals, so the error count is an
+            // approximate "normalization failed" signal rather than an exact count of failed files.
             return (0, 1);
         }
     }

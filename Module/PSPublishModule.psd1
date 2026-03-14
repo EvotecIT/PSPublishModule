@@ -9,28 +9,29 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '3.0.0'
+    ModuleVersion          = '3.0.1'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
-            IconUri                  = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-            ProjectUri               = 'https://github.com/EvotecIT/PSPublishModule'
-            RequireLicenseAcceptance = $false
-            Tags                     = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
+            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
+            ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
+            RequireLicenseAcceptance   = $false
+            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
+            ExternalModuleDependencies = @()
         }
     }
     RequiredModules        = @(@{
-            Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
-            ModuleName    = 'powershellget'
-            ModuleVersion = '2.2.5'
+            Guid            = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
+            ModuleName      = 'powershellget'
+            ModuleVersion   = '2.2.5'
         }, @{
-            Guid          = 'd6245802-193d-4068-a631-8863a4342a18'
-            ModuleName    = 'PSScriptAnalyzer'
-            ModuleVersion = '1.24.0'
+            Guid            = 'd6245802-193d-4068-a631-8863a4342a18'
+            ModuleName      = 'PSScriptAnalyzer'
+            ModuleVersion   = '1.24.0'
         }, @{
-            Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
-            ModuleName    = 'Pester'
-            ModuleVersion = '5.7.1'
+            Guid            = 'a699dea5-2c73-4616-a270-1f7abb777e71'
+            ModuleName      = 'Pester'
+            ModuleVersion   = '5.7.1'
         })
     RootModule             = 'PSPublishModule.psm1'
     NestedModules          = @()

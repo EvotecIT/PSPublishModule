@@ -34,7 +34,6 @@ internal sealed class ModuleBuildPreparationService
                 : LegacySegmentAdapter.CollectFromSettings(request.Settings))
             : Array.Empty<IConfigurationSegment>();
 
-        var baseVersion = ResolveBaseVersion(projectRoot, moduleName!);
         var frameworks = useLegacy && !request.DotNetFrameworkWasBound
             ? Array.Empty<string>()
             : request.DotNetFramework;
@@ -47,7 +46,7 @@ internal sealed class ModuleBuildPreparationService
                 SourcePath = projectRoot,
                 StagingPath = request.StagingPath,
                 CsprojPath = request.CsprojPath,
-                Version = baseVersion,
+                Version = "1.0.0",
                 Configuration = request.DotNetConfiguration,
                 Frameworks = frameworks,
                 KeepStaging = request.KeepStaging,
@@ -75,6 +74,8 @@ internal sealed class ModuleBuildPreparationService
             },
             Segments = segments
         };
+
+        spec.Build.Version = ResolveBaseVersion(projectRoot, moduleName!, segments);
 
         return new ModuleBuildPreparedContext
         {
@@ -108,6 +109,37 @@ internal sealed class ModuleBuildPreparationService
 
         var json = JsonSerializer.Serialize(spec, opts) + Environment.NewLine;
         File.WriteAllText(jsonFullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static string ResolveBaseVersion(string projectRoot, string moduleName, IReadOnlyList<IConfigurationSegment>? segments)
+    {
+        var configuredVersion = ResolveConfiguredVersion(segments);
+        if (!string.IsNullOrWhiteSpace(configuredVersion))
+            return configuredVersion!;
+
+        return ResolveBaseVersion(projectRoot, moduleName);
+    }
+
+    private static string? ResolveConfiguredVersion(IReadOnlyList<IConfigurationSegment>? segments)
+    {
+        if (segments is null || segments.Count == 0)
+            return null;
+
+        for (var index = segments.Count - 1; index >= 0; index--)
+        {
+            if (segments[index] is not ConfigurationManifestSegment manifest)
+                continue;
+
+            var moduleVersion = manifest.Configuration?.ModuleVersion;
+            if (!string.IsNullOrWhiteSpace(moduleVersion))
+            {
+                var trimmed = (moduleVersion ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(trimmed))
+                    return trimmed;
+            }
+        }
+
+        return null;
     }
 
     private static string ResolveBaseVersion(string projectRoot, string moduleName)

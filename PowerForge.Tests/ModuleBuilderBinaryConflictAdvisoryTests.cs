@@ -65,6 +65,47 @@ public sealed class ModuleBuilderBinaryConflictAdvisoryTests
         Assert.Contains("LegacyModule 1.0.0", advisory.Actionability, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void WriteBinaryConflictReport_WritesDedupedModulesAndExactVersionPairs()
+    {
+        var result = new BinaryConflictDetectionResult(
+            powerShellEdition: "Desktop",
+            moduleRoot: @"C:\Repo\TestModule",
+            assemblyRootPath: @"C:\Repo\TestModule\Lib\Default",
+            assemblyRootRelativePath: @"Lib\Default",
+            issues: new[]
+            {
+                CreateIssue("System.Memory", "4.0.5.0", "LegacyModule", "1.0.0", "4.0.1.2", 1),
+                CreateIssue("System.Text.Json", "9.0.0.0", "LegacyModule", "2.0.0", "8.0.0.6", 1),
+                CreateIssue("System.Memory", "4.0.5.0", "OtherModule", "3.0.0", "4.0.6.0", -1)
+            },
+            summary: "3 conflicts across 1 module source");
+
+        var advisory = ModuleBuilder.BuildBinaryConflictAdvisorySummary(result);
+        var reportsRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-binary-conflict-report-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var builder = new ModuleBuilder(new NullLogger());
+            var reportPath = builder.WriteBinaryConflictReport(reportsRoot.FullName, advisory, result);
+
+            Assert.False(string.IsNullOrWhiteSpace(reportPath));
+            Assert.True(File.Exists(reportPath), "Expected binary conflict report file to exist.");
+
+            var text = File.ReadAllText(reportPath!);
+            Assert.Contains("Binary conflict report for Desktop", text, StringComparison.Ordinal);
+            Assert.Contains("Installed modules below already keep only the newest installed version per module name.", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("LegacyModule 1.0.0", text, StringComparison.Ordinal);
+            Assert.Contains("LegacyModule 2.0.0", text, StringComparison.Ordinal);
+            Assert.Contains("System.Text.Json: ours 9.0.0.0, theirs 8.0.0.6 (ours newer)", text, StringComparison.Ordinal);
+            Assert.Contains("OtherModule 3.0.0", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { reportsRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static BinaryConflictDetectionIssue CreateIssue(
         string assemblyName,
         string payloadAssemblyVersion,

@@ -236,22 +236,6 @@ public sealed partial class ModulePipelineRunner
         return notes.ToArray();
     }
 
-    private static string SummarizeItems(IEnumerable<string>? items, int maxItems)
-    {
-        var values = (items ?? Array.Empty<string>())
-            .Where(static item => !string.IsNullOrWhiteSpace(item))
-            .Select(static item => item.Trim())
-            .ToArray();
-
-        if (values.Length == 0)
-            return "none";
-
-        if (values.Length <= maxItems)
-            return string.Join(", ", values);
-
-        return string.Join(", ", values.Take(maxItems)) + $", +{values.Length - maxItems} more";
-    }
-
     private BuildDiagnostic[] CreateBinaryConflictDiagnostics(
         ModulePipelineDiagnosticsOptions? options,
         ModulePipelinePlan plan,

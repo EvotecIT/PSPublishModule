@@ -505,7 +505,7 @@ public sealed class ModuleBuilder
             editionStatuses.Add((result.PowerShellEdition, true));
             var reportPath = WriteBinaryConflictReport(opts.BinaryConflictReportRoot, advisory, result);
             _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
-            _logger.Warn($"  Scope: {BuildBinaryConflictScopeText(advisory)}");
+            _logger.Warn($"  Scope: {BuildDeclaredDependencyModulesText(advisory)}");
 
             foreach (var module in advisory.AllModules)
             {
@@ -611,33 +611,12 @@ public sealed class ModuleBuilder
                     : moduleName + " " + moduleVersion;
                 return new BinaryConflictModuleSummary(
                     moduleLabel: label,
-                    isPriority: priorityNames.Contains(moduleName, StringComparer.OrdinalIgnoreCase),
                     conflictCount: group.Count(),
                     distinctAssemblies: group
                         .Select(static issue => issue.AssemblyName)
                         .Where(static name => !string.IsNullOrWhiteSpace(name))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Count(),
-                    topAssemblies: group
-                        .Select(static issue => issue.AssemblyName)
-                        .Where(static name => !string.IsNullOrWhiteSpace(name))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                        .Take(3)
-                        .ToArray(),
-                    examples: group
-                        .GroupBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
-                        .Select(static assemblyGroup => assemblyGroup
-                            .OrderByDescending(static issue => Math.Abs(issue.VersionComparison))
-                            .ThenBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
-                            .First())
-                        .OrderBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
-                        .Take(2)
-                        .Select(static issue => new BinaryConflictExampleSummary(
-                            issue.AssemblyName,
-                            issue.PayloadAssemblyVersion,
-                            issue.InstalledAssemblyVersion))
-                        .ToArray(),
                     mismatches: group
                         .GroupBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
                         .Select(static assemblyGroup => assemblyGroup
@@ -774,7 +753,7 @@ public sealed class ModuleBuilder
         return details.ToArray();
     }
 
-    private string? WriteBinaryConflictReport(
+    internal string? WriteBinaryConflictReport(
         string? reportRoot,
         BinaryConflictAdvisorySummary advisory,
         BinaryConflictDetectionResult result)
@@ -820,11 +799,6 @@ public sealed class ModuleBuilder
             _logger.Verbose($"Failed to write binary conflict report. {ex.Message}");
             return null;
         }
-    }
-
-    private static string BuildBinaryConflictScopeText(BinaryConflictAdvisorySummary advisory)
-    {
-        return BuildDeclaredDependencyModulesText(advisory);
     }
 
     private static string BuildBinaryConflictSessionLabel(string? powerShellEdition)
@@ -879,12 +853,6 @@ public sealed class ModuleBuilder
     {
         var prefix = includeModuleLabel ? module.ModuleLabel + ": " : string.Empty;
         return $"{prefix}{module.DistinctAssemblies} shared assemblies differ; {BuildBinaryConflictVersionDirectionText(module)}.";
-    }
-
-    private static string BuildBinaryConflictModuleOwnerDetail(BinaryConflictModuleSummary module, bool includeModuleLabel)
-    {
-        var prefix = includeModuleLabel ? module.ModuleLabel + ": " : string.Empty;
-        return $"{prefix}{module.DistinctAssemblies} shared assemblies differ; {BuildBinaryConflictVersionDirectionText(module)}; {BuildBinaryConflictModuleCheckText(module)}";
     }
 
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm, PublishCopyOptions options)
@@ -1310,32 +1278,23 @@ public sealed class ModuleBuilder
     internal sealed class BinaryConflictModuleSummary
     {
         internal string ModuleLabel { get; }
-        internal bool IsPriority { get; }
         internal int ConflictCount { get; }
         internal int DistinctAssemblies { get; }
-        internal string[] TopAssemblies { get; }
-        internal BinaryConflictExampleSummary[] Examples { get; }
         internal BinaryConflictExampleSummary[] Mismatches { get; }
         internal int PayloadNewerCount { get; }
         internal int PayloadOlderCount { get; }
 
         internal BinaryConflictModuleSummary(
             string moduleLabel,
-            bool isPriority,
             int conflictCount,
             int distinctAssemblies,
-            string[] topAssemblies,
-            BinaryConflictExampleSummary[] examples,
             BinaryConflictExampleSummary[] mismatches,
             int payloadNewerCount,
             int payloadOlderCount)
         {
             ModuleLabel = moduleLabel ?? string.Empty;
-            IsPriority = isPriority;
             ConflictCount = conflictCount;
             DistinctAssemblies = distinctAssemblies;
-            TopAssemblies = topAssemblies ?? Array.Empty<string>();
-            Examples = examples ?? Array.Empty<BinaryConflictExampleSummary>();
             Mismatches = mismatches ?? Array.Empty<BinaryConflictExampleSummary>();
             PayloadNewerCount = payloadNewerCount;
             PayloadOlderCount = payloadOlderCount;
