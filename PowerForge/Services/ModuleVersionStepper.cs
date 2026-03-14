@@ -70,6 +70,7 @@ public sealed class ModuleVersionStepper
 
         var (current, source) = ResolveCurrentVersion(expectedVersion, moduleName, localPsd1Path, repository, prerelease);
         var proposed = ComputeNextVersion(expectedVersion, current);
+        proposed = EnsureResolvedVersionIsAvailable(expectedVersion, moduleName, repository, prerelease, proposed);
 
         return new ModuleVersionStepResult(
             expectedVersion: expectedVersion,
@@ -204,6 +205,39 @@ public sealed class ModuleVersionStepper
         }
 
         return latestReserved;
+    }
+
+    private string EnsureResolvedVersionIsAvailable(
+        string expectedVersion,
+        string? moduleName,
+        string repository,
+        bool prerelease,
+        string proposedVersion)
+    {
+        if (prerelease ||
+            string.IsNullOrWhiteSpace(moduleName) ||
+            string.IsNullOrWhiteSpace(proposedVersion) ||
+            !string.Equals(repository, "PSGallery", StringComparison.OrdinalIgnoreCase))
+        {
+            return proposedVersion;
+        }
+
+        var candidateText = proposedVersion;
+        const int maxProbeCount = 24;
+
+        for (var index = 0; index < maxProbeCount; index++)
+        {
+            if (!_powerShellGalleryFeed.VersionExists(moduleName!, candidateText, timeout: TimeSpan.FromSeconds(20)))
+                return candidateText;
+
+            if (!TryParseRepositoryVersion(candidateText, out var candidateVersion))
+                return candidateText;
+
+            candidateText = ComputeNextVersion(expectedVersion, candidateVersion);
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to resolve a free PowerShell Gallery version for '{moduleName}' from expected version '{expectedVersion}' after {maxProbeCount} probes.");
     }
 
     private Version? TryResolveCurrentVersionFromPowerShellGalleryFeed(string moduleName, bool prerelease)

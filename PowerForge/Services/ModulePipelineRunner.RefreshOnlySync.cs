@@ -5,18 +5,28 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    internal string? SyncBuildManifestToProjectRoot(
+        ModulePipelinePlan plan)
+    {
+        var projectManifestPath = GetProjectManifestPath(plan);
+        if (!File.Exists(projectManifestPath))
+            return null;
+
+        RefreshProjectManifestFromPlan(plan, projectManifestPath);
+
+        var label = plan.BuildSpec.RefreshManifestOnly ? "RefreshPSD1Only" : "Build";
+        var message = $"{label}: refreshed project-root manifest from source manifest inputs.";
+        _logger.Info(message);
+        return message;
+    }
+
     internal void SyncRefreshManifestToProjectRoot(
         ModulePipelinePlan plan)
     {
         if (!plan.BuildSpec.RefreshManifestOnly)
             return;
 
-        var projectManifestPath = GetProjectManifestPath(plan);
-        if (!File.Exists(projectManifestPath))
-            return;
-
-        RefreshProjectManifestFromPlan(plan, projectManifestPath);
-        _logger.Info("RefreshPSD1Only: refreshed project-root manifest from source manifest inputs.");
+        _ = SyncBuildManifestToProjectRoot(plan);
     }
 
     internal void SyncPublishedManifestToProjectRoot(
@@ -34,7 +44,6 @@ public sealed partial class ModulePipelineRunner
             return;
 
         RefreshProjectManifestFromPlan(plan, projectManifestPath);
-
         _logger.Info("Publish: refreshed project-root manifest from source manifest inputs.");
     }
 

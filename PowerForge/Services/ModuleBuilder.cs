@@ -76,6 +76,16 @@ public sealed class ModuleBuilder
         public IReadOnlyList<string> BinaryConflictSearchRoots { get; set; } = Array.Empty<string>();
 
         /// <summary>
+        /// Declared module names that should be treated as higher-priority during binary conflict analysis.
+        /// </summary>
+        public IReadOnlyList<string> BinaryConflictPriorityModuleNames { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// Optional project-root path used for writing human-readable binary conflict reports.
+        /// </summary>
+        public string? BinaryConflictReportRoot { get; set; }
+
+        /// <summary>
         /// Optional filters used to exclude copied binary libraries by package id, target key, relative path, or file name.
         /// </summary>
         public IReadOnlyList<string> ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
@@ -90,7 +100,7 @@ public sealed class ModuleBuilder
     /// Builds the module layout in-place under <see cref="Options.ProjectRoot"/> without installing it.
     /// </summary>
     /// <param name="opts">Build options.</param>
-    public void BuildInPlace(Options opts)
+    public ModuleOwnerNote[] BuildInPlace(Options opts)
     {
         if (string.IsNullOrWhiteSpace(opts.ProjectRoot) || !Directory.Exists(opts.ProjectRoot))
             throw new DirectoryNotFoundException($"Project root not found: {opts.ProjectRoot}");
@@ -182,7 +192,7 @@ public sealed class ModuleBuilder
             }
         }
 
-        WarnOnInstalledBinaryConflicts(opts);
+        var buildNotes = WarnOnInstalledBinaryConflicts(opts);
 
         // 2) Manifest generation
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
@@ -264,6 +274,7 @@ public sealed class ModuleBuilder
         }
 
         BuildServices.SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
+        return buildNotes;
     }
 
     /// <summary>
@@ -273,7 +284,7 @@ public sealed class ModuleBuilder
     /// <returns>Installation result including resolved version and installed paths.</returns>
     public ModuleInstallerResult Build(Options opts)
     {
-        BuildInPlace(opts);
+        _ = BuildInPlace(opts);
         return BuildServices.InstallVersioned(
             stagingPath: opts.ProjectRoot,
             moduleName: opts.ModuleName,
@@ -457,11 +468,16 @@ public sealed class ModuleBuilder
         return fileNames;
     }
 
-    private void WarnOnInstalledBinaryConflicts(Options opts)
+    private ModuleOwnerNote[] WarnOnInstalledBinaryConflicts(Options opts)
     {
         var compatiblePSEditions = (opts.CompatiblePSEditions ?? Array.Empty<string>())
             .Where(static s => !string.IsNullOrWhiteSpace(s))
             .Select(static s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var priorityModuleNames = (opts.BinaryConflictPriorityModuleNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -469,6 +485,9 @@ public sealed class ModuleBuilder
             compatiblePSEditions = new[] { "Core" };
 
         var detector = new BinaryConflictDetectionService(_logger);
+        var notes = new List<ModuleOwnerNote>();
+        var editionStatuses = new List<(string Edition, bool HasConflicts)>();
+        var advisories = new List<(BinaryConflictDetectionResult Result, BinaryConflictAdvisorySummary Advisory, string? ReportPath)>();
         foreach (var edition in compatiblePSEditions)
         {
             var result = detector.Analyze(
@@ -477,25 +496,363 @@ public sealed class ModuleBuilder
                 currentModuleName: opts.ModuleName,
                 searchRoots: opts.BinaryConflictSearchRoots);
             if (!result.HasConflicts)
-                continue;
-
-            _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
-
-            foreach (var issue in result.Issues.Take(3))
             {
-                var moduleLabel = string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
-                    ? issue.InstalledModuleName
-                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion;
-                var relation = issue.VersionComparison > 0 ? "older" : "newer";
-
-                _logger.Warn(
-                    $"  {issue.AssemblyName} payload {issue.PayloadAssemblyVersion} may conflict with {moduleLabel} " +
-                    $"({relation} installed version {issue.InstalledAssemblyVersion}).");
+                editionStatuses.Add((result.PowerShellEdition, false));
+                continue;
             }
 
-            if (result.Issues.Length > 3)
-                _logger.Warn($"  +{result.Issues.Length - 3} more conflict(s) detected.");
+            var advisory = BuildBinaryConflictAdvisorySummary(result, priorityModuleNames);
+            editionStatuses.Add((result.PowerShellEdition, true));
+            var reportPath = WriteBinaryConflictReport(opts.BinaryConflictReportRoot, advisory, result);
+            _logger.Warn($"Binary conflict advisory ({result.PowerShellEdition}): {result.Summary}.");
+            _logger.Warn($"  Scope: {BuildDeclaredDependencyModulesText(advisory)}");
+
+            foreach (var module in advisory.AllModules)
+            {
+                _logger.Warn("  " + BuildBinaryConflictModuleSummaryLine(module, includeModuleLabel: true));
+            }
+
+            if (!string.IsNullOrWhiteSpace(advisory.Actionability))
+                _logger.Warn($"  Check: {advisory.Actionability}");
+            if (!string.IsNullOrWhiteSpace(reportPath))
+                _logger.Warn($"  Report: {reportPath}");
+
+            advisories.Add((result, advisory, reportPath));
         }
+
+        if (advisories.Count == 0)
+        {
+            if (editionStatuses.Count > 0)
+            {
+                notes.Add(new ModuleOwnerNote(
+                    "Binary Conflicts",
+                    ModuleOwnerNoteSeverity.Info,
+                    summary: BuildBinaryConflictEditionStatusText(editionStatuses),
+                    details: Array.Empty<string>()));
+            }
+
+            return notes.ToArray();
+        }
+
+        var editionStatusText = BuildBinaryConflictEditionStatusText(editionStatuses);
+        foreach (var entry in advisories)
+        {
+            notes.Add(new ModuleOwnerNote(
+                $"Binary Conflicts ({entry.Result.PowerShellEdition})",
+                ModuleOwnerNoteSeverity.Warning,
+                summary: editionStatusText,
+                whyItMatters: BuildBinaryConflictWhyItMatters(entry.Advisory),
+                nextStep: BuildBinaryConflictNextStep(entry.Advisory, entry.ReportPath),
+                details: BuildBinaryConflictOwnerDetails(entry.Advisory, entry.ReportPath)));
+        }
+
+        return notes.ToArray();
+    }
+
+    private static string BuildBinaryConflictEditionStatusText(IReadOnlyList<(string Edition, bool HasConflicts)> statuses)
+    {
+        if (statuses is null || statuses.Count == 0)
+            return string.Empty;
+
+        return string.Join("; ", statuses.Select(static entry =>
+            $"{entry.Edition}: {(entry.HasConflicts ? "conflicts found" : "no conflicts")}"));
+    }
+
+    private static string BuildDeclaredDependencyModulesText(BinaryConflictAdvisorySummary advisory)
+    {
+        if (advisory.PriorityModuleLabels.Length > 0)
+            return "Declared dependency modules involved: " + string.Join(", ", advisory.PriorityModuleLabels) + ".";
+
+        return "Declared dependency modules involved: none.";
+    }
+
+    internal static BinaryConflictAdvisorySummary BuildBinaryConflictAdvisorySummary(
+        BinaryConflictDetectionResult result,
+        IReadOnlyList<string>? priorityModuleNames = null)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        var issues = result.Issues ?? Array.Empty<BinaryConflictDetectionIssue>();
+        var priorityNames = (priorityModuleNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var payloadNewer = issues.Count(static issue => issue.VersionComparison > 0);
+        var payloadOlder = issues.Count(static issue => issue.VersionComparison < 0);
+
+        var latestModuleIssues = issues
+            .GroupBy(static issue => issue.InstalledModuleName, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(group =>
+            {
+                var selectedVersionGroup = group
+                    .GroupBy(static issue => issue.InstalledModuleVersion, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(static versionGroup => ParseModuleVersionOrNull(versionGroup.Key), VersionComparer.Instance)
+                    .ThenByDescending(static versionGroup => versionGroup.Key ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .First();
+                return selectedVersionGroup;
+            })
+            .ToArray();
+
+        var topModules = latestModuleIssues
+            .GroupBy(
+                static issue => new
+                {
+                    issue.InstalledModuleName,
+                    issue.InstalledModuleVersion
+                })
+            .Select(group =>
+            {
+                var moduleName = group.Key.InstalledModuleName;
+                var moduleVersion = group.Key.InstalledModuleVersion;
+                var label = string.IsNullOrWhiteSpace(moduleVersion)
+                    ? moduleName
+                    : moduleName + " " + moduleVersion;
+                return new BinaryConflictModuleSummary(
+                    moduleLabel: label,
+                    conflictCount: group.Count(),
+                    distinctAssemblies: group
+                        .Select(static issue => issue.AssemblyName)
+                        .Where(static name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Count(),
+                    mismatches: group
+                        .GroupBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                        .Select(static assemblyGroup => assemblyGroup
+                            .OrderBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                            .First())
+                        .OrderBy(static issue => issue.AssemblyName, StringComparer.OrdinalIgnoreCase)
+                        .Select(static issue => new BinaryConflictExampleSummary(
+                            issue.AssemblyName,
+                            issue.PayloadAssemblyVersion,
+                            issue.InstalledAssemblyVersion))
+                        .ToArray(),
+                    payloadNewerCount: group.Count(static issue => issue.VersionComparison > 0),
+                    payloadOlderCount: group.Count(static issue => issue.VersionComparison < 0));
+            })
+            .OrderByDescending(static item => item.ConflictCount)
+            .ThenByDescending(static item => item.DistinctAssemblies)
+            .ThenBy(static item => item.ModuleLabel, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var topAssemblies = latestModuleIssues
+            .GroupBy(
+                static issue => new
+                {
+                    issue.AssemblyName,
+                    issue.PayloadAssemblyVersion
+                })
+            .Select(group => new BinaryConflictAssemblySummary(
+                assemblyLabel: $"{group.Key.AssemblyName} {group.Key.PayloadAssemblyVersion}",
+                conflictCount: group.Count(),
+                distinctModules: group
+                    .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                        ? issue.InstalledModuleName
+                        : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                    .Where(static label => !string.IsNullOrWhiteSpace(label))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count()))
+            .OrderByDescending(static item => item.ConflictCount)
+            .ThenByDescending(static item => item.DistinctModules)
+            .ThenBy(static item => item.AssemblyLabel, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var actionability = BuildBinaryConflictActionability(
+            payloadNewer,
+            payloadOlder,
+            topModules.Length > 0 ? topModules[0].ModuleLabel : null);
+
+        return new BinaryConflictAdvisorySummary(
+            powerShellEdition: result.PowerShellEdition,
+            distinctPayloadAssemblies: issues
+                .Select(static issue => issue.AssemblyName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            distinctInstalledModules: latestModuleIssues
+                .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                .Where(static label => !string.IsNullOrWhiteSpace(label))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            payloadNewerConflicts: payloadNewer,
+            payloadOlderConflicts: payloadOlder,
+            allModules: topModules,
+            topModules: topModules.Take(3).ToArray(),
+            remainingModuleCount: Math.Max(0, topModules.Length - 3),
+            topAssemblies: topAssemblies.Take(3).ToArray(),
+            remainingAssemblyCount: Math.Max(0, topAssemblies.Length - 3),
+            priorityModuleLabels: latestModuleIssues
+                .Where(issue => priorityNames.Contains(issue.InstalledModuleName, StringComparer.OrdinalIgnoreCase))
+                .Select(static issue => string.IsNullOrWhiteSpace(issue.InstalledModuleVersion)
+                    ? issue.InstalledModuleName
+                    : issue.InstalledModuleName + " " + issue.InstalledModuleVersion)
+                .Where(static label => !string.IsNullOrWhiteSpace(label))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static label => label, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            actionability: actionability);
+    }
+
+    private static string BuildBinaryConflictActionability(int payloadNewer, int payloadOlder, string? primaryModuleLabel)
+    {
+        if (payloadNewer == 0 && payloadOlder == 0)
+            return "Only matters when the listed modules are imported into the same session.";
+
+        return string.IsNullOrWhiteSpace(primaryModuleLabel)
+            ? "Ignore unless you use this module together with one of the listed installed modules."
+            : $"Ignore unless you use this module together with {primaryModuleLabel} or one of the other listed installed modules.";
+    }
+
+    private static Version? ParseModuleVersionOrNull(string? value)
+        => Version.TryParse(value, out var parsed) ? parsed : null;
+
+    private static string BuildBinaryConflictWhyItMatters(BinaryConflictAdvisorySummary advisory)
+    {
+        var sessionLabel = BuildBinaryConflictSessionLabel(advisory.PowerShellEdition);
+
+        if (advisory.PriorityModuleLabels.Length > 0)
+        {
+            return $"Only matters if this module and one of those declared modules are loaded into the same {sessionLabel} session.";
+        }
+
+        return $"Only matters if this module and one of the modules below are loaded into the same {sessionLabel} session.";
+    }
+
+    private static string BuildBinaryConflictNextStep(BinaryConflictAdvisorySummary advisory, string? reportPath)
+    {
+        if (advisory.PriorityModuleLabels.Length > 0)
+        {
+            return string.IsNullOrWhiteSpace(reportPath)
+                ? $"If you use those declared modules together, check the exact assembly/version pairs first: {string.Join(", ", advisory.PriorityModuleLabels)}."
+                : $"If you use those declared modules together, open the full report first. It shows the exact assembly/version pairs for: {string.Join(", ", advisory.PriorityModuleLabels)}.";
+        }
+
+        return string.IsNullOrWhiteSpace(reportPath)
+            ? "Ignore if you never load those modules together. Otherwise check the exact assembly/version pairs before testing import order."
+            : "Ignore if you never load those modules together. Otherwise open the full report for the exact assembly/version pairs, then test import order only for the modules you actually use together.";
+    }
+
+    private static string[] BuildBinaryConflictOwnerDetails(BinaryConflictAdvisorySummary advisory, string? reportPath)
+    {
+        var details = new List<string>();
+        details.Add(BuildDeclaredDependencyModulesText(advisory));
+        details.Add("Installed modules below already keep only the newest installed version per module name.");
+
+        if (advisory.AllModules.Length > 0)
+        {
+            foreach (var module in advisory.AllModules)
+                details.Add(BuildBinaryConflictModuleSummaryLine(module, includeModuleLabel: true));
+        }
+
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            details.Add("Full report: " + reportPath!.Trim());
+
+        return details.ToArray();
+    }
+
+    internal string? WriteBinaryConflictReport(
+        string? reportRoot,
+        BinaryConflictAdvisorySummary advisory,
+        BinaryConflictDetectionResult result)
+    {
+        if (string.IsNullOrWhiteSpace(reportRoot))
+            return null;
+
+        try
+        {
+            var root = Path.GetFullPath(reportRoot);
+            var reportsDirectory = Path.Combine(root, "Artefacts", "Reports");
+            Directory.CreateDirectory(reportsDirectory);
+            var fileName = $"BinaryConflicts.{result.PowerShellEdition}.txt";
+            var path = Path.Combine(reportsDirectory, fileName);
+
+            var lines = new List<string>
+            {
+                $"Binary conflict report for {result.PowerShellEdition}",
+                $"Summary: {result.Issues.Length} assembly-version mismatches across {advisory.AllModules.Length} installed module(s).",
+                BuildDeclaredDependencyModulesText(advisory),
+                "Installed modules below already keep only the newest installed version per module name.",
+                $"Why this matters: {BuildBinaryConflictWhyItMatters(advisory)}",
+                string.Empty
+            };
+
+            foreach (var module in advisory.AllModules)
+            {
+                lines.Add(module.ModuleLabel);
+                lines.Add($"  Shared assemblies: {module.DistinctAssemblies}");
+                lines.Add($"  Version direction: {BuildBinaryConflictVersionDirectionText(module)}");
+                lines.Add($"  Suggested check: {BuildBinaryConflictModuleCheckText(module)}");
+                lines.Add("  Mismatches:");
+                foreach (var mismatch in module.Mismatches)
+                    lines.Add($"  - {mismatch.AssemblyName}: ours {mismatch.PayloadAssemblyVersion}, theirs {mismatch.InstalledAssemblyVersion} ({BuildBinaryConflictMismatchDirectionText(mismatch)})");
+                lines.Add(string.Empty);
+            }
+
+            File.WriteAllLines(path, lines);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            _logger.Verbose($"Failed to write binary conflict report. {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string BuildBinaryConflictSessionLabel(string? powerShellEdition)
+    {
+        if (string.Equals(powerShellEdition, "Desktop", StringComparison.OrdinalIgnoreCase))
+            return "Windows PowerShell/Desktop";
+        if (string.Equals(powerShellEdition, "Core", StringComparison.OrdinalIgnoreCase))
+            return "PowerShell/Core";
+
+        return string.IsNullOrWhiteSpace(powerShellEdition) ? "PowerShell" : powerShellEdition!;
+    }
+
+    private static string BuildBinaryConflictVersionDirectionText(BinaryConflictModuleSummary module)
+    {
+        return module.PayloadNewerCount > 0 && module.PayloadOlderCount > 0
+            ? "mixed newer/older versions on different assemblies"
+            : module.PayloadNewerCount > 0
+                ? "our module is newer on every listed assembly"
+                : module.PayloadOlderCount > 0
+                    ? "the installed module is newer on every listed assembly"
+                    : "different versions";
+    }
+
+    private static string BuildBinaryConflictModuleCheckText(BinaryConflictModuleSummary module)
+    {
+        return module.PayloadNewerCount > 0 && module.PayloadOlderCount > 0
+            ? "If you use both modules together, test both import orders."
+            : module.PayloadNewerCount > 0
+                ? "If you use both modules together, import that module first, then this one."
+                : module.PayloadOlderCount > 0
+                    ? "If you use both modules together, import this module first, then that module."
+                    : "If you use both modules together, test both import orders.";
+    }
+
+    private static string BuildBinaryConflictMismatchDirectionText(BinaryConflictExampleSummary mismatch)
+    {
+        var payload = ParseModuleVersionOrNull(mismatch.PayloadAssemblyVersion);
+        var installed = ParseModuleVersionOrNull(mismatch.InstalledAssemblyVersion);
+        if (payload is null || installed is null)
+            return "versions differ";
+
+        var comparison = payload.CompareTo(installed);
+        if (comparison > 0)
+            return "ours newer";
+        if (comparison < 0)
+            return "theirs newer";
+
+        return "versions differ";
+    }
+
+    private static string BuildBinaryConflictModuleSummaryLine(BinaryConflictModuleSummary module, bool includeModuleLabel)
+    {
+        var prefix = includeModuleLabel ? module.ModuleLabel + ": " : string.Empty;
+        return $"{prefix}{module.DistinctAssemblies} shared assemblies differ; {BuildBinaryConflictVersionDirectionText(module)}.";
     }
 
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm, PublishCopyOptions options)
@@ -872,5 +1229,122 @@ public sealed class ModuleBuilder
         }
 
         return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal sealed class BinaryConflictAdvisorySummary
+    {
+        internal string PowerShellEdition { get; }
+        internal int DistinctPayloadAssemblies { get; }
+        internal int DistinctInstalledModules { get; }
+        internal int PayloadNewerConflicts { get; }
+        internal int PayloadOlderConflicts { get; }
+        internal BinaryConflictModuleSummary[] AllModules { get; }
+        internal BinaryConflictModuleSummary[] TopModules { get; }
+        internal int RemainingModuleCount { get; }
+        internal BinaryConflictAssemblySummary[] TopAssemblies { get; }
+        internal int RemainingAssemblyCount { get; }
+        internal string[] PriorityModuleLabels { get; }
+        internal string Actionability { get; }
+
+        internal BinaryConflictAdvisorySummary(
+            string powerShellEdition,
+            int distinctPayloadAssemblies,
+            int distinctInstalledModules,
+            int payloadNewerConflicts,
+            int payloadOlderConflicts,
+            BinaryConflictModuleSummary[] allModules,
+            BinaryConflictModuleSummary[] topModules,
+            int remainingModuleCount,
+            BinaryConflictAssemblySummary[] topAssemblies,
+            int remainingAssemblyCount,
+            string[] priorityModuleLabels,
+            string actionability)
+        {
+            PowerShellEdition = powerShellEdition ?? string.Empty;
+            DistinctPayloadAssemblies = distinctPayloadAssemblies;
+            DistinctInstalledModules = distinctInstalledModules;
+            PayloadNewerConflicts = payloadNewerConflicts;
+            PayloadOlderConflicts = payloadOlderConflicts;
+            AllModules = allModules ?? Array.Empty<BinaryConflictModuleSummary>();
+            TopModules = topModules ?? Array.Empty<BinaryConflictModuleSummary>();
+            RemainingModuleCount = remainingModuleCount;
+            TopAssemblies = topAssemblies ?? Array.Empty<BinaryConflictAssemblySummary>();
+            RemainingAssemblyCount = remainingAssemblyCount;
+            PriorityModuleLabels = priorityModuleLabels ?? Array.Empty<string>();
+            Actionability = actionability ?? string.Empty;
+        }
+    }
+
+    internal sealed class BinaryConflictModuleSummary
+    {
+        internal string ModuleLabel { get; }
+        internal int ConflictCount { get; }
+        internal int DistinctAssemblies { get; }
+        internal BinaryConflictExampleSummary[] Mismatches { get; }
+        internal int PayloadNewerCount { get; }
+        internal int PayloadOlderCount { get; }
+
+        internal BinaryConflictModuleSummary(
+            string moduleLabel,
+            int conflictCount,
+            int distinctAssemblies,
+            BinaryConflictExampleSummary[] mismatches,
+            int payloadNewerCount,
+            int payloadOlderCount)
+        {
+            ModuleLabel = moduleLabel ?? string.Empty;
+            ConflictCount = conflictCount;
+            DistinctAssemblies = distinctAssemblies;
+            Mismatches = mismatches ?? Array.Empty<BinaryConflictExampleSummary>();
+            PayloadNewerCount = payloadNewerCount;
+            PayloadOlderCount = payloadOlderCount;
+        }
+    }
+
+    private sealed class VersionComparer : IComparer<Version?>
+    {
+        internal static VersionComparer Instance { get; } = new();
+
+        public int Compare(Version? x, Version? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return x.CompareTo(y);
+        }
+    }
+
+    internal sealed class BinaryConflictExampleSummary
+    {
+        internal string AssemblyName { get; }
+        internal string PayloadAssemblyVersion { get; }
+        internal string InstalledAssemblyVersion { get; }
+
+        internal BinaryConflictExampleSummary(
+            string assemblyName,
+            string payloadAssemblyVersion,
+            string installedAssemblyVersion)
+        {
+            AssemblyName = assemblyName ?? string.Empty;
+            PayloadAssemblyVersion = payloadAssemblyVersion ?? string.Empty;
+            InstalledAssemblyVersion = installedAssemblyVersion ?? string.Empty;
+        }
+    }
+
+    internal sealed class BinaryConflictAssemblySummary
+    {
+        internal string AssemblyLabel { get; }
+        internal int ConflictCount { get; }
+        internal int DistinctModules { get; }
+
+        internal BinaryConflictAssemblySummary(
+            string assemblyLabel,
+            int conflictCount,
+            int distinctModules)
+        {
+            AssemblyLabel = assemblyLabel ?? string.Empty;
+            ConflictCount = conflictCount;
+            DistinctModules = distinctModules;
+        }
     }
 }

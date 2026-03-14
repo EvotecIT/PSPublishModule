@@ -10,10 +10,10 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private bool ApplyMerge(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    private MergeExecutionResult ApplyMerge(ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
-        if (plan is null || buildResult is null) return false;
-        if (!plan.MergeModule && !plan.MergeMissing) return false;
+        if (plan is null || buildResult is null) return MergeExecutionResult.None;
+        if (!plan.MergeModule && !plan.MergeMissing) return MergeExecutionResult.None;
 
         var mergeInfo = BuildMergeSources(
             buildResult.StagingPath,
@@ -24,7 +24,18 @@ public sealed partial class ModulePipelineRunner
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             _logger.Warn("Merge requested but no script sources or PSM1 file were found.");
-            return false;
+            return new MergeExecutionResult(
+                mergedModule: false,
+                usedExistingPsm1: false,
+                retainedBootstrapperBecauseBinaryOutputsDetected: false,
+                requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
+                approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
+                dependentModules: Array.Empty<string>(),
+                topLevelInlinedFunctions: 0,
+                totalInlinedFunctions: 0,
+                scriptFilesDetected: 0,
+                hasBinaryOutputs: mergeInfo.HasLib,
+                hasScriptSources: false);
         }
 
         string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
@@ -45,15 +56,19 @@ public sealed partial class ModulePipelineRunner
         }
 
         var mergedModule = false;
+        var retainedBootstrapperBecauseBinaryOutputsDetected = false;
+        var usedExistingPsm1 = false;
         if (plan.MergeModule)
         {
             if (mergeInfo.HasLib)
             {
                 _logger.Warn("MergeModuleOnBuild requested but binary outputs were detected. Keeping bootstrapper PSM1.");
+                retainedBootstrapperBecauseBinaryOutputsDetected = true;
             }
             else if (!mergeInfo.HasScripts)
             {
                 _logger.Warn("MergeModuleOnBuild requested but no script sources were found. Skipping merge.");
+                usedExistingPsm1 = File.Exists(mergeInfo.Psm1Path);
             }
             else
             {
@@ -87,7 +102,20 @@ public sealed partial class ModulePipelineRunner
             WriteMergedPsm1(mergeInfo.Psm1Path, merged);
         }
 
-        return mergedModule;
+        usedExistingPsm1 |= !mergeInfo.HasScripts && File.Exists(mergeInfo.Psm1Path);
+
+        return new MergeExecutionResult(
+            mergedModule: mergedModule,
+            usedExistingPsm1: usedExistingPsm1,
+            retainedBootstrapperBecauseBinaryOutputsDetected: retainedBootstrapperBecauseBinaryOutputsDetected,
+            requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
+            approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
+            dependentModules: dependentRequiredModules,
+            topLevelInlinedFunctions: missingReport?.FunctionsTopLevelOnly?.Length ?? 0,
+            totalInlinedFunctions: missingReport?.Functions?.Length ?? 0,
+            scriptFilesDetected: mergeInfo.ScriptFiles.Length,
+            hasBinaryOutputs: mergeInfo.HasLib,
+            hasScriptSources: mergeInfo.HasScripts);
     }
 
     private void ApplyPlaceholders(ModulePipelinePlan plan, ModuleBuildResult buildResult)

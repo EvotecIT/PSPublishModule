@@ -6,13 +6,13 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private void EnsureBuildDependenciesInstalledIfNeeded(ModulePipelinePlan plan)
+    private ModuleDependencyInstallResult[] EnsureBuildDependenciesInstalledIfNeeded(ModulePipelinePlan plan)
     {
-        if (!plan.InstallMissingModules) return;
+        if (!plan.InstallMissingModules) return Array.Empty<ModuleDependencyInstallResult>();
 
         try
         {
-            _ = EnsureBuildDependenciesInstalled(plan);
+            return EnsureBuildDependenciesInstalled(plan);
         }
         catch (Exception ex)
         {
@@ -62,7 +62,11 @@ public sealed partial class ModulePipelineRunner
         CheckStatus? projectRootFileConsistencyStatus,
         ProjectConversionResult? projectRootFileConsistencyEncodingFix,
         ProjectConversionResult? projectRootFileConsistencyLineEndingFix,
-        ModuleSigningResult? signingResult)
+        ModuleSigningResult? signingResult,
+        ModuleDependencyInstallResult[] dependencyInstallResults,
+        ModuleBuildPipeline.StagingResult stagingResult,
+        MergeExecutionResult mergeExecution,
+        string? projectManifestSyncMessage)
     {
         var diagnostics = new List<BuildDiagnostic>(BuildDiagnosticsFactory.CreatePipelineDiagnostics(
             fileConsistencyReport,
@@ -103,12 +107,133 @@ public sealed partial class ModulePipelineRunner
             projectRootFileConsistencyStatus,
             projectRootFileConsistencyEncodingFix,
             projectRootFileConsistencyLineEndingFix,
-            signingResult);
+            signingResult,
+            BuildOwnerNotes(
+                plan,
+                buildResult,
+                documentationResult,
+                dependencyInstallResults,
+                stagingResult,
+                mergeExecution,
+                projectManifestSyncMessage));
 
         if (diagnosticsPolicy?.PolicyViolated == true)
             throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);
 
         return result;
+    }
+
+    private ModuleOwnerNote[] BuildOwnerNotes(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        DocumentationBuildResult? documentationResult,
+        ModuleDependencyInstallResult[]? dependencyInstallResults,
+        ModuleBuildPipeline.StagingResult? stagingResult,
+        MergeExecutionResult? mergeExecution,
+        string? projectManifestSyncMessage)
+    {
+        var notes = new List<ModuleOwnerNote>();
+
+        if (dependencyInstallResults is { Length: > 0 })
+        {
+            var installed = dependencyInstallResults.Count(static result => result.Status == ModuleDependencyInstallStatus.Installed);
+            var updated = dependencyInstallResults.Count(static result => result.Status == ModuleDependencyInstallStatus.Updated);
+            var satisfied = dependencyInstallResults.Count(static result => result.Status == ModuleDependencyInstallStatus.Satisfied);
+            var skipped = dependencyInstallResults.Count(static result => result.Status == ModuleDependencyInstallStatus.Skipped);
+            var listed = string.Join(", ", dependencyInstallResults.Select(static result => result.Name).Where(static name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase));
+
+            notes.Add(new ModuleOwnerNote(
+                "Dependencies",
+                ModuleOwnerNoteSeverity.Info,
+                summary: $"Checked {dependencyInstallResults.Length} dependency module(s): {listed}.",
+                nextStep: installed > 0 || updated > 0
+                    ? "If the build environment changed, re-run the module import step if you are troubleshooting dependency-related behavior."
+                    : string.Empty,
+                details: new[]
+                {
+                    $"{installed} installed, {updated} updated, {satisfied} satisfied, {skipped} skipped."
+                }));
+        }
+
+        if (stagingResult is not null && (stagingResult.NormalizedLineEndingsCount > 0 || stagingResult.LineEndingNormalizationErrors > 0))
+        {
+            var lines = new List<string>();
+            if (stagingResult.NormalizedLineEndingsCount > 0)
+                lines.Add($"Normalized staged line endings to CRLF for {stagingResult.NormalizedLineEndingsCount} file(s).");
+            if (stagingResult.LineEndingNormalizationErrors > 0)
+                lines.Add($"Failed to normalize {stagingResult.LineEndingNormalizationErrors} staged file(s).");
+
+            notes.Add(new ModuleOwnerNote(
+                "Staging",
+                stagingResult.LineEndingNormalizationErrors > 0 ? ModuleOwnerNoteSeverity.Warning : ModuleOwnerNoteSeverity.Info,
+                summary: stagingResult.LineEndingNormalizationErrors > 0
+                    ? $"Normalized {stagingResult.NormalizedLineEndingsCount} staged file(s) and failed to normalize {stagingResult.LineEndingNormalizationErrors}."
+                    : $"Normalized staged line endings to CRLF for {stagingResult.NormalizedLineEndingsCount} file(s).",
+                whyItMatters: stagingResult.LineEndingNormalizationErrors > 0
+                    ? "A normalization failure means staged content may not match the expected packaging format."
+                    : string.Empty,
+                nextStep: stagingResult.LineEndingNormalizationErrors > 0
+                    ? "Review the affected staged files before publishing."
+                    : string.Empty,
+                details: lines.ToArray()));
+        }
+
+        if (buildResult.BuildNotes is { Length: > 0 })
+            notes.AddRange(buildResult.BuildNotes);
+
+        if (mergeExecution is not null &&
+            (mergeExecution.RequiredModules.Length > 0 ||
+             mergeExecution.ApprovedModules.Length > 0 ||
+             mergeExecution.DependentModules.Length > 0 ||
+             mergeExecution.TopLevelInlinedFunctions > 0 ||
+             mergeExecution.TotalInlinedFunctions > 0 ||
+             mergeExecution.UsedExistingPsm1 ||
+             mergeExecution.RetainedBootstrapperBecauseBinaryOutputsDetected ||
+             mergeExecution.MergedModule))
+        {
+            notes.Add(new ModuleOwnerNote(
+                "Module Entry Script",
+                ModuleOwnerNoteSeverity.Info,
+                summary: mergeExecution.RetainedBootstrapperBecauseBinaryOutputsDetected
+                    ? "Build kept the existing .psm1 entry script because the module contains binaries."
+                    : mergeExecution.UsedExistingPsm1 && !mergeExecution.HasScriptSources
+                        ? "Build reused the existing .psm1 entry script because there were no script sources to merge."
+                        : mergeExecution.MergedModule
+                            ? $"Build wrote a merged .psm1 entry script from {mergeExecution.ScriptFilesDetected} script source file(s)."
+                            : "Build entry script did not require changes.",
+                details: Array.Empty<string>()));
+        }
+
+        if (documentationResult is not null &&
+            documentationResult.Succeeded &&
+            plan.DocumentationBuild?.UpdateWhenNew == true &&
+            plan.Documentation is not null)
+        {
+            var docsPath = ResolvePath(plan.ProjectRoot, plan.Documentation.Path);
+            notes.Add(new ModuleOwnerNote(
+                "Documentation",
+                ModuleOwnerNoteSeverity.Info,
+                summary: $"Updated project documentation at '{docsPath}'.",
+                details: new[]
+                {
+                    $"Generated {documentationResult.MarkdownFiles} markdown help file(s)."
+                }));
+        }
+
+        if (!string.IsNullOrWhiteSpace(projectManifestSyncMessage))
+        {
+            var manifestSyncMessage = projectManifestSyncMessage!;
+            notes.Add(new ModuleOwnerNote(
+                "Manifest",
+                ModuleOwnerNoteSeverity.Info,
+                summary: manifestSyncMessage.Trim(),
+                details: new[]
+                {
+                    $"Project manifest now tracks the resolved build version {plan.ResolvedVersion}."
+                }));
+        }
+
+        return notes.ToArray();
     }
 
     private BuildDiagnostic[] CreateBinaryConflictDiagnostics(

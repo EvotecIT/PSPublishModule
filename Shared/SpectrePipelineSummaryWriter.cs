@@ -235,6 +235,16 @@ internal static class SpectrePipelineSummaryWriter
             table.AddRow($"{(unicode ? "💡" : "*")} Diagnostics", $"[grey]{Esc(detail)}[/]");
         }
 
+        if (res.OwnerNotes is { Length: > 0 })
+        {
+            var actionableCount = res.OwnerNotes.Count(static note => note is not null && note.Severity == ModuleOwnerNoteSeverity.Warning);
+            var fyiCount = res.OwnerNotes.Count(static note => note is not null && note.Severity != ModuleOwnerNoteSeverity.Warning);
+            var parts = new List<string>(2);
+            if (actionableCount > 0) parts.Add($"[yellow]{actionableCount} action needed[/]");
+            if (fyiCount > 0) parts.Add($"[blue]{fyiCount} FYI[/]");
+            table.AddRow($"{(unicode ? "📝" : "*")} Owner notes", parts.Count == 0 ? "[grey]None[/]" : string.Join(", ", parts));
+        }
+
         if (res.InstallResult is not null)
             table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
@@ -277,6 +287,7 @@ internal static class SpectrePipelineSummaryWriter
 
         var buildRecommendations = BuildRecommendations(res, BuildDiagnosticArea.Build);
         WriteRecommendationTable("Build advisories", buildRecommendations, border);
+        WriteOwnerNotes(res.OwnerNotes, border);
 
         if (res.FileConsistencyReport is not null && res.Plan.FileConsistencySettings?.Severity != ValidationSeverity.Off)
             WriteFileConsistencyIssues(
@@ -718,6 +729,141 @@ internal static class SpectrePipelineSummaryWriter
 
         if (table.Rows.Count > 0)
             AnsiConsole.Write(table);
+    }
+
+    private static void WriteOwnerNotes(
+        IReadOnlyList<ModuleOwnerNote>? notes,
+        TableBorder border)
+    {
+        if (notes is null || notes.Count == 0)
+            return;
+
+        var visibleNotes = notes
+            .Where(static note => note is not null)
+            .Select(static note => note!)
+            .Where(static note =>
+                !string.IsNullOrWhiteSpace(note.Summary) ||
+                !string.IsNullOrWhiteSpace(note.WhyItMatters) ||
+                !string.IsNullOrWhiteSpace(note.NextStep) ||
+                (note.Details?.Length ?? 0) > 0)
+            .ToArray();
+
+        if (visibleNotes.Length == 0)
+            return;
+
+        var actionable = visibleNotes
+            .Where(static note => note.Severity == ModuleOwnerNoteSeverity.Warning)
+            .ToArray();
+        var fyi = visibleNotes
+            .Where(static note => note.Severity != ModuleOwnerNoteSeverity.Warning)
+            .ToArray();
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Owner Notes[/]").LeftJustified());
+
+        WriteOwnerNoteGroup("Action Needed", actionable, border, "[yellow]");
+        WriteOwnerNoteSummaryTable("FYI", fyi, border, "[blue]");
+    }
+
+    private static void WriteOwnerNoteGroup(
+        string title,
+        IEnumerable<ModuleOwnerNote> entries,
+        TableBorder border,
+        string colorMarkup)
+    {
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        var notes = entries.ToArray();
+        if (notes.Length == 0)
+            return;
+
+        AnsiConsole.Write(new Rule($"{colorMarkup}{Esc(title)}[/]").LeftJustified());
+
+        foreach (var note in notes)
+        {
+            var body = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(note.Summary))
+                body.Add(Esc(note.Summary.Trim()));
+
+            if (!string.IsNullOrWhiteSpace(note.WhyItMatters))
+                body.Add($"[grey]When it matters:[/] {Esc(note.WhyItMatters.Trim())}");
+
+            if (!string.IsNullOrWhiteSpace(note.NextStep))
+                body.Add($"[grey]What to do:[/] {Esc(note.NextStep.Trim())}");
+
+            var details = (note.Details ?? Array.Empty<string>())
+                .Where(static line => !string.IsNullOrWhiteSpace(line))
+                .Select(static line => line.Trim())
+                .ToArray();
+            if (details.Length > 0)
+                body.AddRange(details.Select(detail => $"[grey]-[/] {Esc(detail)}"));
+
+            if (body.Count == 0)
+                continue;
+
+            var panel = new Panel(new Markup(string.Join(Environment.NewLine, body)))
+            {
+                Border = BoxBorder.Rounded,
+                Header = new PanelHeader($"{colorMarkup}{Esc(note.Title)}[/]"),
+                Expand = true
+            };
+
+            AnsiConsole.Write(panel);
+        }
+    }
+
+    private static void WriteOwnerNoteSummaryTable(
+        string title,
+        IEnumerable<ModuleOwnerNote> entries,
+        TableBorder border,
+        string colorMarkup)
+    {
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        var notes = entries.ToArray();
+        if (notes.Length == 0)
+            return;
+
+        AnsiConsole.Write(new Rule($"{colorMarkup}{Esc(title)}[/]").LeftJustified());
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Topic").NoWrap())
+            .AddColumn(new TableColumn("Summary"));
+
+        foreach (var note in notes)
+        {
+            var summary = BuildCompactOwnerNoteSummary(note);
+            if (string.IsNullOrWhiteSpace(summary))
+                continue;
+
+            table.AddRow(Esc(note.Title), Esc(summary));
+        }
+
+        if (table.Rows.Count > 0)
+            AnsiConsole.Write(table);
+    }
+
+    private static string BuildCompactOwnerNoteSummary(ModuleOwnerNote note)
+    {
+        if (note is null)
+            return string.Empty;
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(note.Summary))
+            parts.Add(note.Summary.Trim());
+
+        var details = (note.Details ?? Array.Empty<string>())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .Select(static line => line.Trim())
+            .Where(line => parts.Count == 0 || !line.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
+            .Take(1)
+            .ToArray();
+        if (details.Length > 0)
+            parts.Add(details[0]);
+
+        return string.Join(" ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
     }
 
     private static string BuildRecommendationAction(BuildDiagnostic diagnostic)

@@ -20,11 +20,19 @@ public sealed class ModuleBuildPipeline
     {
         public string SourcePath { get; }
         public string StagingPath { get; }
+        public int NormalizedLineEndingsCount { get; }
+        public int LineEndingNormalizationErrors { get; }
 
-        public StagingResult(string sourcePath, string stagingPath)
+        public StagingResult(
+            string sourcePath,
+            string stagingPath,
+            int normalizedLineEndingsCount,
+            int lineEndingNormalizationErrors)
         {
             SourcePath = sourcePath;
             StagingPath = stagingPath;
+            NormalizedLineEndingsCount = normalizedLineEndingsCount;
+            LineEndingNormalizationErrors = lineEndingNormalizationErrors;
         }
     }
 
@@ -79,9 +87,13 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
-        NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
+        var normalization = NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
-        return new StagingResult(source, staging);
+        return new StagingResult(
+            source,
+            staging,
+            normalization.Converted,
+            normalization.Errors);
     }
 
     internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
@@ -95,7 +107,7 @@ public sealed class ModuleBuildPipeline
 
         var builder = new ModuleBuilder(_logger);
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
-        builder.BuildInPlace(new ModuleBuilder.Options
+        var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
@@ -112,6 +124,8 @@ public sealed class ModuleBuildPipeline
             ExportAssemblies = spec.ExportAssemblies ?? Array.Empty<string>(),
             DisableBinaryCmdletScan = spec.DisableBinaryCmdletScan,
             BinaryConflictSearchRoots = spec.BinaryConflictSearchRoots ?? Array.Empty<string>(),
+            BinaryConflictPriorityModuleNames = spec.BinaryConflictPriorityModuleNames ?? Array.Empty<string>(),
+            BinaryConflictReportRoot = spec.BinaryConflictReportRoot,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
         });
@@ -133,7 +147,7 @@ public sealed class ModuleBuildPipeline
             _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
         }
 
-        return new ModuleBuildResult(staging, psd1, exports);
+        return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 
     /// <summary>
@@ -271,7 +285,7 @@ public sealed class ModuleBuildPipeline
             ReadStringOrArray(psd1Path, "CmdletsToExport"),
             ReadStringOrArray(psd1Path, "AliasesToExport"));
 
-    private void NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
+    private (int Converted, int Errors) NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {
         try
         {
@@ -303,10 +317,14 @@ public sealed class ModuleBuildPipeline
                 _logger.Info($"Normalized staged line endings to CRLF ({result.Converted} file(s)).");
             if (result.Errors > 0)
                 _logger.Warn($"Failed to normalize line endings for {result.Errors} staged file(s).");
+            return (result.Converted, result.Errors);
         }
         catch (Exception ex)
         {
             _logger.Warn($"Mixed line-ending normalization in staging failed: {ex.Message}");
+            // This outer catch can fire before the converter returns per-file totals, so the error count is an
+            // approximate "normalization failed" signal rather than an exact count of failed files.
+            return (0, 1);
         }
     }
 

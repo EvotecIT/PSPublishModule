@@ -23,10 +23,6 @@
     [string] $FailOnDiagnosticsSeverity
 )
 
-if (-not $JsonOnly) {
-    Remove-Item -Path (Join-Path $PSScriptRoot '../Lib') -Recurse -Force -ErrorAction SilentlyContinue
-}
-
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $artefactsRoot = Join-Path $moduleRoot 'Artefacts'
@@ -55,32 +51,32 @@ if (-not $JsonOnly -and -not $NoDotnetBuild) {
 # installed/imported module in the caller session can shadow the current source changes.
 Get-Module -Name 'PSPublishModule' -All -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
 
+# Clean the repo Lib payload only after unloading the module; otherwise Windows can keep
+# stale PSPublishModule binaries locked and the delete silently fails.
+if (-not $JsonOnly) {
+    Remove-Item -Path (Join-Path $PSScriptRoot '../Lib') -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $importPath = $null
 
-# Json-only and no-dotnet-build flows should avoid importing the source manifest from Module\Lib.
-# Once a PowerShell session loads those repo DLLs on Windows, later self-build attempts cannot
-# refresh them in-place. Import the compiled binary module instead for config generation.
-$preferBinaryImport = $JsonOnly -or $NoDotnetBuild
-
-if ($preferBinaryImport) {
-    if (-not (Test-Path -LiteralPath $binaryModule)) {
-        if (Test-Path -LiteralPath $csproj) {
-            $i = [char]0x2139 # ℹ
-            Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
-            $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                $buildOutput | Out-Host
-                throw "dotnet build failed (exit $LASTEXITCODE)."
-            }
+# Prefer the freshly built binary module for all PSPublishModule self-builds. Falling back to
+# the source manifest is only a last resort when the binary output is unavailable.
+if (-not (Test-Path -LiteralPath $binaryModule)) {
+    if (Test-Path -LiteralPath $csproj) {
+        $i = [char]0x2139 # ℹ
+        Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+        $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $buildOutput | Out-Host
+            throw "dotnet build failed (exit $LASTEXITCODE)."
         }
     }
+}
 
-    if (Test-Path -LiteralPath $binaryModule) {
-        $importPath = $binaryModule
-    }
+if (Test-Path -LiteralPath $binaryModule) {
+    $importPath = $binaryModule
 } elseif (Test-Path -LiteralPath $sourceLibRoot) {
-    # Keep the source-manifest path for regular repo builds where Module\Lib is intentionally populated.
-    # Build-ModuleSelf now prefers binary import to avoid in-place refreshes of loaded repo DLLs.
+    Write-Warning "Falling back to source manifest import because the compiled PSPublishModule binary was not found: $binaryModule"
     $importPath = $sourceManifest
 } else {
     if (-not (Test-Path -LiteralPath $binaryModule)) {
@@ -104,6 +100,7 @@ if (-not $importPath) {
     throw "Invoke-ModuleBuild is not available. Ensure PSPublishModule.dll built and importable."
 }
 
+Write-Verbose "Importing PSPublishModule from '$importPath'."
 Import-Module $importPath -Force
 
 $invokeModuleBuildCommand = Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue
