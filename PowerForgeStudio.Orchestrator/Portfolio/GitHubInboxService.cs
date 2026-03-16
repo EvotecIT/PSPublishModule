@@ -42,7 +42,9 @@ public sealed class GitHubInboxService : IDisposable
         CancellationToken cancellationToken = default)
     {
         options ??= new GitHubInboxOptions();
-        var maxRepositories = Math.Max(0, options.MaxRepositories);
+        var maxRepositories = options.MaxRepositories < 0
+            ? items.Count
+            : Math.Max(0, options.MaxRepositories);
         var enriched = new List<RepositoryPortfolioItem>(items.Count);
 
         for (var index = 0; index < items.Count; index++)

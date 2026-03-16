@@ -47,6 +47,11 @@
           "SQLitePCLRaw.core": "2.1.11"
         }
       },
+      "System.Reflection.MetadataLoadContext": {
+        "type": "Transitive",
+        "resolved": "8.0.0",
+        "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+      },
       "dbaclientx.core": {
         "type": "Project"
       },
@@ -57,6 +62,12 @@
           "Microsoft.Data.Sqlite": "[10.0.2, )"
         }
       },
+      "powerforge": {
+        "type": "Project",
+        "dependencies": {
+          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
       "powerforgestudio.domain": {
         "type": "Project"
       },
@@ -64,6 +75,7 @@
         "type": "Project",
         "dependencies": {
           "DBAClientX.SQLite": "[0.2.0, )",
+          "PowerForge": "[1.0.0, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }

@@ -16,7 +16,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "15";
+    private const string CurrentSchemaVersion = "16";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -216,7 +216,8 @@ public sealed class ReleaseStateDatabase
         new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase) {
             ["release_portfolio_view_state"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
                 ["preset_key"] = "TEXT NULL",
-                ["family_key"] = "TEXT NULL"
+                ["family_key"] = "TEXT NULL",
+                ["display_name"] = "TEXT NULL"
             },
             ["release_queue_session"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
                 ["scope_key"] = "TEXT NULL",
@@ -346,6 +347,7 @@ public sealed class ReleaseStateDatabase
             """
             CREATE TABLE IF NOT EXISTS release_portfolio_view_state (
                 view_id TEXT PRIMARY KEY,
+                display_name TEXT NULL,
                 preset_key TEXT NULL,
                 focus_mode TEXT NOT NULL,
                 search_text TEXT NULL,
@@ -535,6 +537,12 @@ public sealed class ReleaseStateDatabase
             columnDefinition: "TEXT NULL",
             cancellationToken).ConfigureAwait(false);
 
+        await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_view_state",
+            columnName: "display_name",
+            columnDefinition: "TEXT NULL",
+            cancellationToken).ConfigureAwait(false);
+
         await _sqlite.ExecuteNonQueryAsync(
             DatabasePath,
             """
@@ -617,7 +625,11 @@ public sealed class ReleaseStateDatabase
         }
     }
 
-    public async Task PersistPortfolioViewStateAsync(RepositoryPortfolioViewState state, string viewId = "default", CancellationToken cancellationToken = default)
+    public async Task PersistPortfolioViewStateAsync(
+        RepositoryPortfolioViewState state,
+        string viewId = "default",
+        string? displayName = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentException.ThrowIfNullOrWhiteSpace(viewId);
@@ -627,6 +639,7 @@ public sealed class ReleaseStateDatabase
             """
             INSERT INTO release_portfolio_view_state(
                 view_id,
+                display_name,
                 preset_key,
                 focus_mode,
                 search_text,
@@ -634,12 +647,14 @@ public sealed class ReleaseStateDatabase
                 updated_at_utc)
             VALUES (
                 @ViewId,
+                @DisplayName,
                 @PresetKey,
                 @FocusMode,
                 @SearchText,
                 @FamilyKey,
                 @UpdatedAtUtc)
             ON CONFLICT(view_id) DO UPDATE SET
+                display_name = excluded.display_name,
                 preset_key = excluded.preset_key,
                 focus_mode = excluded.focus_mode,
                 search_text = excluded.search_text,
@@ -648,6 +663,7 @@ public sealed class ReleaseStateDatabase
             """,
             new Dictionary<string, object?> {
                 ["@ViewId"] = viewId,
+                ["@DisplayName"] = displayName,
                 ["@PresetKey"] = state.PresetKey,
                 ["@FocusMode"] = state.FocusMode.ToString(),
                 ["@SearchText"] = state.SearchText,
@@ -664,7 +680,8 @@ public sealed class ReleaseStateDatabase
         var rows = await _sqlite.QueryReadOnlyAsListAsync(
             DatabasePath,
             """
-            SELECT preset_key,
+            SELECT display_name,
+                   preset_key,
                    focus_mode,
                    search_text,
                    family_key,
@@ -674,11 +691,13 @@ public sealed class ReleaseStateDatabase
             LIMIT 1;
             """,
             reader => new PortfolioViewStateRow(
-                PresetKey: reader.IsDBNull(0) ? null : reader.GetString(0),
-                FocusMode: reader.GetString(1),
-                SearchText: reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
-                FamilyKey: reader.IsDBNull(3) ? null : reader.GetString(3),
-                UpdatedAtUtc: DateTimeOffset.Parse(reader.GetString(4))),
+                ViewId: viewId,
+                DisplayName: reader.IsDBNull(0) ? null : reader.GetString(0),
+                PresetKey: reader.IsDBNull(1) ? null : reader.GetString(1),
+                FocusMode: reader.GetString(2),
+                SearchText: reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                FamilyKey: reader.IsDBNull(4) ? null : reader.GetString(4),
+                UpdatedAtUtc: DateTimeOffset.Parse(reader.GetString(5))),
             new Dictionary<string, object?> {
                 ["@ViewId"] = viewId
             },
@@ -696,6 +715,61 @@ public sealed class ReleaseStateDatabase
             SearchText: row.SearchText,
             FamilyKey: row.FamilyKey,
             UpdatedAtUtc: row.UpdatedAtUtc);
+    }
+
+    public async Task<IReadOnlyList<RepositoryPortfolioSavedView>> LoadSavedPortfolioViewsAsync(CancellationToken cancellationToken = default)
+    {
+        var rows = await _sqlite.QueryReadOnlyAsListAsync(
+            DatabasePath,
+            """
+            SELECT view_id,
+                   display_name,
+                   preset_key,
+                   focus_mode,
+                   search_text,
+                   family_key,
+                   updated_at_utc
+            FROM release_portfolio_view_state
+            WHERE view_id <> 'default'
+            ORDER BY updated_at_utc DESC, display_name, view_id;
+            """,
+            reader => new PortfolioViewStateRow(
+                ViewId: reader.GetString(0),
+                DisplayName: reader.IsDBNull(1) ? null : reader.GetString(1),
+                PresetKey: reader.IsDBNull(2) ? null : reader.GetString(2),
+                FocusMode: reader.GetString(3),
+                SearchText: reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                FamilyKey: reader.IsDBNull(5) ? null : reader.GetString(5),
+                UpdatedAtUtc: DateTimeOffset.Parse(reader.GetString(6))),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return rows
+            .Select(row => new RepositoryPortfolioSavedView(
+                ViewId: row.ViewId,
+                DisplayName: string.IsNullOrWhiteSpace(row.DisplayName) ? row.ViewId : row.DisplayName,
+                State: new RepositoryPortfolioViewState(
+                    PresetKey: row.PresetKey,
+                    FocusMode: Enum.Parse<RepositoryPortfolioFocusMode>(row.FocusMode, ignoreCase: true),
+                    SearchText: row.SearchText,
+                    FamilyKey: row.FamilyKey,
+                    UpdatedAtUtc: row.UpdatedAtUtc)))
+            .ToArray();
+    }
+
+    public async Task DeletePortfolioViewStateAsync(string viewId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewId);
+
+        await _sqlite.ExecuteNonQueryAsync(
+            DatabasePath,
+            """
+            DELETE FROM release_portfolio_view_state
+            WHERE view_id = @ViewId;
+            """,
+            new Dictionary<string, object?> {
+                ["@ViewId"] = viewId
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PersistPortfolioSnapshotAsync(IEnumerable<RepositoryPortfolioItem> items, CancellationToken cancellationToken = default)
@@ -1565,6 +1639,8 @@ public sealed class ReleaseStateDatabase
         string? DriftDetail);
 
     private readonly record struct PortfolioViewStateRow(
+        string ViewId,
+        string? DisplayName,
         string? PresetKey,
         string FocusMode,
         string SearchText,

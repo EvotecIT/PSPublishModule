@@ -94,6 +94,55 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         Assert.True(File.Exists(plan.PlanPath!));
     }
 
+    [Fact]
+    public async Task PopulatePlanPreviewAsync_NegativeLimit_TreatsWorkspaceAsUnlimited()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LibraryRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("LibraryRepo", "Build"));
+        var buildScriptPath = Path.Combine(buildDirectory, "Build-Project.ps1");
+        var configPath = Path.Combine(buildDirectory, "project.build.json");
+
+        File.WriteAllText(buildScriptPath, "# test");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "RootPath": ".",
+              "Build": true
+            }
+            """);
+
+        var projectBuildHostService = new ProjectBuildHostService(
+            new NullLogger(),
+            executeRelease: spec => new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "1.0.0" },
+            publishGitHub: null,
+            validateGitHubPreflight: null);
+        var service = new RepositoryPlanPreviewService(
+            projectBuildHostService,
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+
+        var item = new RepositoryPortfolioItem(
+            new RepositoryCatalogEntry(
+                Name: "LibraryRepo",
+                RootPath: repositoryRoot,
+                RepositoryKind: ReleaseRepositoryKind.Library,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                ModuleBuildScriptPath: null,
+                ProjectBuildScriptPath: buildScriptPath,
+                IsWorktree: false,
+                HasWebsiteSignals: false),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0),
+            new RepositoryReadiness(RepositoryReadinessKind.Ready, "Ready"));
+
+        var result = await service.PopulatePlanPreviewAsync([item], new PlanPreviewOptions { MaxRepositories = -1 });
+
+        var updated = Assert.Single(result);
+        var plan = Assert.Single(updated.PlanResults!);
+        Assert.Equal(RepositoryPlanStatus.Succeeded, plan.Status);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

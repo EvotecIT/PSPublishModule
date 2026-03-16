@@ -129,6 +129,36 @@ public sealed class PowerForgeStudioGitHubInboxServiceTests
         Assert.Contains("pull request probe unavailable", inbox.Summary, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task PopulateInboxAsync_NegativeLimit_TreatsWorkspaceAsUnlimited()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(request => CreateResponse(request.RequestUri))) {
+            BaseAddress = new Uri("https://api.github.com")
+        };
+        var repository = new RepositoryPortfolioItem(
+            new RepositoryCatalogEntry(
+                Name: "DbaClientX",
+                RootPath: @"C:\Support\GitHub\DbaClientX",
+                RepositoryKind: ReleaseRepositoryKind.Mixed,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                ModuleBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Module.ps1",
+                ProjectBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Project.ps1",
+                IsWorktree: false,
+                HasWebsiteSignals: false),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 1, 0, 0, 0),
+            new RepositoryReadiness(RepositoryReadinessKind.Ready, "Clean and ready."));
+
+        var service = new GitHubInboxService(httpClient, new StubGitRemoteResolver("https://github.com/EvotecIT/DbaClientX.git"));
+        var result = await service.PopulateInboxAsync([repository], new GitHubInboxOptions {
+            MaxRepositories = -1
+        });
+
+        var inbox = Assert.Single(result).GitHubInbox;
+        Assert.NotNull(inbox);
+        Assert.NotEqual(RepositoryGitHubInboxStatus.NotProbed, inbox.Status);
+        Assert.Equal("EvotecIT/DbaClientX", inbox.RepositorySlug);
+    }
+
     private static HttpResponseMessage CreateResponse(Uri? uri)
     {
         var pathAndQuery = uri?.PathAndQuery ?? string.Empty;
