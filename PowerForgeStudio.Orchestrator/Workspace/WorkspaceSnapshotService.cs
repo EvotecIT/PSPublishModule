@@ -121,6 +121,7 @@ public sealed class WorkspaceSnapshotService : IWorkspaceSnapshotService
                 persistedPortfolio = _workspaceFamilyService.AnnotateFamilies(await stateDatabase.LoadPortfolioSnapshotAsync(cancellationToken).ConfigureAwait(false));
 
                 var latestQueue = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false);
+                // Workspace roots are normalized before persistence, but Windows path identity is still case-insensitive.
                 if (latestQueue is null
                     || !string.Equals(latestQueue.WorkspaceRoot, workspaceRoot, StringComparison.OrdinalIgnoreCase))
                 {

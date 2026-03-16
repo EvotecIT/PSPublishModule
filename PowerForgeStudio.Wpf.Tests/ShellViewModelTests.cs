@@ -1778,17 +1778,22 @@ public sealed class ShellViewModelTests
         field.SetValue(viewModel, value);
     }
 
-    private static async Task WaitForConditionAsync(Func<bool> condition)
+    private static async Task WaitForConditionAsync(
+        Func<bool> condition,
+        TimeSpan? timeout = null,
+        TimeSpan? pollingInterval = null)
     {
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(5);
+        var effectivePollingInterval = pollingInterval ?? TimeSpan.FromMilliseconds(50);
         var startedAt = DateTime.UtcNow;
         while (!condition())
         {
-            if (DateTime.UtcNow - startedAt > TimeSpan.FromSeconds(5))
+            if (DateTime.UtcNow - startedAt > effectiveTimeout)
             {
                 throw new TimeoutException("Condition was not met within the expected time.");
             }
 
-            await Task.Delay(25).ConfigureAwait(false);
+            await Task.Delay(effectivePollingInterval).ConfigureAwait(false);
         }
     }
 

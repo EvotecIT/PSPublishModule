@@ -19,6 +19,7 @@ $dotnetArguments = @(
     'run',
     '--project', $wpfProject,
     '-c', $Configuration,
+    # Keep this aligned with the WPF target framework in PowerForgeStudio.Wpf.csproj.
     '--framework', 'net10.0-windows'
 )
 if ($NoBuild) {

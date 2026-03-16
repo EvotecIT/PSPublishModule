@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using System.Security;
 using PowerForgeStudio.Orchestrator.PowerShell;
 
 namespace PowerForgeStudio.Orchestrator.Host;
@@ -14,21 +15,19 @@ public static class PowerForgeStudioHostPaths
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
         var normalizedRoot = NormalizeWorkspaceRoot(workspaceRoot);
-        var workspaceName = GetWorkspaceDisplayName(normalizedRoot);
-        var workspaceKey = BuildWorkspaceKey(normalizedRoot);
+        var workspaceName = GetWorkspaceDisplayNameFromNormalizedRoot(normalizedRoot);
+        var workspaceKey = BuildWorkspaceKeyFromNormalizedRoot(normalizedRoot);
         var directory = Path.Combine(
             GetStudioRootPath(),
             "workspaces",
             $"{SanitizePathSegment(workspaceName)}-{workspaceKey[..12]}");
 
-        Directory.CreateDirectory(directory);
         return Path.Combine(directory, "releaseops.db");
     }
 
     public static string GetWorkspaceRootCatalogPath()
     {
         var directory = Path.Combine(GetStudioRootPath(), "state");
-        Directory.CreateDirectory(directory);
         return Path.Combine(directory, "workspace-roots.json");
     }
 
@@ -81,7 +80,7 @@ public static class PowerForgeStudioHostPaths
             return Path.GetFullPath(value)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
-        catch (Exception) when (value is not null)
+        catch (Exception exception) when (exception is ArgumentException or SecurityException or PathTooLongException or NotSupportedException)
         {
             return value.Trim()
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -93,9 +92,7 @@ public static class PowerForgeStudioHostPaths
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
         var normalizedRoot = NormalizeWorkspaceRoot(workspaceRoot);
-        var bytes = Encoding.UTF8.GetBytes(normalizedRoot);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return BuildWorkspaceKeyFromNormalizedRoot(normalizedRoot);
     }
 
     internal static string GetWorkspaceDisplayName(string workspaceRoot)
@@ -103,6 +100,18 @@ public static class PowerForgeStudioHostPaths
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
         var normalizedRoot = NormalizeWorkspaceRoot(workspaceRoot);
+        return GetWorkspaceDisplayNameFromNormalizedRoot(normalizedRoot);
+    }
+
+    private static string BuildWorkspaceKeyFromNormalizedRoot(string normalizedRoot)
+    {
+        var bytes = Encoding.UTF8.GetBytes(normalizedRoot);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string GetWorkspaceDisplayNameFromNormalizedRoot(string normalizedRoot)
+    {
         var name = Path.GetFileName(normalizedRoot);
         return string.IsNullOrWhiteSpace(name)
             ? "workspace"
