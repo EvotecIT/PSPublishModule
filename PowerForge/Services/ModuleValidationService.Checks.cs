@@ -245,14 +245,24 @@ public sealed partial class ModuleValidationService
                     var messages = failures
                         .Select(f => string.IsNullOrWhiteSpace(f.Message) ? f.Name : $"{f.Name}: {f.Message}")
                         .ToArray();
-                    issues.Add($"PSScriptAnalyzer install failed: {string.Join("; ", messages)}");
-                    return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+                    if (!settings.SkipIfUnavailable)
+                    {
+                        issues.Add($"PSScriptAnalyzer install failed: {string.Join("; ", messages)}");
+                        return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+                    }
+
+                    _logger.Warn($"PSScriptAnalyzer install failed; continuing with SkipIfUnavailable enabled. {string.Join("; ", messages)}");
                 }
             }
             catch (Exception ex)
             {
-                issues.Add($"PSScriptAnalyzer install failed: {ex.Message}");
-                return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+                if (!settings.SkipIfUnavailable)
+                {
+                    issues.Add($"PSScriptAnalyzer install failed: {ex.Message}");
+                    return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+                }
+
+                _logger.Warn($"PSScriptAnalyzer install failed; continuing with SkipIfUnavailable enabled. {ex.Message}");
             }
         }
 
