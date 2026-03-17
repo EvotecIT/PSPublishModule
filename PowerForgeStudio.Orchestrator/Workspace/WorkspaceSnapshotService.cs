@@ -120,9 +120,19 @@ public sealed class WorkspaceSnapshotService : IWorkspaceSnapshotService
                 await stateDatabase.PersistPlanSnapshotsAsync(familyAnnotatedPortfolio, cancellationToken).ConfigureAwait(false);
                 persistedPortfolio = _workspaceFamilyService.AnnotateFamilies(await stateDatabase.LoadPortfolioSnapshotAsync(cancellationToken).ConfigureAwait(false));
 
-                var draftQueue = _queuePlanner.CreateDraftQueue(workspaceRoot, persistedPortfolio);
-                await stateDatabase.PersistQueueSessionAsync(draftQueue, cancellationToken).ConfigureAwait(false);
-                persistedQueue = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false) ?? draftQueue;
+                var latestQueue = await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false);
+                // Workspace roots are normalized before persistence, but Windows path identity is still case-insensitive.
+                if (latestQueue is null
+                    || !string.Equals(latestQueue.WorkspaceRoot, workspaceRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    var draftQueue = _queuePlanner.CreateDraftQueue(workspaceRoot, persistedPortfolio);
+                    await stateDatabase.PersistQueueSessionAsync(draftQueue, cancellationToken).ConfigureAwait(false);
+                    persistedQueue = draftQueue;
+                }
+                else
+                {
+                    persistedQueue = latestQueue;
+                }
 
                 signingReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
                 publishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);

@@ -30,6 +30,17 @@ Each module that is published to PowerShellGallery has Build or Publish folder n
 
 For examples and usage you can visit other projects and see how they are built in addition to what is shown in Build folder.
 
+## PowerForge Studio
+
+The repo also contains the current PowerForge Studio hosts:
+
+- `PowerForgeStudio.Wpf`
+- `PowerForgeStudio.Cli`
+
+For Studio-specific build, run, and publish commands, use:
+
+- [Docs\PowerForgeStudio.Runbook.md](Docs/PowerForgeStudio.Runbook.md)
+
 ## Support This Project
 
 If you find this project helpful, please consider supporting its development.

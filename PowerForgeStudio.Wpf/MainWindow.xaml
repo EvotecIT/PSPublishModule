@@ -2,1396 +2,481 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:local="clr-namespace:PowerForgeStudio.Wpf.ViewModels"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="PowerForgeStudio"
-        Width="1480"
-        Height="920"
-        MinWidth="1200"
-        MinHeight="760"
+        Width="1600"
+        Height="960"
+        MinWidth="1280"
+        MinHeight="820"
         Loaded="Window_Loaded">
-    <Grid Margin="24">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="240" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="360" />
-        </Grid.ColumnDefinitions>
+    <Window.Resources>
+        <Style x:Key="PanelBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style x:Key="HintTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource AppTextMutedBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="GhostButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="Background" Value="#EDF6F2" />
+            <Setter Property="BorderBrush" Value="#C9DDD4" />
+            <Setter Property="Foreground" Value="{StaticResource AppAccentDeepBrush}" />
+        </Style>
+        <Style x:Key="FlatListBoxStyle" TargetType="ListBox">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style x:Key="FlatListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style x:Key="ExplorerNodeBorderStyle" TargetType="Border">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Background" Value="#EDF6F2" />
+                    <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
 
-        <Border Grid.Column="0"
-                Margin="0,0,20,0"
-                Background="{StaticResource AppAccentDeepBrush}"
-                CornerRadius="28"
-                Padding="22">
-            <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock FontFamily="Segoe UI Variable Display"
-                               FontSize="26"
-                               FontWeight="SemiBold"
-                               Foreground="White"
-                               Text="ReleaseOps" />
-                    <TextBlock Margin="0,6,0,22"
-                               Foreground="#CBE3DD"
-                               Text="Desktop release control plane" />
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-                    <Button Background="{StaticResource AppWarmBrush}"
-                            BorderBrush="{StaticResource AppWarmBrush}"
-                            Command="{Binding RefreshPortfolioCommand}"
-                            Content="Prepare Queue" />
-                    <Button Background="#1D5B52"
-                            BorderBrush="#1D5B52"
-                            Command="{Binding RunNextQueueStepCommand}"
-                            Content="Run Next Step" />
-                    <Button Background="#123C36"
-                            BorderBrush="#123C36"
-                            Command="{Binding ApproveUsbCommand}"
-                            Content="Approve USB" />
-                    <Button Background="#6C4A16"
-                            BorderBrush="#6C4A16"
-                            Command="{Binding RetryFailedCommand}"
-                            Content="Retry Failed" />
+        <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Background="{StaticResource HeroBrush}" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="360" />
+                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock FontFamily="Segoe UI Variable Display" FontSize="28" FontWeight="SemiBold" Text="PowerForge Studio" />
+                    <TextBlock Margin="0,4,0,0" FontSize="16" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding PortfolioOverview.SummaryHeadline}" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.SummaryDetails}" />
                 </StackPanel>
 
-                <StackPanel VerticalAlignment="Stretch">
-                    <TextBlock Margin="0,10,0,10"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="#D8ECE7"
-                               Text="Core Views" />
-                    <TextBlock Margin="0,0,0,8" Foreground="White" Text="Portfolio" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Queue" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Repository Detail" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Signing Station" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Publish Station" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Verification Station" />
-                    <TextBlock Margin="0,0,0,8" Foreground="#CBE3DD" Text="Publish Receipts" />
-                    <TextBlock Margin="0,0,0,24" Foreground="#CBE3DD" Text="Verification Receipts" />
-
-                    <Border Background="#16463F"
-                            CornerRadius="18"
-                            Padding="14">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold"
-                                       Foreground="White"
-                                       Text="Workspace Root" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Foreground="#CBE3DD"
-                                       Text="{Binding WorkspaceRoot}" />
-                        </StackPanel>
-                    </Border>
+                <StackPanel Grid.Column="1" Margin="20,0,0,0">
+                    <TextBlock FontWeight="SemiBold" Text="Workspace Root" />
+                    <ComboBox Margin="0,8,0,0" Padding="6" IsEditable="True" IsTextSearchEnabled="False"
+                              ItemsSource="{Binding RecentWorkspaceRoots}" StaysOpenOnEdit="True"
+                              Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Focus" />
+                    <ComboBox Margin="0,8,0,0" Padding="6"
+                              ItemsSource="{Binding PortfolioOverview.FocusModes}"
+                              SelectedItem="{Binding PortfolioOverview.SelectedFocus}"
+                              DisplayMemberPath="DisplayName" />
                 </StackPanel>
-            </DockPanel>
+
+                <StackPanel Grid.Column="2" Margin="20,0,0,0">
+                    <TextBlock FontWeight="SemiBold" Text="Search" />
+                    <TextBox Margin="0,8,0,0" Padding="8,6" Text="{Binding PortfolioOverview.SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Plan Coverage" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.PlanCoverageText}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Margin="24,0,0,0">
+                    <TextBlock FontWeight="SemiBold" Text="Quick Filters" />
+                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PortfolioOverview.QuickPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource GhostButtonStyle}"
+                                        Command="{Binding DataContext.ApplyPortfolioPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        Content="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Status" />
+                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" FontWeight="SemiBold" Text="{Binding StatusText}" />
+                    <ProgressBar Margin="0,10,0,0" Height="8" IsIndeterminate="{Binding IsBusy}" />
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="400" />
+            </Grid.ColumnDefinitions>
 
-            <Border Style="{StaticResource CardBorderStyle}"
-                    Background="{StaticResource HeroBrush}"
-                    Padding="24">
-                <Grid>
+            <ScrollViewer Grid.Column="0" Margin="0,0,16,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource PanelBorderStyle}">
+                        <StackPanel>
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Explorer" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.FocusHeadline}" />
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RefreshPortfolioCommand}" Content="Refresh Workspace" />
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding PrepareSelectedFamilyQueueCommand}" Content="Prepare Family" />
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RetrySelectedFamilyFailedCommand}" Content="Retry Family" />
+                            </WrapPanel>
+
+                            <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Families" />
+                            <TreeView Margin="0,10,0,0"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      ItemsSource="{Binding WorkspaceExplorerNodes}">
+                                <TreeView.Resources>
+                                    <HierarchicalDataTemplate DataType="{x:Type local:WorkspaceExplorerNodeViewModel}" ItemsSource="{Binding Children}">
+                                        <Button Padding="0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyWorkspaceExplorerNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Style="{StaticResource ExplorerNodeBorderStyle}">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                        <Border DockPanel.Dock="Right" Padding="8,3" Background="#FFFFFF" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Badge}" />
+                                                        </Border>
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding Summary}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.Resources>
+                            </TreeView>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource PanelBorderStyle}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Release Inbox" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ReleaseSignals.ReleaseInboxHeadline}" />
+                            <ListBox Margin="0,10,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
+                                     ItemsSource="{Binding ReleaseSignals.ReleaseInboxItems}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyReleaseInboxItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Padding="12" Background="#FFFDF9" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding Badge}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Title}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Column="1" Margin="0,0,16,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="300" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="320" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel>
-                        <TextBlock FontFamily="Segoe UI Variable Display"
-                                   FontSize="30"
-                                   FontWeight="SemiBold"
-                                   Text="Release cockpit foundation" />
-                        <TextBlock Margin="0,8,0,10"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                   Text="{Binding SummaryHeadline}" />
-                        <TextBlock Width="680"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource AppTextMutedBrush}"
-                                   Text="{Binding SummaryDetails}" />
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,16,0">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top">
+                                <DockPanel LastChildFill="False">
+                                    <TextBlock DockPanel.Dock="Left" FontSize="18" FontWeight="SemiBold" Text="Repositories" />
+                                    <Border DockPanel.Dock="Right" Padding="10,4" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="10">
+                                        <TextBlock Text="{Binding Repositories.Count, StringFormat=Visible repos: {0}}" />
+                                    </Border>
+                                </DockPanel>
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="Select a repository to inspect what you are actually working on." />
+                            </StackPanel>
 
-                        <ItemsControl Margin="0,18,0,0"
-                                      ItemsSource="{Binding PortfolioDashboardCards}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Margin="0,0,12,12"
-                                            Padding="0"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Command="{Binding DataContext.ApplyDashboardCardCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}">
-                                        <Border Width="150"
-                                                Padding="14"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="18">
+                            <ListBox Margin="0,16,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
+                                     ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
                                             <StackPanel>
-                                                <TextBlock FontSize="11"
-                                                           Foreground="{StaticResource AppTextMutedBrush}"
-                                                           Text="{Binding Title}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           FontFamily="Segoe UI Variable Display"
-                                                           FontSize="26"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{StaticResource AppAccentDeepBrush}"
-                                                           Text="{Binding CountDisplay}" />
-                                                <TextBlock Margin="0,8,0,0"
-                                                           TextWrapping="Wrap"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding Detail}" />
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                    <Border DockPanel.Dock="Right" Padding="8,3" Background="#EDF6F2" CornerRadius="10">
+                                                        <TextBlock Text="{Binding ReadinessKind}" />
+                                                    </Border>
+                                                </DockPanel>
+                                                <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding FamilyDisplayName}" />
+                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ReadinessReason}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PlanStatus, StringFormat=Plan: {0}}" />
                                             </StackPanel>
                                         </Border>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
 
-                    <Border Grid.Column="1"
-                            Margin="24,0,0,0"
-                            Padding="14"
-                            Background="#FFFFFF"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="18">
-                        <StackPanel Width="260">
-                            <TextBlock FontWeight="SemiBold" Text="Local State" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding DatabasePath}" />
-                            <TextBlock Margin="0,14,0,0"
-                                       Foreground="{StaticResource AppSuccessBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding StatusText}" />
-                            <TextBlock Margin="0,8,0,0"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding IsBusy, StringFormat=Busy: {0}}" />
-                            <TextBlock Margin="0,12,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding PlanCoverageText}" />
-
-                            <Border Margin="0,16,0,0"
-                                    Padding="12"
-                                    Background="#F4F9F7"
-                                    BorderBrush="{StaticResource AppBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="14">
-                                <StackPanel>
-                                    <DockPanel>
-                                        <TextBlock DockPanel.Dock="Left"
-                                                   FontWeight="SemiBold"
-                                                   Text="Build Engine" />
-                                        <Border DockPanel.Dock="Right"
-                                                Padding="8,3"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10">
-                                            <TextBlock FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding BuildEngineStatus}" />
-                                        </Border>
-                                    </DockPanel>
-                                    <TextBlock Margin="0,8,0,0"
-                                               Foreground="{StaticResource AppAccentDeepBrush}"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding BuildEngineHeadline}" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               TextWrapping="Wrap"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="{Binding BuildEngineDetails}" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               TextWrapping="Wrap"
-                                               Foreground="{StaticResource AppWarmBrush}"
-                                               Text="{Binding BuildEngineAdvisory}" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
+                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Family Lane" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryFamily.LaneHeadline}" />
+                            </StackPanel>
+                            <ListBox Margin="0,16,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
+                                     ItemsSource="{Binding RepositoryFamily.LaneItems}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyRepositoryFamilyLaneItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding LaneDisplay}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
                     </Border>
                 </Grid>
-            </Border>
 
-            <Border Grid.Row="1"
-                    Style="{StaticResource CardBorderStyle}"
-                    Padding="0">
-                <DockPanel>
-                    <Border DockPanel.Dock="Top"
-                            Padding="18"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="0,0,0,1"
-                            Background="{StaticResource AppSurfaceAltBrush}">
-                        <StackPanel>
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="Managed Repositories" />
-                            <TextBlock Margin="0,4,0,0"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="Live portfolio with readiness and git telemetry, persisted through DbaClientX.SQLite." />
-
-                            <WrapPanel Margin="0,14,0,0">
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="Quick Presets" />
-                                    <ItemsControl Margin="0,6,0,0"
-                                                  ItemsSource="{Binding PortfolioQuickPresets}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Button Margin="0,0,10,10"
-                                                        Padding="12,6"
-                                                        Background="#FFFFFF"
-                                                        BorderBrush="{StaticResource AppBorderBrush}"
-                                                        BorderThickness="1"
-                                                        Command="{Binding DataContext.ApplyPortfolioPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        Content="{Binding DisplayName}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Margin="0,16,0,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
+                            <DockPanel LastChildFill="False">
+                                <StackPanel DockPanel.Dock="Left">
+                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding RepositoryDetail.Headline}" />
+                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" FontWeight="SemiBold" Text="{Binding RepositoryDetail.Readiness}" />
                                 </StackPanel>
-                            </WrapPanel>
+                                <Border DockPanel.Dock="Right" Padding="10,4" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="12">
+                                    <TextBlock Text="{Binding RepositoryDetail.Badge}" />
+                                </Border>
+                            </DockPanel>
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.Reason}" />
+                        </StackPanel>
 
-                            <WrapPanel Margin="0,4,0,0">
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="Repository Families" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="{Binding RepositoryFamilyHeadline}" />
-                                    <TextBlock Margin="0,2,0,0"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="{Binding RepositoryFamilyDetails}" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Foreground="{StaticResource AppAccentDeepBrush}"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding RepositoryFamilyActionHeadline}" />
-
-                                    <ItemsControl Margin="0,8,0,0"
-                                                  ItemsSource="{Binding RepositoryFamilies}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Button Margin="0,0,10,10"
-                                                        Padding="0"
-                                                        Background="Transparent"
-                                                        BorderThickness="0"
-                                                        Command="{Binding DataContext.ApplyRepositoryFamilyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}">
-                                                    <Border Width="178"
-                                                            Padding="12"
-                                                            Background="#FFFFFF"
-                                                            BorderBrush="{StaticResource AppBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="16">
+                        <TabControl Margin="0,16,0,0">
+                            <TabItem Header="Overview">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Margin="12">
+                                        <TextBlock FontWeight="SemiBold" Text="Repository Path" />
+                                        <TextBox Margin="0,8,0,0" IsReadOnly="True" Text="{Binding RepositoryDetail.Path}" />
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Branch" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.Branch}" />
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Queue" />
+                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.QueueLane}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.QueueSummary}" />
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Release Drift" />
+                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.ReleaseDrift}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.ReleaseDriftDetail}" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="Git">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Margin="12">
+                                        <TextBlock FontWeight="SemiBold" Text="Git Diagnostics" />
+                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.GitDiagnostics}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.GitDiagnosticsDetail}" />
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Quick Actions" />
+                                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding RepositoryDetail.GitQuickActions}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                        <DockPanel>
+                                                            <StackPanel DockPanel.Dock="Left">
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
+                                                            </StackPanel>
+                                                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButtonStyle}"
+                                                                    Command="{Binding DataContext.ExecuteGitQuickActionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}" Content="{Binding ExecuteLabel}" />
+                                                        </DockPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Suggested Commands" />
+                                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding RepositoryDetail.GitRemediationSteps}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
                                                         <StackPanel>
                                                             <DockPanel>
-                                                                <TextBlock DockPanel.Dock="Left"
-                                                                           FontWeight="SemiBold"
-                                                                           Text="{Binding DisplayName}" />
-                                                                <Border DockPanel.Dock="Right"
-                                                                        Padding="8,3"
-                                                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                                                        CornerRadius="10">
-                                                                    <TextBlock FontSize="11"
-                                                                               Foreground="{StaticResource AppTextMutedBrush}"
-                                                                               Text="{Binding CountDisplay}" />
-                                                                </Border>
+                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Title}" />
+                                                                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButtonStyle}"
+                                                                        Command="{Binding DataContext.CopyGitRemediationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}" Content="Copy" />
                                                             </DockPanel>
-                                                            <TextBlock Margin="0,6,0,0"
-                                                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                                                       FontWeight="SemiBold"
-                                                                       Text="{Binding StatusDisplay}" />
-                                                            <TextBlock Margin="0,6,0,0"
-                                                                       TextWrapping="Wrap"
-                                                                       Style="{StaticResource MutedTextStyle}"
-                                                                       Text="{Binding MemberSummary}" />
+                                                            <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
+                                                            <TextBox Margin="0,8,0,0" IsReadOnly="True" Text="{Binding CommandText}" />
                                                         </StackPanel>
                                                     </Border>
-                                                </Button>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
-                                    <WrapPanel Margin="0,2,0,0">
-                                        <Button Margin="0,0,10,10"
-                                                Padding="12,6"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                Command="{Binding PrepareSelectedFamilyQueueCommand}"
-                                                Content="Prepare Family Queue" />
-                                        <Button Margin="0,0,10,10"
-                                                Padding="12,6"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                Command="{Binding RetrySelectedFamilyFailedCommand}"
-                                                Content="Retry Family Failed" />
-                                    </WrapPanel>
-
-                                    <Border Margin="0,0,0,10"
-                                            Padding="14"
-                                            Background="#FFFFFF"
-                                            BorderBrush="{StaticResource AppBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="18">
-                                        <StackPanel>
-                                            <TextBlock FontWeight="SemiBold"
-                                                       Text="Family Lane" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryFamilyLaneHeadline}" />
-                                            <TextBlock Margin="0,4,0,12"
-                                                       TextWrapping="Wrap"
-                                                       Style="{StaticResource MutedTextStyle}"
-                                                       Text="{Binding RepositoryFamilyLaneDetails}" />
-
-                                            <ItemsControl ItemsSource="{Binding RepositoryFamilyLaneItems}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button Margin="0,0,0,10"
-                                                                Padding="0"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Command="{Binding DataContext.ApplyRepositoryFamilyLaneItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}">
-                                                            <Border Padding="12"
-                                                                    Background="{StaticResource AppSurfaceAltBrush}"
-                                                                    CornerRadius="14">
-                                                                <StackPanel>
-                                                                    <DockPanel>
-                                                                        <TextBlock DockPanel.Dock="Left"
-                                                                                   FontWeight="SemiBold"
-                                                                                   Text="{Binding RepositoryName}" />
-                                                                        <TextBlock DockPanel.Dock="Right"
-                                                                                   FontSize="11"
-                                                                                   Foreground="{StaticResource AppTextMutedBrush}"
-                                                                                   Text="{Binding WorkspaceDisplay}" />
-                                                                    </DockPanel>
-                                                                    <TextBlock Margin="0,4,0,0"
-                                                                               Foreground="{StaticResource AppAccentDeepBrush}"
-                                                                               FontWeight="SemiBold"
-                                                                               Text="{Binding LaneDisplay}" />
-                                                                    <TextBlock Margin="0,4,0,0"
-                                                                               FontSize="11"
-                                                                               Style="{StaticResource MutedTextStyle}"
-                                                                               Text="{Binding ReadinessDisplay}" />
-                                                                    <TextBlock Margin="0,6,0,0"
-                                                                               TextWrapping="Wrap"
-                                                                               Text="{Binding Detail}" />
-                                                                </StackPanel>
-                                                            </Border>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                            </WrapPanel>
-
-                            <WrapPanel Margin="0,4,0,0">
-                                <StackPanel Width="220">
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="Focus" />
-                                    <ComboBox Margin="0,6,0,0"
-                                              ItemsSource="{Binding PortfolioFocusModes}"
-                                              SelectedItem="{Binding SelectedPortfolioFocus, Mode=TwoWay}"
-                                              DisplayMemberPath="DisplayName" />
-                                </StackPanel>
-
-                                <StackPanel Width="280" Margin="14,0,0,0">
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="Search" />
-                                    <TextBox Margin="0,6,0,0"
-                                             Text="{Binding PortfolioSearchText, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                            </WrapPanel>
-
-                            <TextBlock Margin="0,14,0,0"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       Text="{Binding PortfolioFocusHeadline}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       Text="{Binding PortfolioPresetHeadline}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding PortfolioViewMemory}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding PortfolioFocusDetails}" />
-                        </StackPanel>
-                    </Border>
-
-                    <ListView ItemsSource="{Binding Repositories}"
-                              SelectedItem="{Binding SelectedRepository, Mode=TwoWay}">
-                        <ListView.View>
-                            <GridView AllowsColumnReorder="False">
-                                <GridViewColumn Width="220" Header="Repository" DisplayMemberBinding="{Binding Name}" />
-                                <GridViewColumn Width="140" Header="Family" DisplayMemberBinding="{Binding FamilyDisplayName}" />
-                                <GridViewColumn Width="110" Header="Readiness" DisplayMemberBinding="{Binding ReadinessKind}" />
-                                <GridViewColumn Width="200" Header="Reason" DisplayMemberBinding="{Binding ReadinessReason}" />
-                                <GridViewColumn Width="110" Header="Git Guard" DisplayMemberBinding="{Binding GitGuardStatus}" />
-                                <GridViewColumn Width="280" Header="Git Summary" DisplayMemberBinding="{Binding GitGuardSummary}" />
-                                <GridViewColumn Width="110" Header="Plan" DisplayMemberBinding="{Binding PlanStatus}" />
-                                <GridViewColumn Width="320" Header="Plan Summary" DisplayMemberBinding="{Binding PlanSummary}" />
-                                <GridViewColumn Width="110" Header="GitHub" DisplayMemberBinding="{Binding GitHubStatus}" />
-                                <GridViewColumn Width="70" Header="PRs" DisplayMemberBinding="{Binding GitHubPullRequests}" />
-                                <GridViewColumn Width="260" Header="GitHub Summary" DisplayMemberBinding="{Binding GitHubSummary}" />
-                                <GridViewColumn Width="110" Header="Drift" DisplayMemberBinding="{Binding ReleaseDriftStatus}" />
-                                <GridViewColumn Width="260" Header="Drift Summary" DisplayMemberBinding="{Binding ReleaseDriftSummary}" />
-                                <GridViewColumn Width="180" Header="Branch" DisplayMemberBinding="{Binding BranchName}" />
-                                <GridViewColumn Width="110" Header="Ahead / Behind" DisplayMemberBinding="{Binding AheadBehindDisplay}" />
-                                <GridViewColumn Width="170" Header="Dirty" DisplayMemberBinding="{Binding DirtyStatus}" />
-                                <GridViewColumn Width="110" Header="Kind" DisplayMemberBinding="{Binding RepositoryKind}" />
-                                <GridViewColumn Width="120" Header="Workspace" DisplayMemberBinding="{Binding WorkspaceKind}" />
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
-                </DockPanel>
-            </Border>
-        </Grid>
-
-        <StackPanel Grid.Column="2" Margin="20,0,0,0">
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Left"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Text="Repository Detail" />
-                        <Border DockPanel.Dock="Right"
-                                Padding="8,3"
-                                Background="#FFFFFF"
-                                BorderBrush="{StaticResource AppBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="10">
-                            <TextBlock FontSize="11"
-                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                       Text="{Binding RepositoryDetailReadiness}" />
-                        </Border>
-                    </DockPanel>
-
-                    <TextBlock Margin="0,8,0,0"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding RepositoryDetailHeadline}" />
-                    <TextBlock Margin="0,4,0,0"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding RepositoryDetailBadge}" />
-                    <TextBlock Margin="0,8,0,12"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding RepositoryDetailReason}" />
-
-                    <Border Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{StaticResource AppSurfaceAltBrush}"
-                            CornerRadius="14">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Text="Repository Path" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailPath}" />
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Git Branch" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailBranch}" />
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Git Preflight" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding RepositoryDetailGitDiagnostics}" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailGitDiagnosticsDetail}" />
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Suggested Commands" />
-                            <ItemsControl Margin="0,8,0,0"
-                                          ItemsSource="{Binding SelectedRepositoryGitRemediationSteps}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="0,0,0,10"
-                                                Padding="10"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="12">
-                                            <StackPanel>
-                                                <DockPanel>
-                                                    <TextBlock DockPanel.Dock="Left"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding Title}" />
-                                                    <TextBlock DockPanel.Dock="Right"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource AppTextMutedBrush}"
-                                                               Text="{Binding IsPrimary, StringFormat=Primary: {0}}" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           TextWrapping="Wrap"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding Summary}" />
-                                                <Border Margin="0,8,0,0"
-                                                        Padding="8"
-                                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                                        CornerRadius="10">
-                                                    <TextBlock FontFamily="Consolas"
-                                                               FontSize="12"
-                                                               TextWrapping="Wrap"
-                                                               Text="{Binding CommandText}" />
-                                                </Border>
-                                                <Button Margin="0,8,0,0"
-                                                        Width="130"
-                                                        HorizontalAlignment="Left"
-                                                        Padding="10,4"
-                                                        Background="#FFFFFF"
-                                                        BorderBrush="{StaticResource AppBorderBrush}"
-                                                        BorderThickness="1"
-                                                        Command="{Binding DataContext.CopyGitRemediationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        Content="Copy Command" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Quick Actions" />
-                            <ItemsControl Margin="0,8,0,0"
-                                          ItemsSource="{Binding SelectedRepositoryGitQuickActions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="0,0,0,10"
-                                                Padding="10"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="12">
-                                            <StackPanel>
-                                                <DockPanel>
-                                                    <TextBlock DockPanel.Dock="Left"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding Title}" />
-                                                    <TextBlock DockPanel.Dock="Right"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource AppTextMutedBrush}"
-                                                               Text="{Binding KindDisplay}" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           TextWrapping="Wrap"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding Summary}" />
-                                                <Border Margin="0,8,0,0"
-                                                        Padding="8"
-                                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                                        CornerRadius="10">
-                                                    <TextBlock FontFamily="Consolas"
-                                                               FontSize="12"
-                                                               TextWrapping="Wrap"
-                                                               Text="{Binding Payload}" />
-                                                </Border>
-                                                <Button Margin="0,8,0,0"
-                                                        Width="130"
-                                                        HorizontalAlignment="Left"
-                                                        Padding="10,4"
-                                                        Background="#FFFFFF"
-                                                        BorderBrush="{StaticResource AppBorderBrush}"
-                                                        BorderThickness="1"
-                                                        Command="{Binding DataContext.ExecuteGitQuickActionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        Content="{Binding ExecuteLabel}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Last Git Action" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding RepositoryDetailLastGitAction}" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailLastGitActionSummary}" />
-                            <TextBlock Margin="0,10,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Output Tail" />
-                            <Border Margin="0,4,0,0"
-                                    Padding="8"
-                                    Background="#FFFFFF"
-                                    BorderBrush="{StaticResource AppBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="10">
-                                <TextBlock FontFamily="Consolas"
-                                           FontSize="12"
-                                           TextWrapping="Wrap"
-                                           Text="{Binding RepositoryDetailLastGitActionOutput}" />
-                            </Border>
-                            <TextBlock Margin="0,10,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Error Tail" />
-                            <Border Margin="0,4,0,0"
-                                    Padding="8"
-                                    Background="#FFFFFF"
-                                    BorderBrush="{StaticResource AppBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="10">
-                                <TextBlock FontFamily="Consolas"
-                                           FontSize="12"
-                                           TextWrapping="Wrap"
-                                           Text="{Binding RepositoryDetailLastGitActionError}" />
-                            </Border>
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Build Contract" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailBuildContract}" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{StaticResource AppSurfaceAltBrush}"
-                            CornerRadius="14">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Text="Latest Queue Checkpoint" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding RepositoryDetailQueueLane}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailQueueCheckpoint}" />
-                            <TextBlock Margin="0,8,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailQueueSummary}" />
-                            <TextBlock Margin="0,12,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="Checkpoint Payload" />
-                            <Border Margin="0,6,0,0"
-                                    Padding="10"
-                                    Background="#FFFFFF"
-                                    BorderBrush="{StaticResource AppBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="10">
-                                <ScrollViewer MaxHeight="150"
-                                              VerticalScrollBarVisibility="Auto">
-                                    <TextBlock FontFamily="Consolas"
-                                               FontSize="12"
-                                               TextWrapping="Wrap"
-                                               Text="{Binding RepositoryDetailQueuePayload}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </ScrollViewer>
-                            </Border>
-                        </StackPanel>
-                    </Border>
+                            </TabItem>
+                            <TabItem Header="Evidence">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Margin="12">
+                                        <TextBlock FontWeight="SemiBold" Text="Build Contract" />
+                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.BuildContract}" />
+                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Build Engine" />
+                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.EngineDisplay}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.EnginePath}" />
+                                        <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding RepositoryDetail.Evidence}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                        <StackPanel>
+                                                            <DockPanel>
+                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding AdapterDisplay}" />
+                                                                <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding StatusDisplay}" />
+                                                            </DockPanel>
+                                                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Summary}" />
+                                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
+                    </DockPanel>
+                </Border>
+            </Grid>
 
-                    <Border Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{StaticResource AppSurfaceAltBrush}"
-                            CornerRadius="14">
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource PanelBorderStyle}">
                         <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Text="Release Drift" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding RepositoryDetailReleaseDrift}" />
-                            <TextBlock Margin="0,8,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailReleaseDriftDetail}" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Margin="0,0,0,12"
-                            Padding="12"
-                            Background="#F4F9F7"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="14">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Text="Effective Build Engine" />
-                            <TextBlock Margin="0,8,0,0"
-                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding RepositoryDetailEngineDisplay}" />
-                            <TextBlock Margin="0,6,0,0"
-                                       TextWrapping="Wrap"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding RepositoryDetailEnginePath}" />
-                            <TextBlock Margin="0,8,0,0"
-                                       TextWrapping="Wrap"
-                                       Foreground="{StaticResource AppWarmBrush}"
-                                       Text="{Binding RepositoryDetailEngineAdvisory}" />
-                        </StackPanel>
-                    </Border>
-
-                    <TextBlock FontWeight="SemiBold"
-                               Text="Adapter Evidence" />
-                    <ItemsControl Margin="0,10,0,0"
-                                  ItemsSource="{Binding SelectedRepositoryEvidence}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding AdapterDisplay}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding StatusDisplay}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding Summary}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding Detail}" />
-                                        <TextBlock Margin="0,10,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Text="Artifact Path" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding ArtifactPath}" />
-                                        <TextBlock Margin="0,10,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Text="Output Tail" />
-                                        <Border Margin="0,4,0,0"
-                                                Padding="8"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10">
-                                            <TextBlock FontFamily="Consolas"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"
-                                                       Text="{Binding OutputTail}" />
-                                        </Border>
-                                        <TextBlock Margin="0,10,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Text="Error Tail" />
-                                        <Border Margin="0,4,0,0"
-                                                Padding="8"
-                                                Background="#FFFFFF"
-                                                BorderBrush="{StaticResource AppBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10">
-                                            <TextBlock FontFamily="Consolas"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap"
-                                                       Text="{Binding ErrorTail}" />
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Release Inbox" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="A ranked action list that merges queue blockers, USB pauses, publish/verify-ready work, and remote pressure." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding ReleaseInboxHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding ReleaseInboxDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding ReleaseInboxItems}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Margin="0,0,0,10"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Command="{Binding DataContext.ApplyReleaseInboxItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}">
-                                    <Border Padding="12"
-                                            Background="{StaticResource AppSurfaceAltBrush}"
-                                            CornerRadius="14">
-                                        <StackPanel>
-                                            <DockPanel>
-                                                <TextBlock DockPanel.Dock="Left"
-                                                           FontWeight="SemiBold"
-                                                           Text="{Binding Title}" />
-                                                <TextBlock DockPanel.Dock="Right"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource AppTextMutedBrush}"
-                                                           Text="{Binding Badge}" />
-                                            </DockPanel>
-                                            <TextBlock Margin="0,6,0,0"
-                                                       TextWrapping="Wrap"
-                                                       Foreground="{StaticResource AppAccentDeepBrush}"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       TextWrapping="Wrap"
-                                                       Style="{StaticResource MutedTextStyle}"
-                                                       Text="{Binding Detail}" />
-                                        </StackPanel>
-                                    </Border>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="GitHub Inbox" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="A lightweight remote probe for open PRs, recent workflow health, and latest release tags." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding GitHubInboxHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding GitHubInboxDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding GitHubInboxItems}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding Name}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding GitHubStatus}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding GitHubSummary}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding GitHubInbox.Detail}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Release Drift" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="A lightweight signal for repos that appear ahead of their last detected GitHub release boundary." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding ReleaseDriftHeadline}" />
-                    <TextBlock Margin="0,6,0,0"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding ReleaseDriftDetails}" />
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Publish Station" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="Publish runs only after signing succeeds, and only when the external-publish safety flag is enabled." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding PublishHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding PublishDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding PublishTargets}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding TargetKind}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding TargetName}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Destination}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding SourcePath}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Verification Station" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="Verification runs after publish and checks whether the recorded external outcomes can be confirmed." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding VerificationHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding VerificationDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding VerificationTargets}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding TargetKind}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding TargetName}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Destination}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding SourcePath}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Verification Receipts" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="These are the final evidence checks that decide whether a queue item can actually be marked complete." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding VerificationReceiptHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding VerificationReceiptDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding VerificationReceipts}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding Status}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding TargetName}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Summary}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding DestinationDisplay}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Publish Receipts" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="Every publish outcome is persisted so verify reflects recorded external state, not just optimistic queue movement." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding PublishReceiptHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding PublishReceiptDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding PublishReceipts}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding Status}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding TargetName}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Summary}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding DestinationDisplay}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Signing Station" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="USB-gated artifacts are collected here so approval is tied to concrete files, not memory." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding SigningHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding SigningDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding SigningArtifacts}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding ArtifactKind}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding AdapterDisplay}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding DisplayName}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding ArtifactPath}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Signing Receipts" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="Each signing action is persisted so publish unlocks only after recorded outcomes exist." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding ReceiptHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding ReceiptDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding SigningReceipts}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource AppTextMutedBrush}"
-                                                       Text="{Binding Status}" />
-                                        </DockPanel>
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding ArtifactName}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Summary}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding ArtifactPath}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Draft Queue" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="The queue should feel explicit, resumable, and safe around signing checkpoints." />
-
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AppAccentDeepBrush}"
-                               Text="{Binding QueueHeadline}" />
-                    <TextBlock Margin="0,6,0,14"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="{Binding QueueDetails}" />
-
-                    <ItemsControl ItemsSource="{Binding DraftQueue}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding RepositoryName}" />
-                                            <Border DockPanel.Dock="Right"
-                                                    Padding="8,3"
-                                                    Background="#FFFFFF"
-                                                    BorderBrush="{StaticResource AppBorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="10">
-                                                <TextBlock FontSize="11"
-                                                           Foreground="{StaticResource AppTextMutedBrush}"
-                                                           Text="{Binding OrderDisplay}" />
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Queue Control" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Stations.QueueHeadline}" />
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RunNextQueueStepCommand}" Content="Run Next" />
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding ApproveUsbCommand}" Content="Approve USB" />
+                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RetryFailedCommand}" Content="Retry Failed" />
+                            </WrapPanel>
+                            <ListBox Margin="0,14,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
+                                     ItemsSource="{Binding Stations.DraftQueue}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyQueueItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding OrderDisplay}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding LaneDisplay}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
+                                                </StackPanel>
                                             </Border>
-                                        </DockPanel>
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Foreground="{StaticResource AppAccentDeepBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding LaneDisplay}" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   FontSize="11"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding RepositoryBadge}" />
-                                        <TextBlock Margin="0,8,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Text="{Binding Summary}" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+
+                    <TabControl Margin="0,16,0,0" SelectedIndex="{Binding SelectedStageIndex}">
+                        <TabItem Header="Sign">
+                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.SigningArtifacts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplySigningArtifactCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ArtifactPath}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </TabItem>
+                        <TabItem Header="Publish">
+                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.PublishTargets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyPublishTargetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding TargetName}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Destination}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </TabItem>
+                        <TabItem Header="Verify">
+                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.VerificationTargets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.ApplyVerificationTargetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Destination}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </TabItem>
+                    </TabControl>
                 </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Execution Spine" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="These stages stay visible so build, sign, publish, and verify can evolve without hiding the queue state." />
-
-                    <ItemsControl ItemsSource="{Binding PipelineStages}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,10"
-                                        Padding="12"
-                                        Background="{StaticResource AppSurfaceAltBrush}"
-                                        CornerRadius="14">
-                                    <TextBlock TextWrapping="Wrap" Text="{Binding}" />
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Text="Next PR Slices" />
-                    <TextBlock Margin="0,4,0,14"
-                               Style="{StaticResource MutedTextStyle}"
-                               Text="Keep each increment additive so the branch can stay reviewable and low-risk." />
-
-                    <ItemsControl ItemsSource="{Binding NextSlices}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Margin="0,0,0,10"
-                                           TextWrapping="Wrap"
-                                           Text="{Binding}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-        </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Window>

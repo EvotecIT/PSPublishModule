@@ -33,7 +33,9 @@ public sealed class RepositoryPlanPreviewService
     {
         options ??= new PlanPreviewOptions();
         var materialized = items.ToList();
-        var targetCount = Math.Max(0, options.MaxRepositories);
+        var targetCount = options.MaxRepositories < 0
+            ? materialized.Count
+            : Math.Max(0, options.MaxRepositories);
         var planTargets = materialized
             .OrderBy(item => GetPreviewPriority(item.Repository.RepositoryKind))
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
