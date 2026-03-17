@@ -26,6 +26,7 @@ internal sealed class ValidationConfigurationRequest
     public string[] ScriptAnalyzerExcludeDirectories { get; set; } = new[] { "tests", "TestResults", ".git", ".vs", "bin", "obj", "packages", "node_modules", "Artefacts", "Ignore" };
     public string[] ScriptAnalyzerExcludeRules { get; set; } = new[] { "PSAvoidTrailingWhitespace", "PSShouldProcess" };
     public bool ScriptAnalyzerSkipIfUnavailable { get; set; } = true;
+    public bool ScriptAnalyzerInstallIfUnavailable { get; set; }
     public int ScriptAnalyzerTimeoutSeconds { get; set; } = 300;
     public string[] FileIntegrityExcludeDirectories { get; set; } = new[] { "tests", "TestResults", ".git", ".vs", "bin", "obj", "packages", "node_modules", "Artefacts", "Ignore" };
     public bool FileIntegrityCheckTrailingWhitespace { get; set; } = true;

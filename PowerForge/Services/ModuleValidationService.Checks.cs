@@ -227,6 +227,35 @@ public sealed partial class ModuleValidationService
         var scriptPath = Path.Combine(tempDir, $"pssa_{id}.ps1");
         var jsonPath = Path.Combine(tempDir, $"pssa_{id}.json");
 
+        if (settings.InstallIfUnavailable)
+        {
+            try
+            {
+                var installResults = _ensureRuntimeDependencies(
+                    new[] { new ModuleDependency("PSScriptAnalyzer") },
+                    new RuntimeToolDependencyOptions
+                    {
+                        TimeoutPerModule = TimeSpan.FromMinutes(5)
+                    });
+                var failures = installResults
+                    .Where(r => r.Status == ModuleDependencyInstallStatus.Failed)
+                    .ToArray();
+                if (failures.Length > 0)
+                {
+                    var messages = failures
+                        .Select(f => string.IsNullOrWhiteSpace(f.Message) ? f.Name : $"{f.Name}: {f.Message}")
+                        .ToArray();
+                    issues.Add($"PSScriptAnalyzer install failed: {string.Join("; ", messages)}");
+                    return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+                }
+            }
+            catch (Exception ex)
+            {
+                issues.Add($"PSScriptAnalyzer install failed: {ex.Message}");
+                return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "install failed");
+            }
+        }
+
         File.WriteAllText(scriptPath, BuildScriptAnalyzerScript(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
         try

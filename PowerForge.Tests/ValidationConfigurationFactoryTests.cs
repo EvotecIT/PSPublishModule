@@ -16,6 +16,7 @@ public sealed class ValidationConfigurationFactoryTests
             DocumentationSeverity = ValidationSeverity.Warning,
             ScriptAnalyzerSeverity = ValidationSeverity.Error,
             EnableScriptAnalyzer = true,
+            ScriptAnalyzerInstallIfUnavailable = true,
             ScriptAnalyzerTimeoutSeconds = 0,
             FileIntegritySeverity = ValidationSeverity.Error,
             BannedCommands = new[] { "Invoke-Expression" },
@@ -32,6 +33,7 @@ public sealed class ValidationConfigurationFactoryTests
         Assert.True(segment.Settings.Enable);
         Assert.Equal(ValidationSeverity.Error, segment.Settings.Structure.Severity);
         Assert.True(segment.Settings.ScriptAnalyzer.Enable);
+        Assert.True(segment.Settings.ScriptAnalyzer.InstallIfUnavailable);
         Assert.Equal(1, segment.Settings.ScriptAnalyzer.TimeoutSeconds);
         Assert.Equal("Invoke-Expression", Assert.Single(segment.Settings.FileIntegrity.BannedCommands));
         Assert.True(segment.Settings.Tests.Enable);

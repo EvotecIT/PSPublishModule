@@ -39,6 +39,7 @@ internal sealed class ValidationConfigurationFactory
                     ExcludeDirectories = request.ScriptAnalyzerExcludeDirectories ?? Array.Empty<string>(),
                     ExcludeRules = request.ScriptAnalyzerExcludeRules ?? Array.Empty<string>(),
                     SkipIfUnavailable = request.ScriptAnalyzerSkipIfUnavailable,
+                    InstallIfUnavailable = request.ScriptAnalyzerInstallIfUnavailable,
                     TimeoutSeconds = Math.Max(1, request.ScriptAnalyzerTimeoutSeconds)
                 },
                 FileIntegrity = new FileIntegrityValidationSettings

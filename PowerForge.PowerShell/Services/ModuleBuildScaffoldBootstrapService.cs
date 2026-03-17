@@ -29,9 +29,15 @@ internal sealed class ModuleBuildScaffoldBootstrapService
             return new ModuleBuildScaffoldBootstrapResult { Succeeded = false, Attempted = false };
         }
 
-        var templateRoot = string.IsNullOrWhiteSpace(moduleBase)
-            ? null
-            : Path.Combine(moduleBase, "Data");
+        string? templateRoot = null;
+        if (!ModuleScaffoldTemplateStore.TryLoadDefaults(out _)
+            && !string.IsNullOrWhiteSpace(moduleBase))
+        {
+            var candidate = Path.Combine(moduleBase, "Data");
+            if (Directory.Exists(candidate))
+                templateRoot = candidate;
+        }
+
         _createScaffolder(_logger).EnsureScaffold(new ModuleScaffoldSpec
         {
             ProjectRoot = context.ProjectRoot,
