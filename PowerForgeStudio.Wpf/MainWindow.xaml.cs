@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using PowerForgeStudio.Wpf.Themes;
 using PowerForgeStudio.Wpf.ViewModels;
 using PowerForgeStudio.Wpf.ViewModels.Hub;
 
@@ -11,6 +13,7 @@ namespace PowerForgeStudio.Wpf;
 public partial class MainWindow : Window
 {
     private readonly HubShellViewModel _viewModel;
+    private readonly ThemeService _themeService;
     private bool _isLoaded;
 
     public MainWindow()
@@ -23,15 +26,56 @@ public partial class MainWindow : Window
     public MainWindow(HubShellViewModel viewModel)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _themeService = ((App)Application.Current).ThemeService;
+
         InitializeComponent();
         DataContext = _viewModel;
 
-        SourceInitialized += (_, _) => EnableDarkTitleBar();
+        SourceInitialized += (_, _) =>
+        {
+            ThemeService.SetDarkTitleBar(this, _themeService.ActiveTheme.IsDarkTitleBar);
+        };
+
         ContentRendered += (_, _) =>
         {
             Activate();
             Focus();
         };
+
+        // Set initial theme selector
+        SetThemeSelectorValue(_themeService.CurrentMode);
+
+        // Listen for theme changes (e.g. from system Auto switch)
+        _themeService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnThemeChanged(ThemeDefinition theme)
+    {
+        ThemeService.SetDarkTitleBar(this, theme.IsDarkTitleBar);
+    }
+
+    private void ThemeSelector_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThemeSelector.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            if (Enum.TryParse<AppThemeMode>(tag, true, out var mode))
+            {
+                _themeService.CurrentMode = mode;
+            }
+        }
+    }
+
+    private void SetThemeSelectorValue(AppThemeMode mode)
+    {
+        var tag = mode.ToString();
+        foreach (ComboBoxItem item in ThemeSelector.Items)
+        {
+            if (string.Equals(item.Tag as string, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                ThemeSelector.SelectedItem = item;
+                break;
+            }
+        }
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -68,22 +112,4 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
     }
-
-    private void EnableDarkTitleBar()
-    {
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            // DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-            var value = 1;
-            DwmSetWindowAttribute(hwnd, 20, ref value, sizeof(int));
-        }
-        catch
-        {
-            // Older Windows versions don't support this
-        }
-    }
-
-    [DllImport("dwmapi.dll", PreserveSig = true)]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref int value, int size);
 }

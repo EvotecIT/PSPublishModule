@@ -24,25 +24,25 @@
         <hub:BoolToCollapsedConverter x:Key="BoolToCollapsed" />
 
         <Style x:Key="PanelStyle" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="12" />
         </Style>
         <Style x:Key="MutedText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource AppTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style x:Key="GhostBtn" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
             <Setter Property="FontWeight" Value="Normal" />
             <Setter Property="Padding" Value="10,5" />
         </Style>
         <Style x:Key="FlatList" TargetType="ListBox">
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
         </Style>
         <Style x:Key="FlatItem" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0" />
@@ -58,10 +58,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AppSurfaceAltBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AppSurfaceHoverBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -69,7 +69,7 @@
             </Setter>
         </Style>
         <Style x:Key="NavBtn" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource AppTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Margin" Value="0,0,4,0" />
@@ -81,18 +81,18 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AppAccentBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppAccentBrush}" />
                                 <Setter Property="Foreground" Value="White" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AppSurfaceHoverBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsMouseOver" Value="True" />
                                     <Condition Property="IsChecked" Value="True" />
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AppAccentDeepBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppAccentDeepBrush}" />
                                 <Setter Property="Foreground" Value="White" />
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
@@ -103,33 +103,33 @@
         <Style x:Key="SectionHead" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource AppTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
             <Setter Property="Margin" Value="0,14,0,8" />
             <!-- Letter spacing handled by font weight -->
         </Style>
         <Style x:Key="StatCard" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="Padding" Value="16,12" />
         </Style>
     </Window.Resources>
 
-    <Grid Background="{StaticResource AppShellBrush}">
+    <Grid Background="{DynamicResource AppShellBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- Top Navigation Bar -->
-        <Border Grid.Row="0" Background="{StaticResource AppSurfaceBrush}"
-                BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="0,0,0,1"
+        <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
                 Padding="20,10">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="Bold"
-                               Foreground="{StaticResource AppTextStrongBrush}"
+                               Foreground="{DynamicResource AppTextStrongBrush}"
                                VerticalAlignment="Center" Text="PowerForge Studio" Margin="0,0,20,0" />
                     <RadioButton Content="Hub" Style="{StaticResource NavBtn}"
                                  IsChecked="{Binding IsHubMode, Mode=OneWay}" GroupName="Mode"
@@ -139,12 +139,20 @@
                                  Command="{Binding SwitchToReleaseCommand}" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <TextBlock Foreground="{StaticResource AppTextMutedBrush}" FontSize="12"
+                    <TextBlock Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                VerticalAlignment="Center" Margin="0,0,12,0"
                                Text="{Binding HubViewModel.StatusText}" />
                     <ProgressBar Width="100" Height="3" IsIndeterminate="{Binding HubViewModel.IsScanning}"
-                                 Background="{StaticResource AppSurfaceAltBrush}"
-                                 Foreground="{StaticResource AppAccentBrush}" BorderThickness="0" />
+                                 Background="{DynamicResource AppSurfaceAltBrush}"
+                                 Foreground="{DynamicResource AppAccentBrush}" BorderThickness="0"
+                                 Margin="0,0,16,0" />
+                    <!-- Theme selector -->
+                    <ComboBox x:Name="ThemeSelector" Width="80" FontSize="11"
+                              SelectionChanged="ThemeSelector_Changed">
+                        <ComboBoxItem Content="Auto" Tag="Auto" />
+                        <ComboBoxItem Content="Dark" Tag="Dark" />
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                    </ComboBox>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -163,14 +171,14 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- ===== LEFT: Project List ===== -->
-                        <Border Grid.Column="0" Background="{StaticResource AppSurfaceBrush}"
-                                BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="0,0,1,0">
+                        <Border Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,1,0">
                             <DockPanel>
                                 <!-- Header -->
                                 <StackPanel DockPanel.Dock="Top" Margin="16,14,16,0">
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left" FontSize="15" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AppTextStrongBrush}" Text="Projects" />
+                                                   Foreground="{DynamicResource AppTextStrongBrush}" Text="Projects" />
                                         <Button DockPanel.Dock="Right" Style="{StaticResource GhostBtn}"
                                                 Padding="8,3" FontSize="11"
                                                 Command="{Binding ScanWorkspaceCommand}" Content="Scan" />
@@ -196,28 +204,28 @@
                                                 <!-- Project Name + Time -->
                                                 <DockPanel>
                                                     <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
-                                                               Foreground="{StaticResource AppTextStrongBrush}"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
                                                                Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,2,0,0"
-                                                               Foreground="{StaticResource AppTextMutedBrush}"
+                                                               Foreground="{DynamicResource AppTextMutedBrush}"
                                                                Text="{Binding LastActivity}" />
                                                 </DockPanel>
                                                 <!-- Category + Branch + Badges -->
                                                 <DockPanel Margin="0,3,0,0">
                                                     <Border DockPanel.Dock="Left" Padding="5,1" CornerRadius="4"
-                                                            Background="{StaticResource AppSurfaceAltBrush}">
-                                                        <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}"
+                                                            Background="{DynamicResource AppSurfaceAltBrush}">
+                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
                                                                    Text="{Binding CategoryDisplay}" />
                                                     </Border>
                                                     <!-- PR badge -->
                                                     <Border DockPanel.Dock="Right" Padding="5,1" CornerRadius="4" Margin="4,0,0,0"
                                                             Background="#1A3B82F6"
                                                             Visibility="{Binding HasOpenPrs, Converter={StaticResource BoolToVisible}}">
-                                                        <TextBlock FontSize="9" Foreground="{StaticResource AppAccentBrush}"
+                                                        <TextBlock FontSize="9" Foreground="{DynamicResource AppAccentBrush}"
                                                                    Text="{Binding OpenPrCount, StringFormat={}{0} PR}" />
                                                     </Border>
                                                     <TextBlock DockPanel.Dock="Left" FontSize="11" Margin="6,0,0,0"
-                                                               Foreground="{StaticResource AppAccentBrush}"
+                                                               Foreground="{DynamicResource AppAccentBrush}"
                                                                Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
                                                 <!-- Worktrees (clickable) -->
@@ -229,13 +237,13 @@
                                                                     Background="Transparent" Cursor="Hand"
                                                                     MouseLeftButtonDown="WorktreeItem_Click">
                                                                 <DockPanel>
-                                                                    <Ellipse Width="5" Height="5" Fill="{StaticResource AppSuccessBrush}"
+                                                                    <Ellipse Width="5" Height="5" Fill="{DynamicResource AppSuccessBrush}"
                                                                              VerticalAlignment="Center" Margin="0,0,6,0" />
                                                                     <TextBlock FontSize="11"
-                                                                               Foreground="{StaticResource AppTextMutedBrush}"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                                     <TextBlock DockPanel.Dock="Right" FontSize="9" Margin="6,1,0,0"
-                                                                               Foreground="{StaticResource AppTextMutedBrush}"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                Text="{Binding LastActivity}" />
                                                                 </DockPanel>
                                                             </Border>
@@ -256,7 +264,7 @@
                                           Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToCollapsed}}">
                                 <StackPanel MaxWidth="800">
                                     <TextBlock FontSize="22" FontWeight="SemiBold"
-                                               Foreground="{StaticResource AppTextStrongBrush}" Text="Dashboard" />
+                                               Foreground="{DynamicResource AppTextStrongBrush}" Text="Dashboard" />
                                     <TextBlock Margin="0,6,0,20" Style="{StaticResource MutedText}"
                                                Text="Select a project to view details. Aggregate stats below." />
 
@@ -265,49 +273,49 @@
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppAccentBrush}"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
                                                            Text="{Binding Dashboard.TotalProjects}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Total Projects" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Total Projects" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppAccentBrush}"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
                                                            Text="{Binding Dashboard.ManagedProjects}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Managed" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Managed" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,0,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppWarmBrush}"
+                                                           Foreground="{DynamicResource AppWarmBrush}"
                                                            Text="{Binding Dashboard.DirtyRepos}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Dirty Repos" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Dirty Repos" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppAccentBrush}"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
                                                            Text="{Binding Dashboard.TotalOpenPrs}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Open PRs" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Open PRs" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppAccentBrush}"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
                                                            Text="{Binding Dashboard.TotalOpenIssues}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Open Issues" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Open Issues" />
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource StatCard}" Margin="0,0,0,8">
                                             <StackPanel>
                                                 <TextBlock FontSize="32" FontWeight="Bold"
-                                                           Foreground="{StaticResource AppDangerBrush}"
+                                                           Foreground="{DynamicResource AppDangerBrush}"
                                                            Text="{Binding Dashboard.FailingBuilds}" />
-                                                <TextBlock FontSize="12" Foreground="{StaticResource AppTextMutedBrush}" Text="Failing Builds" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Failing Builds" />
                                             </StackPanel>
                                         </Border>
                                     </UniformGrid>
@@ -316,15 +324,15 @@
                                     <ItemsControl ItemsSource="{Binding Dashboard.RecentlyActive}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="{StaticResource AppSurfaceAltBrush}"
+                                                <Border Background="{DynamicResource AppSurfaceAltBrush}"
                                                         CornerRadius="8" Padding="12,8" Margin="0,0,0,4">
                                                     <DockPanel>
                                                         <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
-                                                                   Foreground="{StaticResource AppTextStrongBrush}"
+                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
                                                                    Text="{Binding Name}" />
                                                         <Border DockPanel.Dock="Right" Padding="6,2" CornerRadius="4"
-                                                                Background="{StaticResource AppSurfaceHoverBrush}">
-                                                            <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}"
+                                                                Background="{DynamicResource AppSurfaceHoverBrush}">
+                                                            <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
                                                                        Text="{Binding CategoryDisplay}" />
                                                         </Border>
                                                     </DockPanel>
@@ -345,9 +353,9 @@
                                             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                                                 <StackPanel DockPanel.Dock="Left">
                                                     <TextBlock FontSize="20" FontWeight="SemiBold"
-                                                               Foreground="{StaticResource AppTextStrongBrush}"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
                                                                Text="{Binding ProjectName}" />
-                                                    <TextBlock FontSize="11" Foreground="{StaticResource AppTextMutedBrush}"
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource AppTextMutedBrush}"
                                                                Text="{Binding RootPath}" Margin="0,2,0,0" />
                                                 </StackPanel>
                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
@@ -371,17 +379,17 @@
                                                             <UniformGrid Columns="2" Margin="0,0,0,8">
                                                                 <Border Style="{StaticResource StatCard}" Margin="0,0,6,0">
                                                                     <StackPanel>
-                                                                        <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}" Text="BUILD" />
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="BUILD" />
                                                                         <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
-                                                                                   Foreground="{StaticResource AppAccentBrush}"
+                                                                                   Foreground="{DynamicResource AppAccentBrush}"
                                                                                    Text="{Binding BuildScriptDisplay}" />
                                                                     </StackPanel>
                                                                 </Border>
                                                                 <Border Style="{StaticResource StatCard}" Margin="6,0,0,0">
                                                                     <StackPanel>
-                                                                        <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}" Text="REMOTE" />
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="REMOTE" />
                                                                         <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
-                                                                                   Foreground="{StaticResource AppTextStrongBrush}"
+                                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                    Text="{Binding GitHubSlug}" />
                                                                     </StackPanel>
                                                                 </Border>
@@ -389,9 +397,9 @@
                                                             <Border Style="{StaticResource StatCard}" Margin="0,0,0,8"
                                                                     Visibility="{Binding HasAzureDevOps, Converter={StaticResource BoolToVisible}}">
                                                                 <StackPanel>
-                                                                    <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}" Text="AZURE DEVOPS" />
+                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="AZURE DEVOPS" />
                                                                     <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
-                                                                               Foreground="{StaticResource AppTextStrongBrush}"
+                                                                               Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                Text="{Binding AzureDevOpsSlug}" />
                                                                 </StackPanel>
                                                             </Border>
@@ -404,26 +412,26 @@
                                                             <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
                                                                     Command="{Binding LoadIssuesCommand}" Content="Refresh" />
                                                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
-                                                                       Foreground="{StaticResource AppTextMutedBrush}" FontSize="12"
+                                                                       Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                                                        Text="{Binding Issues.Count, StringFormat={}{0} issue(s)}" />
                                                         </DockPanel>
                                                         <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
                                                                  ItemsSource="{Binding Issues}">
                                                             <ListBox.ItemTemplate>
                                                                 <DataTemplate>
-                                                                    <Border Background="{StaticResource AppSurfaceAltBrush}"
+                                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
                                                                             CornerRadius="8" Padding="12,8" Margin="0,0,0,2">
                                                                         <StackPanel>
                                                                             <DockPanel>
                                                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
-                                                                                           Foreground="{StaticResource AppTextStrongBrush}"
+                                                                                           Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                            Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                                                                                 <TextBlock DockPanel.Dock="Right" FontSize="11"
-                                                                                           Foreground="{StaticResource AppTextMutedBrush}"
+                                                                                           Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                            Text="{Binding Number, StringFormat=#{0}}" />
                                                                             </DockPanel>
                                                                             <DockPanel Margin="0,4,0,0">
-                                                                                <TextBlock FontSize="11" Foreground="{StaticResource AppAccentBrush}"
+                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppAccentBrush}"
                                                                                            Text="{Binding LabelDisplay}" />
                                                                             </DockPanel>
                                                                         </StackPanel>
@@ -439,29 +447,29 @@
                                                             <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
                                                                     Command="{Binding LoadPullRequestsCommand}" Content="Refresh" />
                                                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
-                                                                       Foreground="{StaticResource AppTextMutedBrush}" FontSize="12"
+                                                                       Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                                                        Text="{Binding PullRequests.Count, StringFormat={}{0} PR(s)}" />
                                                         </DockPanel>
                                                         <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
                                                                  ItemsSource="{Binding PullRequests}">
                                                             <ListBox.ItemTemplate>
                                                                 <DataTemplate>
-                                                                    <Border Background="{StaticResource AppSurfaceAltBrush}"
+                                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
                                                                             CornerRadius="8" Padding="12,8" Margin="0,0,0,2">
                                                                         <StackPanel>
                                                                             <DockPanel>
                                                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
-                                                                                           Foreground="{StaticResource AppTextStrongBrush}"
+                                                                                           Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                            Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                                                                                 <TextBlock DockPanel.Dock="Right" FontSize="11"
-                                                                                           Foreground="{StaticResource AppTextMutedBrush}"
+                                                                                           Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                            Text="{Binding Number, StringFormat=#{0}}" />
                                                                             </DockPanel>
                                                                             <DockPanel Margin="0,4,0,0">
-                                                                                <TextBlock FontSize="11" Foreground="{StaticResource AppAccentBrush}"
+                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppAccentBrush}"
                                                                                            Text="{Binding HeadBranch}" />
                                                                                 <TextBlock DockPanel.Dock="Right" FontSize="11"
-                                                                                           Foreground="{StaticResource AppSuccessBrush}" Margin="8,0,0,0"
+                                                                                           Foreground="{DynamicResource AppSuccessBrush}" Margin="8,0,0,0"
                                                                                            Text="{Binding DiffStatDisplay}" />
                                                                             </DockPanel>
                                                                         </StackPanel>
@@ -475,7 +483,7 @@
                                                     <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
                                                         <StackPanel>
                                                             <TextBlock Style="{StaticResource SectionHead}" Text="BUILD SCRIPT" />
-                                                            <TextBlock Foreground="{StaticResource AppAccentBrush}" Text="{Binding BuildScriptDisplay}" />
+                                                            <TextBlock Foreground="{DynamicResource AppAccentBrush}" Text="{Binding BuildScriptDisplay}" />
                                                             <Button Margin="0,12,0,0" Style="{StaticResource GhostBtn}"
                                                                     Command="{Binding RunBuildCommand}" Content="Run Build" />
                                                             <TextBlock Style="{StaticResource SectionHead}" Text="OUTPUT" />
@@ -502,12 +510,12 @@
                         </Grid>
 
                         <!-- ===== RIGHT: Git Actions Panel ===== -->
-                        <Border Grid.Column="2" Background="{StaticResource AppSurfaceBrush}"
-                                BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1,0,0,0">
+                        <Border Grid.Column="2" Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0">
                             <Grid>
                                 <!-- Placeholder when nothing selected -->
                                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Foreground="{StaticResource AppTextMutedBrush}" FontSize="12"
+                                           Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                            Text="Select a project to see git status."
                                            Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToCollapsed}}" />
 
@@ -521,11 +529,11 @@
                                                     <!-- Branch + Diff Header -->
                                                     <DockPanel>
                                                         <TextBlock DockPanel.Dock="Left" FontSize="11"
-                                                                   Foreground="{StaticResource AppTextMutedBrush}"
+                                                                   Foreground="{DynamicResource AppTextMutedBrush}"
                                                                    Text="{Binding AheadBehindDisplay}" />
                                                     </DockPanel>
                                                     <TextBlock FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0"
-                                                               Foreground="{StaticResource AppTextStrongBrush}"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
                                                                Text="{Binding BranchName}" />
 
                                                     <!-- Commit Box -->
@@ -545,12 +553,12 @@
                                                                 <DockPanel Margin="0,1">
                                                                     <Border DockPanel.Dock="Left" Width="18" Height="18"
                                                                             CornerRadius="4" Margin="0,0,8,0"
-                                                                            Background="{StaticResource AppSuccessBrush}">
+                                                                            Background="{DynamicResource AppSuccessBrush}">
                                                                         <TextBlock Text="{Binding KindDisplay}" FontSize="10"
                                                                                    Foreground="White" HorizontalAlignment="Center"
                                                                                    VerticalAlignment="Center" FontWeight="Bold" />
                                                                     </Border>
-                                                                    <TextBlock FontSize="12" Foreground="{StaticResource AppTextBrush}"
+                                                                    <TextBlock FontSize="12" Foreground="{DynamicResource AppTextBrush}"
                                                                                Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
                                                                 </DockPanel>
                                                             </DataTemplate>
@@ -574,12 +582,12 @@
                                                                 <DockPanel Margin="0,1">
                                                                     <Border DockPanel.Dock="Left" Width="18" Height="18"
                                                                             CornerRadius="4" Margin="0,0,8,0"
-                                                                            Background="{StaticResource AppWarmBrush}">
+                                                                            Background="{DynamicResource AppWarmBrush}">
                                                                         <TextBlock Text="{Binding KindDisplay}" FontSize="10"
                                                                                    Foreground="White" HorizontalAlignment="Center"
                                                                                    VerticalAlignment="Center" FontWeight="Bold" />
                                                                     </Border>
-                                                                    <TextBlock FontSize="12" Foreground="{StaticResource AppTextBrush}"
+                                                                    <TextBlock FontSize="12" Foreground="{DynamicResource AppTextBrush}"
                                                                                Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
                                                                 </DockPanel>
                                                             </DataTemplate>
@@ -609,13 +617,13 @@
                                                     <ItemsControl ItemsSource="{Binding Worktrees}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
-                                                                <Border Background="{StaticResource AppSurfaceAltBrush}"
+                                                                <Border Background="{DynamicResource AppSurfaceAltBrush}"
                                                                         CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
                                                                     <StackPanel>
                                                                         <TextBlock FontWeight="SemiBold" FontSize="12"
-                                                                                   Foreground="{StaticResource AppTextStrongBrush}"
+                                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                    Text="{Binding BranchDisplay}" />
-                                                                        <TextBlock FontSize="10" Foreground="{StaticResource AppTextMutedBrush}"
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                    Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
                                                                     </StackPanel>
                                                                 </Border>
@@ -639,7 +647,7 @@
 
                 <!-- Release mode placeholder -->
                 <DataTemplate DataType="{x:Type local:ShellViewModel}">
-                    <TextBlock Margin="40" FontSize="16" Foreground="{StaticResource AppTextMutedBrush}"
+                    <TextBlock Margin="40" FontSize="16" Foreground="{DynamicResource AppTextMutedBrush}"
                                Text="Release mode — switch to Hub to manage projects." />
                 </DataTemplate>
             </ContentControl.Resources>

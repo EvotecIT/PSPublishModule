@@ -9,7 +9,7 @@
         <Style x:Key="DarkTreeItem" TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-            <Setter Property="Foreground" Value="#B8BDD0" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -26,13 +26,13 @@
                                             <ControlTemplate TargetType="ToggleButton">
                                                 <Border Background="Transparent" Padding="2">
                                                     <Path x:Name="arrow" Data="M0,0 L4,3.5 L0,7"
-                                                          Stroke="#6B7280" StrokeThickness="1.2"
+                                                          Stroke="{DynamicResource AppTextMutedBrush}" StrokeThickness="1.2"
                                                           VerticalAlignment="Center" HorizontalAlignment="Center" />
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsChecked" Value="True">
                                                         <Setter TargetName="arrow" Property="Data" Value="M0,0 L7,0 L3.5,4" />
-                                                        <Setter TargetName="arrow" Property="Stroke" Value="#B8BDD0" />
+                                                        <Setter TargetName="arrow" Property="Stroke" Value="{DynamicResource AppTextBrush}" />
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -45,14 +45,14 @@
                         </StackPanel>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#242838" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsMouseOver" Value="True" />
                                     <Condition Property="IsSelected" Value="False" />
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Bd" Property="Background" Value="#1A1D2A" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppTabHoverBrush}" />
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -61,25 +61,25 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Background="#0F1117">
+    <Grid Background="{DynamicResource AppShellBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- Path bar -->
-        <Border Grid.Row="0" Background="#161822" BorderBrush="#2A2E3F" BorderThickness="0,0,0,1" Padding="8,5">
+        <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="8,5">
             <DockPanel>
-                <Button DockPanel.Dock="Left" Background="#1C1F2E" Foreground="#B8BDD0" BorderThickness="0"
+                <Button DockPanel.Dock="Left" Background="{DynamicResource AppSurfaceAltBrush}" Foreground="{DynamicResource AppTextBrush}" BorderThickness="0"
                         Padding="8,3" FontSize="11" Margin="0,0,6,0"
                         Command="{Binding NavigateUpCommand}" Content="Up" />
-                <Button DockPanel.Dock="Right" Background="#1C1F2E" Foreground="#B8BDD0" BorderThickness="0"
+                <Button DockPanel.Dock="Right" Background="{DynamicResource AppSurfaceAltBrush}" Foreground="{DynamicResource AppTextBrush}" BorderThickness="0"
                         Padding="8,3" FontSize="11" Margin="6,0,0,0"
                         Command="{Binding RefreshCommand}" Content="Refresh" />
                 <TextBox DockPanel.Dock="Right" Width="130" Margin="6,0,0,0"
                          FontSize="11" Padding="6,3"
                          Text="{Binding SearchFilter, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="#6B7280"
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource AppTextMutedBrush}"
                            Text="{Binding CurrentPath}" TextTrimming="CharacterEllipsis" Margin="4,0,0,0" />
             </DockPanel>
         </Border>
@@ -93,8 +93,8 @@
             </Grid.ColumnDefinitions>
 
             <!-- Left: Folder tree -->
-            <TreeView Grid.Column="0" Background="#161822" BorderThickness="0"
-                      Foreground="#B8BDD0"
+            <TreeView Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}" BorderThickness="0"
+                      Foreground="{DynamicResource AppTextBrush}"
                       ItemsSource="{Binding RootNodes}"
                       ItemContainerStyle="{StaticResource DarkTreeItem}"
                       SelectedItemChanged="TreeView_SelectedItemChanged"
@@ -103,34 +103,34 @@
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xF0114;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                       Foreground="#F59E0B" VerticalAlignment="Center" />
+                                       Foreground="{DynamicResource AppWarmBrush}" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding Name}" Margin="5,0,0,0"
-                                       Foreground="#B8BDD0" FontSize="12" VerticalAlignment="Center" />
+                                       Foreground="{DynamicResource AppTextBrush}" FontSize="12" VerticalAlignment="Center" />
                         </StackPanel>
                     </HierarchicalDataTemplate>
                 </TreeView.ItemTemplate>
             </TreeView>
 
             <!-- Splitter -->
-            <GridSplitter Grid.Column="1" Width="2" Background="#2A2E3F"
+            <GridSplitter Grid.Column="1" Width="2" Background="{DynamicResource AppBorderBrush}"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch" />
 
             <!-- Right: File list -->
-            <ListView Grid.Column="2" Background="#0F1117" BorderThickness="0"
+            <ListView Grid.Column="2" Background="{DynamicResource AppShellBrush}" BorderThickness="0"
                       ItemsSource="{Binding CurrentFolderContents}"
                       VirtualizingPanel.IsVirtualizing="True"
                       VirtualizingPanel.VirtualizationMode="Recycling"
-                      Foreground="#B8BDD0"
+                      Foreground="{DynamicResource AppTextBrush}"
                       MouseDoubleClick="ListView_MouseDoubleClick"
                       Padding="0">
                 <ListView.View>
                     <GridView>
                         <GridView.ColumnHeaderContainerStyle>
                             <Style TargetType="GridViewColumnHeader">
-                                <Setter Property="Background" Value="#161822" />
-                                <Setter Property="Foreground" Value="#6B7280" />
+                                <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
                                 <Setter Property="BorderThickness" Value="0,0,0,1" />
-                                <Setter Property="BorderBrush" Value="#2A2E3F" />
+                                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
                                 <Setter Property="Padding" Value="10,5" />
                                 <Setter Property="FontSize" Value="11" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
@@ -158,18 +158,18 @@
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Text" Value="&#xE7C3;" />
-                                                    <Setter Property="Foreground" Value="#6B7280" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsDirectory}" Value="True">
                                                             <Setter Property="Text" Value="&#xF0114;" />
-                                                            <Setter Property="Foreground" Value="#F59E0B" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource AppWarmBrush}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <TextBlock Text="{Binding Name}" Margin="8,0,0,0"
-                                                   Foreground="#E8ECF4" FontSize="12" VerticalAlignment="Center" />
+                                                   Foreground="{DynamicResource AppTextStrongBrush}" FontSize="12" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
@@ -177,14 +177,14 @@
                         <GridViewColumn Header="Size" Width="80">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding SizeDisplay}" Foreground="#6B7280" FontSize="11" />
+                                    <TextBlock Text="{Binding SizeDisplay}" Foreground="{DynamicResource AppTextMutedBrush}" FontSize="11" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
                         <GridViewColumn Header="Modified" Width="100">
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding LastModifiedDisplay}" Foreground="#6B7280" FontSize="11" />
+                                    <TextBlock Text="{Binding LastModifiedDisplay}" Foreground="{DynamicResource AppTextMutedBrush}" FontSize="11" />
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
@@ -192,7 +192,7 @@
                 </ListView.View>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
-                        <Setter Property="Foreground" Value="#B8BDD0" />
+                        <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
                         <Setter Property="FontSize" Value="12" />
                         <Setter Property="Margin" Value="0" />
                         <Setter Property="Padding" Value="0" />
@@ -205,14 +205,14 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#242838" />
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
                                         </Trigger>
                                         <MultiTrigger>
                                             <MultiTrigger.Conditions>
                                                 <Condition Property="IsMouseOver" Value="True" />
                                                 <Condition Property="IsSelected" Value="False" />
                                             </MultiTrigger.Conditions>
-                                            <Setter TargetName="Bd" Property="Background" Value="#1A1D2A" />
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppTabHoverBrush}" />
                                         </MultiTrigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -221,7 +221,7 @@
                     </Style>
                 </ListView.ItemContainerStyle>
                 <ListView.ContextMenu>
-                    <ContextMenu Background="#1C1F2E" Foreground="#B8BDD0" BorderBrush="#2A2E3F">
+                    <ContextMenu Background="{DynamicResource AppSurfaceAltBrush}" Foreground="{DynamicResource AppTextBrush}" BorderBrush="{DynamicResource AppBorderBrush}">
                         <MenuItem Header="Open in Explorer"
                                   Command="{Binding OpenInExplorerCommand}"
                                   CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=PlacementTarget.SelectedItem}" />
