@@ -202,8 +202,9 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         _gitRefreshTimer.Start();
         _githubRefreshTimer.Start();
 
-        // Kick off initial GitHub fetch
+        // Kick off initial GitHub fetch and git status scan
         _ = RefreshGitHubCountsAsync();
+        _ = RefreshDirtyRepoCountAsync();
     }
 
     private async Task<bool> TryLoadFromCacheAsync()
@@ -386,6 +387,33 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
             TotalOpenPrs = totalPrs,
             TotalOpenIssues = totalIssues
         });
+    }
+
+    private async Task RefreshDirtyRepoCountAsync()
+    {
+        var dirtyCount = 0;
+
+        foreach (var project in _allProjects)
+        {
+            try
+            {
+                var status = await _gitService.GetStatusAsync(project.Entry.RootPath).ConfigureAwait(true);
+                project.BranchName = status.BranchName;
+                project.IsDirty = status.IsDirty;
+
+                if (status.IsDirty)
+                {
+                    dirtyCount++;
+                }
+            }
+            catch
+            {
+                // Skip
+            }
+        }
+
+        var current = Dashboard.Snapshot;
+        Dashboard = new HubDashboardViewModel(current with { DirtyRepos = dirtyCount });
     }
 
     private async Task RefreshSelectedGitStatusAsync()

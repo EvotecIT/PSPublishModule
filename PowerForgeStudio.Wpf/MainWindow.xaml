@@ -385,24 +385,47 @@
                                                                                    Text="{Binding BuildScriptDisplay}" />
                                                                     </StackPanel>
                                                                 </Border>
-                                                                <Border Style="{StaticResource StatCard}" Margin="6,0,0,0">
+                                                                <Border Style="{StaticResource StatCard}" Margin="6,0,0,0" Cursor="Hand"
+                                                                        MouseLeftButtonDown="GitHubSlug_Click">
                                                                     <StackPanel>
-                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="REMOTE" />
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="GITHUB" />
                                                                         <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
-                                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                   Foreground="{DynamicResource AppAccentBrush}"
+                                                                                   TextDecorations="Underline"
                                                                                    Text="{Binding GitHubSlug}" />
                                                                     </StackPanel>
                                                                 </Border>
                                                             </UniformGrid>
-                                                            <Border Style="{StaticResource StatCard}" Margin="0,0,0,8"
-                                                                    Visibility="{Binding HasAzureDevOps, Converter={StaticResource BoolToVisible}}">
-                                                                <StackPanel>
-                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="AZURE DEVOPS" />
-                                                                    <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
-                                                                               Foreground="{DynamicResource AppTextStrongBrush}"
-                                                                               Text="{Binding AzureDevOpsSlug}" />
-                                                                </StackPanel>
-                                                            </Border>
+
+                                                            <!-- Git Log -->
+                                                            <TextBlock Style="{StaticResource SectionHead}" Text="RECENT COMMITS" />
+                                                            <ItemsControl ItemsSource="{Binding GitLog}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                                CornerRadius="6" Padding="10,6" Margin="0,0,0,3">
+                                                                            <DockPanel>
+                                                                                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Top" Margin="10,0,0,0">
+                                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                               Text="{Binding RelativeTime}" />
+                                                                                </StackPanel>
+                                                                                <StackPanel>
+                                                                                    <DockPanel>
+                                                                                        <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                                                                   FontFamily="Cascadia Code,Consolas,Courier New"
+                                                                                                   Foreground="{DynamicResource AppWarmBrush}"
+                                                                                                   Text="{Binding ShortHash}" Margin="0,0,8,0" />
+                                                                                        <TextBlock FontSize="12" Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                                   Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
+                                                                                    </DockPanel>
+                                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                               Text="{Binding AuthorName}" Margin="0,2,0,0" />
+                                                                                </StackPanel>
+                                                                            </DockPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
                                                         </StackPanel>
                                                     </ScrollViewer>
                                                 </TabItem>

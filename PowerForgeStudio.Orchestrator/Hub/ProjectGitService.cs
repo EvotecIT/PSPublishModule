@@ -114,6 +114,44 @@ public sealed class ProjectGitService
         return result.Succeeded;
     }
 
+    public async Task<IReadOnlyList<GitLogEntry>> GetLogAsync(string repositoryRoot, int count = 15, CancellationToken cancellationToken = default)
+    {
+        var result = await RunGitAsync(repositoryRoot,
+            ["log", $"-{count}", "--format=%H%n%h%n%an%n%s%n%aI%n---"],
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Succeeded)
+        {
+            return [];
+        }
+
+        var entries = new List<GitLogEntry>();
+        var lines = result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var i = 0;
+        while (i + 4 < lines.Length)
+        {
+            var hash = lines[i].Trim();
+            var shortHash = lines[i + 1].Trim();
+            var author = lines[i + 2].Trim();
+            var message = lines[i + 3].Trim();
+            var dateStr = lines[i + 4].Trim();
+
+            if (!string.IsNullOrEmpty(hash) && DateTimeOffset.TryParse(dateStr, out var date))
+            {
+                entries.Add(new GitLogEntry(hash, shortHash, author, message, date));
+            }
+
+            // Skip to next entry (past the "---" separator)
+            i += 5;
+            while (i < lines.Length && lines[i].Trim() == "---")
+            {
+                i++;
+            }
+        }
+
+        return entries;
+    }
+
     public async Task<bool> CreateWorktreeAsync(string repositoryRoot, string path, string branchName, CancellationToken cancellationToken = default)
     {
         var result = await RunGitAsync(repositoryRoot, ["worktree", "add", path, "-b", branchName], cancellationToken).ConfigureAwait(false);

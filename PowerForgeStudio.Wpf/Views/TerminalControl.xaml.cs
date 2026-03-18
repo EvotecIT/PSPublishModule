@@ -21,7 +21,6 @@ public partial class TerminalControl : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        // Unhook old VM
         if (_viewModel is not null)
         {
             _viewModel.OutputAvailable -= OnOutputAvailable;
@@ -49,16 +48,13 @@ public partial class TerminalControl : UserControl
 
             await WebView.EnsureCoreWebView2Async().ConfigureAwait(true);
 
-            // Configure WebView2 settings
             var settings = WebView.CoreWebView2.Settings;
             settings.IsStatusBarEnabled = false;
             settings.AreDefaultContextMenusEnabled = false;
             settings.AreDevToolsEnabled = false;
 
-            // Handle messages from JS
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
-            // Load the terminal HTML
             var htmlPath = Path.Combine(AppContext.BaseDirectory, "Assets", "terminal.html");
             if (File.Exists(htmlPath))
             {
@@ -66,18 +62,19 @@ public partial class TerminalControl : UserControl
             }
             else
             {
-                // Fallback: try embedded
                 LoadingText.Text = $"terminal.html not found at: {htmlPath}";
                 return;
             }
 
+            // Wait for xterm.js to fully initialize
+            await Task.Delay(500).ConfigureAwait(true);
+
             _webViewReady = true;
-
-            // Wait a bit for xterm.js to initialize
-            await Task.Delay(300).ConfigureAwait(true);
-
             LoadingText.Visibility = Visibility.Collapsed;
             WebView.Visibility = Visibility.Visible;
+
+            // NOW start the ConPTY session — WebView2 is ready to receive output
+            _viewModel?.StartSession();
         }
         catch (Exception ex)
         {
@@ -103,8 +100,7 @@ public partial class TerminalControl : UserControl
                     var b64 = doc.RootElement.GetProperty("data").GetString();
                     if (b64 is not null)
                     {
-                        var bytes = Convert.FromBase64String(b64);
-                        _viewModel.SendInput(bytes);
+                        _viewModel.SendInput(Convert.FromBase64String(b64));
                     }
                     break;
 
@@ -125,14 +121,12 @@ public partial class TerminalControl : UserControl
     {
         if (!_webViewReady) return;
 
-        // Marshal to UI thread for WebView2 access
         Dispatcher.InvokeAsync(() =>
         {
             if (!_webViewReady || WebView.CoreWebView2 is null) return;
             try
             {
-                var b64 = Convert.ToBase64String(data);
-                WebView.CoreWebView2.PostWebMessageAsString(b64);
+                WebView.CoreWebView2.PostWebMessageAsString(Convert.ToBase64String(data));
             }
             catch
             {
@@ -145,18 +139,14 @@ public partial class TerminalControl : UserControl
     {
         if (e.PropertyName == nameof(TerminalTabViewModel.IsConnected) && _viewModel?.IsConnected == false)
         {
-            Dispatcher.InvokeAsync(() =>
-            {
-                ExitedOverlay.Visibility = Visibility.Visible;
-            });
+            Dispatcher.InvokeAsync(() => ExitedOverlay.Visibility = Visibility.Visible);
         }
     }
 
     private void RestartButton_Click(object sender, RoutedEventArgs e)
     {
-        // Signal the workspace to recreate the terminal
-        // This is handled by the parent - for now just hide the overlay
         ExitedOverlay.Visibility = Visibility.Collapsed;
+        _viewModel?.StartSession();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

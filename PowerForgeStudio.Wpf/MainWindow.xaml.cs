@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -100,6 +101,22 @@ public partial class MainWindow : Window
                 "PowerForge Studio startup failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+        }
+    }
+
+    private void GitHubSlug_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ProjectWorkspaceViewModel workspace }
+            && workspace.GitHubSlug is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo($"https://github.com/{workspace.GitHubSlug}")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch { }
         }
     }
 

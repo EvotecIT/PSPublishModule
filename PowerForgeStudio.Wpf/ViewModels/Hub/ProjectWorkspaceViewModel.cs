@@ -13,6 +13,7 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
     private readonly GitHubProjectService _gitHubService;
     private readonly ProjectBuildService _buildService;
     private readonly TerminalSessionService _terminalService;
+    private readonly ProjectGitService _gitService;
     private int _selectedTabIndex;
     private bool _isLoadingIssues;
     private bool _isLoadingPrs;
@@ -25,16 +26,22 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
         ProjectEntry entry,
         GitHubProjectService gitHubService,
         ProjectBuildService buildService,
+        ProjectGitService? gitService = null,
         TerminalSessionService? terminalService = null)
     {
         _entry = entry;
         _gitHubService = gitHubService;
         _buildService = buildService;
+        _gitService = gitService ?? new ProjectGitService();
         _terminalService = terminalService ?? new TerminalSessionService();
 
         Issues = [];
         PullRequests = [];
         BuildResults = [];
+        GitLog = [];
+
+        // Load git log immediately for the Overview tab
+        _ = LoadGitLogAsync();
 
         LoadIssuesCommand = new AsyncDelegateCommand(LoadIssuesAsync, () => !_isLoadingIssues && _entry.GitHubSlug is not null);
         LoadPullRequestsCommand = new AsyncDelegateCommand(LoadPullRequestsAsync, () => !_isLoadingPrs && _entry.GitHubSlug is not null);
@@ -87,6 +94,8 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
     public ObservableCollection<GitHubPullRequest> PullRequests { get; }
 
     public ObservableCollection<ProjectBuildResult> BuildResults { get; }
+
+    public ObservableCollection<GitLogEntry> GitLog { get; }
 
     public int SelectedTabIndex
     {
@@ -170,19 +179,26 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
 
     public string? TerminalError { get; private set; }
 
-    private void CreateTerminal()
+    private async Task LoadGitLogAsync()
     {
         try
         {
-            var session = _terminalService.CreateSession(_entry.RootPath);
-            ActiveTerminal = new TerminalTabViewModel(session, _entry.RootPath);
-            TerminalError = null;
+            var log = await _gitService.GetLogAsync(_entry.RootPath).ConfigureAwait(true);
+            foreach (var entry in log)
+            {
+                GitLog.Add(entry);
+            }
         }
-        catch (Exception ex)
+        catch
         {
-            TerminalError = $"Terminal failed: {ex.Message}";
-            RaisePropertyChanged(nameof(TerminalError));
+            // Non-fatal
         }
+    }
+
+    private void CreateTerminal()
+    {
+        // Session creation is deferred until WebView2 is ready (see TerminalControl)
+        ActiveTerminal = new TerminalTabViewModel(_terminalService, _entry.RootPath);
     }
 
     public async Task DisposeAsync()

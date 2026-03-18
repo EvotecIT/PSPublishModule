@@ -4,19 +4,18 @@ namespace PowerForgeStudio.Wpf.ViewModels.Hub;
 
 public sealed class TerminalTabViewModel : ViewModelBase, IAsyncDisposable
 {
-    private readonly ITerminalSession _session;
-    private bool _isConnected = true;
+    private readonly TerminalSessionService _sessionService;
+    private readonly string _workingDirectory;
+    private ITerminalSession? _session;
+    private bool _isConnected;
     private string _title;
     private bool _disposed;
 
-    public TerminalTabViewModel(ITerminalSession session, string workingDirectory)
+    public TerminalTabViewModel(TerminalSessionService sessionService, string workingDirectory)
     {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
-        WorkingDirectory = workingDirectory;
+        _sessionService = sessionService;
+        _workingDirectory = workingDirectory;
         _title = $"Terminal — {System.IO.Path.GetFileName(workingDirectory)}";
-
-        _session.OutputReceived += OnOutputReceived;
-        _session.Exited += OnExited;
     }
 
     public string Title
@@ -31,23 +30,40 @@ public sealed class TerminalTabViewModel : ViewModelBase, IAsyncDisposable
         private set => SetProperty(ref _isConnected, value);
     }
 
-    public string WorkingDirectory { get; }
+    public string WorkingDirectory => _workingDirectory;
+
+    public event Action<byte[]>? OutputAvailable;
 
     /// <summary>
-    /// Raised when batched output bytes are available for the view to send to xterm.js.
-    /// The byte[] is raw ConPTY output (VT sequences), base64 encode for JS transport.
+    /// Called by the View once WebView2 and xterm.js are fully initialized.
+    /// Only then do we start the ConPTY session so no output is lost.
     /// </summary>
-    public event Action<byte[]>? OutputAvailable;
+    public void StartSession(int initialCols = 120, int initialRows = 30)
+    {
+        if (_session is not null || _disposed) return;
+
+        try
+        {
+            _session = _sessionService.CreateSession(_workingDirectory, initialCols, initialRows);
+            _session.OutputReceived += OnOutputReceived;
+            _session.Exited += OnExited;
+            IsConnected = true;
+        }
+        catch (Exception ex)
+        {
+            Title = $"Terminal — failed: {ex.Message}";
+        }
+    }
 
     public void SendInput(byte[] data)
     {
-        if (_disposed) return;
+        if (_disposed || _session is null) return;
         _session.WriteInput(data);
     }
 
     public void Resize(int cols, int rows)
     {
-        if (_disposed || cols <= 0 || rows <= 0) return;
+        if (_disposed || _session is null || cols <= 0 || rows <= 0) return;
         _session.Resize(cols, rows);
     }
 
@@ -67,9 +83,12 @@ public sealed class TerminalTabViewModel : ViewModelBase, IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _session.OutputReceived -= OnOutputReceived;
-        _session.Exited -= OnExited;
-
-        await _session.DisposeAsync().ConfigureAwait(false);
+        if (_session is not null)
+        {
+            _session.OutputReceived -= OnOutputReceived;
+            _session.Exited -= OnExited;
+            await _session.DisposeAsync().ConfigureAwait(false);
+            _session = null;
+        }
     }
 }
