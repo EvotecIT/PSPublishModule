@@ -221,14 +221,18 @@
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Margin="8,6,8,4">
-                                                <!-- Project Name + Time -->
+                                                <!-- Project Name + Time + Dirty dot -->
                                                 <DockPanel>
-                                                    <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
-                                                               Foreground="{DynamicResource AppTextStrongBrush}"
-                                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <Ellipse DockPanel.Dock="Left" Width="6" Height="6"
+                                                             VerticalAlignment="Center" Margin="0,0,6,0"
+                                                             Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisible}}"
+                                                             Fill="{DynamicResource AppWarmBrush}" />
                                                     <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,2,0,0"
                                                                Foreground="{DynamicResource AppTextMutedBrush}"
                                                                Text="{Binding LastActivity}" />
+                                                    <TextBlock FontWeight="SemiBold" FontSize="13"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
+                                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
                                                 <!-- Branch + Badges -->
                                                 <DockPanel Margin="0,3,0,0">
@@ -454,22 +458,24 @@
                                                                        Text="{Binding Issues.Count, StringFormat={}{0} issue(s)}" />
                                                         </DockPanel>
                                                         <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
-                                                                 ItemsSource="{Binding Issues}">
+                                                                 ItemsSource="{Binding Issues}"
+                                                                 MouseDoubleClick="IssueList_DoubleClick">
                                                             <ListBox.ItemTemplate>
                                                                 <DataTemplate>
                                                                     <Border Background="{DynamicResource AppSurfaceAltBrush}"
-                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2">
+                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2"
+                                                                            Cursor="Hand">
                                                                         <StackPanel>
                                                                             <DockPanel>
                                                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
                                                                                            Foreground="{DynamicResource AppTextStrongBrush}"
                                                                                            Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                                                                                 <TextBlock DockPanel.Dock="Right" FontSize="11"
-                                                                                           Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                           Foreground="{DynamicResource AppAccentBrush}"
                                                                                            Text="{Binding Number, StringFormat=#{0}}" />
                                                                             </DockPanel>
                                                                             <DockPanel Margin="0,4,0,0">
-                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppAccentBrush}"
+                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppTextMutedBrush}"
                                                                                            Text="{Binding LabelDisplay}" />
                                                                             </DockPanel>
                                                                         </StackPanel>
@@ -489,11 +495,13 @@
                                                                        Text="{Binding PullRequests.Count, StringFormat={}{0} PR(s)}" />
                                                         </DockPanel>
                                                         <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
-                                                                 ItemsSource="{Binding PullRequests}">
+                                                                 ItemsSource="{Binding PullRequests}"
+                                                                 MouseDoubleClick="PrList_DoubleClick">
                                                             <ListBox.ItemTemplate>
                                                                 <DataTemplate>
                                                                     <Border Background="{DynamicResource AppSurfaceAltBrush}"
-                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2">
+                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2"
+                                                                            Cursor="Hand">
                                                                         <StackPanel>
                                                                             <DockPanel>
                                                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"

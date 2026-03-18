@@ -205,6 +205,9 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
             await ScanWorkspaceAsync().ConfigureAwait(true);
         }
 
+        // Auto-select last project
+        AutoSelectLastProject();
+
         // Start background timers
         _gitRefreshTimer.Start();
         _githubRefreshTimer.Start();
@@ -212,6 +215,20 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         // Kick off initial GitHub fetch and git status scan
         _ = RefreshGitHubCountsAsync();
         _ = RefreshDirtyRepoCountAsync();
+    }
+
+    private void AutoSelectLastProject()
+    {
+        var lastProjectName = Themes.WindowStateService.GetLastProjectName();
+        if (string.IsNullOrWhiteSpace(lastProjectName)) return;
+
+        var match = FilteredProjects.FirstOrDefault(p =>
+            string.Equals(p.Name, lastProjectName, StringComparison.OrdinalIgnoreCase));
+
+        if (match is not null)
+        {
+            SelectedProject = match;
+        }
     }
 
     private async Task<bool> TryLoadFromCacheAsync()

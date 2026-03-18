@@ -163,6 +163,38 @@ public partial class MainWindow : Window
         return null;
     }
 
+    private void IssueList_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: Domain.Hub.GitHubIssue issue }
+            && _viewModel.ActiveContent is HubViewModel hub
+            && hub.ActiveWorkspace?.GitHubSlug is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(
+                    $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/issues/{issue.Number}")
+                { UseShellExecute = true });
+            }
+            catch { }
+        }
+    }
+
+    private void PrList_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: Domain.Hub.GitHubPullRequest pr }
+            && _viewModel.ActiveContent is HubViewModel hub
+            && hub.ActiveWorkspace?.GitHubSlug is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(
+                    $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/pull/{pr.Number}")
+                { UseShellExecute = true });
+            }
+            catch { }
+        }
+    }
+
     private void GitHubSlug_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: ProjectWorkspaceViewModel workspace }

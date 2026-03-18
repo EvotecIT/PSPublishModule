@@ -270,13 +270,13 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
     private async Task RunBuildAsync()
     {
         IsBuilding = true;
-        BuildOutput = "Starting build...\n";
+        BuildOutput = string.Empty;
         try
         {
-            var progress = new Progress<string>(message => BuildOutput += message + "\n");
-            var result = await _buildService.RunBuildAsync(_entry, progress).ConfigureAwait(true);
+            var result = await _buildService.RunBuildStreamingAsync(
+                _entry,
+                line => BuildOutput += line + "\n").ConfigureAwait(true);
             BuildResults.Insert(0, result);
-            BuildOutput += $"\n{result.StatusDisplay} ({result.DurationDisplay})";
         }
         catch (Exception exception)
         {
