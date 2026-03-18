@@ -613,6 +613,12 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
             project.BranchName = gitStatus.BranchName;
             project.IsDirty = gitStatus.IsDirty;
 
+            // Dispose previous workspace resources (terminal, file explorer)
+            if (ActiveWorkspace is not null)
+            {
+                await ActiveWorkspace.DisposeAsync().ConfigureAwait(true);
+            }
+
             ActiveWorkspace = new ProjectWorkspaceViewModel(project.Entry, _gitHubService, _buildService);
             ActiveActions = new ProjectActionsViewModel(project.Entry, gitStatus, _gitService);
 

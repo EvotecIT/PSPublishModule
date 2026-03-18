@@ -1,0 +1,27 @@
+<UserControl x:Class="PowerForgeStudio.Wpf.Views.TerminalControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+    <Grid Background="#0F1117">
+        <!-- Loading overlay -->
+        <TextBlock x:Name="LoadingText"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#6B7280" FontSize="13"
+                   Text="Initializing terminal..." />
+
+        <!-- WebView2 terminal -->
+        <wv2:WebView2 x:Name="WebView"
+                      Visibility="Collapsed"
+                      DefaultBackgroundColor="#0F1117" />
+
+        <!-- Exited overlay -->
+        <StackPanel x:Name="ExitedOverlay"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="Collapsed">
+            <TextBlock Foreground="#6B7280" FontSize="13" HorizontalAlignment="Center"
+                       Text="Terminal session ended." />
+            <Button Margin="0,12,0,0" Padding="16,6" Content="Restart"
+                    Click="RestartButton_Click" />
+        </StackPanel>
+    </Grid>
+</UserControl>

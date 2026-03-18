@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using PowerForgeStudio.Domain.Hub;
+using PowerForgeStudio.Orchestrator.Explorer;
 using PowerForgeStudio.Orchestrator.Hub;
+using PowerForgeStudio.Orchestrator.Terminal;
 
 namespace PowerForgeStudio.Wpf.ViewModels.Hub;
 
@@ -10,20 +12,25 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
     private readonly ProjectEntry _entry;
     private readonly GitHubProjectService _gitHubService;
     private readonly ProjectBuildService _buildService;
+    private readonly TerminalSessionService _terminalService;
     private int _selectedTabIndex;
     private bool _isLoadingIssues;
     private bool _isLoadingPrs;
     private bool _isBuilding;
     private string _buildOutput = string.Empty;
+    private TerminalTabViewModel? _activeTerminal;
+    private FileExplorerViewModel? _fileExplorer;
 
     public ProjectWorkspaceViewModel(
         ProjectEntry entry,
         GitHubProjectService gitHubService,
-        ProjectBuildService buildService)
+        ProjectBuildService buildService,
+        TerminalSessionService? terminalService = null)
     {
         _entry = entry;
         _gitHubService = gitHubService;
         _buildService = buildService;
+        _terminalService = terminalService ?? new TerminalSessionService();
 
         Issues = [];
         PullRequests = [];
@@ -123,6 +130,18 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
         private set => SetProperty(ref _buildOutput, value);
     }
 
+    public TerminalTabViewModel? ActiveTerminal
+    {
+        get => _activeTerminal;
+        private set => SetProperty(ref _activeTerminal, value);
+    }
+
+    public FileExplorerViewModel? FileExplorer
+    {
+        get => _fileExplorer;
+        private set => SetProperty(ref _fileExplorer, value);
+    }
+
     public AsyncDelegateCommand LoadIssuesCommand { get; }
     public AsyncDelegateCommand LoadPullRequestsCommand { get; }
     public AsyncDelegateCommand RunBuildCommand { get; }
@@ -140,7 +159,42 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
             case 2 when PullRequests.Count == 0 && HasGitHub:
                 _ = LoadPullRequestsAsync();
                 break;
+            case 4 when ActiveTerminal is null:
+                CreateTerminal();
+                break;
+            case 5 when FileExplorer is null:
+                FileExplorer = new FileExplorerViewModel(_entry.RootPath, new FileExplorerService());
+                break;
         }
+    }
+
+    public string? TerminalError { get; private set; }
+
+    private void CreateTerminal()
+    {
+        try
+        {
+            var session = _terminalService.CreateSession(_entry.RootPath);
+            ActiveTerminal = new TerminalTabViewModel(session, _entry.RootPath);
+            TerminalError = null;
+        }
+        catch (Exception ex)
+        {
+            TerminalError = $"Terminal failed: {ex.Message}";
+            RaisePropertyChanged(nameof(TerminalError));
+        }
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_activeTerminal is not null)
+        {
+            await _activeTerminal.DisposeAsync().ConfigureAwait(false);
+            _activeTerminal = null;
+        }
+
+        _fileExplorer?.Dispose();
+        _fileExplorer = null;
     }
 
     private async Task LoadIssuesAsync()

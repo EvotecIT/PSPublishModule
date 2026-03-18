@@ -27,6 +27,11 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
 
         SourceInitialized += (_, _) => EnableDarkTitleBar();
+        ContentRendered += (_, _) =>
+        {
+            Activate();
+            Focus();
+        };
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
