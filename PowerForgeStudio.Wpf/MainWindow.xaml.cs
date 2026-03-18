@@ -37,11 +37,50 @@ public partial class MainWindow : Window
             ThemeService.SetDarkTitleBar(this, _themeService.ActiveTheme.IsDarkTitleBar);
         };
 
+        // Restore window position/size
+        WindowStateService.RestoreState(this);
+
+        // Save on close
+        Closing += (_, _) =>
+        {
+            var lastProject = (_viewModel.ActiveContent as HubViewModel)?.SelectedProject?.Name;
+            WindowStateService.SaveState(this, lastProject);
+        };
+
         ContentRendered += (_, _) =>
         {
             Activate();
             Focus();
         };
+
+        // Keyboard shortcuts
+        CommandBindings.Add(new CommandBinding(HubCommands.FocusSearchCommand, (_, _) =>
+        {
+            var searchBox = FindVisualChild<TextBox>(this, "ProjectSearchBox");
+            searchBox?.Focus();
+            searchBox?.SelectAll();
+        }));
+        CommandBindings.Add(new CommandBinding(HubCommands.OpenTerminalCommand, (_, _) =>
+        {
+            if (_viewModel.ActiveContent is HubViewModel hub && hub.ActiveWorkspace is not null)
+            {
+                hub.ActiveWorkspace.SelectedTabIndex = 4; // Terminal
+            }
+        }));
+        CommandBindings.Add(new CommandBinding(HubCommands.OpenFilesCommand, (_, _) =>
+        {
+            if (_viewModel.ActiveContent is HubViewModel hub && hub.ActiveWorkspace is not null)
+            {
+                hub.ActiveWorkspace.SelectedTabIndex = 5; // Files
+            }
+        }));
+        CommandBindings.Add(new CommandBinding(HubCommands.ClearSearchCommand, (_, _) =>
+        {
+            if (_viewModel.ActiveContent is HubViewModel hub)
+            {
+                hub.SearchText = string.Empty;
+            }
+        }));
 
         // Set initial theme selector
         SetThemeSelectorValue(_themeService.CurrentMode);
@@ -102,6 +141,26 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T element && element.Name == name)
+            {
+                return element;
+            }
+
+            var found = FindVisualChild<T>(child, name);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void GitHubSlug_Click(object sender, MouseButtonEventArgs e)

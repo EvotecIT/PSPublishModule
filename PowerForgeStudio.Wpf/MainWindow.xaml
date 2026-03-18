@@ -116,6 +116,13 @@
         </Style>
     </Window.Resources>
 
+    <Window.InputBindings>
+        <KeyBinding Key="P" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.FocusSearchCommand}" />
+        <KeyBinding Key="T" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.OpenTerminalCommand}" />
+        <KeyBinding Key="E" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.OpenFilesCommand}" />
+        <KeyBinding Key="Escape" Command="{x:Static hub:HubCommands.ClearSearchCommand}" />
+    </Window.InputBindings>
+
     <Grid Background="{DynamicResource AppShellBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -184,13 +191,14 @@
                                                 Command="{Binding ScanWorkspaceCommand}" Content="Scan" />
                                     </DockPanel>
                                     <TextBox Margin="0,10,0,10" Padding="8,6" FontSize="12"
+                                             x:Name="ProjectSearchBox"
                                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
 
                                 <!-- Project Tree -->
                                 <ListBox Style="{StaticResource FlatList}"
                                          ItemContainerStyle="{StaticResource FlatItem}"
-                                         ItemsSource="{Binding FilteredProjects}"
+                                         ItemsSource="{Binding GroupedView}"
                                          SelectedItem="{Binding SelectedProject}"
                                          VirtualizingPanel.IsVirtualizing="True"
                                          VirtualizingPanel.VirtualizationMode="Recycling"
@@ -198,6 +206,18 @@
                                          ScrollViewer.CanContentScroll="True"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          Margin="8,0,8,8">
+                                    <ListBox.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="10" FontWeight="Bold"
+                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                               Margin="8,12,0,4" />
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </ListBox.GroupStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Margin="8,6,8,4">
@@ -210,13 +230,8 @@
                                                                Foreground="{DynamicResource AppTextMutedBrush}"
                                                                Text="{Binding LastActivity}" />
                                                 </DockPanel>
-                                                <!-- Category + Branch + Badges -->
+                                                <!-- Branch + Badges -->
                                                 <DockPanel Margin="0,3,0,0">
-                                                    <Border DockPanel.Dock="Left" Padding="5,1" CornerRadius="4"
-                                                            Background="{DynamicResource AppSurfaceAltBrush}">
-                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
-                                                                   Text="{Binding CategoryDisplay}" />
-                                                    </Border>
                                                     <!-- PR badge -->
                                                     <Border DockPanel.Dock="Right" Padding="5,1" CornerRadius="4" Margin="4,0,0,0"
                                                             Background="#1A3B82F6"
@@ -224,7 +239,7 @@
                                                         <TextBlock FontSize="9" Foreground="{DynamicResource AppAccentBrush}"
                                                                    Text="{Binding OpenPrCount, StringFormat={}{0} PR}" />
                                                     </Border>
-                                                    <TextBlock DockPanel.Dock="Left" FontSize="11" Margin="6,0,0,0"
+                                                    <TextBlock DockPanel.Dock="Left" FontSize="11"
                                                                Foreground="{DynamicResource AppAccentBrush}"
                                                                Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
@@ -619,12 +634,55 @@
 
                                                     <!-- Diff -->
                                                     <TextBlock Style="{StaticResource SectionHead}" Text="DIFF" />
-                                                    <TextBox IsReadOnly="True" MaxHeight="180"
-                                                             FontFamily="Cascadia Code,Consolas,Courier New"
-                                                             FontSize="11" TextWrapping="NoWrap" AcceptsReturn="True"
-                                                             HorizontalScrollBarVisibility="Auto"
-                                                             VerticalScrollBarVisibility="Auto"
-                                                             Text="{Binding DiffContent, Mode=OneWay}" />
+                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                            CornerRadius="6" MaxHeight="200">
+                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                                      VerticalScrollBarVisibility="Auto">
+                                                            <ItemsControl ItemsSource="{Binding DiffLines}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Padding="6,1,6,1">
+                                                                            <Border.Style>
+                                                                                <Style TargetType="Border">
+                                                                                    <Setter Property="Background" Value="Transparent" />
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                                                                            <Setter Property="Background" Value="#1A10B981" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                                                                                            <Setter Property="Background" Value="#1AEF4444" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Hunk">
+                                                                                            <Setter Property="Background" Value="#0D3B82F6" />
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Border.Style>
+                                                                            <TextBlock FontFamily="Cascadia Code,Consolas,Courier New"
+                                                                                       FontSize="11" Text="{Binding Text}" TextWrapping="NoWrap">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppSuccessBrush}" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppDangerBrush}" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Hunk">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Border>
 
                                                     <!-- Branches -->
                                                     <TextBlock Style="{StaticResource SectionHead}" Text="BRANCHES" />

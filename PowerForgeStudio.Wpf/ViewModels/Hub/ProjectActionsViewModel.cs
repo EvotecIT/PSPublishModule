@@ -69,7 +69,29 @@ public sealed class ProjectActionsViewModel : ViewModelBase
     public string DiffContent
     {
         get => _diffContent;
-        private set => SetProperty(ref _diffContent, value);
+        private set
+        {
+            if (SetProperty(ref _diffContent, value))
+            {
+                ParseDiffLines(value);
+            }
+        }
+    }
+
+    public ObservableCollection<DiffLine> DiffLines { get; } = [];
+
+    private void ParseDiffLines(string diff)
+    {
+        DiffLines.Clear();
+        if (string.IsNullOrWhiteSpace(diff) || diff == "(No diff available)")
+        {
+            return;
+        }
+
+        foreach (var line in diff.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            DiffLines.Add(DiffLine.Parse(line));
+        }
     }
 
     public string CommitMessage

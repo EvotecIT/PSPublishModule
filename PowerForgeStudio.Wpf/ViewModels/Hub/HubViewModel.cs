@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
+using System.Windows.Data;
 using System.Windows.Threading;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Orchestrator.Hub;
@@ -55,6 +57,9 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
         FilteredProjects = new BatchObservableCollection<ProjectListItemViewModel>();
 
+        GroupedView = CollectionViewSource.GetDefaultView(FilteredProjects);
+        GroupedView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ProjectListItemViewModel.CategoryDisplay)));
+
         ScanWorkspaceCommand = new AsyncDelegateCommand(ScanWorkspaceAsync, () => !_isScanning);
         RefreshSelectedCommand = new AsyncDelegateCommand(RefreshSelectedProjectAsync, () => _selectedProject is not null);
 
@@ -75,6 +80,8 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
     }
 
     public BatchObservableCollection<ProjectListItemViewModel> FilteredProjects { get; }
+
+    public ICollectionView GroupedView { get; }
 
     public ProjectListItemViewModel? SelectedProject
     {
