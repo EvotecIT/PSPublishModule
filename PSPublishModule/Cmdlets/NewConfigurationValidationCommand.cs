@@ -95,6 +95,9 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
     /// <summary>Skip PSScriptAnalyzer checks if the module is not installed.</summary>
     [Parameter] public bool ScriptAnalyzerSkipIfUnavailable { get; set; } = true;
 
+    /// <summary>Install PSScriptAnalyzer on demand before validation when it is missing.</summary>
+    [Parameter] public bool ScriptAnalyzerInstallIfUnavailable { get; set; }
+
     /// <summary>ScriptAnalyzer timeout, in seconds (default 300).</summary>
     [Parameter] public int ScriptAnalyzerTimeoutSeconds { get; set; } = 300;
 
@@ -180,6 +183,7 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
             ScriptAnalyzerExcludeDirectories = ScriptAnalyzerExcludeDirectories,
             ScriptAnalyzerExcludeRules = ScriptAnalyzerExcludeRules,
             ScriptAnalyzerSkipIfUnavailable = ScriptAnalyzerSkipIfUnavailable,
+            ScriptAnalyzerInstallIfUnavailable = ScriptAnalyzerInstallIfUnavailable,
             ScriptAnalyzerTimeoutSeconds = ScriptAnalyzerTimeoutSeconds,
             FileIntegrityExcludeDirectories = FileIntegrityExcludeDirectories,
             FileIntegrityCheckTrailingWhitespace = FileIntegrityCheckTrailingWhitespace,

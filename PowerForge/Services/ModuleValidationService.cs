@@ -17,14 +17,21 @@ public sealed partial class ModuleValidationService
 {
     private readonly ILogger _logger;
     private readonly IPowerShellRunner _runner;
+    private readonly Func<IEnumerable<ModuleDependency>, RuntimeToolDependencyOptions, IReadOnlyList<ModuleDependencyInstallResult>> _ensureRuntimeDependencies;
 
     /// <summary>Creates a module validation service.</summary>
     /// <param name="logger">Logger for status output.</param>
     /// <param name="runner">Optional PowerShell runner override.</param>
-    public ModuleValidationService(ILogger logger, IPowerShellRunner? runner = null)
+    /// <param name="ensureRuntimeDependencies">Optional callback used to install tool dependencies on demand.</param>
+    public ModuleValidationService(
+        ILogger logger,
+        IPowerShellRunner? runner = null,
+        Func<IEnumerable<ModuleDependency>, RuntimeToolDependencyOptions, IReadOnlyList<ModuleDependencyInstallResult>>? ensureRuntimeDependencies = null)
     {
         _logger = logger ?? new NullLogger();
         _runner = runner ?? new PowerShellRunner();
+        _ensureRuntimeDependencies = ensureRuntimeDependencies ??
+            ((dependencies, options) => new RuntimeToolDependencyService(_runner, _logger).EnsureInstalled(dependencies, options));
     }
 
     /// <summary>Runs configured validation checks for the module.</summary>
