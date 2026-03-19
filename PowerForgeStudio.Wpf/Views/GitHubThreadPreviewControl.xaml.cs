@@ -1,12 +1,10 @@
-using System.Diagnostics;
 using System.Net;
 using System.Text;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Microsoft.Web.WebView2.Core;
 using OfficeIMO.MarkdownRenderer;
+using OfficeIMO.MarkdownRenderer.Wpf;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Wpf.Themes;
 
@@ -35,13 +33,8 @@ public partial class GitHubThreadPreviewControl : UserControl
             typeof(GitHubThreadPreviewControl),
             new PropertyMetadata(string.Empty, OnContentChanged));
 
-    private readonly SemaphoreSlim _renderGate = new(1, 1);
     private readonly ThemeService? _themeService;
-    private TaskCompletionSource<bool>? _navigationCompletionSource;
     private bool _isThemeSubscribed;
-    private bool _pendingShellReload = true;
-    private bool _pendingBodyReload = true;
-    private bool _webViewReady;
 
     public GitHubThreadPreviewControl()
     {
@@ -69,7 +62,7 @@ public partial class GitHubThreadPreviewControl : UserControl
         set => SetValue(BaseHrefProperty, value);
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (!_isThemeSubscribed && _themeService is not null)
         {
@@ -77,7 +70,7 @@ public partial class GitHubThreadPreviewControl : UserControl
             _isThemeSubscribed = true;
         }
 
-        await RenderPendingAsync().ConfigureAwait(true);
+        ApplyToPreview();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -91,107 +84,31 @@ public partial class GitHubThreadPreviewControl : UserControl
 
     private void OnThemeChanged(ThemeDefinition theme)
     {
-        _pendingShellReload = true;
-        _pendingBodyReload = true;
-        _ = Dispatcher.InvokeAsync(RenderPendingAsync);
+        ApplyToPreview();
     }
 
-    private static async void OnContentChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    private static void OnContentChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
         if (dependencyObject is GitHubThreadPreviewControl control)
         {
-            control._pendingShellReload = true;
-            control._pendingBodyReload = true;
-            await control.RenderPendingAsync().ConfigureAwait(true);
+            control.ApplyToPreview();
         }
     }
 
-    private async Task RenderPendingAsync()
+    private void ApplyToPreview()
     {
         if (!IsLoaded)
         {
             return;
         }
 
-        await _renderGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            while (_pendingShellReload || _pendingBodyReload)
-            {
-                var rebuildShell = _pendingShellReload || !_webViewReady;
-                _pendingShellReload = false;
-                _pendingBodyReload = false;
-
-                ShowStatus("Loading discussion preview...");
-                await EnsureWebViewAsync().ConfigureAwait(true);
-
-                var options = CreateRendererOptions();
-                if (rebuildShell)
-                {
-                    await NavigateShellAsync(options).ConfigureAwait(true);
-                }
-
-                UpdateBody(options);
-                ShowBrowser();
-            }
-        }
-        catch (Exception exception)
-        {
-            ShowStatus($"Discussion preview unavailable: {exception.Message}");
-        }
-        finally
-        {
-            _renderGate.Release();
-        }
-    }
-
-    private async Task EnsureWebViewAsync()
-    {
-        if (_webViewReady)
-        {
-            return;
-        }
-
-        await Browser.EnsureCoreWebView2Async().ConfigureAwait(true);
-
-        var settings = Browser.CoreWebView2.Settings;
-        settings.IsStatusBarEnabled = false;
-        settings.AreDefaultContextMenusEnabled = false;
-        settings.AreDevToolsEnabled = false;
-
-        Browser.CoreWebView2.NavigationStarting += OnNavigationStarting;
-        Browser.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-        _webViewReady = true;
-    }
-
-    private async Task NavigateShellAsync(MarkdownRendererOptions options)
-    {
-        if (Browser.CoreWebView2 is null)
-        {
-            throw new InvalidOperationException("WebView2 is not initialized.");
-        }
-
-        _navigationCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Browser.NavigateToString(MarkdownRenderer.BuildShellHtml(DocumentTitle, options));
-        await _navigationCompletionSource.Task.ConfigureAwait(true);
-    }
-
-    private void UpdateBody(MarkdownRendererOptions options)
-    {
-        if (Browser.CoreWebView2 is null)
-        {
-            return;
-        }
-
-        var bodyHtml = BuildThreadHtml(options);
-        Browser.CoreWebView2.PostWebMessageAsString(bodyHtml);
-    }
-
-    private MarkdownRendererOptions CreateRendererOptions()
-    {
         var options = MarkdownRendererPresets.CreateRelaxed(string.IsNullOrWhiteSpace(BaseHref) ? null : BaseHref.Trim());
-        options.ShellCss = BuildThemeCss();
-        return options;
+        Preview.Markdown = string.Empty;
+        Preview.BodyHtml = BuildThreadHtml(options);
+        Preview.DocumentTitle = string.IsNullOrWhiteSpace(DocumentTitle) ? "GitHub thread" : DocumentTitle;
+        Preview.BaseHref = BaseHref ?? string.Empty;
+        Preview.Preset = MarkdownViewPreset.Relaxed;
+        Preview.ShellCss = BuildThemeCss();
     }
 
     private string BuildThreadHtml(MarkdownRendererOptions options)
@@ -373,35 +290,6 @@ body {
 """;
     }
 
-    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
-    {
-        if (_navigationCompletionSource is null)
-        {
-            return;
-        }
-
-        if (e.IsSuccess)
-        {
-            _navigationCompletionSource.TrySetResult(true);
-        }
-        else
-        {
-            _navigationCompletionSource.TrySetException(
-                new InvalidOperationException($"Thread shell navigation failed: {e.WebErrorStatus}."));
-        }
-    }
-
-    private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-    {
-        if (!e.IsUserInitiated || !TryGetExternalNavigationUri(e.Uri, out var navigationUri))
-        {
-            return;
-        }
-
-        e.Cancel = true;
-        TryOpenExternal(navigationUri);
-    }
-
     private string GetCssColor(string resourceKey, string fallback)
     {
         if (Application.Current?.TryFindResource(resourceKey) is SolidColorBrush brush)
@@ -414,48 +302,4 @@ body {
 
     private static string ToCssColor(Color color)
         => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-
-    private static bool TryGetExternalNavigationUri(string? rawUri, out Uri navigationUri)
-    {
-        navigationUri = null!;
-        if (string.IsNullOrWhiteSpace(rawUri) || !Uri.TryCreate(rawUri, UriKind.Absolute, out var parsed))
-        {
-            return false;
-        }
-
-        if (string.Equals(parsed.Scheme, "about", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(parsed.Scheme, "data", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(parsed.Scheme, "javascript", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        navigationUri = parsed;
-        return true;
-    }
-
-    private static void TryOpenExternal(Uri navigationUri)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(navigationUri.AbsoluteUri) { UseShellExecute = true });
-        }
-        catch
-        {
-            // Ignore shell launch failures.
-        }
-    }
-
-    private void ShowStatus(string text)
-    {
-        StatusText.Text = text;
-        StatusOverlay.Visibility = Visibility.Visible;
-        Browser.Visibility = Visibility.Collapsed;
-    }
-
-    private void ShowBrowser()
-    {
-        StatusOverlay.Visibility = Visibility.Collapsed;
-        Browser.Visibility = Visibility.Visible;
-    }
 }

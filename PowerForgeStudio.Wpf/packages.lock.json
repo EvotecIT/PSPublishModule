@@ -96,6 +96,13 @@
           "System.Text.Json": "[8.0.5, 9.0.0)"
         }
       },
+      "officeimo.markdownrenderer.wpf": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Web.WebView2": "[1.0.*, )",
+          "OfficeIMO.MarkdownRenderer": "[0.2.4, )"
+        }
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
