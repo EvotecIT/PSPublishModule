@@ -11,12 +11,21 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <OfficeImoMarkdownRendererWpfProject></OfficeImoMarkdownRendererWpfProject>
+    <OfficeImoMarkdownRendererWpfProject Condition="'$(OfficeImoMarkdownRendererWpfProject)' == '' AND '$(OFFICEIMO_MARKDOWNRENDERER_WPF_PROJECT)' != '' AND Exists('$(OFFICEIMO_MARKDOWNRENDERER_WPF_PROJECT)')">$(OFFICEIMO_MARKDOWNRENDERER_WPF_PROJECT)</OfficeImoMarkdownRendererWpfProject>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
     <ProjectReference Include="..\PowerForgeStudio.Orchestrator\PowerForgeStudio.Orchestrator.csproj" />
+    <ProjectReference Include="$(OfficeImoMarkdownRendererWpfProject)"
+                      Condition="Exists('$(OfficeImoMarkdownRendererWpfProject)')" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="OfficeIMO.MarkdownRenderer.Wpf" Version="0.1.0"
+                      Condition="!Exists('$(OfficeImoMarkdownRendererWpfProject)')" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
   </ItemGroup>
 

@@ -44,13 +44,18 @@
                             <ItemsPresenter Margin="14,0,0,0" />
                         </StackPanel>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsMouseOver" Value="True" />
-                                    <Condition Property="IsSelected" Value="False" />
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
+                        </Trigger>
+                        <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                        </DataTrigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True" />
+                                <Condition Property="IsSelected" Value="False" />
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppTabHoverBrush}" />
                             </MultiTrigger>

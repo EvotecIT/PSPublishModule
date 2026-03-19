@@ -7,17 +7,16 @@ namespace PowerForgeStudio.Wpf.ViewModels.Hub;
 
 public sealed class FileTreeNodeViewModel : ViewModelBase
 {
-    private static readonly FileTreeNodeViewModel SentinelNode = new();
-
     private readonly FileExplorerService? _service;
     private bool _isExpanded;
     private bool _isSelected;
     private bool _isLoading;
     private bool _isLoaded;
+    private readonly bool _isPlaceholder;
 
-    // Sentinel constructor (empty placeholder node)
-    private FileTreeNodeViewModel()
+    private FileTreeNodeViewModel(bool isPlaceholder)
     {
+        _isPlaceholder = isPlaceholder;
         Name = string.Empty;
         FullPath = string.Empty;
         Children = [];
@@ -34,8 +33,8 @@ public sealed class FileTreeNodeViewModel : ViewModelBase
         Children = [];
         if (entry.IsDirectory)
         {
-            // Add sentinel so the expand arrow appears
-            Children.Add(SentinelNode);
+            // Add a per-node placeholder so the expand arrow appears before the folder is loaded.
+            Children.Add(new FileTreeNodeViewModel(isPlaceholder: true));
         }
     }
 
@@ -43,6 +42,7 @@ public sealed class FileTreeNodeViewModel : ViewModelBase
     public string FullPath { get; }
     public bool IsDirectory { get; }
     public ImageSource? Icon { get; }
+    public bool IsPlaceholder => _isPlaceholder;
 
     public ObservableCollection<FileTreeNodeViewModel> Children { get; }
 

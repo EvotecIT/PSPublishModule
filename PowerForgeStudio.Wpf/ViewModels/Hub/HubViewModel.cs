@@ -65,11 +65,11 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
         // Background refresh: git status every 60s
         _gitRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
-        _gitRefreshTimer.Tick += async (_, _) => await RefreshSelectedGitStatusAsync().ConfigureAwait(true);
+        _gitRefreshTimer.Tick += async (_, _) => await RunBackgroundTaskAsync(RefreshSelectedGitStatusAsync, "selected git refresh").ConfigureAwait(true);
 
         // Background refresh: GitHub data every 10 minutes
         _githubRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
-        _githubRefreshTimer.Tick += async (_, _) => await RefreshGitHubCountsAsync().ConfigureAwait(true);
+        _githubRefreshTimer.Tick += async (_, _) => await RunBackgroundTaskAsync(RefreshGitHubCountsAsync, "GitHub refresh").ConfigureAwait(true);
     }
 
     public void Dispose()
@@ -248,7 +248,7 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         {
             StatusText = $"{_primaryProjectCount} projects (cached)";
             // Scan in background for fresh data
-            _ = ScanWorkspaceAsync();
+            _ = RunBackgroundTaskAsync(ScanWorkspaceAsync, "workspace scan");
         }
         else
         {
@@ -263,8 +263,8 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         _githubRefreshTimer.Start();
 
         // Kick off initial GitHub fetch and git status scan
-        _ = RefreshGitHubCountsAsync();
-        _ = RefreshDirtyRepoCountAsync();
+        _ = RunBackgroundTaskAsync(RefreshGitHubCountsAsync, "GitHub refresh");
+        _ = RunBackgroundTaskAsync(RefreshDirtyRepoCountAsync, "git status refresh");
     }
 
     private void AutoSelectLastProject()
@@ -391,6 +391,7 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
     private async Task RefreshGitHubCountsAsync()
     {
+        var projects = _allProjects.ToList();
         if (!GitHubHttpClientFactory.HasToken)
         {
             StatusText = $"{_primaryProjectCount} projects, {_worktreeCount} worktrees (no GitHub token — set GITHUB_TOKEN or run gh auth login)";
@@ -405,7 +406,7 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         var totalPrs = 0;
         var totalIssues = 0;
 
-        foreach (var project in _allProjects)
+        foreach (var project in projects)
         {
             if (project.GitHubSlug is null)
             {
@@ -472,8 +473,9 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
     private async Task RefreshDirtyRepoCountAsync()
     {
         var dirtyCount = 0;
+        var projects = _allProjects.ToList();
 
-        foreach (var project in _allProjects)
+        foreach (var project in projects)
         {
             try
             {
@@ -494,6 +496,18 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
         var current = Dashboard.Snapshot;
         Dashboard = new HubDashboardViewModel(current with { DirtyRepos = dirtyCount });
+    }
+
+    private async Task RunBackgroundTaskAsync(Func<Task> action, string operationName)
+    {
+        try
+        {
+            await action().ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"{operationName} failed: {exception.Message}";
+        }
     }
 
     private async Task RefreshSelectedGitStatusAsync()

@@ -173,7 +173,7 @@ public partial class MainWindow : Window
             try
             {
                 Process.Start(new ProcessStartInfo(
-                    $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/issues/{issue.Number}")
+                    issue.HtmlUrl ?? $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/issues/{issue.Number}")
                 { UseShellExecute = true });
             }
             catch { }
@@ -189,7 +189,7 @@ public partial class MainWindow : Window
             try
             {
                 Process.Start(new ProcessStartInfo(
-                    $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/pull/{pr.Number}")
+                    pr.HtmlUrl ?? $"https://github.com/{hub.ActiveWorkspace.GitHubSlug}/pull/{pr.Number}")
                 { UseShellExecute = true });
             }
             catch { }

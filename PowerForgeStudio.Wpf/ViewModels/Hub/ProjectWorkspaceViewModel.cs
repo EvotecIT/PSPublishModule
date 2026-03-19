@@ -22,6 +22,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     private readonly System.Text.StringBuilder _buildOutputBuilder = new();
     private TerminalTabViewModel? _activeTerminal;
     private FileExplorerViewModel? _fileExplorer;
+    private GitHubIssue? _selectedIssue;
+    private GitHubPullRequest? _selectedPullRequest;
+    private GitHubIssueDetail? _selectedIssueDetail;
+    private GitHubPullRequestDetail? _selectedPullRequestDetail;
+    private bool _isLoadingIssueDetail;
+    private bool _isLoadingPullRequestDetail;
+    private int _issueDetailRequestVersion;
+    private int _pullRequestDetailRequestVersion;
     private string _issueStateFilter = "open";
     private string _prStateFilter = "open";
 
@@ -136,6 +144,8 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
 
     public string? AzureDevOpsSlug => _entry.AzureDevOpsSlug;
 
+    public string GitHubRepositoryBaseUrl => _entry.GitHubSlug is null ? string.Empty : $"https://github.com/{_entry.GitHubSlug}";
+
     public bool HasGitHub => _entry.GitHubSlug is not null;
 
     public bool HasAzureDevOps => _entry.AzureDevOpsSlug is not null;
@@ -149,6 +159,36 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<ProjectBuildResult> BuildResults { get; }
 
     public ObservableCollection<GitLogEntry> GitLog { get; }
+
+    public GitHubIssue? SelectedIssue
+    {
+        get => _selectedIssue;
+        set
+        {
+            if (SetProperty(ref _selectedIssue, value))
+            {
+                _selectedIssueDetail = null;
+                RaisePropertyChanged(nameof(HasSelectedIssue));
+                RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
+                _ = LoadSelectedIssueDetailAsync(value);
+            }
+        }
+    }
+
+    public GitHubPullRequest? SelectedPullRequest
+    {
+        get => _selectedPullRequest;
+        set
+        {
+            if (SetProperty(ref _selectedPullRequest, value))
+            {
+                _selectedPullRequestDetail = null;
+                RaisePropertyChanged(nameof(HasSelectedPullRequest));
+                RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
+                _ = LoadSelectedPullRequestDetailAsync(value);
+            }
+        }
+    }
 
     public int SelectedTabIndex
     {
@@ -217,6 +257,42 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     public AsyncDelegateCommand RestartTerminalCommand { get; }
 
     public bool HasActiveTerminal => ActiveTerminal is not null;
+
+    public bool HasSelectedIssue => SelectedIssue is not null;
+
+    public bool HasSelectedPullRequest => SelectedPullRequest is not null;
+
+    public bool IsLoadingIssueDetail
+    {
+        get => _isLoadingIssueDetail;
+        private set
+        {
+            if (SetProperty(ref _isLoadingIssueDetail, value))
+            {
+                RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
+            }
+        }
+    }
+
+    public bool IsLoadingPullRequestDetail
+    {
+        get => _isLoadingPullRequestDetail;
+        private set
+        {
+            if (SetProperty(ref _isLoadingPullRequestDetail, value))
+            {
+                RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
+            }
+        }
+    }
+
+    public IReadOnlyList<GitHubThreadEntry> SelectedIssueThreadEntries => SelectedIssue is null
+        ? []
+        : GitHubThreadEntryBuilder.BuildIssueEntries(SelectedIssue, _selectedIssueDetail);
+
+    public IReadOnlyList<GitHubThreadEntry> SelectedPullRequestThreadEntries => SelectedPullRequest is null
+        ? []
+        : GitHubThreadEntryBuilder.BuildPullRequestEntries(SelectedPullRequest, _selectedPullRequestDetail);
 
     public string IssueStateFilter
     {
@@ -316,11 +392,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var issues = await _gitHubService.FetchIssuesAsync(_entry.GitHubSlug, _issueStateFilter).ConfigureAwait(true);
+            var selectedNumber = SelectedIssue?.Number;
             Issues.Clear();
             foreach (var issue in issues)
             {
                 Issues.Add(issue);
             }
+
+            SelectedIssue = Issues.FirstOrDefault(issue => issue.Number == selectedNumber) ?? Issues.FirstOrDefault();
         }
         catch
         {
@@ -343,11 +422,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var prs = await _gitHubService.FetchPullRequestsAsync(_entry.GitHubSlug, _prStateFilter).ConfigureAwait(true);
+            var selectedNumber = SelectedPullRequest?.Number;
             PullRequests.Clear();
             foreach (var pr in prs)
             {
                 PullRequests.Add(pr);
             }
+
+            SelectedPullRequest = PullRequests.FirstOrDefault(pr => pr.Number == selectedNumber) ?? PullRequests.FirstOrDefault();
         }
         catch
         {
@@ -356,6 +438,106 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         finally
         {
             IsLoadingPrs = false;
+        }
+    }
+
+    private async Task LoadSelectedIssueDetailAsync(GitHubIssue? issue)
+    {
+        var requestVersion = ++_issueDetailRequestVersion;
+        if (issue is null || _entry.GitHubSlug is null)
+        {
+            IsLoadingIssueDetail = false;
+            _selectedIssueDetail = null;
+            RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
+            return;
+        }
+
+        IsLoadingIssueDetail = true;
+        try
+        {
+            var detail = await _gitHubService.FetchIssueDetailAsync(_entry.GitHubSlug, issue.Number).ConfigureAwait(true);
+            if (requestVersion != _issueDetailRequestVersion || SelectedIssue?.Number != issue.Number)
+            {
+                return;
+            }
+
+            _selectedIssueDetail = detail;
+            if (detail is not null)
+            {
+                if (!EqualityComparer<GitHubIssue?>.Default.Equals(_selectedIssue, detail.Issue))
+                {
+                    _selectedIssue = detail.Issue;
+                    RaisePropertyChanged(nameof(SelectedIssue));
+                    RaisePropertyChanged(nameof(HasSelectedIssue));
+                    RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the selection changes while loading.
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceWarning($"Failed to load issue detail for {_entry.GitHubSlug}#{issue.Number}: {exception}");
+        }
+        finally
+        {
+            if (requestVersion == _issueDetailRequestVersion)
+            {
+                IsLoadingIssueDetail = false;
+                RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
+            }
+        }
+    }
+
+    private async Task LoadSelectedPullRequestDetailAsync(GitHubPullRequest? pullRequest)
+    {
+        var requestVersion = ++_pullRequestDetailRequestVersion;
+        if (pullRequest is null || _entry.GitHubSlug is null)
+        {
+            IsLoadingPullRequestDetail = false;
+            _selectedPullRequestDetail = null;
+            RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
+            return;
+        }
+
+        IsLoadingPullRequestDetail = true;
+        try
+        {
+            var detail = await _gitHubService.FetchPullRequestDetailAsync(_entry.GitHubSlug, pullRequest.Number).ConfigureAwait(true);
+            if (requestVersion != _pullRequestDetailRequestVersion || SelectedPullRequest?.Number != pullRequest.Number)
+            {
+                return;
+            }
+
+            _selectedPullRequestDetail = detail;
+            if (detail is not null)
+            {
+                if (!EqualityComparer<GitHubPullRequest?>.Default.Equals(_selectedPullRequest, detail.PullRequest))
+                {
+                    _selectedPullRequest = detail.PullRequest;
+                    RaisePropertyChanged(nameof(SelectedPullRequest));
+                    RaisePropertyChanged(nameof(HasSelectedPullRequest));
+                    RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the selection changes while loading.
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceWarning($"Failed to load pull request detail for {_entry.GitHubSlug}#{pullRequest.Number}: {exception}");
+        }
+        finally
+        {
+            if (requestVersion == _pullRequestDetailRequestVersion)
+            {
+                IsLoadingPullRequestDetail = false;
+                RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
+            }
         }
     }
 
