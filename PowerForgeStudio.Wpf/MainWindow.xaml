@@ -565,7 +565,40 @@
                                                     </ScrollViewer>
                                                 </TabItem>
                                                 <TabItem Header="Terminal">
-                                                    <views:TerminalControl DataContext="{Binding ActiveTerminal}" />
+                                                    <Grid>
+                                                        <!-- No terminal running — show start button -->
+                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                    Visibility="{Binding HasActiveTerminal, Converter={StaticResource BoolToCollapsed}}">
+                                                            <TextBlock Foreground="{DynamicResource AppTextMutedBrush}" FontSize="13"
+                                                                       HorizontalAlignment="Center" Margin="0,0,0,12"
+                                                                       Text="No terminal session running." />
+                                                            <Button Style="{StaticResource GhostBtn}" HorizontalAlignment="Center"
+                                                                    Padding="20,8" FontSize="13"
+                                                                    Command="{Binding StartTerminalCommand}" Content="Start Terminal" />
+                                                        </StackPanel>
+
+                                                        <!-- Terminal running -->
+                                                        <DockPanel Visibility="{Binding HasActiveTerminal, Converter={StaticResource BoolToVisible}}">
+                                                            <Border DockPanel.Dock="Top" Padding="8,4"
+                                                                    Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                    BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+                                                                <DockPanel>
+                                                                    <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="{Binding ActiveTerminal.Title}" />
+                                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                        <Button Style="{StaticResource GhostBtn}" Padding="8,3" FontSize="10"
+                                                                                Margin="0,0,4,0"
+                                                                                Command="{Binding RestartTerminalCommand}" Content="Restart" />
+                                                                        <Button Style="{StaticResource GhostBtn}" Padding="8,3" FontSize="10"
+                                                                                Command="{Binding CloseTerminalCommand}" Content="Close" />
+                                                                    </StackPanel>
+                                                                </DockPanel>
+                                                            </Border>
+                                                            <views:TerminalControl DataContext="{Binding ActiveTerminal}" />
+                                                        </DockPanel>
+                                                    </Grid>
                                                 </TabItem>
                                                 <TabItem Header="Files">
                                                     <views:FileExplorerView DataContext="{Binding FileExplorer}" />

@@ -87,6 +87,33 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
                 PrStateFilter = state;
             }
         });
+
+        StartTerminalCommand = new AsyncDelegateCommand(async () =>
+        {
+            CreateTerminal();
+            await Task.CompletedTask;
+        }, () => ActiveTerminal is null);
+
+        CloseTerminalCommand = new AsyncDelegateCommand(async () =>
+        {
+            if (_activeTerminal is not null)
+            {
+                await _activeTerminal.DisposeAsync().ConfigureAwait(true);
+                ActiveTerminal = null;
+                NotifyTerminalStateChanged();
+            }
+        }, () => ActiveTerminal is not null);
+
+        RestartTerminalCommand = new AsyncDelegateCommand(async () =>
+        {
+            if (_activeTerminal is not null)
+            {
+                await _activeTerminal.DisposeAsync().ConfigureAwait(true);
+                ActiveTerminal = null;
+            }
+
+            CreateTerminal();
+        });
     }
 
     public string ProjectName => _entry.Name;
@@ -185,6 +212,11 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     public DelegateCommand<object?> OpenInTerminalCommand { get; }
     public DelegateCommand<object?> SetIssueStateFilterCommand { get; }
     public DelegateCommand<object?> SetPrStateFilterCommand { get; }
+    public AsyncDelegateCommand StartTerminalCommand { get; }
+    public AsyncDelegateCommand CloseTerminalCommand { get; }
+    public AsyncDelegateCommand RestartTerminalCommand { get; }
+
+    public bool HasActiveTerminal => ActiveTerminal is not null;
 
     public string IssueStateFilter
     {
@@ -220,8 +252,8 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
             case 2 when PullRequests.Count == 0 && HasGitHub:
                 _ = LoadPullRequestsAsync();
                 break;
-            case 4 when ActiveTerminal is null:
-                CreateTerminal();
+            // Terminal tab: don't auto-create — user must click Start
+            case 4:
                 break;
             case 5 when FileExplorer is null:
                 FileExplorer = new FileExplorerViewModel(_entry.RootPath, new FileExplorerService());
@@ -249,6 +281,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     {
         // Session creation is deferred until WebView2 is ready (see TerminalControl)
         ActiveTerminal = new TerminalTabViewModel(_terminalService, _entry.RootPath);
+        NotifyTerminalStateChanged();
+    }
+
+    private void NotifyTerminalStateChanged()
+    {
+        RaisePropertyChanged(nameof(HasActiveTerminal));
+        StartTerminalCommand.RaiseCanExecuteChanged();
+        CloseTerminalCommand.RaiseCanExecuteChanged();
     }
 
     public async ValueTask DisposeAsync()
