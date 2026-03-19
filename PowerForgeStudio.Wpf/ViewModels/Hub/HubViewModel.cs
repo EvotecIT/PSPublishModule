@@ -189,23 +189,41 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         }
         catch { }
 
-        // Sensible fallbacks
+        // Sensible fallbacks — pick the one with the most subdirectories (repos)
         var candidates = new[]
         {
+            @"C:\Support\GitHub",
             System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos"),
             System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "GitHub"),
-            @"C:\Support\GitHub"
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Projects")
         };
+
+        string? bestCandidate = null;
+        var bestCount = -1;
 
         foreach (var candidate in candidates)
         {
-            if (System.IO.Directory.Exists(candidate))
+            if (!System.IO.Directory.Exists(candidate)) continue;
+
+            try
             {
-                return candidate;
+                var count = System.IO.Directory.EnumerateDirectories(candidate).Take(5).Count();
+                if (count > bestCount)
+                {
+                    bestCount = count;
+                    bestCandidate = candidate;
+                }
+            }
+            catch
+            {
+                if (bestCandidate is null)
+                {
+                    bestCandidate = candidate;
+                }
             }
         }
 
-        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return bestCandidate ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
     public AsyncDelegateCommand ScanWorkspaceCommand { get; }
