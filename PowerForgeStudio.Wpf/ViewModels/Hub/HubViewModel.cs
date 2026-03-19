@@ -373,6 +373,12 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
     private async Task RefreshGitHubCountsAsync()
     {
+        if (!GitHubHttpClientFactory.HasToken)
+        {
+            StatusText = $"{_primaryProjectCount} projects, {_worktreeCount} worktrees (no GitHub token — set GITHUB_TOKEN or run gh auth login)";
+            return;
+        }
+
         if (_gitHubService.IsRateLimited)
         {
             return;
