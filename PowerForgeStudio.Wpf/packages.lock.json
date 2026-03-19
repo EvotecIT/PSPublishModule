@@ -8,6 +8,16 @@
         "resolved": "1.0.3856.49",
         "contentHash": "OOBKvFgK0pUKcndvTK6/jUsbrPRwce62Wt/0hkJWDsK2AcsJ2ylOS/mLa4xAcNUTOs96YIjpPN4AHMADXJcrgQ=="
       },
+      "OfficeIMO.MarkdownRenderer.Wpf": {
+        "type": "Direct",
+        "requested": "[0.1.0, )",
+        "resolved": "0.1.0",
+        "contentHash": "7ZetGNPohn2rgFXK7fqktR+oERRJUXOvuFpqCpEWLUgjXl3CBDamhQLkT8mYlidNSCCyHhuakjc6TynopGcJYg==",
+        "dependencies": {
+          "Microsoft.Web.WebView2": "1.0.3856.49",
+          "OfficeIMO.MarkdownRenderer": "0.2.5"
+        }
+      },
       "AngleSharp": {
         "type": "Transitive",
         "resolved": "1.3.0",
@@ -29,6 +39,30 @@
         "contentHash": "jFYXnh7s0RShCw6Vkf+ReGCw+mVi7ISg1YaEzYCJcXnUifmbW+aqvCsRJuSRj2ZuQ+oqetpjxlZtbpMmk5FKqQ==",
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "OfficeIMO.Markdown": {
+        "type": "Transitive",
+        "resolved": "0.6.5",
+        "contentHash": "8tCl4cdsN/Qx+FICyFgo8tAU5nN64mQlBbROoK3gNXvD4+kfniDSwfHxYWydJMfS2BaDGMm51YZZ20FDR5loUQ=="
+      },
+      "OfficeIMO.Markdown.Html": {
+        "type": "Transitive",
+        "resolved": "0.1.5",
+        "contentHash": "z7gCXslAQLUx0bZ5JXUqvP7ZybQ94pLfYZ8PdhQ6O/qAvlYDLGtpzovCXX0yNVqTbR62pHJMiGSCBdqNMWX8iA==",
+        "dependencies": {
+          "AngleSharp": "1.3.0",
+          "OfficeIMO.Markdown": "0.6.5"
+        }
+      },
+      "OfficeIMO.MarkdownRenderer": {
+        "type": "Transitive",
+        "resolved": "0.2.5",
+        "contentHash": "vDpOtV854M3dFfNQ3tJ3r6h6MIg3l1MzVoDrYkTULkLtfgq+nJshQTUAbYwAIQVnl/XbTvoHRJNfRN7Wf3oe8g==",
+        "dependencies": {
+          "OfficeIMO.Markdown": "0.6.5",
+          "OfficeIMO.Markdown.Html": "0.1.5",
+          "System.Text.Json": "[8.0.5, 9.0.0)"
         }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
@@ -76,31 +110,6 @@
         "dependencies": {
           "DBAClientX.Core": "[0.3.0, )",
           "Microsoft.Data.Sqlite": "[10.0.5, )"
-        }
-      },
-      "officeimo.markdown": {
-        "type": "Project"
-      },
-      "officeimo.markdown.html": {
-        "type": "Project",
-        "dependencies": {
-          "AngleSharp": "[1.3.0, )",
-          "OfficeIMO.Markdown": "[0.6.4, )"
-        }
-      },
-      "officeimo.markdownrenderer": {
-        "type": "Project",
-        "dependencies": {
-          "OfficeIMO.Markdown": "[0.6.4, )",
-          "OfficeIMO.Markdown.Html": "[0.1.4, )",
-          "System.Text.Json": "[8.0.5, 9.0.0)"
-        }
-      },
-      "officeimo.markdownrenderer.wpf": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Web.WebView2": "[1.0.*, )",
-          "OfficeIMO.MarkdownRenderer": "[0.2.4, )"
         }
       },
       "powerforge": {
