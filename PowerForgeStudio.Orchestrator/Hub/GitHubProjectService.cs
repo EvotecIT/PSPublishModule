@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -7,6 +8,8 @@ namespace PowerForgeStudio.Orchestrator.Hub;
 
 public sealed class GitHubProjectService : IDisposable
 {
+    private const int MaxPagedRequestCount = 5;
+    private const string GitHubApiVersion = "2026-03-10";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _concurrencyGate;
@@ -52,7 +55,7 @@ public sealed class GitHubProjectService : IDisposable
         try
         {
             var issues = new List<GitHubIssue>();
-            for (var page = 1; page <= 5; page++)
+            for (var page = 1; page <= MaxPagedRequestCount; page++)
             {
                 using var request = CreateRequest(
                     $"/repos/{parts[0]}/{parts[1]}/issues?state={state}&per_page=100&page={page}");
@@ -90,6 +93,7 @@ public sealed class GitHubProjectService : IDisposable
                 }
             }
 
+            TraceIfPagedResultMayBeTruncated("issues", $"{parts[0]}/{parts[1]}", issues.Count);
             return issues;
         }
         finally
@@ -113,7 +117,7 @@ public sealed class GitHubProjectService : IDisposable
         try
         {
             var pullRequests = new List<GitHubPullRequest>();
-            for (var page = 1; page <= 5; page++)
+            for (var page = 1; page <= MaxPagedRequestCount; page++)
             {
                 using var request = CreateRequest(
                     $"/repos/{parts[0]}/{parts[1]}/pulls?state={state}&per_page=100&page={page}");
@@ -145,6 +149,7 @@ public sealed class GitHubProjectService : IDisposable
                 }
             }
 
+            TraceIfPagedResultMayBeTruncated("pull requests", $"{parts[0]}/{parts[1]}", pullRequests.Count);
             return pullRequests;
         }
         finally
@@ -164,6 +169,7 @@ public sealed class GitHubProjectService : IDisposable
             return null;
         }
 
+        GitHubIssue issue;
         await _concurrencyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -179,16 +185,16 @@ public sealed class GitHubProjectService : IDisposable
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             using var document = JsonDocument.Parse(json);
-
-            var issue = ParseIssue(document.RootElement);
-            var comments = await FetchIssueCommentsCoreAsync(parts[0], parts[1], issueNumber, cancellationToken).ConfigureAwait(false);
-            var timelineEvents = await FetchTimelineEventsCoreAsync(parts[0], parts[1], issueNumber, cancellationToken).ConfigureAwait(false);
-            return new GitHubIssueDetail(issue, comments, timelineEvents);
+            issue = ParseIssue(document.RootElement);
         }
         finally
         {
             _concurrencyGate.Release();
         }
+
+        var comments = await FetchIssueCommentsCoreAsync(parts[0], parts[1], issueNumber, cancellationToken).ConfigureAwait(false);
+        var timelineEvents = await FetchTimelineEventsCoreAsync(parts[0], parts[1], issueNumber, cancellationToken).ConfigureAwait(false);
+        return new GitHubIssueDetail(issue, comments, timelineEvents);
     }
 
     public async Task<GitHubPullRequestDetail?> FetchPullRequestDetailAsync(
@@ -202,6 +208,7 @@ public sealed class GitHubProjectService : IDisposable
             return null;
         }
 
+        GitHubPullRequest pullRequest;
         await _concurrencyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -217,22 +224,22 @@ public sealed class GitHubProjectService : IDisposable
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             using var document = JsonDocument.Parse(json);
-
-            var pullRequest = ParsePullRequest(document.RootElement);
-            var issueComments = await FetchIssueCommentsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
-            var reviewComments = await FetchPullRequestReviewCommentsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
-            var comments = issueComments
-                .Concat(reviewComments)
-                .OrderBy(comment => comment.CreatedAt)
-                .ToList();
-            var timelineEvents = await FetchTimelineEventsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
-
-            return new GitHubPullRequestDetail(pullRequest, comments, timelineEvents);
+            pullRequest = ParsePullRequest(document.RootElement);
         }
         finally
         {
             _concurrencyGate.Release();
         }
+
+        var issueComments = await FetchIssueCommentsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
+        var reviewComments = await FetchPullRequestReviewCommentsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
+        var comments = issueComments
+            .Concat(reviewComments)
+            .OrderBy(comment => comment.CreatedAt)
+            .ToList();
+        var timelineEvents = await FetchTimelineEventsCoreAsync(parts[0], parts[1], pullRequestNumber, cancellationToken).ConfigureAwait(false);
+
+        return new GitHubPullRequestDetail(pullRequest, comments, timelineEvents);
     }
 
     public async Task<int> GetOpenPullRequestCountAsync(string slug, CancellationToken cancellationToken = default)
@@ -247,7 +254,7 @@ public sealed class GitHubProjectService : IDisposable
         try
         {
             var total = 0;
-            for (var page = 1; page <= 5; page++)
+            for (var page = 1; page <= MaxPagedRequestCount; page++)
             {
                 using var request = CreateRequest($"/repos/{parts[0]}/{parts[1]}/pulls?state=open&per_page=100&page={page}");
                 using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -273,6 +280,7 @@ public sealed class GitHubProjectService : IDisposable
                 }
             }
 
+            TraceIfPagedResultMayBeTruncated("open pull requests", slug, total);
             return total;
         }
         finally
@@ -425,7 +433,7 @@ public sealed class GitHubProjectService : IDisposable
         CancellationToken cancellationToken)
     {
         var comments = new List<GitHubDiscussionComment>();
-        for (var page = 1; page <= 5; page++)
+        for (var page = 1; page <= MaxPagedRequestCount; page++)
         {
             using var request = CreateRequest($"/repos/{owner}/{repository}/issues/{issueNumber}/comments?per_page=100&page={page}");
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -455,6 +463,7 @@ public sealed class GitHubProjectService : IDisposable
             }
         }
 
+        TraceIfPagedResultMayBeTruncated("issue comments", $"{owner}/{repository}#{issueNumber}", comments.Count);
         return comments;
     }
 
@@ -465,7 +474,7 @@ public sealed class GitHubProjectService : IDisposable
         CancellationToken cancellationToken)
     {
         var comments = new List<GitHubDiscussionComment>();
-        for (var page = 1; page <= 5; page++)
+        for (var page = 1; page <= MaxPagedRequestCount; page++)
         {
             using var request = CreateRequest($"/repos/{owner}/{repository}/pulls/{pullRequestNumber}/comments?per_page=100&page={page}");
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -495,6 +504,7 @@ public sealed class GitHubProjectService : IDisposable
             }
         }
 
+        TraceIfPagedResultMayBeTruncated("pull request review comments", $"{owner}/{repository}#{pullRequestNumber}", comments.Count);
         return comments;
     }
 
@@ -505,7 +515,7 @@ public sealed class GitHubProjectService : IDisposable
         CancellationToken cancellationToken)
     {
         var events = new List<GitHubTimelineEvent>();
-        for (var page = 1; page <= 5; page++)
+        for (var page = 1; page <= MaxPagedRequestCount; page++)
         {
             using var request = CreateRequest($"/repos/{owner}/{repository}/issues/{issueNumber}/timeline?per_page=100&page={page}");
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -539,6 +549,7 @@ public sealed class GitHubProjectService : IDisposable
             }
         }
 
+        TraceIfPagedResultMayBeTruncated("timeline events", $"{owner}/{repository}#{issueNumber}", events.Count);
         return events;
     }
 
@@ -553,9 +564,7 @@ public sealed class GitHubProjectService : IDisposable
             BodyMarkdown: element.TryGetProperty("body", out var body) && body.ValueKind != JsonValueKind.Null
                 ? body.GetString() ?? string.Empty
                 : string.Empty,
-            CreatedAt: element.TryGetProperty("created_at", out var createdAt)
-                ? createdAt.GetDateTimeOffset()
-                : DateTimeOffset.MinValue,
+            CreatedAt: GetCreatedAtOrNow(element),
             HtmlUrl: element.TryGetProperty("html_url", out var htmlUrl) ? htmlUrl.GetString() : null,
             Path: element.TryGetProperty("path", out var path) && path.ValueKind != JsonValueKind.Null
                 ? path.GetString()
@@ -600,10 +609,18 @@ public sealed class GitHubProjectService : IDisposable
             Id: element.TryGetProperty("id", out var id) ? id.GetInt64() : 0,
             EventName: eventName,
             ActorLogin: GetUserLogin(element, "actor") ?? GetUserLogin(element, "user"),
-            CreatedAt: element.TryGetProperty("created_at", out var createdAt)
-                ? createdAt.GetDateTimeOffset()
-                : DateTimeOffset.MinValue,
+            CreatedAt: GetCreatedAtOrNow(element),
             Markdown: markdown);
+    }
+
+    private static DateTimeOffset GetCreatedAtOrNow(JsonElement element)
+    {
+        if (element.TryGetProperty("created_at", out var createdAt) && createdAt.ValueKind == JsonValueKind.String)
+        {
+            return createdAt.GetDateTimeOffset();
+        }
+
+        return DateTimeOffset.UtcNow;
     }
 
     private static string BuildTimelineEventMarkdown(JsonElement element, string eventName)
@@ -818,12 +835,22 @@ public sealed class GitHubProjectService : IDisposable
         }
     }
 
+    private static void TraceIfPagedResultMayBeTruncated(string entityName, string context, int itemCount)
+    {
+        if (itemCount < MaxPagedRequestCount * 100)
+        {
+            return;
+        }
+
+        Trace.TraceWarning($"GitHub {entityName} for {context} may be truncated at {itemCount} items.");
+    }
+
     private HttpRequestMessage CreateRequest(string relativePath)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, relativePath);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         request.Headers.UserAgent.ParseAdd("PowerForgeStudio/0.1");
-        request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2026-03-10");
+        request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", GitHubApiVersion);
         return request;
     }
 

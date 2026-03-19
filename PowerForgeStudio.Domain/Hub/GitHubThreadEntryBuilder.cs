@@ -120,10 +120,29 @@ public static class GitHubThreadEntryBuilder
             "Review thread",
             root.AuthorLogin,
             root.CreatedAt,
-            BuildReviewThreadMarkdown(root, repliesByParent.TryGetValue(root.Id, out var replies) ? replies : []),
+            BuildReviewThreadMarkdown(root, FlattenReplies(root.Id, repliesByParent)),
             root.HtmlUrl,
             root.Path))
             .ToList();
+    }
+
+    private static IReadOnlyList<GitHubDiscussionComment> FlattenReplies(
+        long parentCommentId,
+        IReadOnlyDictionary<long, List<GitHubDiscussionComment>> repliesByParent)
+    {
+        if (!repliesByParent.TryGetValue(parentCommentId, out var directReplies))
+        {
+            return [];
+        }
+
+        var replies = new List<GitHubDiscussionComment>();
+        foreach (var reply in directReplies)
+        {
+            replies.Add(reply);
+            replies.AddRange(FlattenReplies(reply.Id, repliesByParent));
+        }
+
+        return replies;
     }
 
     private static string BuildReviewThreadMarkdown(

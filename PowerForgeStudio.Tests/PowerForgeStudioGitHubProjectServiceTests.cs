@@ -279,6 +279,58 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
     }
 
     [Fact]
+    public async Task FetchIssueDetailAsync_MissingCreatedAt_DoesNotUseMinValueFallback()
+    {
+        using var client = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri?.PathAndQuery ?? string.Empty;
+            if (path.Contains("/issues/17/timeline", StringComparison.OrdinalIgnoreCase))
+            {
+                return Json("""
+[
+  {
+    "id": 301,
+    "event": "labeled",
+    "actor": { "login": "maintainer" },
+    "label": { "name": "bug" }
+  }
+]
+""");
+            }
+
+            if (path.Contains("/issues/17/comments", StringComparison.OrdinalIgnoreCase))
+            {
+                return Json("""[]""");
+            }
+
+            return Json("""
+{
+  "number": 17,
+  "title": "Issue body",
+  "state": "closed",
+  "html_url": "https://github.com/EvotecIT/PSPublishModule/issues/17",
+  "body": "## Summary\nIssue details",
+  "user": { "login": "przemyslaw" },
+  "labels": [{ "name": "bug" }],
+  "assignees": [{ "login": "team" }],
+  "created_at": "2026-03-18T10:00:00Z",
+  "closed_at": "2026-03-19T11:15:00Z"
+}
+""");
+        }))
+        {
+            BaseAddress = new Uri("https://api.github.com")
+        };
+
+        using var service = new GitHubProjectService(client);
+        var detail = await service.FetchIssueDetailAsync("EvotecIT/PSPublishModule", 17);
+
+        Assert.NotNull(detail);
+        var timeline = Assert.Single(detail.TimelineEvents);
+        Assert.NotEqual(DateTimeOffset.MinValue, timeline.CreatedAt);
+    }
+
+    [Fact]
     public void GitHubDiscussionMarkdownBuilder_MergesTimelineAndCommentsChronologically()
     {
         var issue = new GitHubIssue(
@@ -372,6 +424,65 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
         Assert.Contains("Inline review note", reviewThread.Markdown);
         Assert.Contains("Reply from przemyslaw", reviewThread.Markdown);
         Assert.Contains("@@ -560,6 +571,8 @@", reviewThread.Markdown);
+    }
+
+    [Fact]
+    public void GitHubThreadEntryBuilder_IncludesNestedReviewReplies()
+    {
+        var pullRequest = new GitHubPullRequest(
+            Number: 220,
+            Title: "Add markdown preview",
+            State: "open",
+            AuthorLogin: "author",
+            HeadBranch: "feature",
+            BaseBranch: "main",
+            ReviewStatus: GitHubPrReviewStatus.Pending,
+            MergeStatus: GitHubPrMergeStatus.Clean,
+            Labels: [],
+            Additions: 1,
+            Deletions: 0,
+            ChangedFiles: 1,
+            CreatedAt: DateTimeOffset.Parse("2026-03-19T10:00:00Z"),
+            MergedAt: null,
+            BodyMarkdown: "PR body");
+        var detail = new GitHubPullRequestDetail(
+            pullRequest,
+            Comments:
+            [
+                new GitHubDiscussionComment(
+                    202,
+                    GitHubDiscussionCommentKind.PullRequestReviewComment,
+                    "reviewer",
+                    "Inline review note",
+                    DateTimeOffset.Parse("2026-03-19T12:30:00Z"),
+                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    PullRequestReviewId: 55),
+                new GitHubDiscussionComment(
+                    203,
+                    GitHubDiscussionCommentKind.PullRequestReviewComment,
+                    "przemyslaw",
+                    "Reply on the inline thread",
+                    DateTimeOffset.Parse("2026-03-19T12:45:00Z"),
+                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    ParentCommentId: 202,
+                    PullRequestReviewId: 55),
+                new GitHubDiscussionComment(
+                    204,
+                    GitHubDiscussionCommentKind.PullRequestReviewComment,
+                    "reviewer",
+                    "Nested follow-up reply",
+                    DateTimeOffset.Parse("2026-03-19T12:50:00Z"),
+                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    ParentCommentId: 203,
+                    PullRequestReviewId: 55)
+            ],
+            TimelineEvents: []);
+
+        var entries = GitHubThreadEntryBuilder.BuildPullRequestEntries(pullRequest, detail);
+
+        var reviewThread = Assert.Single(entries, entry => entry.Kind == GitHubThreadEntryKind.ReviewThread);
+        Assert.Contains("Reply on the inline thread", reviewThread.Markdown);
+        Assert.Contains("Nested follow-up reply", reviewThread.Markdown);
     }
 
     private static HttpResponseMessage Json(string json)

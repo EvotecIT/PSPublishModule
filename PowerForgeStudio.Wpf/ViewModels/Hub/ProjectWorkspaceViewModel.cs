@@ -169,7 +169,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
             {
                 _selectedIssueDetail = null;
                 RaisePropertyChanged(nameof(HasSelectedIssue));
-                RaisePropertyChanged(nameof(SelectedIssueMarkdown));
                 RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
                 _ = LoadSelectedIssueDetailAsync(value);
             }
@@ -185,7 +184,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
             {
                 _selectedPullRequestDetail = null;
                 RaisePropertyChanged(nameof(HasSelectedPullRequest));
-                RaisePropertyChanged(nameof(SelectedPullRequestMarkdown));
                 RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
                 _ = LoadSelectedPullRequestDetailAsync(value);
             }
@@ -271,7 +269,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         {
             if (SetProperty(ref _isLoadingIssueDetail, value))
             {
-                RaisePropertyChanged(nameof(SelectedIssueMarkdown));
                 RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
             }
         }
@@ -284,27 +281,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         {
             if (SetProperty(ref _isLoadingPullRequestDetail, value))
             {
-                RaisePropertyChanged(nameof(SelectedPullRequestMarkdown));
                 RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
             }
         }
     }
 
-    public string SelectedIssueMarkdown => SelectedIssue is null
-        ? string.Empty
-        : IsLoadingIssueDetail
-            ? "_Loading issue discussion..._"
-            : GitHubDiscussionMarkdownBuilder.BuildIssueThread(SelectedIssue, _selectedIssueDetail);
-
     public IReadOnlyList<GitHubThreadEntry> SelectedIssueThreadEntries => SelectedIssue is null
         ? []
         : GitHubThreadEntryBuilder.BuildIssueEntries(SelectedIssue, _selectedIssueDetail);
-
-    public string SelectedPullRequestMarkdown => SelectedPullRequest is null
-        ? string.Empty
-        : IsLoadingPullRequestDetail
-            ? "_Loading pull request discussion..._"
-            : GitHubDiscussionMarkdownBuilder.BuildPullRequestThread(SelectedPullRequest, _selectedPullRequestDetail);
 
     public IReadOnlyList<GitHubThreadEntry> SelectedPullRequestThreadEntries => SelectedPullRequest is null
         ? []
@@ -464,7 +448,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         {
             IsLoadingIssueDetail = false;
             _selectedIssueDetail = null;
-            RaisePropertyChanged(nameof(SelectedIssueMarkdown));
             RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
             return;
         }
@@ -490,16 +473,19 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
                 }
             }
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Silently fail -- preview falls back to summary body
+            // Expected when the selection changes while loading.
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceWarning($"Failed to load issue detail for {_entry.GitHubSlug}#{issue.Number}: {exception}");
         }
         finally
         {
             if (requestVersion == _issueDetailRequestVersion)
             {
                 IsLoadingIssueDetail = false;
-                RaisePropertyChanged(nameof(SelectedIssueMarkdown));
                 RaisePropertyChanged(nameof(SelectedIssueThreadEntries));
             }
         }
@@ -512,7 +498,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         {
             IsLoadingPullRequestDetail = false;
             _selectedPullRequestDetail = null;
-            RaisePropertyChanged(nameof(SelectedPullRequestMarkdown));
             RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
             return;
         }
@@ -538,16 +523,19 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
                 }
             }
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Silently fail -- preview falls back to summary body
+            // Expected when the selection changes while loading.
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceWarning($"Failed to load pull request detail for {_entry.GitHubSlug}#{pullRequest.Number}: {exception}");
         }
         finally
         {
             if (requestVersion == _pullRequestDetailRequestVersion)
             {
                 IsLoadingPullRequestDetail = false;
-                RaisePropertyChanged(nameof(SelectedPullRequestMarkdown));
                 RaisePropertyChanged(nameof(SelectedPullRequestThreadEntries));
             }
         }
