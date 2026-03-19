@@ -3,6 +3,7 @@ using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
+using static PowerForgeStudio.Orchestrator.Catalog.WorktreeDetector;
 
 using HubProjectKind = PowerForgeStudio.Domain.Hub.ProjectKind;
 
@@ -208,8 +209,8 @@ public sealed class ProjectDiscoveryService
             return HubProjectKind.Worktree;
         }
 
-        // Real worktree detection: .git is a file (not directory) containing "gitdir:" reference
-        if (IsActualGitWorktree(entry.RootPath))
+        // Real worktree detection via shared utility
+        if (WorktreeDetector.IsWorktree(entry.RootPath))
         {
             return HubProjectKind.Worktree;
         }
@@ -223,37 +224,7 @@ public sealed class ProjectDiscoveryService
     }
 
     private static bool IsGitDirectory(ProjectEntry entry)
-    {
-        var gitPath = Path.Combine(entry.RootPath, ".git");
-        // Must have either .git directory (regular repo) or .git file (worktree)
-        return Directory.Exists(gitPath) || File.Exists(gitPath);
-    }
-
-    private static bool IsActualGitWorktree(string rootPath)
-    {
-        var gitPath = Path.Combine(rootPath, ".git");
-        if (!File.Exists(gitPath))
-        {
-            return false;
-        }
-
-        // If .git is a file (not a directory), it's a worktree - the file contains "gitdir: <path>"
-        try
-        {
-            var attributes = File.GetAttributes(gitPath);
-            if (attributes.HasFlag(FileAttributes.Directory))
-            {
-                return false;
-            }
-
-            var content = File.ReadAllText(gitPath).Trim();
-            return content.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => WorktreeDetector.IsGitRepository(entry.RootPath);
 
     private static bool FileExistsInBuildFolder(string rootPath, string fileName)
     {

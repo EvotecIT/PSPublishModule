@@ -7,7 +7,7 @@ using PowerForgeStudio.Orchestrator.Terminal;
 
 namespace PowerForgeStudio.Wpf.ViewModels.Hub;
 
-public sealed class ProjectWorkspaceViewModel : ViewModelBase
+public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly ProjectEntry _entry;
     private readonly GitHubProjectService _gitHubService;
@@ -177,8 +177,6 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
         }
     }
 
-    public string? TerminalError { get; private set; }
-
     private async Task LoadGitLogAsync()
     {
         try
@@ -201,13 +199,15 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase
         ActiveTerminal = new TerminalTabViewModel(_terminalService, _entry.RootPath);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_activeTerminal is not null)
         {
             await _activeTerminal.DisposeAsync().ConfigureAwait(false);
             _activeTerminal = null;
         }
+
+        await _terminalService.DisposeAsync().ConfigureAwait(false);
 
         _fileExplorer?.Dispose();
         _fileExplorer = null;

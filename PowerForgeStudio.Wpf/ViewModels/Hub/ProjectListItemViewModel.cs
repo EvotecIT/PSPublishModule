@@ -40,24 +40,9 @@ public sealed class ProjectListItemViewModel : ViewModelBase
 
     public string WorktreeCountDisplay => Worktrees.Count > 0 ? $"{Worktrees.Count} worktree(s)" : string.Empty;
 
-    public string? LastActivity
-    {
-        get
-        {
-            if (!Entry.LastCommitUtc.HasValue)
-            {
-                return null;
-            }
-
-            var elapsed = DateTimeOffset.UtcNow - Entry.LastCommitUtc.Value;
-            return elapsed.TotalMinutes < 1 ? "just now"
-                : elapsed.TotalMinutes < 60 ? $"{(int)elapsed.TotalMinutes}m"
-                : elapsed.TotalHours < 24 ? $"{(int)elapsed.TotalHours}h"
-                : elapsed.TotalDays < 30 ? $"{(int)elapsed.TotalDays}d"
-                : elapsed.TotalDays < 365 ? $"{(int)(elapsed.TotalDays / 30)}mo"
-                : $"{(int)(elapsed.TotalDays / 365)}y";
-        }
-    }
+    public string? LastActivity => Entry.LastCommitUtc.HasValue
+        ? Domain.Hub.RelativeTimeFormatter.Format(Entry.LastCommitUtc.Value)
+        : null;
 
     public int OpenPrCount
     {

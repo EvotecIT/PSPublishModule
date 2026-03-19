@@ -37,16 +37,5 @@ public sealed class FileListItemViewModel : ViewModelBase
         }
     }
 
-    public string LastModifiedDisplay
-    {
-        get
-        {
-            var elapsed = DateTimeOffset.UtcNow - LastModifiedUtc;
-            return elapsed.TotalMinutes < 1 ? "just now"
-                : elapsed.TotalHours < 1 ? $"{(int)elapsed.TotalMinutes}m ago"
-                : elapsed.TotalDays < 1 ? $"{(int)elapsed.TotalHours}h ago"
-                : elapsed.TotalDays < 30 ? $"{(int)elapsed.TotalDays}d ago"
-                : LastModifiedUtc.LocalDateTime.ToString("yyyy-MM-dd");
-        }
-    }
+    public string LastModifiedDisplay => Domain.Hub.RelativeTimeFormatter.FormatWithAgo(LastModifiedUtc);
 }

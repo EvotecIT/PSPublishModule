@@ -547,24 +547,11 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
 
     private static string? FindParentProjectName(ProjectEntry entry, HashSet<string> primaryNames, Dictionary<string, string> parentPathMap)
     {
-        // Method 1: Read .git file to find actual parent repo path
-        var parentFromGitFile = ResolveParentFromGitFile(entry.RootPath);
+        // Method 1: Use shared WorktreeDetector to find parent from .git file
+        var parentFromGitFile = Orchestrator.Catalog.WorktreeDetector.ResolveParentRepositoryName(entry.RootPath);
         if (parentFromGitFile is not null && primaryNames.Contains(parentFromGitFile))
         {
             return parentFromGitFile;
-        }
-
-        // Also check via the parentPathMap (maps worktree root to resolved parent name)
-        if (parentFromGitFile is not null)
-        {
-            // The .git file pointed to a path; try to match the parent dir name
-            foreach (var primary in primaryNames)
-            {
-                if (string.Equals(primary, parentFromGitFile, StringComparison.OrdinalIgnoreCase))
-                {
-                    return primary;
-                }
-            }
         }
 
         var worktreeName = entry.Name;
@@ -599,43 +586,6 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         }
 
         return bestMatch;
-    }
-
-    private static string? ResolveParentFromGitFile(string rootPath)
-    {
-        var gitFilePath = Path.Combine(rootPath, ".git");
-        try
-        {
-            if (!File.Exists(gitFilePath))
-            {
-                return null;
-            }
-
-            var content = File.ReadAllText(gitFilePath).Trim();
-            if (!content.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            // Format: "gitdir: C:/Support/GitHub/IntelligenceX/.git/worktrees/IntelligenceX-autonomy-next"
-            var gitdir = content["gitdir:".Length..].Trim();
-
-            // Navigate up: .git/worktrees/<name> -> extract parent repo dir name
-            // The parent .git is at: <path>/.git/worktrees/<wt-name>
-            // So parent repo is at: <path>
-            var worktreesIndex = gitdir.Replace('\\', '/').IndexOf("/.git/worktrees/", StringComparison.OrdinalIgnoreCase);
-            if (worktreesIndex >= 0)
-            {
-                var parentRepoPath = gitdir[..worktreesIndex];
-                return Path.GetFileName(parentRepoPath);
-            }
-        }
-        catch
-        {
-            // Ignore read errors
-        }
-
-        return null;
     }
 
     private static string? GetAbbreviation(string projectName)
@@ -697,7 +647,7 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
             project.BranchName = gitStatus.BranchName;
             project.IsDirty = gitStatus.IsDirty;
 
-            // Dispose previous workspace resources (terminal, file explorer)
+            // Dispose previous workspace resources (terminal, file explorer, session service)
             if (ActiveWorkspace is not null)
             {
                 await ActiveWorkspace.DisposeAsync().ConfigureAwait(true);
