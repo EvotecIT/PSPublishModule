@@ -11,11 +11,8 @@ public sealed record AzureDevOpsWorkItem(
 {
     public string TypeDisplay => Type switch
     {
-        "Bug" => "Bug",
-        "Task" => "Task",
         "User Story" => "Story",
-        "Feature" => "Feature",
-        "Epic" => "Epic",
+        "Product Backlog Item" => "PBI",
         _ => Type
     };
 }

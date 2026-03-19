@@ -174,7 +174,39 @@ public sealed class HubViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string WorkspaceRoot { get; set; } = @"C:\Support\GitHub";
+    public string WorkspaceRoot { get; set; } = LoadWorkspaceRoot();
+
+    private static string LoadWorkspaceRoot()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\PowerForgeStudio");
+            var saved = key?.GetValue("WorkspaceRoot") as string;
+            if (!string.IsNullOrWhiteSpace(saved) && System.IO.Directory.Exists(saved))
+            {
+                return saved;
+            }
+        }
+        catch { }
+
+        // Sensible fallbacks
+        var candidates = new[]
+        {
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos"),
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "GitHub"),
+            @"C:\Support\GitHub"
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (System.IO.Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
 
     public AsyncDelegateCommand ScanWorkspaceCommand { get; }
 

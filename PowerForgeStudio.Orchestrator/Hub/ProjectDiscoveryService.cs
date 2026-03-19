@@ -64,8 +64,10 @@ public sealed class ProjectDiscoveryService
     {
         var rootPath = catalogEntry.RootPath;
 
-        var gitHubSlug = await ResolveGitHubSlugAsync(rootPath, cancellationToken).ConfigureAwait(false);
-        var azureDevOpsSlug = await ResolveAzureDevOpsSlugAsync(rootPath, cancellationToken).ConfigureAwait(false);
+        // Resolve origin URL once and parse for both GitHub and ADO
+        var originUrl = await ResolveOriginUrlAsync(rootPath, cancellationToken).ConfigureAwait(false);
+        var gitHubSlug = ParseGitHubSlug(originUrl);
+        var azureDevOpsSlug = ParseAzureDevOpsSlug(originUrl);
 
         var hasPowerForgeJson = File.Exists(Path.Combine(rootPath, "powerforge.json"));
         var hasProjectBuildJson = FileExistsInBuildFolder(rootPath, "project.build.json");
@@ -98,40 +100,31 @@ public sealed class ProjectDiscoveryService
             LastScanUtc: DateTimeOffset.UtcNow);
     }
 
-    private async Task<string?> ResolveGitHubSlugAsync(string rootPath, CancellationToken cancellationToken)
+    private async Task<string?> ResolveOriginUrlAsync(string rootPath, CancellationToken cancellationToken)
     {
         try
         {
-            var originUrl = await _gitRemoteResolver.ResolveOriginUrlAsync(rootPath, cancellationToken).ConfigureAwait(false);
-            if (GitHubInboxService.TryParseGitHubSlug(originUrl, out var owner, out var repo))
-            {
-                return $"{owner}/{repo}";
-            }
+            return await _gitRemoteResolver.ResolveOriginUrlAsync(rootPath, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            // Not a git repo or no remote
+            return null;
+        }
+    }
+
+    private static string? ParseGitHubSlug(string? originUrl)
+    {
+        if (GitHubInboxService.TryParseGitHubSlug(originUrl, out var owner, out var repo))
+        {
+            return $"{owner}/{repo}";
         }
 
         return null;
     }
 
-    private async Task<string?> ResolveAzureDevOpsSlugAsync(string rootPath, CancellationToken cancellationToken)
+    private static string? ParseAzureDevOpsSlug(string? originUrl)
     {
-        try
-        {
-            var originUrl = await _gitRemoteResolver.ResolveOriginUrlAsync(rootPath, cancellationToken).ConfigureAwait(false);
-            if (TryParseAzureDevOpsSlug(originUrl, out var slug))
-            {
-                return slug;
-            }
-        }
-        catch
-        {
-            // Not a git repo or no remote
-        }
-
-        return null;
+        return TryParseAzureDevOpsSlug(originUrl, out var slug) ? slug : null;
     }
 
     private async Task<DateTimeOffset?> GetLastCommitDateAsync(string rootPath, CancellationToken cancellationToken)

@@ -116,6 +116,13 @@ public sealed class ProjectCacheDatabase
     {
         await _sqlite.ExecuteNonQueryAsync(
             DatabasePath,
+            "BEGIN IMMEDIATE;",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+        await _sqlite.ExecuteNonQueryAsync(
+            DatabasePath,
             "DELETE FROM hub_project_entry;",
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -160,6 +167,23 @@ public sealed class ProjectCacheDatabase
                     ["@LastScanUtc"] = entry.LastScanUtc?.ToString("O")
                 },
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        await _sqlite.ExecuteNonQueryAsync(
+            DatabasePath, "COMMIT;",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            try
+            {
+                await _sqlite.ExecuteNonQueryAsync(
+                    DatabasePath, "ROLLBACK;",
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch { }
+
+            throw;
         }
     }
 

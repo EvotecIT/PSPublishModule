@@ -11,7 +11,7 @@ public sealed class GitHubProjectService : IDisposable
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _concurrencyGate;
     private readonly bool _ownsHttpClient;
-    private int _rateLimitRemaining = int.MaxValue;
+    private volatile int _rateLimitRemaining = int.MaxValue;
 
     public GitHubProjectService()
         : this(CreateHttpClient(), ownsHttpClient: true)
@@ -25,7 +25,7 @@ public sealed class GitHubProjectService : IDisposable
         _concurrencyGate = new SemaphoreSlim(5, 5);
     }
 
-    public bool IsRateLimited => _rateLimitRemaining < 100;
+    public bool IsRateLimited => Interlocked.CompareExchange(ref _rateLimitRemaining, 0, 0) < 100;
 
     public void Dispose()
     {
@@ -164,20 +164,34 @@ public sealed class GitHubProjectService : IDisposable
         await _concurrencyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            using var request = CreateRequest($"/repos/{parts[0]}/{parts[1]}/pulls?state=open&per_page=1");
-            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            TrackRateLimit(response);
-
-            if (!response.IsSuccessStatusCode)
+            var total = 0;
+            for (var page = 1; page <= 5; page++)
             {
-                return 0;
+                using var request = CreateRequest($"/repos/{parts[0]}/{parts[1]}/pulls?state=open&per_page=100&page={page}");
+                using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                TrackRateLimit(response);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return total;
+                }
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    return total;
+                }
+
+                var pageCount = document.RootElement.GetArrayLength();
+                total += pageCount;
+                if (pageCount < 100)
+                {
+                    break;
+                }
             }
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Array
-                ? document.RootElement.GetArrayLength()
-                : 0;
+            return total;
         }
         finally
         {
@@ -321,7 +335,7 @@ public sealed class GitHubProjectService : IDisposable
             var value = values.FirstOrDefault();
             if (int.TryParse(value, out var remaining))
             {
-                _rateLimitRemaining = remaining;
+                Interlocked.Exchange(ref _rateLimitRemaining, remaining);
             }
         }
     }

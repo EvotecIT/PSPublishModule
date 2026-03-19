@@ -17,7 +17,7 @@ public sealed record ProjectGitStatus(
 {
     public bool IsDirty => StagedCount > 0 || UnstagedCount > 0 || UntrackedCount > 0;
 
-    public string BranchDisplay => string.IsNullOrWhiteSpace(BranchName) ? "-" : BranchName!;
+    public string BranchDisplay => string.IsNullOrWhiteSpace(BranchName) ? "-" : BranchName;
 
     public string AheadBehindDisplay => $"+{AheadCount} / -{BehindCount}";
 

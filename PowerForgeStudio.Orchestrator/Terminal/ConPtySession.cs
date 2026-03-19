@@ -15,7 +15,7 @@ public sealed class ConPtySession : ITerminalSession
     private readonly CancellationTokenSource _readCts = new();
     private readonly Thread _readThread;
     private readonly object _outputLock = new();
-    private byte[] _outputBuffer = [];
+    private System.IO.MemoryStream _outputBuffer = new();
     private readonly Timer _flushTimer;
     private bool _disposed;
     private int _exitCode;
@@ -30,8 +30,14 @@ public sealed class ConPtySession : ITerminalSession
         if (!CreatePipe(out var pipeInRead, out _pipeInWrite, ref sa, 0))
             throw new InvalidOperationException($"CreatePipe (stdin) failed: {Marshal.GetLastWin32Error()}");
 
+        try
+        {
         if (!CreatePipe(out _pipeOutRead, out var pipeOutWrite, ref sa, 0))
+        {
+            _pipeInWrite.Dispose();
+            pipeInRead.Dispose();
             throw new InvalidOperationException($"CreatePipe (stdout) failed: {Marshal.GetLastWin32Error()}");
+        }
 
         var size = new COORD { X = (short)initialCols, Y = (short)initialRows };
         var hr = CreatePseudoConsole(size, pipeInRead, pipeOutWrite, 0, out _hPC);
@@ -83,6 +89,18 @@ public sealed class ConPtySession : ITerminalSession
         // Start dedicated read thread (synchronous reads on pipe handles are most reliable)
         _readThread = new Thread(ReadLoop) { IsBackground = true, Name = "ConPTY-Read" };
         _readThread.Start();
+        }
+        catch
+        {
+            // Clean up all allocated resources on constructor failure
+            if (_hPC != nint.Zero) { ClosePseudoConsole(_hPC); _hPC = nint.Zero; }
+            if (_attributeList != nint.Zero) { DeleteProcThreadAttributeList(_attributeList); Marshal.FreeHGlobal(_attributeList); _attributeList = nint.Zero; }
+            if (_hProcess != nint.Zero) { CloseHandle(_hProcess); _hProcess = nint.Zero; }
+            if (_hThread != nint.Zero) { CloseHandle(_hThread); _hThread = nint.Zero; }
+            if (_pipeInWrite is { IsInvalid: false }) _pipeInWrite.Dispose();
+            if (_pipeOutRead is { IsInvalid: false }) _pipeOutRead.Dispose();
+            throw;
+        }
     }
 
     public bool IsRunning
@@ -152,10 +170,7 @@ public sealed class ConPtySession : ITerminalSession
 
                 lock (_outputLock)
                 {
-                    var newBuffer = new byte[_outputBuffer.Length + bytesRead];
-                    Buffer.BlockCopy(_outputBuffer, 0, newBuffer, 0, _outputBuffer.Length);
-                    Buffer.BlockCopy(chunk, 0, newBuffer, _outputBuffer.Length, (int)bytesRead);
-                    _outputBuffer = newBuffer;
+                    _outputBuffer.Write(chunk, 0, (int)bytesRead);
                 }
 
                 _flushTimer.Change(16, Timeout.Infinite);
@@ -180,8 +195,8 @@ public sealed class ConPtySession : ITerminalSession
         lock (_outputLock)
         {
             if (_outputBuffer.Length == 0) return;
-            data = _outputBuffer;
-            _outputBuffer = [];
+            data = _outputBuffer.ToArray();
+            _outputBuffer.SetLength(0);
         }
 
         OutputReceived?.Invoke(data);
