@@ -122,6 +122,33 @@ public sealed class GitClient
             cancellationToken);
 
     /// <summary>
+    /// Executes an arbitrary git command with raw string arguments.
+    /// Use this for commands not covered by the typed API.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository working directory.</param>
+    /// <param name="arguments">Raw git arguments.</param>
+    /// <param name="timeout">Optional timeout override.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Process execution result.</returns>
+    public async Task<ProcessRunResult> RunRawAsync(
+        string repositoryRoot,
+        IReadOnlyList<string> arguments,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
+            throw new ArgumentException("Working directory is required.", nameof(repositoryRoot));
+
+        return await _processRunner.RunAsync(
+            new ProcessRunRequest(
+                _gitExecutable,
+                repositoryRoot,
+                arguments,
+                timeout ?? _defaultTimeout),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Executes a typed git command.
     /// </summary>
     /// <param name="request">Typed git command request.</param>

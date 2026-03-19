@@ -13,7 +13,7 @@ public sealed class GitHubInboxService : IDisposable
     private readonly bool _ownsHttpClient;
 
     public GitHubInboxService()
-        : this(CreateHttpClient(), new GitRemoteResolver(), ownsHttpClient: true) {
+        : this(Hub.GitHubHttpClientFactory.Create(TimeSpan.FromSeconds(12)), new GitRemoteResolver(), ownsHttpClient: true) {
     }
 
     internal GitHubInboxService(HttpClient httpClient, IGitRemoteResolver gitRemoteResolver)
@@ -423,34 +423,7 @@ public sealed class GitHubInboxService : IDisposable
         return request;
     }
 
-    private static HttpClient CreateHttpClient()
-    {
-        var httpClient = new HttpClient {
-            BaseAddress = new Uri("https://api.github.com"),
-            Timeout = TimeSpan.FromSeconds(12)
-        };
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForgeStudio/0.1");
-
-        var token = ResolveToken();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        return httpClient;
-    }
-
-    private static string? ResolveToken()
-    {
-        var token = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            return token;
-        }
-
-        token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        return string.IsNullOrWhiteSpace(token) ? null : token;
-    }
+    // HttpClient creation and token resolution delegated to GitHubHttpClientFactory
 
     internal static bool TryParseGitHubSlug(string? originUrl, out string owner, out string repo)
     {

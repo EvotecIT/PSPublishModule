@@ -3,480 +3,798 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:local="clr-namespace:PowerForgeStudio.Wpf.ViewModels"
+        xmlns:hub="clr-namespace:PowerForgeStudio.Wpf.ViewModels.Hub"
+        xmlns:views="clr-namespace:PowerForgeStudio.Wpf.Views"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="PowerForgeStudio"
+        Title="PowerForge Studio"
         Width="1600"
         Height="960"
         MinWidth="1280"
         MinHeight="820"
+        WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded">
+    <!-- Dark title bar via DWM attribute -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome GlassFrameThickness="0,1,0,0" CaptionHeight="32"
+                      ResizeBorderThickness="6" UseAeroCaptionButtons="True" />
+    </WindowChrome.WindowChrome>
     <Window.Resources>
-        <Style x:Key="PanelBorderStyle" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="18" />
-            <Setter Property="Padding" Value="16" />
-        </Style>
-        <Style x:Key="HintTextStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource AppTextMutedBrush}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-        <Style x:Key="GhostButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Margin" Value="0,0,8,8" />
-            <Setter Property="Padding" Value="12,7" />
-            <Setter Property="Background" Value="#EDF6F2" />
-            <Setter Property="BorderBrush" Value="#C9DDD4" />
-            <Setter Property="Foreground" Value="{StaticResource AppAccentDeepBrush}" />
-        </Style>
-        <Style x:Key="FlatListBoxStyle" TargetType="ListBox">
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style x:Key="FlatListItemStyle" TargetType="ListBoxItem">
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        </Style>
-        <Style x:Key="ExplorerNodeBorderStyle" TargetType="Border">
-            <Setter Property="Padding" Value="10" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+        <hub:BoolToVisibleConverter x:Key="BoolToVisible" />
+        <hub:BoolToCollapsedConverter x:Key="BoolToCollapsed" />
+
+        <Style x:Key="PanelStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="12" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                    <Setter Property="Background" Value="#EDF6F2" />
-                    <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
-                </DataTrigger>
-            </Style.Triggers>
+        </Style>
+        <Style x:Key="MutedText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="GhostBtn" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Padding" Value="10,5" />
+        </Style>
+        <Style x:Key="FlatList" TargetType="ListBox">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style x:Key="FlatItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}" CornerRadius="8">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="NavBtn" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bd" Background="Transparent" Padding="14,7" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppAccentBrush}" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppSurfaceHoverBrush}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsChecked" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AppAccentDeepBrush}" />
+                                <Setter Property="Foreground" Value="White" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SectionHead" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
+            <Setter Property="Margin" Value="0,14,0,8" />
+            <!-- Letter spacing handled by font weight -->
+        </Style>
+        <Style x:Key="StatCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,12" />
         </Style>
     </Window.Resources>
 
-    <Grid Margin="20">
+    <Window.InputBindings>
+        <KeyBinding Key="P" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.FocusSearchCommand}" />
+        <KeyBinding Key="T" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.OpenTerminalCommand}" />
+        <KeyBinding Key="E" Modifiers="Ctrl" Command="{x:Static hub:HubCommands.OpenFilesCommand}" />
+        <KeyBinding Key="Escape" Command="{x:Static hub:HubCommands.ClearSearchCommand}" />
+    </Window.InputBindings>
+
+    <Grid Background="{DynamicResource AppShellBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Background="{StaticResource HeroBrush}" Margin="0,0,0,16">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="360" />
-                    <ColumnDefinition Width="260" />
-                    <ColumnDefinition Width="260" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock FontFamily="Segoe UI Variable Display" FontSize="28" FontWeight="SemiBold" Text="PowerForge Studio" />
-                    <TextBlock Margin="0,4,0,0" FontSize="16" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding PortfolioOverview.SummaryHeadline}" />
-                    <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.SummaryDetails}" />
+        <!-- Top Navigation Bar -->
+        <Border Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="20,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock FontFamily="Segoe UI Variable Display" FontSize="18" FontWeight="Bold"
+                               Foreground="{DynamicResource AppTextStrongBrush}"
+                               VerticalAlignment="Center" Text="PowerForge Studio" Margin="0,0,20,0" />
+                    <RadioButton Content="Hub" Style="{StaticResource NavBtn}"
+                                 IsChecked="{Binding IsHubMode, Mode=OneWay}" GroupName="Mode"
+                                 Command="{Binding SwitchToHubCommand}" />
+                    <RadioButton Content="Release" Style="{StaticResource NavBtn}"
+                                 IsChecked="{Binding IsReleaseMode, Mode=OneWay}" GroupName="Mode"
+                                 Command="{Binding SwitchToReleaseCommand}" />
                 </StackPanel>
-
-                <StackPanel Grid.Column="1" Margin="20,0,0,0">
-                    <TextBlock FontWeight="SemiBold" Text="Workspace Root" />
-                    <ComboBox Margin="0,8,0,0" Padding="6" IsEditable="True" IsTextSearchEnabled="False"
-                              ItemsSource="{Binding RecentWorkspaceRoots}" StaysOpenOnEdit="True"
-                              Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Focus" />
-                    <ComboBox Margin="0,8,0,0" Padding="6"
-                              ItemsSource="{Binding PortfolioOverview.FocusModes}"
-                              SelectedItem="{Binding PortfolioOverview.SelectedFocus}"
-                              DisplayMemberPath="DisplayName" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,12,0"
+                               Text="{Binding HubViewModel.StatusText}" />
+                    <ProgressBar Width="100" Height="3" IsIndeterminate="{Binding HubViewModel.IsScanning}"
+                                 Background="{DynamicResource AppSurfaceAltBrush}"
+                                 Foreground="{DynamicResource AppAccentBrush}" BorderThickness="0"
+                                 Margin="0,0,16,0" />
+                    <!-- Theme selector -->
+                    <ComboBox x:Name="ThemeSelector" Width="80" FontSize="11"
+                              SelectionChanged="ThemeSelector_Changed">
+                        <ComboBoxItem Content="Auto" Tag="Auto" />
+                        <ComboBoxItem Content="Dark" Tag="Dark" />
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                    </ComboBox>
                 </StackPanel>
-
-                <StackPanel Grid.Column="2" Margin="20,0,0,0">
-                    <TextBlock FontWeight="SemiBold" Text="Search" />
-                    <TextBox Margin="0,8,0,0" Padding="8,6" Text="{Binding PortfolioOverview.SearchText, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Plan Coverage" />
-                    <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.PlanCoverageText}" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="3" Margin="24,0,0,0">
-                    <TextBlock FontWeight="SemiBold" Text="Quick Filters" />
-                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PortfolioOverview.QuickPresets}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource GhostButtonStyle}"
-                                        Command="{Binding DataContext.ApplyPortfolioPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"
-                                        Content="{Binding DisplayName}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Status" />
-                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" FontWeight="SemiBold" Text="{Binding StatusText}" />
-                    <ProgressBar Margin="0,10,0,0" Height="8" IsIndeterminate="{Binding IsBusy}" />
-                </StackPanel>
-            </Grid>
+            </DockPanel>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="400" />
-            </Grid.ColumnDefinitions>
+        <!-- Content -->
+        <ContentControl Grid.Row="1" Content="{Binding ActiveContent}">
+            <ContentControl.Resources>
 
-            <ScrollViewer Grid.Column="0" Margin="0,0,16,0" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <Border Style="{StaticResource PanelBorderStyle}">
-                        <StackPanel>
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Explorer" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PortfolioOverview.FocusHeadline}" />
-                            <WrapPanel Margin="0,12,0,0">
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RefreshPortfolioCommand}" Content="Refresh Workspace" />
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding PrepareSelectedFamilyQueueCommand}" Content="Prepare Family" />
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RetrySelectedFamilyFailedCommand}" Content="Retry Family" />
-                            </WrapPanel>
+                <!-- ==================== HUB VIEW ==================== -->
+                <DataTemplate DataType="{x:Type hub:HubViewModel}">
+                    <Grid Margin="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="360" />
+                        </Grid.ColumnDefinitions>
 
-                            <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Families" />
-                            <TreeView Margin="0,10,0,0"
-                                      BorderThickness="0"
-                                      Background="Transparent"
-                                      ItemsSource="{Binding WorkspaceExplorerNodes}">
-                                <TreeView.Resources>
-                                    <HierarchicalDataTemplate DataType="{x:Type local:WorkspaceExplorerNodeViewModel}" ItemsSource="{Binding Children}">
-                                        <Button Padding="0"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyWorkspaceExplorerNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Style="{StaticResource ExplorerNodeBorderStyle}">
-                                                <StackPanel>
-                                                    <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding DisplayName}" />
-                                                        <Border DockPanel.Dock="Right" Padding="8,3" Background="#FFFFFF" CornerRadius="10">
-                                                            <TextBlock Text="{Binding Badge}" />
-                                                        </Border>
-                                                    </DockPanel>
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding Summary}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </HierarchicalDataTemplate>
-                                </TreeView.Resources>
-                            </TreeView>
-                        </StackPanel>
-                    </Border>
+                        <!-- ===== LEFT: Project List ===== -->
+                        <Border Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,1,0">
+                            <DockPanel>
+                                <!-- Header -->
+                                <StackPanel DockPanel.Dock="Top" Margin="16,14,16,0">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AppTextStrongBrush}" Text="Projects" />
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostBtn}"
+                                                Padding="8,3" FontSize="11"
+                                                Command="{Binding ScanWorkspaceCommand}" Content="Scan" />
+                                    </DockPanel>
+                                    <TextBox Margin="0,10,0,10" Padding="8,6" FontSize="12"
+                                             x:Name="ProjectSearchBox"
+                                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
 
-                    <Border Style="{StaticResource PanelBorderStyle}" Margin="0,16,0,0">
-                        <StackPanel>
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Release Inbox" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ReleaseSignals.ReleaseInboxHeadline}" />
-                            <ListBox Margin="0,10,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
-                                     ItemsSource="{Binding ReleaseSignals.ReleaseInboxItems}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyReleaseInboxItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Padding="12" Background="#FFFDF9" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                <StackPanel>
-                                                    <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding Badge}" />
-                                                    </DockPanel>
-                                                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Title}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-
-            <Grid Grid.Column="1" Margin="0,0,16,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="300" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="320" />
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,16,0">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Top">
-                                <DockPanel LastChildFill="False">
-                                    <TextBlock DockPanel.Dock="Left" FontSize="18" FontWeight="SemiBold" Text="Repositories" />
-                                    <Border DockPanel.Dock="Right" Padding="10,4" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="10">
-                                        <TextBlock Text="{Binding Repositories.Count, StringFormat=Visible repos: {0}}" />
-                                    </Border>
-                                </DockPanel>
-                                <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="Select a repository to inspect what you are actually working on." />
-                            </StackPanel>
-
-                            <ListBox Margin="0,16,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
-                                     ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                            <StackPanel>
+                                <!-- Project Tree -->
+                                <ListBox Style="{StaticResource FlatList}"
+                                         ItemContainerStyle="{StaticResource FlatItem}"
+                                         ItemsSource="{Binding GroupedView}"
+                                         SelectedItem="{Binding SelectedProject}"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling"
+                                         VirtualizingPanel.ScrollUnit="Pixel"
+                                         ScrollViewer.CanContentScroll="True"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         Margin="8,0,8,8">
+                                    <ListBox.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="10" FontWeight="Bold"
+                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                               Margin="8,12,0,4" />
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </ListBox.GroupStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="8,6,8,4">
+                                                <!-- Project Name + Time + Dirty dot -->
                                                 <DockPanel>
-                                                    <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Name}" />
-                                                    <Border DockPanel.Dock="Right" Padding="8,3" Background="#EDF6F2" CornerRadius="10">
-                                                        <TextBlock Text="{Binding ReadinessKind}" />
-                                                    </Border>
+                                                    <Ellipse DockPanel.Dock="Left" Width="6" Height="6"
+                                                             VerticalAlignment="Center" Margin="0,0,6,0"
+                                                             Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisible}}"
+                                                             Fill="{DynamicResource AppWarmBrush}" />
+                                                    <TextBlock DockPanel.Dock="Right" FontSize="10" Margin="6,2,0,0"
+                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                               Text="{Binding LastActivity}" />
+                                                    <TextBlock FontWeight="SemiBold" FontSize="13"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
+                                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
-                                                <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentDeepBrush}" Text="{Binding FamilyDisplayName}" />
-                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ReadinessReason}" />
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding PlanStatus, StringFormat=Plan: {0}}" />
+                                                <!-- Branch + Badges -->
+                                                <DockPanel Margin="0,3,0,0">
+                                                    <!-- PR badge -->
+                                                    <Border DockPanel.Dock="Right" Padding="5,1" CornerRadius="4" Margin="4,0,0,0"
+                                                            Background="#1A3B82F6"
+                                                            Visibility="{Binding HasOpenPrs, Converter={StaticResource BoolToVisible}}">
+                                                        <TextBlock FontSize="9" Foreground="{DynamicResource AppAccentBrush}"
+                                                                   Text="{Binding OpenPrCount, StringFormat={}{0} PR}" />
+                                                    </Border>
+                                                    <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                               Foreground="{DynamicResource AppAccentBrush}"
+                                                               Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" />
+                                                </DockPanel>
+                                                <!-- Worktrees (clickable) -->
+                                                <ItemsControl ItemsSource="{Binding Worktrees}" Margin="10,4,0,0"
+                                                              Visibility="{Binding HasWorktrees, Converter={StaticResource BoolToVisible}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,1" Padding="4,2" CornerRadius="4"
+                                                                    Background="Transparent" Cursor="Hand"
+                                                                    MouseLeftButtonDown="WorktreeItem_Click">
+                                                                <DockPanel>
+                                                                    <Ellipse Width="5" Height="5" Fill="{DynamicResource AppSuccessBrush}"
+                                                                             VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                                    <TextBlock FontSize="11"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock DockPanel.Dock="Right" FontSize="9" Margin="6,1,0,0"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                               Text="{Binding LastActivity}" />
+                                                                </DockPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- ===== CENTER: Workspace / Dashboard ===== -->
+                        <Grid Grid.Column="1">
+                            <!-- Dashboard -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20"
+                                          Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToCollapsed}}">
+                                <StackPanel MaxWidth="800">
+                                    <TextBlock FontSize="22" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppTextStrongBrush}" Text="Dashboard" />
+                                    <TextBlock Margin="0,6,0,20" Style="{StaticResource MutedText}"
+                                               Text="Select a project to view details. Aggregate stats below." />
+
+                                    <!-- Stat Cards -->
+                                    <UniformGrid Columns="3" Rows="2" Margin="0,0,0,20">
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
+                                                           Text="{Binding Dashboard.TotalProjects}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Total Projects" />
                                             </StackPanel>
                                         </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </DockPanel>
-                    </Border>
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
+                                                           Text="{Binding Dashboard.ManagedProjects}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Managed" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppWarmBrush}"
+                                                           Text="{Binding Dashboard.DirtyRepos}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Dirty Repos" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
+                                                           Text="{Binding Dashboard.TotalOpenPrs}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Open PRs" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,8,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppAccentBrush}"
+                                                           Text="{Binding Dashboard.TotalOpenIssues}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Open Issues" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCard}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock FontSize="32" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AppDangerBrush}"
+                                                           Text="{Binding Dashboard.FailingBuilds}" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource AppTextMutedBrush}" Text="Failing Builds" />
+                                            </StackPanel>
+                                        </Border>
+                                    </UniformGrid>
 
-                    <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Top">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Family Lane" />
-                                <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryFamily.LaneHeadline}" />
-                            </StackPanel>
-                            <ListBox Margin="0,16,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
-                                     ItemsSource="{Binding RepositoryFamily.LaneItems}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyRepositoryFamilyLaneItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding LaneDisplay}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </DockPanel>
-                    </Border>
-                </Grid>
-
-                <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}" Margin="0,16,0,0">
-                    <DockPanel>
-                        <StackPanel DockPanel.Dock="Top">
-                            <DockPanel LastChildFill="False">
-                                <StackPanel DockPanel.Dock="Left">
-                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding RepositoryDetail.Headline}" />
-                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" FontWeight="SemiBold" Text="{Binding RepositoryDetail.Readiness}" />
-                                </StackPanel>
-                                <Border DockPanel.Dock="Right" Padding="10,4" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="12">
-                                    <TextBlock Text="{Binding RepositoryDetail.Badge}" />
-                                </Border>
-                            </DockPanel>
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.Reason}" />
-                        </StackPanel>
-
-                        <TabControl Margin="0,16,0,0">
-                            <TabItem Header="Overview">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Margin="12">
-                                        <TextBlock FontWeight="SemiBold" Text="Repository Path" />
-                                        <TextBox Margin="0,8,0,0" IsReadOnly="True" Text="{Binding RepositoryDetail.Path}" />
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Branch" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.Branch}" />
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Queue" />
-                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.QueueLane}" />
-                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.QueueSummary}" />
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Release Drift" />
-                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.ReleaseDrift}" />
-                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.ReleaseDriftDetail}" />
-                                    </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Git">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Margin="12">
-                                        <TextBlock FontWeight="SemiBold" Text="Git Diagnostics" />
-                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.GitDiagnostics}" />
-                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.GitDiagnosticsDetail}" />
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Quick Actions" />
-                                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding RepositoryDetail.GitQuickActions}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                        <DockPanel>
-                                                            <StackPanel DockPanel.Dock="Left">
-                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
-                                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
-                                                            </StackPanel>
-                                                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButtonStyle}"
-                                                                    Command="{Binding DataContext.ExecuteGitQuickActionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    CommandParameter="{Binding}" Content="{Binding ExecuteLabel}" />
-                                                        </DockPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Suggested Commands" />
-                                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding RepositoryDetail.GitRemediationSteps}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                        <StackPanel>
-                                                            <DockPanel>
-                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Title}" />
-                                                                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButtonStyle}"
-                                                                        Command="{Binding DataContext.CopyGitRemediationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        CommandParameter="{Binding}" Content="Copy" />
-                                                            </DockPanel>
-                                                            <TextBlock Margin="0,6,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
-                                                            <TextBox Margin="0,8,0,0" IsReadOnly="True" Text="{Binding CommandText}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="Evidence">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Margin="12">
-                                        <TextBlock FontWeight="SemiBold" Text="Build Contract" />
-                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.BuildContract}" />
-                                        <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="Build Engine" />
-                                        <TextBlock Margin="0,8,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding RepositoryDetail.EngineDisplay}" />
-                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding RepositoryDetail.EnginePath}" />
-                                        <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding RepositoryDetail.Evidence}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                        <StackPanel>
-                                                            <DockPanel>
-                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding AdapterDisplay}" />
-                                                                <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding StatusDisplay}" />
-                                                            </DockPanel>
-                                                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Summary}" />
-                                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Detail}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
-                        </TabControl>
-                    </DockPanel>
-                </Border>
-            </Grid>
-
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <Border Style="{StaticResource PanelBorderStyle}">
-                        <StackPanel>
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Queue Control" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Stations.QueueHeadline}" />
-                            <WrapPanel Margin="0,12,0,0">
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RunNextQueueStepCommand}" Content="Run Next" />
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding ApproveUsbCommand}" Content="Approve USB" />
-                                <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding RetryFailedCommand}" Content="Retry Failed" />
-                            </WrapPanel>
-                            <ListBox Margin="0,14,0,0" Style="{StaticResource FlatListBoxStyle}" ItemContainerStyle="{StaticResource FlatListItemStyle}"
-                                     ItemsSource="{Binding Stations.DraftQueue}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyQueueItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionHead}" Text="RECENTLY ACTIVE" />
+                                    <ItemsControl ItemsSource="{Binding Dashboard.RecentlyActive}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                        CornerRadius="8" Padding="12,8" Margin="0,0,0,4">
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource AppAccentBrush}" Text="{Binding OrderDisplay}" />
+                                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
+                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                   Text="{Binding Name}" />
+                                                        <Border DockPanel.Dock="Right" Padding="6,2" CornerRadius="4"
+                                                                Background="{DynamicResource AppSurfaceHoverBrush}">
+                                                            <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                       Text="{Binding CategoryDisplay}" />
+                                                        </Border>
                                                     </DockPanel>
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding LaneDisplay}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Summary}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
 
-                    <TabControl Margin="0,16,0,0" SelectedIndex="{Binding SelectedStageIndex}">
-                        <TabItem Header="Sign">
-                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.SigningArtifacts}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplySigningArtifactCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding DisplayName}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding ArtifactPath}" />
+                            <!-- Project Workspace -->
+                            <ContentControl Content="{Binding ActiveWorkspace}"
+                                            Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToVisible}}">
+                                <ContentControl.ContentTemplate>
+                                    <DataTemplate DataType="{x:Type hub:ProjectWorkspaceViewModel}">
+                                        <DockPanel Margin="24,16,24,16">
+                                            <!-- Workspace Header -->
+                                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                                                <StackPanel DockPanel.Dock="Left">
+                                                    <TextBlock FontSize="20" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
+                                                               Text="{Binding ProjectName}" />
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                               Text="{Binding RootPath}" Margin="0,2,0,0" />
                                                 </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="Publish">
-                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.PublishTargets}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyPublishTargetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding TargetName}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Destination}" />
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                            VerticalAlignment="Top" Margin="8,0,0,0">
+                                                    <Button Style="{StaticResource GhostBtn}" Padding="8,4" FontSize="10"
+                                                            Margin="0,0,4,0"
+                                                            Command="{Binding OpenInExplorerCommand}" Content="Explorer" />
+                                                    <Button Style="{StaticResource GhostBtn}" Padding="8,4" FontSize="10"
+                                                            Margin="0,0,4,0"
+                                                            Command="{Binding OpenInVsCodeCommand}" Content="VS Code" />
+                                                    <Button Style="{StaticResource GhostBtn}" Padding="8,4" FontSize="10"
+                                                            Command="{Binding OpenInTerminalCommand}" Content="Terminal" />
                                                 </StackPanel>
-                                            </Border>
-                                        </Button>
+                                            </DockPanel>
+
+                                            <TabControl SelectedIndex="{Binding SelectedTabIndex}">
+                                                <TabItem Header="Overview">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                                                        <StackPanel>
+                                                            <!-- Info cards -->
+                                                            <UniformGrid Columns="2" Margin="0,0,0,8">
+                                                                <Border Style="{StaticResource StatCard}" Margin="0,0,6,0">
+                                                                    <StackPanel>
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="BUILD" />
+                                                                        <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource AppAccentBrush}"
+                                                                                   Text="{Binding BuildScriptDisplay}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                                <Border Style="{StaticResource StatCard}" Margin="6,0,0,0" Cursor="Hand"
+                                                                        MouseLeftButtonDown="GitHubSlug_Click">
+                                                                    <StackPanel>
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}" Text="GITHUB" />
+                                                                        <TextBlock Margin="0,4,0,0" FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource AppAccentBrush}"
+                                                                                   TextDecorations="Underline"
+                                                                                   Text="{Binding GitHubSlug}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </UniformGrid>
+
+                                                            <!-- Git Log -->
+                                                            <TextBlock Style="{StaticResource SectionHead}" Text="RECENT COMMITS" />
+                                                            <ItemsControl ItemsSource="{Binding GitLog}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                                CornerRadius="6" Padding="10,6" Margin="0,0,0,3">
+                                                                            <DockPanel>
+                                                                                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Top" Margin="10,0,0,0">
+                                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                               Text="{Binding RelativeTime}" />
+                                                                                </StackPanel>
+                                                                                <StackPanel>
+                                                                                    <DockPanel>
+                                                                                        <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                                                                   FontFamily="Cascadia Code,Consolas,Courier New"
+                                                                                                   Foreground="{DynamicResource AppWarmBrush}"
+                                                                                                   Text="{Binding ShortHash}" Margin="0,0,8,0" />
+                                                                                        <TextBlock FontSize="12" Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                                   Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
+                                                                                    </DockPanel>
+                                                                                    <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                               Text="{Binding AuthorName}" Margin="0,2,0,0" />
+                                                                                </StackPanel>
+                                                                            </DockPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </TabItem>
+                                                <TabItem Header="Issues">
+                                                    <DockPanel Margin="0,12,0,0">
+                                                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                                                            <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
+                                                                    Command="{Binding LoadIssuesCommand}" Content="Refresh" />
+                                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="8,0,0,0">
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="open"
+                                                                        Content="Open" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="closed"
+                                                                        Content="Closed" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="all"
+                                                                        Content="All" />
+                                                            </StackPanel>
+                                                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
+                                                                       Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
+                                                                       Text="{Binding Issues.Count, StringFormat={}{0} issue(s)}" />
+                                                        </DockPanel>
+                                                        <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
+                                                                 ItemsSource="{Binding Issues}"
+                                                                 MouseDoubleClick="IssueList_DoubleClick">
+                                                            <ListBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2"
+                                                                            Cursor="Hand">
+                                                                        <StackPanel>
+                                                                            <DockPanel>
+                                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
+                                                                                           Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                           Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                                                <TextBlock DockPanel.Dock="Right" FontSize="11"
+                                                                                           Foreground="{DynamicResource AppAccentBrush}"
+                                                                                           Text="{Binding Number, StringFormat=#{0}}" />
+                                                                            </DockPanel>
+                                                                            <DockPanel Margin="0,4,0,0">
+                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                           Text="{Binding LabelDisplay}" />
+                                                                            </DockPanel>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ListBox.ItemTemplate>
+                                                        </ListBox>
+                                                    </DockPanel>
+                                                </TabItem>
+                                                <TabItem Header="Pull Requests">
+                                                    <DockPanel Margin="0,12,0,0">
+                                                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                                                            <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
+                                                                    Command="{Binding LoadPullRequestsCommand}" Content="Refresh" />
+                                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="8,0,0,0">
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="open"
+                                                                        Content="Open" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="closed"
+                                                                        Content="Closed" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="all"
+                                                                        Content="All" />
+                                                            </StackPanel>
+                                                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
+                                                                       Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
+                                                                       Text="{Binding PullRequests.Count, StringFormat={}{0} PR(s)}" />
+                                                        </DockPanel>
+                                                        <ListBox Style="{StaticResource FlatList}" ItemContainerStyle="{StaticResource FlatItem}"
+                                                                 ItemsSource="{Binding PullRequests}"
+                                                                 MouseDoubleClick="PrList_DoubleClick">
+                                                            <ListBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                            CornerRadius="8" Padding="12,8" Margin="0,0,0,2"
+                                                                            Cursor="Hand">
+                                                                        <StackPanel>
+                                                                            <DockPanel>
+                                                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="13"
+                                                                                           Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                           Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                                                <TextBlock DockPanel.Dock="Right" FontSize="11"
+                                                                                           Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                           Text="{Binding Number, StringFormat=#{0}}" />
+                                                                            </DockPanel>
+                                                                            <DockPanel Margin="0,4,0,0">
+                                                                                <TextBlock FontSize="11" Foreground="{DynamicResource AppAccentBrush}"
+                                                                                           Text="{Binding HeadBranch}" />
+                                                                                <TextBlock DockPanel.Dock="Right" FontSize="11"
+                                                                                           Foreground="{DynamicResource AppSuccessBrush}" Margin="8,0,0,0"
+                                                                                           Text="{Binding DiffStatDisplay}" />
+                                                                            </DockPanel>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ListBox.ItemTemplate>
+                                                        </ListBox>
+                                                    </DockPanel>
+                                                </TabItem>
+                                                <TabItem Header="Build">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                                                        <StackPanel>
+                                                            <TextBlock Style="{StaticResource SectionHead}" Text="BUILD SCRIPT" />
+                                                            <TextBlock Foreground="{DynamicResource AppAccentBrush}" Text="{Binding BuildScriptDisplay}" />
+                                                            <Button Margin="0,12,0,0" Style="{StaticResource GhostBtn}"
+                                                                    Command="{Binding RunBuildCommand}" Content="Run Build" />
+                                                            <TextBlock Style="{StaticResource SectionHead}" Text="OUTPUT" />
+                                                            <TextBox IsReadOnly="True"
+                                                                     FontFamily="Cascadia Code,Consolas,Courier New"
+                                                                     FontSize="11" MaxHeight="400"
+                                                                     TextWrapping="Wrap" AcceptsReturn="True"
+                                                                     VerticalScrollBarVisibility="Auto"
+                                                                     Text="{Binding BuildOutput, Mode=OneWay}" />
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </TabItem>
+                                                <TabItem Header="Terminal">
+                                                    <Grid>
+                                                        <!-- No terminal running — show start button -->
+                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                    Visibility="{Binding HasActiveTerminal, Converter={StaticResource BoolToCollapsed}}">
+                                                            <TextBlock Foreground="{DynamicResource AppTextMutedBrush}" FontSize="13"
+                                                                       HorizontalAlignment="Center" Margin="0,0,0,12"
+                                                                       Text="No terminal session running." />
+                                                            <Button Style="{StaticResource GhostBtn}" HorizontalAlignment="Center"
+                                                                    Padding="20,8" FontSize="13"
+                                                                    Command="{Binding StartTerminalCommand}" Content="Start Terminal" />
+                                                        </StackPanel>
+
+                                                        <!-- Terminal running -->
+                                                        <DockPanel Visibility="{Binding HasActiveTerminal, Converter={StaticResource BoolToVisible}}">
+                                                            <Border DockPanel.Dock="Top" Padding="8,4"
+                                                                    Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                    BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+                                                                <DockPanel>
+                                                                    <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                                               Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="{Binding ActiveTerminal.Title}" />
+                                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                                        <Button Style="{StaticResource GhostBtn}" Padding="8,3" FontSize="10"
+                                                                                Margin="0,0,4,0"
+                                                                                Command="{Binding RestartTerminalCommand}" Content="Restart" />
+                                                                        <Button Style="{StaticResource GhostBtn}" Padding="8,3" FontSize="10"
+                                                                                Command="{Binding CloseTerminalCommand}" Content="Close" />
+                                                                    </StackPanel>
+                                                                </DockPanel>
+                                                            </Border>
+                                                            <views:TerminalControl DataContext="{Binding ActiveTerminal}" />
+                                                        </DockPanel>
+                                                    </Grid>
+                                                </TabItem>
+                                                <TabItem Header="Files">
+                                                    <views:FileExplorerView DataContext="{Binding FileExplorer}" />
+                                                </TabItem>
+                                            </TabControl>
+                                        </DockPanel>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="Verify">
-                            <ItemsControl Margin="12" ItemsSource="{Binding Stations.VerificationTargets}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Padding="0" Background="Transparent" BorderThickness="0"
-                                                Command="{Binding DataContext.ApplyVerificationTargetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Border Margin="0,0,0,10" Padding="12" Background="#FFFFFF" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </Grid>
+
+                        <!-- ===== RIGHT: Git Actions Panel ===== -->
+                        <Border Grid.Column="2" Background="{DynamicResource AppSurfaceBrush}"
+                                BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0">
+                            <Grid>
+                                <!-- Placeholder when nothing selected -->
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
+                                           Text="Select a project to see git status."
+                                           Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToCollapsed}}" />
+
+                                <!-- Git Actions -->
+                                <ContentControl Content="{Binding ActiveActions}"
+                                                Visibility="{Binding HasSelectedProject, Converter={StaticResource BoolToVisible}}">
+                                    <ContentControl.ContentTemplate>
+                                        <DataTemplate DataType="{x:Type hub:ProjectActionsViewModel}">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14">
                                                 <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding RepositoryName}" />
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource AppAccentBrush}" Text="{Binding DisplayName}" />
-                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource HintTextStyle}" Text="{Binding Destination}" />
+                                                    <!-- Branch + Diff Header -->
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" FontSize="11"
+                                                                   Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                   Text="{Binding AheadBehindDisplay}" />
+                                                    </DockPanel>
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0"
+                                                               Foreground="{DynamicResource AppTextStrongBrush}"
+                                                               Text="{Binding BranchName}" />
+
+                                                    <!-- Commit Box -->
+                                                    <TextBox Margin="0,14,0,0" MinHeight="50" AcceptsReturn="True"
+                                                             TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                                             FontSize="12"
+                                                             Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <Button Margin="0,8,0,0" HorizontalAlignment="Left"
+                                                            Style="{StaticResource GhostBtn}"
+                                                            Command="{Binding CommitCommand}" Content="Commit" />
+
+                                                    <!-- Staged -->
+                                                    <TextBlock Style="{StaticResource SectionHead}" Text="STAGED" />
+                                                    <ItemsControl ItemsSource="{Binding StagedChanges}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <DockPanel Margin="0,1">
+                                                                    <Border DockPanel.Dock="Left" Width="18" Height="18"
+                                                                            CornerRadius="4" Margin="0,0,8,0"
+                                                                            Background="{DynamicResource AppSuccessBrush}">
+                                                                        <TextBlock Text="{Binding KindDisplay}" FontSize="10"
+                                                                                   Foreground="White" HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center" FontWeight="Bold" />
+                                                                    </Border>
+                                                                    <TextBlock FontSize="12" Foreground="{DynamicResource AppTextBrush}"
+                                                                               Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                                                                </DockPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <!-- Unstaged -->
+                                                    <DockPanel Margin="0,14,0,8">
+                                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource SectionHead}"
+                                                                   Margin="0" Text="UNSTAGED" />
+                                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center">
+                                                            <Button Style="{StaticResource GhostBtn}" Padding="6,2" FontSize="10"
+                                                                    Margin="0,0,4,0"
+                                                                    Command="{Binding StageAllCommand}" Content="Stage All" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                    <ItemsControl ItemsSource="{Binding UnstagedChanges}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <DockPanel Margin="0,1">
+                                                                    <Border DockPanel.Dock="Left" Width="18" Height="18"
+                                                                            CornerRadius="4" Margin="0,0,8,0"
+                                                                            Background="{DynamicResource AppWarmBrush}">
+                                                                        <TextBlock Text="{Binding KindDisplay}" FontSize="10"
+                                                                                   Foreground="White" HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center" FontWeight="Bold" />
+                                                                    </Border>
+                                                                    <TextBlock FontSize="12" Foreground="{DynamicResource AppTextBrush}"
+                                                                               Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                                                                </DockPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <!-- Diff -->
+                                                    <TextBlock Style="{StaticResource SectionHead}" Text="DIFF" />
+                                                    <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                            CornerRadius="6" MaxHeight="200">
+                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                                      VerticalScrollBarVisibility="Auto">
+                                                            <ItemsControl ItemsSource="{Binding DiffLines}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Padding="6,1,6,1">
+                                                                            <Border.Style>
+                                                                                <Style TargetType="Border">
+                                                                                    <Setter Property="Background" Value="Transparent" />
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                                                                            <Setter Property="Background" Value="#1A10B981" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                                                                                            <Setter Property="Background" Value="#1AEF4444" />
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Hunk">
+                                                                                            <Setter Property="Background" Value="#0D3B82F6" />
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Border.Style>
+                                                                            <TextBlock FontFamily="Cascadia Code,Consolas,Courier New"
+                                                                                       FontSize="11" Text="{Binding Text}" TextWrapping="NoWrap">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppSuccessBrush}" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppDangerBrush}" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding Kind}" Value="Hunk">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Border>
+
+                                                    <!-- Branches -->
+                                                    <TextBlock Style="{StaticResource SectionHead}" Text="BRANCHES" />
+                                                    <ComboBox Padding="6" FontSize="12"
+                                                              ItemsSource="{Binding Branches}"
+                                                              SelectedItem="{Binding SelectedBranch}" />
+                                                    <Button Margin="0,6,0,0" Style="{StaticResource GhostBtn}"
+                                                            HorizontalAlignment="Left"
+                                                            Command="{Binding SwitchBranchCommand}" Content="Switch" />
+
+                                                    <!-- Worktrees -->
+                                                    <TextBlock Style="{StaticResource SectionHead}" Text="WORKTREES" />
+                                                    <ItemsControl ItemsSource="{Binding Worktrees}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                                        CornerRadius="6" Padding="10,6" Margin="0,0,0,4">
+                                                                    <StackPanel>
+                                                                        <TextBlock FontWeight="SemiBold" FontSize="12"
+                                                                                   Foreground="{DynamicResource AppTextStrongBrush}"
+                                                                                   Text="{Binding BranchDisplay}" />
+                                                                        <TextBlock FontSize="10" Foreground="{DynamicResource AppTextMutedBrush}"
+                                                                                   Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <!-- Refresh -->
+                                                    <Button Margin="0,14,0,0" Style="{StaticResource GhostBtn}"
+                                                            HorizontalAlignment="Left"
+                                                            Command="{Binding RefreshStatusCommand}" Content="Refresh" />
                                                 </StackPanel>
-                                            </Border>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                    </TabControl>
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
+                                            </ScrollViewer>
+                                        </DataTemplate>
+                                    </ContentControl.ContentTemplate>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- Release mode placeholder -->
+                <DataTemplate DataType="{x:Type local:ShellViewModel}">
+                    <TextBlock Margin="40" FontSize="16" Foreground="{DynamicResource AppTextMutedBrush}"
+                               Text="Release mode — switch to Hub to manage projects." />
+                </DataTemplate>
+            </ContentControl.Resources>
+        </ContentControl>
     </Grid>
 </Window>
