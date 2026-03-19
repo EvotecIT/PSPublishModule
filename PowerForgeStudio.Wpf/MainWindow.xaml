@@ -453,6 +453,17 @@
                                                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                                                             <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
                                                                     Command="{Binding LoadIssuesCommand}" Content="Refresh" />
+                                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="8,0,0,0">
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="open"
+                                                                        Content="Open" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="closed"
+                                                                        Content="Closed" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetIssueStateFilterCommand}" CommandParameter="all"
+                                                                        Content="All" />
+                                                            </StackPanel>
                                                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
                                                                        Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                                                        Text="{Binding Issues.Count, StringFormat={}{0} issue(s)}" />
@@ -490,6 +501,17 @@
                                                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                                                             <Button Style="{StaticResource GhostBtn}" DockPanel.Dock="Left"
                                                                     Command="{Binding LoadPullRequestsCommand}" Content="Refresh" />
+                                                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Margin="8,0,0,0">
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="open"
+                                                                        Content="Open" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="closed"
+                                                                        Content="Closed" Margin="0,0,2,0" />
+                                                                <Button Style="{StaticResource GhostBtn}"
+                                                                        Command="{Binding SetPrStateFilterCommand}" CommandParameter="all"
+                                                                        Content="All" />
+                                                            </StackPanel>
                                                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0"
                                                                        Foreground="{DynamicResource AppTextMutedBrush}" FontSize="12"
                                                                        Text="{Binding PullRequests.Count, StringFormat={}{0} PR(s)}" />

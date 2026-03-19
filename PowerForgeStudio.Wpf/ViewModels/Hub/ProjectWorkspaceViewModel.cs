@@ -22,6 +22,8 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     private readonly System.Text.StringBuilder _buildOutputBuilder = new();
     private TerminalTabViewModel? _activeTerminal;
     private FileExplorerViewModel? _fileExplorer;
+    private string _issueStateFilter = "open";
+    private string _prStateFilter = "open";
 
     public ProjectWorkspaceViewModel(
         ProjectEntry entry,
@@ -68,6 +70,22 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
                 Process.Start(psi);
             }
             catch { }
+        });
+
+        SetIssueStateFilterCommand = new DelegateCommand<object?>(param =>
+        {
+            if (param is string state)
+            {
+                IssueStateFilter = state;
+            }
+        });
+
+        SetPrStateFilterCommand = new DelegateCommand<object?>(param =>
+        {
+            if (param is string state)
+            {
+                PrStateFilter = state;
+            }
         });
     }
 
@@ -165,6 +183,32 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     public DelegateCommand<object?> OpenInExplorerCommand { get; }
     public DelegateCommand<object?> OpenInVsCodeCommand { get; }
     public DelegateCommand<object?> OpenInTerminalCommand { get; }
+    public DelegateCommand<object?> SetIssueStateFilterCommand { get; }
+    public DelegateCommand<object?> SetPrStateFilterCommand { get; }
+
+    public string IssueStateFilter
+    {
+        get => _issueStateFilter;
+        set
+        {
+            if (SetProperty(ref _issueStateFilter, value))
+            {
+                _ = LoadIssuesAsync();
+            }
+        }
+    }
+
+    public string PrStateFilter
+    {
+        get => _prStateFilter;
+        set
+        {
+            if (SetProperty(ref _prStateFilter, value))
+            {
+                _ = LoadPullRequestsAsync();
+            }
+        }
+    }
 
     private void OnTabSelected(int tabIndex)
     {
@@ -231,7 +275,7 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         IsLoadingIssues = true;
         try
         {
-            var issues = await _gitHubService.FetchIssuesAsync(_entry.GitHubSlug).ConfigureAwait(true);
+            var issues = await _gitHubService.FetchIssuesAsync(_entry.GitHubSlug, _issueStateFilter).ConfigureAwait(true);
             Issues.Clear();
             foreach (var issue in issues)
             {
@@ -258,7 +302,7 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
         IsLoadingPrs = true;
         try
         {
-            var prs = await _gitHubService.FetchPullRequestsAsync(_entry.GitHubSlug).ConfigureAwait(true);
+            var prs = await _gitHubService.FetchPullRequestsAsync(_entry.GitHubSlug, _prStateFilter).ConfigureAwait(true);
             PullRequests.Clear();
             foreach (var pr in prs)
             {
