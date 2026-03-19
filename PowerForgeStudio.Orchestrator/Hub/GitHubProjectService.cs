@@ -14,7 +14,7 @@ public sealed class GitHubProjectService : IDisposable
     private volatile int _rateLimitRemaining = int.MaxValue;
 
     public GitHubProjectService()
-        : this(CreateHttpClient(), ownsHttpClient: true)
+        : this(GitHubHttpClientFactory.Create(), ownsHttpClient: true)
     {
     }
 
@@ -348,39 +348,5 @@ public sealed class GitHubProjectService : IDisposable
         return request;
     }
 
-    private static HttpClient CreateHttpClient()
-    {
-        var httpClient = new HttpClient
-        {
-            BaseAddress = new Uri("https://api.github.com"),
-            Timeout = TimeSpan.FromSeconds(15)
-        };
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForgeStudio/0.1");
-
-        var token = ResolveToken();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        return httpClient;
-    }
-
-    private static string? ResolveToken()
-    {
-        var token = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            return token;
-        }
-
-        token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            return token;
-        }
-
-        token = Environment.GetEnvironmentVariable("GH_TOKEN");
-        return string.IsNullOrWhiteSpace(token) ? null : token;
-    }
+    // HttpClient creation and token resolution delegated to GitHubHttpClientFactory
 }
