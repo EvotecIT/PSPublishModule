@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
     <ProjectReference Include="..\PowerForgeStudio.Orchestrator\PowerForgeStudio.Orchestrator.csproj" />
+    <ProjectReference Include="..\..\OfficeIMO-markdownrenderer-wpf\OfficeIMO.MarkdownRenderer\OfficeIMO.MarkdownRenderer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

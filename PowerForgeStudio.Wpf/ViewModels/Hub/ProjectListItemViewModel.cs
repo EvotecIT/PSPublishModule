@@ -40,6 +40,10 @@ public sealed class ProjectListItemViewModel : ViewModelBase
 
     public string WorktreeCountDisplay => Worktrees.Count > 0 ? $"{Worktrees.Count} worktree(s)" : string.Empty;
 
+    public string WorktreeTooltip => Worktrees.Count == 0
+        ? string.Empty
+        : string.Join(Environment.NewLine, Worktrees.Select(worktree => worktree.Name));
+
     public string? LastActivity => Entry.LastCommitUtc.HasValue
         ? Domain.Hub.RelativeTimeFormatter.Format(Entry.LastCommitUtc.Value)
         : null;

@@ -8,9 +8,13 @@ public sealed record GitHubIssue(
     IReadOnlyList<string> Labels,
     IReadOnlyList<string> Assignees,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ClosedAt)
+    DateTimeOffset? ClosedAt,
+    string? HtmlUrl = null,
+    string? BodyMarkdown = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
+
+    public string StateDisplay => IsOpen ? "Open" : "Closed";
 
     public string LabelDisplay => Labels.Count == 0 ? "" : string.Join(", ", Labels);
 

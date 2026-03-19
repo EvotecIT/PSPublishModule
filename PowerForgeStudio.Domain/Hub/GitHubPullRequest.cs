@@ -14,11 +14,17 @@ public sealed record GitHubPullRequest(
     int Deletions,
     int ChangedFiles,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? MergedAt)
+    DateTimeOffset? MergedAt,
+    string? HtmlUrl = null,
+    string? BodyMarkdown = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 
+    public string StateDisplay => MergedAt is not null ? "Merged" : IsOpen ? "Open" : "Closed";
+
     public string DiffStatDisplay => $"+{Additions} / -{Deletions}";
+
+    public string LabelDisplay => Labels.Count == 0 ? "" : string.Join(", ", Labels);
 
     public string ReviewStatusDisplay => ReviewStatus switch
     {
