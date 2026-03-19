@@ -163,7 +163,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// Folders from which to include all files in artefacts.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
-    public string[] IncludeAll { get; set; } = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
+    public string[] IncludeAll { get; set; } = { "Images", "Resources", "Templates", "Bin", "Lib", "en-US" };
 
     /// <summary>
     /// Optional script block executed during staging that can add custom files/folders to the build.

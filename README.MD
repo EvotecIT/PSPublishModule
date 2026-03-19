@@ -368,7 +368,7 @@ $Configuration = @{
         Exclude           = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
         IncludeRoot       = '*.psm1', '*.psd1', 'License*'
         IncludePS1        = 'Private', 'Public', 'Enums', 'Classes'
-        IncludeAll        = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
+        IncludeAll        = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'en-US\'
 
         IncludeCustomCode = {
 

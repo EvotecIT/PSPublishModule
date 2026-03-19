@@ -64,4 +64,38 @@ public sealed class ModuleBuildScaffoldBootstrapServiceTests
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void EnsureScaffold_uses_embedded_templates_when_module_data_folder_is_missing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var moduleBase = Path.Combine(root, "ModuleBase");
+            Directory.CreateDirectory(moduleBase);
+
+            var logger = new NullLogger();
+            var service = new ModuleBuildScaffoldBootstrapService(logger);
+            var projectRoot = Path.Combine(root, "EmbeddedModule");
+
+            var result = service.EnsureScaffold(new ModuleBuildPreparedContext
+            {
+                ModuleName = "EmbeddedModule",
+                ProjectRoot = projectRoot,
+                BasePathForScaffold = root
+            }, moduleBase);
+
+            Assert.True(result.Succeeded);
+            Assert.True(result.Attempted);
+            Assert.True(File.Exists(Path.Combine(projectRoot, "README.MD")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "EmbeddedModule.psd1")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
 }

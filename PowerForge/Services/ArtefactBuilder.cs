@@ -16,7 +16,7 @@ public sealed partial class ArtefactBuilder
     private static readonly string[] DefaultExcludeFromPackage = { ".*", "Ignore", "Examples", "package.json", "Publish", "Docs" };
     private static readonly string[] DefaultIncludeRoot = { "*.psm1", "*.psd1", "*.Libraries.ps1", "License*" };
     private static readonly string[] DefaultIncludePS1 = { "Private", "Public", "Enums", "Classes" };
-    private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
+    private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "en-US" };
 
     private const string PSGalleryName = "PSGallery";
     private const string PSGalleryUriV2 = "https://www.powershellgallery.com/api/v2";

@@ -17,6 +17,8 @@ public sealed class ModulePipelineInstallPackagingTests
             var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
             var publicDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Public"));
             File.WriteAllText(Path.Combine(publicDir.FullName, "Get-Test.ps1"), "function Get-Test { 'ok' }");
+            var dataDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Data"));
+            File.WriteAllText(Path.Combine(dataDir.FullName, "legacy-template.txt"), "legacy");
 
             // These should never end up in the installed module.
             Directory.CreateDirectory(Path.Combine(projectRoot.FullName, ".github"));
@@ -60,6 +62,7 @@ public sealed class ModulePipelineInstallPackagingTests
             Assert.False(File.Exists(Path.Combine(installedPath, "README.md")));
             Assert.False(Directory.Exists(Path.Combine(installedPath, ".github")));
             Assert.False(Directory.Exists(Path.Combine(installedPath, "Sources")));
+            Assert.False(Directory.Exists(Path.Combine(installedPath, "Data")));
         }
         finally
         {
@@ -67,4 +70,3 @@ public sealed class ModulePipelineInstallPackagingTests
         }
     }
 }
-

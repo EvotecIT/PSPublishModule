@@ -114,6 +114,9 @@ public sealed class ScriptAnalyzerValidationSettings
     /// <summary>Skip the check if PSScriptAnalyzer is not available.</summary>
     public bool SkipIfUnavailable { get; set; } = true;
 
+    /// <summary>Install PSScriptAnalyzer on demand before running validation.</summary>
+    public bool InstallIfUnavailable { get; set; }
+
     /// <summary>Timeout for analysis, in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 300;
 }
