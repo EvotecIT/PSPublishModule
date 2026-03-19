@@ -17,7 +17,7 @@ public sealed class ConPtySession : ITerminalSession
     private readonly object _outputLock = new();
     private System.IO.MemoryStream _outputBuffer = new();
     private readonly Timer _flushTimer;
-    private bool _disposed;
+    private volatile bool _disposed;
     private int _exitCode;
 
     public ConPtySession(string executable, string workingDirectory, int initialCols, int initialRows)
@@ -70,7 +70,7 @@ public sealed class ConPtySession : ITerminalSession
         };
 
         if (!CreateProcess(
-                null, executable,
+                executable, $"\"{executable}\"",
                 nint.Zero, nint.Zero,
                 false,
                 EXTENDED_STARTUPINFO_PRESENT,
@@ -207,18 +207,18 @@ public sealed class ConPtySession : ITerminalSession
         if (_disposed) return;
         _disposed = true;
 
-        await _readCts.CancelAsync().ConfigureAwait(false);
-        _readCts.Dispose();
         _flushTimer.Dispose();
 
-        // Close pipes first (this unblocks the read thread)
+        // Close pipes FIRST to unblock the synchronous ReadFile in the read thread
         if (!_pipeInWrite.IsInvalid && !_pipeInWrite.IsClosed)
             _pipeInWrite.Close();
         if (!_pipeOutRead.IsInvalid && !_pipeOutRead.IsClosed)
             _pipeOutRead.Close();
 
-        // Wait for read thread
+        // Now cancel and wait for read thread (should exit quickly since pipe is closed)
+        await _readCts.CancelAsync().ConfigureAwait(false);
         _readThread.Join(TimeSpan.FromSeconds(2));
+        _readCts.Dispose();
 
         // Close pseudo console
         if (_hPC != nint.Zero)

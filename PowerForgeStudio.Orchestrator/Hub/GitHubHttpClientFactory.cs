@@ -26,7 +26,7 @@ public static class GitHubHttpClientFactory
         return httpClient;
     }
 
-    public static string? ResolveToken()
+    internal static string? ResolveToken()
     {
         var token = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_GITHUB_TOKEN");
         if (!string.IsNullOrWhiteSpace(token)) return token;

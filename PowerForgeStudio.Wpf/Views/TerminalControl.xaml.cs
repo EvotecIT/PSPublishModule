@@ -66,15 +66,9 @@ public partial class TerminalControl : UserControl
                 return;
             }
 
-            // Wait for xterm.js to fully initialize
-            await Task.Delay(500).ConfigureAwait(true);
-
+            // Wait for xterm.js ready signal (sent via postMessage from terminal.html)
             _webViewReady = true;
-            LoadingText.Visibility = Visibility.Collapsed;
-            WebView.Visibility = Visibility.Visible;
-
-            // NOW start the ConPTY session — WebView2 is ready to receive output
-            _viewModel?.StartSession();
+            // StartSession will be called when we receive the 'ready' message from JS
         }
         catch (Exception ex)
         {
@@ -96,6 +90,12 @@ public partial class TerminalControl : UserControl
 
             switch (type)
             {
+                case "ready":
+                    LoadingText.Visibility = Visibility.Collapsed;
+                    WebView.Visibility = Visibility.Visible;
+                    _viewModel.StartSession();
+                    break;
+
                 case "input":
                     var b64 = doc.RootElement.GetProperty("data").GetString();
                     if (b64 is not null)

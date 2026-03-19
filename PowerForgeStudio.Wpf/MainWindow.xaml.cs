@@ -40,11 +40,12 @@ public partial class MainWindow : Window
         // Restore window position/size
         WindowStateService.RestoreState(this);
 
-        // Save on close
+        // Save state and cleanup on close
         Closing += (_, _) =>
         {
             var lastProject = (_viewModel.ActiveContent as HubViewModel)?.SelectedProject?.Name;
             WindowStateService.SaveState(this, lastProject);
+            _themeService.ThemeChanged -= OnThemeChanged;
         };
 
         ContentRendered += (_, _) =>

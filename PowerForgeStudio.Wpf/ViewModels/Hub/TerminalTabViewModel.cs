@@ -38,9 +38,18 @@ public sealed class TerminalTabViewModel : ViewModelBase, IAsyncDisposable
     /// Called by the View once WebView2 and xterm.js are fully initialized.
     /// Only then do we start the ConPTY session so no output is lost.
     /// </summary>
-    public void StartSession(int initialCols = 120, int initialRows = 30)
+    public async void StartSession(int initialCols = 120, int initialRows = 30)
     {
-        if (_session is not null || _disposed) return;
+        if (_disposed) return;
+
+        // Dispose old session if restarting
+        if (_session is not null)
+        {
+            _session.OutputReceived -= OnOutputReceived;
+            _session.Exited -= OnExited;
+            await _session.DisposeAsync().ConfigureAwait(true);
+            _session = null;
+        }
 
         try
         {
@@ -74,8 +83,12 @@ public sealed class TerminalTabViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnExited(int exitCode)
     {
-        IsConnected = false;
-        Title = $"Terminal (exited: {exitCode})";
+        // Marshal to UI thread since this fires from the ConPTY read thread
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            IsConnected = false;
+            Title = $"Terminal (exited: {exitCode})";
+        });
     }
 
     public async ValueTask DisposeAsync()

@@ -19,6 +19,7 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     private bool _isLoadingPrs;
     private bool _isBuilding;
     private string _buildOutput = string.Empty;
+    private readonly System.Text.StringBuilder _buildOutputBuilder = new();
     private TerminalTabViewModel? _activeTerminal;
     private FileExplorerViewModel? _fileExplorer;
 
@@ -59,7 +60,14 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
 
         OpenInTerminalCommand = new DelegateCommand<object?>(_ =>
         {
-            try { Process.Start(new ProcessStartInfo("wt", $"-d \"{_entry.RootPath}\"") { UseShellExecute = true }); } catch { }
+            try
+            {
+                var psi = new ProcessStartInfo("wt") { UseShellExecute = true };
+                psi.ArgumentList.Add("-d");
+                psi.ArgumentList.Add(_entry.RootPath);
+                Process.Start(psi);
+            }
+            catch { }
         });
     }
 
@@ -270,17 +278,32 @@ public sealed class ProjectWorkspaceViewModel : ViewModelBase, IAsyncDisposable
     private async Task RunBuildAsync()
     {
         IsBuilding = true;
+        _buildOutputBuilder.Clear();
         BuildOutput = string.Empty;
+
+        var lineCount = 0;
         try
         {
             var result = await _buildService.RunBuildStreamingAsync(
                 _entry,
-                line => BuildOutput += line + "\n").ConfigureAwait(true);
+                line =>
+                {
+                    _buildOutputBuilder.AppendLine(line);
+                    lineCount++;
+                    // Batch UI updates: only refresh every 10 lines to avoid O(n^2)
+                    if (lineCount % 10 == 0)
+                    {
+                        BuildOutput = _buildOutputBuilder.ToString();
+                    }
+                }).ConfigureAwait(true);
+
+            BuildOutput = _buildOutputBuilder.ToString();
             BuildResults.Insert(0, result);
         }
         catch (Exception exception)
         {
-            BuildOutput += $"\nBuild error: {exception.Message}";
+            _buildOutputBuilder.AppendLine($"Build error: {exception.Message}");
+            BuildOutput = _buildOutputBuilder.ToString();
         }
         finally
         {
