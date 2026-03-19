@@ -33,8 +33,32 @@ public partial class TerminalControl : UserControl
         {
             _viewModel.OutputAvailable += OnOutputAvailable;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-            _ = InitializeWebViewAsync();
+
+            if (_webViewReady)
+            {
+                // WebView2 already initialized — re-navigate to reset xterm.js and start new session
+                _ = ResetAndStartSessionAsync();
+            }
+            else
+            {
+                _ = InitializeWebViewAsync();
+            }
         }
+    }
+
+    private async Task ResetAndStartSessionAsync()
+    {
+        try
+        {
+            ExitedOverlay.Visibility = Visibility.Collapsed;
+            var htmlPath = Path.Combine(AppContext.BaseDirectory, "Assets", "terminal.html");
+            if (File.Exists(htmlPath))
+            {
+                WebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                // StartSession will be triggered by the 'ready' message from JS
+            }
+        }
+        catch { }
     }
 
     private async Task InitializeWebViewAsync()

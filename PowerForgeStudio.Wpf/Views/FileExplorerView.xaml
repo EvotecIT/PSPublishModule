@@ -102,7 +102,7 @@
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xF0114;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                            <TextBlock Text="&#xED41;" FontFamily="Segoe MDL2 Assets" FontSize="12"
                                        Foreground="{DynamicResource AppWarmBrush}" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding Name}" Margin="5,0,0,0"
                                        Foreground="{DynamicResource AppTextBrush}" FontSize="12" VerticalAlignment="Center" />
@@ -157,11 +157,11 @@
                                                    VerticalAlignment="Center">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="&#xE7C3;" />
+                                                    <Setter Property="Text" Value="&#xE8A5;" />
                                                     <Setter Property="Foreground" Value="{DynamicResource AppTextMutedBrush}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsDirectory}" Value="True">
-                                                            <Setter Property="Text" Value="&#xF0114;" />
+                                                            <Setter Property="Text" Value="&#xED41;" />
                                                             <Setter Property="Foreground" Value="{DynamicResource AppWarmBrush}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>

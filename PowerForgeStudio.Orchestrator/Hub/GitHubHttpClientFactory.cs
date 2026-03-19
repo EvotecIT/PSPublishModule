@@ -89,30 +89,43 @@ public static class GitHubHttpClientFactory
 
     private static string? TryGetGhCliToken()
     {
-        try
+        // Try known install locations + PATH
+        var candidates = new[]
         {
-            var psi = new ProcessStartInfo("gh", "auth token")
+            @"C:\Program Files\GitHub CLI\gh.exe",
+            @"C:\Program Files (x86)\GitHub CLI\gh.exe",
+            "gh"
+        };
+
+        foreach (var ghPath in candidates)
+        {
+            try
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+                var psi = new ProcessStartInfo(ghPath)
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                psi.ArgumentList.Add("auth");
+                psi.ArgumentList.Add("token");
 
-            using var process = Process.Start(psi);
-            if (process is null) return null;
+                using var process = Process.Start(psi);
+                if (process is null) continue;
 
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(5000);
+                var output = process.StandardOutput.ReadToEnd().Trim();
+                process.WaitForExit(5000);
 
-            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
-            {
-                return output;
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    return output;
+                }
             }
-        }
-        catch
-        {
-            // gh CLI not installed or not authenticated
+            catch
+            {
+                // This path didn't work, try next
+            }
         }
 
         return null;
