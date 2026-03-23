@@ -88,14 +88,107 @@ Depending on config, the run can emit:
 - zip artifacts
 - service scripts (`Install-Service.ps1`, `Uninstall-Service.ps1`, `Run-Once.ps1`)
 - MSI prepare/build outputs
+- Microsoft Store / MSIX package outputs (`*.msix`, `*.msixbundle`, `*.msixupload`, `*.appxsym`)
 - benchmark gate results
 - manifests and checksums (for example `SHA256SUMS.txt`)
+
+## Style Choices
+
+- `Portable` / `PortableCompat` / `PortableSize`: self-contained outputs for machines without a preinstalled runtime.
+- `FrameworkDependent`: smaller outputs that require the matching .NET runtime on the target machine.
+- `AotSpeed` / `AotSize`: NativeAOT outputs when the target project/runtime combination supports it.
+
+## Target-Specific Publish Properties
+
+- Use `Publish.MsBuildProperties` for target-wide publish properties.
+- Use `Publish.StyleOverrides.<Style>.MsBuildProperties` when a property should apply only to one publish style.
+- Style-specific properties override target-level properties, which override global `DotNet.MsBuildProperties`.
+
+## Signing Profiles
+
+- Use top-level `SigningProfiles` when multiple targets/installers should share the same signing setup.
+- Use `Publish.SignProfile` or `Installers[].SignProfile` to reference a named profile.
+- Use `SignOverrides` when you want small per-target tweaks on top of a shared profile, for example only changing the description.
+- Direct `Sign` still works and takes precedence when you want one target to fully define its own signing behavior.
+
+## Installer Filters
+
+- Use `Installers[].Runtimes`, `Installers[].Frameworks`, and `Installers[].Styles` when an installer should be built only from specific publish combinations.
+- PowerForge validates that each installer matches at least one publish combination for its `PrepareFromTarget`.
+- This is the recommended way to build only the portable/self-contained MSI while still allowing framework-dependent zip outputs for the same target.
+
+## Bundle Composition
+
+- Use `Bundles[]` when the shipped artifact is more than one publish output folder.
+- `PrepareFromTarget` selects the primary published target for the bundle.
+- `Includes[]` let you copy sidecar targets such as services, workers, helper CLIs, or plugin payloads into subdirectories inside the bundle.
+- `Scripts[]` let you run repo-specific finishing steps after the copy phase, for example exporting plugins, writing launchers, or producing metadata files.
+- Set `Zip`, `ZipPath`, or `ZipNameTemplate` on the bundle when the composed folder should also become a release-ready archive.
+
+## MSI From Bundle
+
+- Use `PrepareFromBundleId` on an installer when WiX harvesting should run against the composed portable bundle instead of the raw `PrepareFromTarget` publish folder.
+- This is the right pattern for desktop apps that need sidecars, plugins, helper scripts, or metadata to be present in the installer payload.
+- Keep `PrepareFromTarget` set as well; it remains the source combination that installer filters validate against.
+
+## Microsoft Store / MSIX Packaging
+
+- Use `StorePackages[]` when the repo needs first-class Store/MSIX outputs in the same publish workflow as zip, bundle, or MSI artifacts.
+- `PrepareFromTarget` keeps Store packaging aligned with the same runtime/framework/style matrix as the published app target.
+- `PackagingProjectPath` or `PackagingProjectId` points at the packaging project, typically a `*.wapproj`.
+- `*.wapproj` Store builds automatically prefer Visual Studio / Build Tools `MSBuild.exe` when available, because Windows Application Packaging projects are not reliably handled by plain `dotnet build`.
+- `OutputPath` controls where generated `*.msix`, `*.msixbundle`, `*.msixupload`, and symbol files land.
+- `BuildMode` selects Store-upload vs sideload packaging behavior.
+- `Bundle` controls `AppxBundle` mode (`Auto`, `Always`, `Never`).
+- `GenerateAppInstaller` maps to `GenerateAppInstallerFile` for packaging projects that support it.
+- PowerForge forwards the selected publish style into packaging builds through `SelfContained` / `WindowsAppSDKSelfContained`, so `FrameworkDependent` versus `PortableCompat` remains meaningful for Store packages too.
+- Use `MsBuildProperties` for project-specific Store settings that are still too repo-specific to deserve a first-class contract.
+
+## Submitting To Partner Center
+
+- Use `powerforge store submit` after `StorePackages[]` has produced a `*.msixupload` or `*.appxupload` artifact.
+- Keep Store submission in a separate config file, typically `powerforge.store.submit.json` or `Build/store.submit.json`.
+- `Provider: PackagedApp` targets the classic packaged-app submission flow:
+  - create or reuse a draft submission
+  - update `applicationPackages`
+  - upload a ZIP archive to the Partner Center SAS URL
+  - commit the draft
+  - optionally poll until the draft leaves `CommitStarted`
+- `Provider: DesktopInstaller` targets the newer MSI/EXE submission API:
+  - update draft package metadata under `/submission/v1/product/{productId}/packages`
+  - commit package metadata
+  - poll draft readiness
+  - create the submission
+  - poll publishing status (`INPROGRESS`, `PUBLISHED`, `FAILED`)
+- For app packages, PowerForge only sets the fields Microsoft documents as required in the update payload: `fileName`, `fileStatus`, `minimumDirectXVersion`, and `minimumSystemRam`.
+- Authentication supports either:
+  - a direct access token, or
+  - Azure AD client credentials for `https://manage.devcenter.microsoft.com`
+  - for desktop submissions, `Authentication.SellerId` is also required
+
+Useful inspection commands:
+
+```powershell
+powerforge store submit --config .\powerforge.store.submit.json --list
+powerforge store submit --config .\powerforge.store.submit.json --target PowerForgeStudio --list-assets
+```
+
+Example:
+
+```powershell
+powerforge store submit --config .\powerforge.store.submit.json --target PowerForgeStudio --plan
+powerforge store submit --config .\powerforge.store.submit.json --target PowerForgeStudio
+```
 
 ## Example Templates
 
 Ready-to-adapt templates are available in:
 
 - `Module/Examples/DotNetPublish/Example.ServiceMsi.json`
+- `Module/Examples/DotNetPublish/Example.PortableBundleMsi.json`
+- `Module/Examples/DotNetPublish/Example.StorePackage.json`
+- `Module/Examples/DotNetPublish/Example.StoreSubmit.json`
+- `Module/Examples/DotNetPublish/Example.StoreDesktopSubmit.json`
 - `Module/Examples/DotNetPublish/Example.RebuildState.json`
 - `Module/Examples/DotNetPublish/README.md`
 

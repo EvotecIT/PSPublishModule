@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../Schemas/powerforge.store.submit.schema.json",
+  "SchemaVersion": 1,
+  "Authentication": {
+    "TenantId": "00000000-0000-0000-0000-000000000000",
+    "ClientId": "11111111-1111-1111-1111-111111111111",
+    "ClientSecretEnvVar": "PARTNER_CENTER_CLIENT_SECRET"
+  },
+  "Targets": [
+    {
+      "Name": "PowerForgeStudio",
+      "Description": "Submit the Store upload artifact produced by DotNetPublish.",
+      "Provider": "PackagedApp",
+      "ApplicationId": "9NBLGGH00000",
+      "SourceDirectory": "Artifacts/DotNetPublish/Store/powerforge.studio.store/PowerForgeStudio/win-x64/net8.0-windows10.0.19041.0/FrameworkDependent",
+      "PackagePatterns": [ "*.msixupload" ],
+      "ZipPath": "Artifacts/StoreSubmit/PowerForgeStudio/submission.zip",
+      "Commit": true,
+      "WaitForCommit": true,
+      "PollIntervalSeconds": 30,
+      "PollTimeoutMinutes": 30
+    }
+  ]
+}
