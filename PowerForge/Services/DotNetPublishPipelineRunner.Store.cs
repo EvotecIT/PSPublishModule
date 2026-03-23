@@ -129,7 +129,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "--nologo"
             });
 
-            if (plan.Restore)
+            if (!plan.Restore)
                 args.Add("--no-restore");
         }
         else
@@ -216,8 +216,9 @@ public sealed partial class DotNetPublishPipelineRunner
         };
     }
 
-    private static string DetermineStoreOutputDir(string preferredRoot, params string[][] fileSets)
+    internal static string DetermineStoreOutputDir(string preferredRoot, params string[][] fileSets)
     {
+        var normalizedPreferredRoot = Path.GetFullPath(preferredRoot);
         var roots = (fileSets ?? Array.Empty<string[]>())
             .SelectMany(files => files ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -227,12 +228,14 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (roots.Length == 0)
-            return preferredRoot;
-        if (roots.Any(path => string.Equals(path, Path.GetFullPath(preferredRoot), StringComparison.OrdinalIgnoreCase)))
-            return Path.GetFullPath(preferredRoot);
+            return normalizedPreferredRoot;
+        if (roots.Any(path => string.Equals(path, normalizedPreferredRoot, StringComparison.OrdinalIgnoreCase)))
+            return normalizedPreferredRoot;
         if (roots.Length == 1)
             return roots[0];
-        return Path.GetDirectoryName(roots[0]) ?? roots[0];
+
+        var commonRoot = FindCommonDirectory(roots);
+        return string.IsNullOrWhiteSpace(commonRoot) ? normalizedPreferredRoot : commonRoot!;
     }
 
     private static string[] EnumerateStoreFiles(IEnumerable<string> roots, params string[] extensions)
@@ -337,6 +340,47 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static string? FindCommonDirectory(string[] roots)
+    {
+        if (roots is null || roots.Length == 0)
+            return null;
+
+        var first = roots[0]
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToArray();
+
+        var commonLength = first.Length;
+        foreach (var root in roots.Skip(1))
+        {
+            var segments = root
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Where(segment => !string.IsNullOrWhiteSpace(segment))
+                .ToArray();
+
+            commonLength = Math.Min(commonLength, segments.Length);
+            for (var i = 0; i < commonLength; i++)
+            {
+                if (!string.Equals(first[i], segments[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    commonLength = i;
+                    break;
+                }
+            }
+        }
+
+        if (commonLength == 0)
+            return null;
+
+        var prefix = roots[0].StartsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? Path.DirectorySeparatorChar.ToString()
+            : string.Empty;
+
+        return prefix + Path.Combine(first.Take(commonLength).ToArray());
+    }
+
     private static IEnumerable<string> EnumerateKnownMsBuildPaths()
     {
         var roots = new[]
@@ -349,7 +393,7 @@ public sealed partial class DotNetPublishPipelineRunner
         .ToArray();
 
         var editions = new[] { "Insiders", "Preview", "BuildTools", "Enterprise", "Professional", "Community" };
-        var versions = new[] { "18", "17", "2022", "2019" };
+        var versions = new[] { "2022", "2019" };
 
         foreach (var root in roots)
         {

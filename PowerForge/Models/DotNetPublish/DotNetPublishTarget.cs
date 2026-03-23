@@ -117,9 +117,32 @@ public sealed class DotNetPublishPublishOptions
     public bool? ReadyToRun { get; set; }
 
     /// <summary>
+    /// Optional publish-specific MSBuild properties passed as <c>/p:Name=Value</c>.
+    /// Values here override matching entries from <see cref="DotNetPublishDotNetOptions.MsBuildProperties"/>.
+    /// </summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+
+    /// <summary>
+    /// Optional style-specific publish overrides keyed by <see cref="DotNetPublishStyle"/> name.
+    /// These overrides are applied after <see cref="MsBuildProperties"/> for the selected style.
+    /// </summary>
+    public Dictionary<string, DotNetPublishStyleOverride>? StyleOverrides { get; set; }
+
+    /// <summary>
     /// Optional signing configuration (Windows only).
     /// </summary>
     public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>
+    /// Optional named signing profile reference used when <see cref="Sign"/> is not set.
+    /// </summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>
+    /// Optional partial overrides applied on top of <see cref="SignProfile"/>.
+    /// Ignored when <see cref="Sign"/> is set.
+    /// </summary>
+    public DotNetPublishSignPatch? SignOverrides { get; set; }
 
     /// <summary>
     /// Optional service package settings (script generation + metadata).
@@ -131,6 +154,18 @@ public sealed class DotNetPublishPublishOptions
     /// Useful for rebuild scenarios where config/data/log/license files should survive deployment.
     /// </summary>
     public DotNetPublishStatePreservationOptions? State { get; set; }
+}
+
+/// <summary>
+/// Style-specific publish overrides for a single target.
+/// </summary>
+public sealed class DotNetPublishStyleOverride
+{
+    /// <summary>
+    /// Optional publish-specific MSBuild properties passed as <c>/p:Name=Value</c>.
+    /// Values here override matching entries from both global and target-level properties.
+    /// </summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
 }
 
 /// <summary>
@@ -173,6 +208,45 @@ public sealed class DotNetPublishSignOptions
     public string? Csp { get; set; }
 
     /// <summary>Optional key container name (signtool /kc).</summary>
+    public string? KeyContainer { get; set; }
+}
+
+/// <summary>
+/// Partial signing overrides used with named signing profiles.
+/// </summary>
+public sealed class DotNetPublishSignPatch
+{
+    /// <summary>Optional enable/disable override.</summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>Optional path to signtool.exe override.</summary>
+    public string? ToolPath { get; set; }
+
+    /// <summary>Optional missing-tool policy override.</summary>
+    public DotNetPublishPolicyMode? OnMissingTool { get; set; }
+
+    /// <summary>Optional sign-failure policy override.</summary>
+    public DotNetPublishPolicyMode? OnSignFailure { get; set; }
+
+    /// <summary>Optional certificate thumbprint override.</summary>
+    public string? Thumbprint { get; set; }
+
+    /// <summary>Optional certificate subject override.</summary>
+    public string? SubjectName { get; set; }
+
+    /// <summary>Optional timestamp server override.</summary>
+    public string? TimestampUrl { get; set; }
+
+    /// <summary>Optional signature description override.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Optional signature URL override.</summary>
+    public string? Url { get; set; }
+
+    /// <summary>Optional CSP override.</summary>
+    public string? Csp { get; set; }
+
+    /// <summary>Optional key container override.</summary>
     public string? KeyContainer { get; set; }
 }
 

@@ -147,7 +147,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = false,
+                Restore = true,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -227,7 +227,7 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             {
                 ProjectRoot = root,
                 Configuration = "Release",
-                Restore = false,
+                Restore = true,
                 Build = false,
                 StorePackages = new[]
                 {
@@ -266,6 +266,36 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
             Assert.Single(store.OutputFiles);
             Assert.EndsWith(".msixbundle", store.OutputFiles[0], StringComparison.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine("Store", "AppPackages"), store.OutputDir, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void DetermineStoreOutputDir_UsesCommonParentForMultiRootOutputs()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var commonRoot = Path.Combine(root, "Store", "AppPackages", "Contoso_1.0.0.0_Test");
+            var package = Path.Combine(commonRoot, "Contoso.msixbundle");
+            var upload = Path.Combine(root, "Store", "AppPackages", "Contoso_1.0.0.0_x64_bundle.msixupload");
+            var symbol = Path.Combine(commonRoot, "Contoso.appxsym");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(package)!);
+            File.WriteAllText(package, "bundle", new UTF8Encoding(false));
+            File.WriteAllText(upload, "upload", new UTF8Encoding(false));
+            File.WriteAllText(symbol, "sym", new UTF8Encoding(false));
+
+            var detected = DotNetPublishPipelineRunner.DetermineStoreOutputDir(
+                Path.Combine(root, "Artifacts", "Store", "unused"),
+                new[] { package },
+                new[] { upload },
+                new[] { symbol });
+
+            Assert.Equal(Path.Combine(root, "Store", "AppPackages"), detected);
         }
         finally
         {

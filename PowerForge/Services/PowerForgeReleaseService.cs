@@ -10,6 +10,9 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeReleaseService
 {
+    private static readonly JsonSerializerOptions DotNetToolsJsonOptions = CreateJsonOptions();
+    private static readonly JsonSerializerOptions WorkspaceValidationJsonOptions = CreateJsonOptions();
+
     private const string DefaultDotNetTargetOutputTemplate =
         "Artifacts/DotNetPublish/{target}/{rid}/{framework}/{style}";
 
@@ -292,14 +295,14 @@ internal sealed class PowerForgeReleaseService
             throw new FileNotFoundException($"Workspace validation config not found: {fullPath}", fullPath);
 
         var json = File.ReadAllText(fullPath);
-        var spec = JsonSerializer.Deserialize<WorkspaceValidationSpec>(json, CreateWorkspaceValidationJsonOptions());
+        var spec = JsonSerializer.Deserialize<WorkspaceValidationSpec>(json, WorkspaceValidationJsonOptions);
         if (spec is null)
             throw new InvalidOperationException($"Unable to deserialize workspace validation config: {fullPath}");
 
         return (spec, fullPath);
     }
 
-    private static JsonSerializerOptions CreateWorkspaceValidationJsonOptions()
+    private static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions
         {
@@ -734,15 +737,7 @@ internal sealed class PowerForgeReleaseService
             throw new FileNotFoundException($"DotNet publish config not found: {configPath}", configPath);
 
         var json = File.ReadAllText(configPath);
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-
-        var spec = JsonSerializer.Deserialize<DotNetPublishSpec>(json, options)
+        var spec = JsonSerializer.Deserialize<DotNetPublishSpec>(json, DotNetToolsJsonOptions)
             ?? throw new InvalidOperationException($"DotNet publish config could not be deserialized: {configPath}");
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))

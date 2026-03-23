@@ -309,7 +309,7 @@ internal static partial class Program
                 continue;
 
             var separator = value.IndexOf('=');
-            if (separator <= 0)
+            if (separator < 0)
             {
                 result[value.Trim()] = string.Empty;
                 continue;

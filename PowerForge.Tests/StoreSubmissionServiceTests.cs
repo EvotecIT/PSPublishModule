@@ -390,6 +390,40 @@ public sealed class StoreSubmissionServiceTests
     }
 
     [Fact]
+    public void RedactSecrets_ClearsInlineAuthenticationSecrets()
+    {
+        var spec = new StoreSubmissionSpec
+        {
+            Authentication = new StoreSubmissionAuthenticationOptions
+            {
+                TenantId = "tenant-001",
+                ClientId = "client-001",
+                ClientSecret = "secret-001",
+                ClientSecretEnvVar = "PARTNER_CENTER_CLIENT_SECRET",
+                AccessToken = "token-001",
+                AccessTokenEnvVar = "PARTNER_CENTER_ACCESS_TOKEN"
+            },
+            Targets = new[]
+            {
+                new StoreSubmissionTarget
+                {
+                    Name = "Contoso",
+                    ApplicationId = "12345678"
+                }
+            }
+        };
+
+        var sanitized = StoreSubmissionSpecSanitizer.RedactSecrets(spec);
+
+        Assert.Null(sanitized.Authentication.ClientSecret);
+        Assert.Null(sanitized.Authentication.AccessToken);
+        Assert.Equal("PARTNER_CENTER_CLIENT_SECRET", sanitized.Authentication.ClientSecretEnvVar);
+        Assert.Equal("PARTNER_CENTER_ACCESS_TOKEN", sanitized.Authentication.AccessTokenEnvVar);
+        Assert.Equal("secret-001", spec.Authentication.ClientSecret);
+        Assert.Equal("token-001", spec.Authentication.AccessToken);
+    }
+
+    [Fact]
     public void Validate_DesktopInstallerRequiresSellerId()
     {
         var spec = new StoreSubmissionSpec
@@ -463,7 +497,7 @@ public sealed class StoreSubmissionServiceTests
         {
             var bodyBytes = request.Content is null
                 ? null
-                : request.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                : request.Content.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult();
             var bodyText = bodyBytes is null || bodyBytes.Length == 0
                 ? null
                 : Encoding.UTF8.GetString(bodyBytes);

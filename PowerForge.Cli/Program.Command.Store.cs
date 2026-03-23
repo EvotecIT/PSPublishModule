@@ -11,15 +11,41 @@ internal static partial class Program
     private static int CommandStore(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
         var argv = filteredArgs.Skip(1).ToArray();
-        if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
+        var outputJson = IsJsonOutput(argv);
+
+        if (argv.Length == 0)
         {
+            if (outputJson)
+            {
+                WriteStoreUsageEnvelope("store", success: false, exitCode: 2);
+                return 2;
+            }
+
             Console.WriteLine(StoreUsage);
             return 2;
+        }
+
+        if (argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
+        {
+            if (outputJson)
+            {
+                WriteStoreUsageEnvelope("store", success: true, exitCode: 0);
+                return 0;
+            }
+
+            Console.WriteLine(StoreUsage);
+            return 0;
         }
 
         var sub = argv[0].ToLowerInvariant();
         if (!string.Equals(sub, "submit", StringComparison.OrdinalIgnoreCase))
         {
+            if (outputJson)
+            {
+                WriteStoreUsageEnvelope("store", success: false, exitCode: 2);
+                return 2;
+            }
+
             Console.WriteLine(StoreUsage);
             return 2;
         }
@@ -46,7 +72,7 @@ internal static partial class Program
             return 0;
         }
 
-        var outputJson = IsJsonOutput(subArgs);
+        outputJson = IsJsonOutput(subArgs);
         var listOnly = subArgs.Any(arg => arg.Equals("--list", StringComparison.OrdinalIgnoreCase) || arg.Equals("--ls", StringComparison.OrdinalIgnoreCase));
         var listAssets = subArgs.Any(arg => arg.Equals("--list-assets", StringComparison.OrdinalIgnoreCase));
         var planOnly = subArgs.Any(arg => arg.Equals("--plan", StringComparison.OrdinalIgnoreCase) || arg.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
@@ -91,6 +117,7 @@ internal static partial class Program
         {
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var loaded = LoadStoreSubmissionSpecWithPath(configPath);
+            var safeSpec = StoreSubmissionSpecSanitizer.RedactSecrets(loaded.Value);
             var service = new StoreSubmissionService(cmdLogger);
             var targetList = service.ListTargets(loaded.Value);
 
@@ -106,7 +133,7 @@ internal static partial class Program
                         ExitCode = 0,
                         Config = "storesubmit",
                         ConfigPath = loaded.FullPath,
-                        Spec = CliJson.SerializeToElement(loaded.Value, CliJson.Context.StoreSubmissionSpec),
+                        Spec = CliJson.SerializeToElement(safeSpec, CliJson.Context.StoreSubmissionSpec),
                         Results = CliJson.SerializeToElement(targetList, CliJson.Context.StoreSubmissionTargetSummaryArray),
                         Logs = LogsToJsonElement(logBuffer)
                     });
@@ -146,7 +173,7 @@ internal static partial class Program
                         ExitCode = 0,
                         Config = "storesubmit",
                         ConfigPath = loaded.FullPath,
-                        Spec = CliJson.SerializeToElement(loaded.Value, CliJson.Context.StoreSubmissionSpec),
+                        Spec = CliJson.SerializeToElement(safeSpec, CliJson.Context.StoreSubmissionSpec),
                         Plan = CliJson.SerializeToElement(plan, CliJson.Context.StoreSubmissionPlan),
                         Logs = LogsToJsonElement(logBuffer)
                     });
@@ -186,7 +213,7 @@ internal static partial class Program
                         Error = validateExitCode == 0 ? null : string.Join("\n", errors),
                         Config = "storesubmit",
                         ConfigPath = loaded.FullPath,
-                        Spec = CliJson.SerializeToElement(loaded.Value, CliJson.Context.StoreSubmissionSpec),
+                        Spec = CliJson.SerializeToElement(safeSpec, CliJson.Context.StoreSubmissionSpec),
                         Plan = plan is null ? null : CliJson.SerializeToElement(plan, CliJson.Context.StoreSubmissionPlan),
                         Logs = LogsToJsonElement(logBuffer)
                     });
@@ -218,7 +245,7 @@ internal static partial class Program
                         ExitCode = 0,
                         Config = "storesubmit",
                         ConfigPath = loaded.FullPath,
-                        Spec = CliJson.SerializeToElement(loaded.Value, CliJson.Context.StoreSubmissionSpec),
+                        Spec = CliJson.SerializeToElement(safeSpec, CliJson.Context.StoreSubmissionSpec),
                         Plan = CliJson.SerializeToElement(prepared, CliJson.Context.StoreSubmissionPlan),
                         Logs = LogsToJsonElement(logBuffer)
                     });
@@ -259,7 +286,7 @@ internal static partial class Program
                     Error = exitCode == 0 ? null : result.ErrorMessage,
                     Config = "storesubmit",
                     ConfigPath = loaded.FullPath,
-                    Spec = CliJson.SerializeToElement(loaded.Value, CliJson.Context.StoreSubmissionSpec),
+                    Spec = CliJson.SerializeToElement(safeSpec, CliJson.Context.StoreSubmissionSpec),
                     Plan = result.Plan is null ? null : CliJson.SerializeToElement(result.Plan, CliJson.Context.StoreSubmissionPlan),
                     Result = CliJson.SerializeToElement(result, CliJson.Context.StoreSubmissionResult),
                     Logs = LogsToJsonElement(logBuffer)
@@ -303,5 +330,18 @@ internal static partial class Program
             logger.Error(ex.Message);
             return 1;
         }
+    }
+
+    private static void WriteStoreUsageEnvelope(string command, bool success, int exitCode)
+    {
+        WriteJson(new CliJsonEnvelope
+        {
+            SchemaVersion = OutputSchemaVersion,
+            Command = command,
+            Success = success,
+            ExitCode = exitCode,
+            Error = success ? null : "Usage requested or invalid store command invocation.",
+            Result = System.Text.Json.JsonSerializer.SerializeToElement(new { usage = StoreUsage })
+        });
     }
 }
