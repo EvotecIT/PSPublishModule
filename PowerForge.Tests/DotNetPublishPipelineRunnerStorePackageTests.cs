@@ -354,11 +354,14 @@ public sealed class DotNetPublishPipelineRunnerStorePackageTests
   <Target Name="PowerForgeFakeStoreOutputs" AfterTargets="Build">
     <PropertyGroup>
       <PowerForgeStoreOutputRoot>OUTPUT_ROOT_TOKEN</PowerForgeStoreOutputRoot>
+      <PowerForgeBundlePath>$([System.IO.Path]::Combine('$(PowerForgeStoreOutputRoot)', 'FakeApp.msixbundle'))</PowerForgeBundlePath>
+      <PowerForgeUploadPath>$([System.IO.Path]::Combine('$(PowerForgeStoreOutputRoot)', 'FakeApp.msixupload'))</PowerForgeUploadPath>
+      <PowerForgeSymbolsPath>$([System.IO.Path]::Combine('$(PowerForgeStoreOutputRoot)', 'FakeApp.appxsym'))</PowerForgeSymbolsPath>
     </PropertyGroup>
     <MakeDir Directories="$(PowerForgeStoreOutputRoot)" />
-    <WriteLinesToFile File="$(PowerForgeStoreOutputRoot)\FakeApp.msixbundle" Lines="bundle" Overwrite="true" />
-    <WriteLinesToFile File="$(PowerForgeStoreOutputRoot)\FakeApp.msixupload" Lines="upload" Overwrite="true" />
-    <WriteLinesToFile File="$(PowerForgeStoreOutputRoot)\FakeApp.appxsym" Lines="symbols" Overwrite="true" />
+    <WriteLinesToFile File="$(PowerForgeBundlePath)" Lines="bundle" Overwrite="true" />
+    <WriteLinesToFile File="$(PowerForgeUploadPath)" Lines="upload" Overwrite="true" />
+    <WriteLinesToFile File="$(PowerForgeSymbolsPath)" Lines="symbols" Overwrite="true" />
   </Target>
 </Project>
 """.Replace("OUTPUT_ROOT_TOKEN", outputRootExpression, StringComparison.Ordinal), new UTF8Encoding(false));
