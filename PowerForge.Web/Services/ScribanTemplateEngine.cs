@@ -120,7 +120,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var menu = arguments.Count > 0 ? arguments[0]?.ToString() : "main";
             var depthArg = arguments.Count > 1 ? arguments[1] : null;
@@ -128,9 +128,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.NavLinks(menu, depth);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -158,7 +158,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var menu = arguments.Count > 0 ? arguments[0]?.ToString() : "main";
             var depthArg = arguments.Count > 1 ? arguments[1] : null;
@@ -166,9 +166,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.MenuTree(menu, depth);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -202,7 +202,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
             var channel = arguments.Count > 1 ? arguments[1]?.ToString() : null;
@@ -215,9 +215,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.ReleaseButton(product, channel, platform, arch, kind, label, cssClass, dataPath);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -252,7 +252,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
             var channel = arguments.Count > 1 ? arguments[1]?.ToString() : null;
@@ -266,9 +266,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.ReleaseButtons(product, channel, limit, groupBy, platform, arch, kind, cssClass, dataPath);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -299,7 +299,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var product = arguments.Count > 0 ? arguments[0]?.ToString() : null;
             var limit = arguments.Count > 1 ? ScribanThemeHelpers.ParseInt(arguments[1], 20) : 20;
@@ -309,9 +309,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass, dataPath);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -350,7 +350,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var maxItems = arguments.Count > 0 ? ScribanThemeHelpers.ParseInt(arguments[0], 0) : 0;
             var excerptLength = arguments.Count > 1 ? ScribanThemeHelpers.ParseInt(arguments[1], 160) : 160;
@@ -374,9 +374,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant, gridClass, cardClass, showCategories, linkTaxonomy);
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -408,7 +408,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var backLabel = arguments.Count > 0 ? arguments[0]?.ToString() : "Back to list";
             var newerLabel = arguments.Count > 1 ? arguments[1]?.ToString() : "Newer post";
@@ -425,9 +425,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 cssClass ?? "pf-post-nav");
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -456,7 +456,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             };
         }
 
-        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public object? Invoke(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
             var newer = arguments.Count > 0 ? arguments[0]?.ToString() : "Newer posts";
             var older = arguments.Count > 1 ? arguments[1]?.ToString() : "Older posts";
@@ -464,9 +464,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _helpers.EditorialPager(newer ?? "Newer posts", older ?? "Older posts", css ?? "pf-pagination");
         }
 
-        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)
         {
-            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+            return new ValueTask<object?>(Invoke(context, callerContext, arguments, blockStatement));
         }
     }
 
@@ -601,9 +601,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             return _resolver(templatePath) ?? string.Empty;
         }
 
-        public ValueTask<string> LoadAsync(TemplateContext context, SourceSpan callerSpan, string templatePath)
+        public ValueTask<string?> LoadAsync(TemplateContext context, SourceSpan callerSpan, string templatePath)
         {
-            return new ValueTask<string>(Load(context, callerSpan, templatePath));
+            return new ValueTask<string?>(Load(context, callerSpan, templatePath));
         }
     }
 }
