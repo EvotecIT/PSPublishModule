@@ -73,7 +73,8 @@ public sealed partial class DotNetPublishPipelineRunner
         if (storePackage.ClearOutput && Directory.Exists(outputDir))
         {
             try { Directory.Delete(outputDir, recursive: true); }
-            catch { /* best effort */ }
+            catch (IOException ex) { _logger.Warn($"Failed to clear Store output directory '{outputDir}': {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { _logger.Warn($"Failed to clear Store output directory '{outputDir}': {ex.Message}"); }
         }
 
         Directory.CreateDirectory(outputDir);
@@ -256,20 +257,13 @@ public sealed partial class DotNetPublishPipelineRunner
         if (extensionSet.Count == 0)
             return Array.Empty<string>();
 
-        try
-        {
-            return rootList
-                .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-                .Where(path => !string.IsNullOrWhiteSpace(path) && extensionSet.Contains(Path.GetExtension(path)))
-                .Select(Path.GetFullPath)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
+        return rootList
+            .SelectMany(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            .Where(path => !string.IsNullOrWhiteSpace(path) && extensionSet.Contains(Path.GetExtension(path)))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string ResolveStorePlatform(string runtime)
@@ -283,7 +277,8 @@ public sealed partial class DotNetPublishPipelineRunner
             return "x86";
         if (rid.EndsWith("arm", StringComparison.OrdinalIgnoreCase))
             return "ARM";
-        return "x64";
+        throw new InvalidOperationException(
+            $"Store packaging runtime '{runtime}' does not map to a supported Store platform. Expected a RID ending in x86, x64, arm, or arm64.");
     }
 
     private static string EnsureTrailingDirectorySeparator(string path)

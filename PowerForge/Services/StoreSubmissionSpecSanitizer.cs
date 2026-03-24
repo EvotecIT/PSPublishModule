@@ -7,22 +7,24 @@ internal static class StoreSubmissionSpecSanitizer
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
 
+        var authentication = spec.Authentication ?? new StoreSubmissionAuthenticationOptions();
+
         return new StoreSubmissionSpec
         {
             Schema = spec.Schema,
             SchemaVersion = spec.SchemaVersion,
             Authentication = new StoreSubmissionAuthenticationOptions
             {
-                SellerId = spec.Authentication.SellerId,
-                TenantId = spec.Authentication.TenantId,
-                ClientId = spec.Authentication.ClientId,
+                SellerId = authentication.SellerId,
+                TenantId = authentication.TenantId,
+                ClientId = authentication.ClientId,
                 ClientSecret = null,
-                ClientSecretEnvVar = spec.Authentication.ClientSecretEnvVar,
+                ClientSecretEnvVar = authentication.ClientSecretEnvVar,
                 AccessToken = null,
-                AccessTokenEnvVar = spec.Authentication.AccessTokenEnvVar,
-                AuthorityHost = spec.Authentication.AuthorityHost,
-                Resource = spec.Authentication.Resource,
-                Scope = spec.Authentication.Scope
+                AccessTokenEnvVar = authentication.AccessTokenEnvVar,
+                AuthorityHost = authentication.AuthorityHost,
+                Resource = authentication.Resource,
+                Scope = authentication.Scope
             },
             Targets = (spec.Targets ?? Array.Empty<StoreSubmissionTarget>())
                 .Select(CloneTarget)

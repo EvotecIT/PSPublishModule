@@ -78,9 +78,12 @@ public sealed class StoreSubmissionServiceTests
                 request.RequestUri?.AbsoluteUri == "https://manage.devcenter.microsoft.com/v1.0/my/applications/12345678/submissions/draft-001/status")
             {
                 statusCalls++;
-                return JsonResponse(statusCalls == 1
-                    ? """{ "status": "CommitStarted", "statusDetails": { "errors": [], "warnings": [] } }"""
-                    : """{ "status": "PreProcessing", "statusDetails": { "errors": [], "warnings": [] } }""");
+                return JsonResponse(statusCalls switch
+                {
+                    1 => """{ "status": "CommitStarted", "statusDetails": { "errors": [], "warnings": [] } }""",
+                    2 => """{ "status": "PreProcessing", "statusDetails": { "errors": [], "warnings": [] } }""",
+                    _ => """{ "status": "Published", "statusDetails": { "errors": [], "warnings": [] } }"""
+                });
             }
 
             return new HttpResponseMessage(HttpStatusCode.NotFound)
@@ -105,7 +108,7 @@ public sealed class StoreSubmissionServiceTests
         Assert.True(result.UploadedPackageArchive);
         Assert.True(result.CommittedSubmission);
         Assert.Equal("draft-001", result.SubmissionId);
-        Assert.Equal("PreProcessing", result.FinalStatus);
+        Assert.Equal("Published", result.FinalStatus);
 
         var updateRequest = Assert.Single(
             requests,
@@ -421,6 +424,60 @@ public sealed class StoreSubmissionServiceTests
         Assert.Equal("PARTNER_CENTER_ACCESS_TOKEN", sanitized.Authentication.AccessTokenEnvVar);
         Assert.Equal("secret-001", spec.Authentication.ClientSecret);
         Assert.Equal("token-001", spec.Authentication.AccessToken);
+    }
+
+    [Fact]
+    public void RedactSecrets_AllowsMissingAuthentication()
+    {
+        var spec = new StoreSubmissionSpec
+        {
+            Targets = new[]
+            {
+                new StoreSubmissionTarget
+                {
+                    Name = "Contoso",
+                    ApplicationId = "12345678"
+                }
+            }
+        };
+
+        var sanitized = StoreSubmissionSpecSanitizer.RedactSecrets(spec);
+
+        Assert.NotNull(sanitized.Authentication);
+        Assert.Null(sanitized.Authentication.ClientSecret);
+        Assert.Null(sanitized.Authentication.AccessToken);
+        Assert.Single(sanitized.Targets);
+    }
+
+    [Fact]
+    public void Validate_RejectsNonHttpsAuthorityHost()
+    {
+        var spec = new StoreSubmissionSpec
+        {
+            Authentication = new StoreSubmissionAuthenticationOptions
+            {
+                TenantId = "tenant-001",
+                ClientId = "client-001",
+                ClientSecret = "secret-001",
+                AuthorityHost = "http://login.microsoftonline.com"
+            },
+            Targets = new[]
+            {
+                new StoreSubmissionTarget
+                {
+                    Name = "Contoso",
+                    ApplicationId = "12345678",
+                    PackagePaths = new[] { @"C:\temp\Contoso.msixupload" },
+                    Commit = false
+                }
+            }
+        };
+
+        using var service = new StoreSubmissionService(new NullLogger());
+        var errors = service.Validate(spec, Path.Combine(Path.GetTempPath(), "store.submit.json"));
+
+        Assert.Contains(errors, error => error.Contains("authorityHost", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(errors, error => error.Contains("HTTPS", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

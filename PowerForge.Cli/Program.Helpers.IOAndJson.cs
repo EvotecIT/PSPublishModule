@@ -151,7 +151,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -176,7 +177,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -202,7 +204,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
