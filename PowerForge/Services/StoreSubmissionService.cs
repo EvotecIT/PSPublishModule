@@ -454,7 +454,7 @@ internal sealed class StoreSubmissionService : IDisposable
         };
 
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
@@ -474,7 +474,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = CreateAppSubmissionEndpoint(applicationId);
         using var request = CreateApiRequest(HttpMethod.Post, endpoint, accessToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("create Store submission", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -486,7 +486,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"{CreateAppSubmissionEndpoint(applicationId)}/{Uri.EscapeDataString(submissionId)}";
         using var request = CreateApiRequest(HttpMethod.Get, endpoint, accessToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("get Store submission", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -500,7 +500,7 @@ internal sealed class StoreSubmissionService : IDisposable
         using var request = CreateApiRequest(HttpMethod.Put, endpoint, accessToken);
         request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("update Store submission", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -512,7 +512,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"{CreateAppSubmissionEndpoint(applicationId)}/{Uri.EscapeDataString(submissionId)}/commit";
         using var request = CreateApiRequest(HttpMethod.Post, endpoint, accessToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("commit Store submission", response.StatusCode, response.ReasonPhrase, responseText);
     }
@@ -522,7 +522,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"{CreateAppSubmissionEndpoint(applicationId)}/{Uri.EscapeDataString(submissionId)}/status";
         using var request = CreateApiRequest(HttpMethod.Get, endpoint, accessToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("get Store submission status", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -541,7 +541,7 @@ internal sealed class StoreSubmissionService : IDisposable
         request.Headers.TryAddWithoutValidation("x-ms-blob-type", "BlockBlob");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("upload Store submission archive", response.StatusCode, response.ReasonPhrase, responseText);
     }
@@ -698,6 +698,12 @@ internal sealed class StoreSubmissionService : IDisposable
     {
         var trimmed = (value ?? string.Empty).Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static Task<string> ReadResponseTextAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return content.ReadAsStringAsync();
     }
 
     private static InvalidOperationException CreateApiException(string operation, HttpStatusCode statusCode, string? reasonPhrase, string? responseText)
@@ -891,7 +897,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"https://api.store.microsoft.com/submission/v1/product/{Uri.EscapeDataString(productId)}/status";
         using var request = CreateDesktopApiRequest(HttpMethod.Get, endpoint, accessToken, sellerId);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("get desktop Store draft status", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -909,7 +915,7 @@ internal sealed class StoreSubmissionService : IDisposable
         using var request = CreateDesktopApiRequest(HttpMethod.Put, endpoint, accessToken, sellerId);
         request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("update desktop Store packages", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -921,7 +927,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"https://api.store.microsoft.com/submission/v1/product/{Uri.EscapeDataString(productId)}/packages/commit";
         using var request = CreateDesktopApiRequest(HttpMethod.Post, endpoint, accessToken, sellerId);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("commit desktop Store packages", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -933,7 +939,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"https://api.store.microsoft.com/submission/v1/product/{Uri.EscapeDataString(productId)}/submit";
         using var request = CreateDesktopApiRequest(HttpMethod.Post, endpoint, accessToken, sellerId);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("create desktop Store submission", response.StatusCode, response.ReasonPhrase, responseText);
 
@@ -947,7 +953,7 @@ internal sealed class StoreSubmissionService : IDisposable
         var endpoint = $"https://api.store.microsoft.com/submission/v1/product/{Uri.EscapeDataString(productId)}/submission/{Uri.EscapeDataString(submissionId)}/status";
         using var request = CreateDesktopApiRequest(HttpMethod.Get, endpoint, accessToken, sellerId);
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseText = await ReadResponseTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateApiException("get desktop Store submission status", response.StatusCode, response.ReasonPhrase, responseText);
 
