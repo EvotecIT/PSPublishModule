@@ -11,6 +11,24 @@ internal sealed class PowerForgeToolReleaseSpec
 
     public string Configuration { get; set; } = "Release";
 
+    /// <summary>
+    /// Optional path to an external DotNet publish config. When set, unified release uses the
+    /// richer DotNet publish workflow instead of the legacy simple tool publisher.
+    /// </summary>
+    public string? DotNetPublishConfigPath { get; set; }
+
+    /// <summary>
+    /// Optional inline DotNet publish spec. When set, unified release uses the richer DotNet
+    /// publish workflow instead of the legacy simple tool publisher.
+    /// </summary>
+    public DotNetPublishSpec? DotNetPublish { get; set; }
+
+    /// <summary>
+    /// Optional DotNet publish profile override applied to either <see cref="DotNetPublishConfigPath"/>
+    /// or <see cref="DotNetPublish"/>.
+    /// </summary>
+    public string? DotNetPublishProfile { get; set; }
+
     public PowerForgeToolReleaseTarget[] Targets { get; set; } = Array.Empty<PowerForgeToolReleaseTarget>();
 
     public PowerForgeToolReleaseGitHubOptions GitHub { get; set; } = new();

@@ -15,18 +15,24 @@ public sealed class ProcessRunRequest
     /// <param name="arguments">Structured arguments passed to the process.</param>
     /// <param name="timeout">Maximum runtime before the process is terminated.</param>
     /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
     public ProcessRunRequest(
         string fileName,
         string workingDirectory,
         IReadOnlyList<string> arguments,
         TimeSpan timeout,
-        IReadOnlyDictionary<string, string?>? environmentVariables = null)
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        bool captureOutput = true,
+        bool captureError = true)
     {
         FileName = fileName;
         WorkingDirectory = workingDirectory;
         Arguments = arguments;
         Timeout = timeout;
         EnvironmentVariables = environmentVariables;
+        CaptureOutput = captureOutput;
+        CaptureError = captureError;
     }
 
     /// <summary>
@@ -53,6 +59,16 @@ public sealed class ProcessRunRequest
     /// Gets optional environment variable overrides.
     /// </summary>
     public IReadOnlyDictionary<string, string?>? EnvironmentVariables { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether standard output should be captured.
+    /// </summary>
+    public bool CaptureOutput { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether standard error should be captured.
+    /// </summary>
+    public bool CaptureError { get; }
 }
 
 /// <summary>
@@ -165,8 +181,12 @@ public sealed class ProcessRunner : IProcessRunner
             return new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
         }
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
+        var stdoutTask = request.CaptureOutput
+            ? process.StandardOutput.ReadToEndAsync()
+            : Task.FromResult(string.Empty);
+        var stderrTask = request.CaptureError
+            ? process.StandardError.ReadToEndAsync()
+            : Task.FromResult(string.Empty);
         var timedOut = false;
 
         try
@@ -189,8 +209,12 @@ public sealed class ProcessRunner : IProcessRunner
             // Best-effort wait only.
         }
 
-        var stdout = await DrainAsync(stdoutTask).ConfigureAwait(false);
-        var stderr = await DrainAsync(stderrTask).ConfigureAwait(false);
+        var stdout = request.CaptureOutput
+            ? await DrainAsync(stdoutTask).ConfigureAwait(false)
+            : string.Empty;
+        var stderr = request.CaptureError
+            ? await DrainAsync(stderrTask).ConfigureAwait(false)
+            : string.Empty;
         stopwatch.Stop();
 
         if (timedOut && string.IsNullOrWhiteSpace(stderr))
@@ -205,10 +229,10 @@ public sealed class ProcessRunner : IProcessRunner
         var startInfo = new ProcessStartInfo {
             FileName = request.FileName,
             WorkingDirectory = request.WorkingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardOutput = request.CaptureOutput,
+            RedirectStandardError = request.CaptureError,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = request.CaptureOutput || request.CaptureError
         };
 
         ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
