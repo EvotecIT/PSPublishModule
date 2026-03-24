@@ -276,6 +276,56 @@ internal static partial class Program
             .ToArray();
     }
 
+    static string[] ParseRepeatedOptionValues(string[] argv, params string[] optionNames)
+    {
+        if (argv is null || argv.Length == 0) return Array.Empty<string>();
+        if (optionNames is null || optionNames.Length == 0) return Array.Empty<string>();
+
+        var names = new HashSet<string>(optionNames, StringComparer.OrdinalIgnoreCase);
+        var values = new List<string>();
+        for (int i = 0; i < argv.Length; i++)
+        {
+            if (!names.Contains(argv[i]))
+                continue;
+
+            if (++i >= argv.Length)
+                break;
+
+            if (!string.IsNullOrWhiteSpace(argv[i]))
+                values.Add(argv[i]);
+        }
+
+        return values.ToArray();
+    }
+
+    static Dictionary<string, string?> ParseKeyValueOptions(string[] argv, params string[] optionNames)
+    {
+        var values = ParseRepeatedOptionValues(argv, optionNames);
+        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var separator = value.IndexOf('=');
+            if (separator < 0)
+            {
+                result[value.Trim()] = string.Empty;
+                continue;
+            }
+
+            var key = value.Substring(0, separator).Trim();
+            var itemValue = value[(separator + 1)..].Trim();
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            result[key] = itemValue;
+        }
+
+        return result;
+    }
+
     static string[] ParseRawOptionValues(string[] argv, params string[] optionNames)
     {
         if (argv is null || argv.Length == 0) return Array.Empty<string>();
@@ -471,6 +521,7 @@ internal static partial class Program
             if (step.Kind == DotNetPublishStepKind.MsiPrepare) continue;
             if (step.Kind == DotNetPublishStepKind.MsiBuild) continue;
             if (step.Kind == DotNetPublishStepKind.MsiSign) continue;
+            if (step.Kind == DotNetPublishStepKind.StorePackage) continue;
             if (step.Kind == DotNetPublishStepKind.BenchmarkExtract) continue;
             if (step.Kind == DotNetPublishStepKind.BenchmarkGate) continue;
             if (step.Kind == DotNetPublishStepKind.Manifest)
@@ -540,6 +591,7 @@ internal static partial class Program
                         }
 
                         AppendMsiPrepareSteps(rebuilt, plan, t, framework, rid.Trim(), style);
+                        AppendStorePackageSteps(rebuilt, plan, t, framework, rid.Trim(), style);
                     }
                 }
             }
@@ -700,6 +752,74 @@ internal static partial class Program
                     });
                 }
             }
+        }
+    }
+
+    static void AppendStorePackageSteps(
+        List<DotNetPublishStep> rebuilt,
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        if (rebuilt is null || plan is null || target is null)
+            return;
+
+        foreach (var storePackage in plan.StorePackages ?? Array.Empty<DotNetPublishStorePackagePlan>())
+        {
+            if (storePackage is null) continue;
+            if (!string.Equals(storePackage.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var combo = new DotNetPublishTargetCombination
+            {
+                Framework = framework ?? string.Empty,
+                Runtime = runtime ?? string.Empty,
+                Style = style
+            };
+
+            if ((storePackage.Runtimes?.Length ?? 0) > 0
+                && !storePackage.Runtimes!.Any(value => string.Equals(value, combo.Runtime, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if ((storePackage.Frameworks?.Length ?? 0) > 0
+                && !storePackage.Frameworks!.Any(value => string.Equals(value, combo.Framework, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if ((storePackage.Styles?.Length ?? 0) > 0
+                && !storePackage.Styles!.Contains(combo.Style))
+                continue;
+
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["storePackage"] = storePackage.Id ?? string.Empty,
+                ["target"] = target.Name ?? string.Empty,
+                ["rid"] = runtime ?? string.Empty,
+                ["framework"] = framework ?? string.Empty,
+                ["style"] = style.ToString(),
+                ["configuration"] = plan.Configuration ?? "Release"
+            };
+
+            var outputTemplate = string.IsNullOrWhiteSpace(storePackage.OutputPath)
+                ? "Artifacts/DotNetPublish/Store/{storePackage}/{target}/{rid}/{framework}/{style}"
+                : storePackage.OutputPath!;
+            var outputPath = ResolveDotNetPublishPath(plan.ProjectRoot, ReplaceDotNetPublishTemplate(outputTemplate, tokens));
+
+            if (!plan.AllowOutputOutsideProjectRoot)
+                EnsureDotNetPublishPathWithinRoot(plan.ProjectRoot, outputPath, $"Store package '{storePackage.Id}' output path");
+
+            rebuilt.Add(new DotNetPublishStep
+            {
+                Key = $"store.package:{storePackage.Id}:{target.Name}:{framework}:{runtime}:{style}",
+                Kind = DotNetPublishStepKind.StorePackage,
+                Title = "Store package",
+                StorePackageId = storePackage.Id,
+                TargetName = target.Name,
+                Framework = framework,
+                Runtime = runtime,
+                Style = style,
+                StorePackageProjectPath = storePackage.PackagingProjectPath,
+                StorePackageOutputPath = outputPath
+            });
         }
     }
 
@@ -1052,6 +1172,33 @@ internal static partial class Program
                     errors.Add(
                         $"MSI sign step '{msiSign.Key}' does not have a matching msi.build step " +
                         $"for installer/target/framework/runtime/style.");
+                }
+            }
+
+            foreach (var storeStep in plan.Steps.Where(s => s.Kind == DotNetPublishStepKind.StorePackage))
+            {
+                if (string.IsNullOrWhiteSpace(storeStep.StorePackageId))
+                    errors.Add($"Store package step '{storeStep.Key}' is missing StorePackageId.");
+                if (!storeStep.Style.HasValue)
+                    errors.Add($"Store package step '{storeStep.Key}' is missing style.");
+                if (string.IsNullOrWhiteSpace(storeStep.StorePackageProjectPath))
+                {
+                    errors.Add($"Store package step '{storeStep.Key}' is missing StorePackageProjectPath.");
+                }
+                else if (!File.Exists(storeStep.StorePackageProjectPath))
+                {
+                    errors.Add($"Store package step '{storeStep.Key}' project path not found: {storeStep.StorePackageProjectPath}");
+                }
+
+                if (string.IsNullOrWhiteSpace(storeStep.StorePackageOutputPath))
+                    errors.Add($"Store package step '{storeStep.Key}' is missing StorePackageOutputPath.");
+
+                var key = $"{storeStep.TargetName}|{storeStep.Framework}|{storeStep.Runtime}|{storeStep.Style?.ToString() ?? string.Empty}";
+                if (!publishMatches.Contains(key))
+                {
+                    errors.Add(
+                        $"Store package step '{storeStep.Key}' does not have a matching publish step " +
+                        $"for target/framework/runtime/style.");
                 }
             }
 

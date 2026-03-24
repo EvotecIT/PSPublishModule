@@ -17,8 +17,18 @@ internal static partial class Program
       powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]
       powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]
       powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]
-      powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--tools-only] [--publish-nuget] [--publish-project-github] [--publish-tool-github]
-                        [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
+      powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--tools-only] [--configuration <Release|Debug>] [--skip-workspace-validation]
+                        [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>]
+                        [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--skip-restore] [--skip-build] [--output-root <path>] [--manifest-json <path>] [--checksums-path <path>] [--keep-symbols] [--sign]
+                        [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>]
+                        [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>]
+                        [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>]
+                        [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
+      powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
+      powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
+                     [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
+      powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]
+                                   [--testimox-root <path>] [--variable <name=value>] [--plan] [--validate] [--output json]
       powerforge normalize <files...>   Normalize encodings and line endings [--output json]
       powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
       powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
@@ -56,6 +66,9 @@ internal static partial class Program
       in the current directory and parent directories.
       DotNet publish searches for powerforge.dotnetpublish.json / .powerforge/dotnetpublish.json.
       Release searches for powerforge.release.json / .powerforge/release.json / Build/release.json.
+      Store submission searches for powerforge.store.submit.json / .powerforge/store.submit.json / Build/store.submit.json.
+      Run profiles search for run.profiles.json / .powerforge/run.profiles.json / Build/run.profiles.json.
+      Workspace validation searches for workspace.validation.json / .powerforge/workspace.validation.json / Build/workspace.validation.json.
     ");
     }
 

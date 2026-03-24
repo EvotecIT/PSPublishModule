@@ -43,14 +43,29 @@ public sealed class DotNetPublishSpec
     public DotNetPublishDotNetOptions DotNet { get; set; } = new();
 
     /// <summary>
+    /// Optional named signing profiles reused by targets and installers.
+    /// </summary>
+    public Dictionary<string, DotNetPublishSignOptions>? SigningProfiles { get; set; }
+
+    /// <summary>
     /// Publish targets.
     /// </summary>
     public DotNetPublishTarget[] Targets { get; set; } = Array.Empty<DotNetPublishTarget>();
 
     /// <summary>
+    /// Optional portable/distribution bundle definitions composed from published targets.
+    /// </summary>
+    public DotNetPublishBundle[] Bundles { get; set; } = Array.Empty<DotNetPublishBundle>();
+
+    /// <summary>
     /// Optional installer definitions (for example MSI prepare/build flows) bound to published targets.
     /// </summary>
     public DotNetPublishInstaller[] Installers { get; set; } = Array.Empty<DotNetPublishInstaller>();
+
+    /// <summary>
+    /// Optional Microsoft Store / MSIX packaging definitions bound to published targets.
+    /// </summary>
+    public DotNetPublishStorePackage[] StorePackages { get; set; } = Array.Empty<DotNetPublishStorePackage>();
 
     /// <summary>
     /// Optional benchmark gates (extract + baseline verify/update) executed near pipeline end.
@@ -114,6 +129,27 @@ public sealed class DotNetPublishInstaller
     public string PrepareFromTarget { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional bundle identifier to prepare from instead of the raw publish output.
+    /// When set, the installer uses the matching bundle artefact for the selected combination.
+    /// </summary>
+    public string? PrepareFromBundleId { get; set; }
+
+    /// <summary>
+    /// Optional runtime filter for installer generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional framework filter for installer generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional style filter for installer generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
+    /// <summary>
     /// Optional payload staging path template.
     /// Supports tokens: <c>{installer}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>.
     /// </summary>
@@ -164,15 +200,231 @@ public sealed class DotNetPublishInstaller
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }
 
     /// <summary>
+    /// Optional named signing profile reference used when <see cref="Sign"/> is not set.
+    /// </summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>
     /// Optional MSI signing options applied by <c>msi.sign</c>.
     /// Reuses the same policy contract as publish signing.
     /// </summary>
     public DotNetPublishSignOptions? Sign { get; set; }
 
     /// <summary>
+    /// Optional partial overrides applied on top of <see cref="SignProfile"/>.
+    /// Ignored when <see cref="Sign"/> is set.
+    /// </summary>
+    public DotNetPublishSignPatch? SignOverrides { get; set; }
+
+    /// <summary>
     /// Optional client-license injection passed to MSI build as an MSBuild property.
     /// </summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+}
+
+/// <summary>
+/// Microsoft Store / MSIX packaging definition bound to a published target combination.
+/// </summary>
+public sealed class DotNetPublishStorePackage
+{
+    /// <summary>Store package identifier used in paths and step keys.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Source publish target name this Store package is associated with.</summary>
+    public string PrepareFromTarget { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional runtime filter for Store package generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional framework filter for Store package generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional style filter for Store package generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
+    /// <summary>
+    /// Optional packaging project ID (resolved from <see cref="DotNetPublishSpec.Projects"/>).
+    /// </summary>
+    public string? PackagingProjectId { get; set; }
+
+    /// <summary>
+    /// Optional packaging project path (for example <c>*.wapproj</c>).
+    /// When set, Store build uses this path directly instead of <see cref="PackagingProjectId"/>.
+    /// </summary>
+    public string? PackagingProjectPath { get; set; }
+
+    /// <summary>
+    /// Optional Store package output path template.
+    /// Supports tokens: <c>{storePackage}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>.
+    /// </summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>
+    /// When true, clears the Store package output directory before build. Default: true.
+    /// </summary>
+    public bool ClearOutput { get; set; } = true;
+
+    /// <summary>
+    /// Store packaging build mode. Default: <see cref="DotNetPublishStoreBuildMode.StoreUpload"/>.
+    /// </summary>
+    public DotNetPublishStoreBuildMode BuildMode { get; set; } = DotNetPublishStoreBuildMode.StoreUpload;
+
+    /// <summary>
+    /// Appx/MSIX bundle behavior. Default: <see cref="DotNetPublishStoreBundleMode.Auto"/>.
+    /// </summary>
+    public DotNetPublishStoreBundleMode Bundle { get; set; } = DotNetPublishStoreBundleMode.Auto;
+
+    /// <summary>
+    /// When true, generates an app installer file when the packaging project supports it.
+    /// </summary>
+    public bool GenerateAppInstaller { get; set; }
+
+    /// <summary>
+    /// Optional extra MSBuild properties applied only to the Store packaging project build.
+    /// </summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+}
+
+/// <summary>
+/// Bundle definition composed from one primary target plus optional included targets and post-copy scripts.
+/// </summary>
+public sealed class DotNetPublishBundle
+{
+    /// <summary>Bundle identifier used in paths and step keys.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Primary publish target name this bundle is composed from.</summary>
+    public string PrepareFromTarget { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional runtime filter for bundle generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional framework filter for bundle generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional style filter for bundle generation. When set, only matching publish combinations are used.
+    /// </summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
+    /// <summary>
+    /// Optional bundle output path template.
+    /// Supports tokens: <c>{bundle}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>.
+    /// </summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>
+    /// When true, clears the bundle output directory before composing files. Default: true.
+    /// </summary>
+    public bool ClearOutput { get; set; } = true;
+
+    /// <summary>
+    /// When true, creates a zip file for the composed bundle.
+    /// </summary>
+    public bool Zip { get; set; }
+
+    /// <summary>
+    /// Optional zip output path. Supports the same tokens as <see cref="OutputPath"/>.
+    /// </summary>
+    public string? ZipPath { get; set; }
+
+    /// <summary>
+    /// Optional zip name template used when <see cref="ZipPath"/> is not provided.
+    /// Supports tokens: <c>{bundle}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>.
+    /// </summary>
+    public string? ZipNameTemplate { get; set; }
+
+    /// <summary>
+    /// Optional additional published targets copied into the bundle.
+    /// </summary>
+    public DotNetPublishBundleInclude[] Includes { get; set; } = Array.Empty<DotNetPublishBundleInclude>();
+
+    /// <summary>
+    /// Optional PowerShell scripts executed after the bundle contents are copied.
+    /// </summary>
+    public DotNetPublishBundleScript[] Scripts { get; set; } = Array.Empty<DotNetPublishBundleScript>();
+}
+
+/// <summary>
+/// Additional published target copied into a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleInclude
+{
+    /// <summary>Target name to include in the bundle.</summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional subdirectory under the bundle output root where the included target should be copied.
+    /// When omitted, the include is copied into the bundle root.
+    /// </summary>
+    public string? Subdirectory { get; set; }
+
+    /// <summary>
+    /// Optional framework override for the included target. When omitted, the bundle combination framework is used when possible.
+    /// </summary>
+    public string? Framework { get; set; }
+
+    /// <summary>
+    /// Optional runtime override for the included target. When omitted, the bundle combination runtime is used.
+    /// </summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>
+    /// Optional style override for the included target. When omitted, the bundle combination style is used.
+    /// </summary>
+    public DotNetPublishStyle? Style { get; set; }
+
+    /// <summary>
+    /// When true, missing include artefacts fail the bundle step. Default: true.
+    /// </summary>
+    public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// PowerShell script executed as part of bundle composition.
+/// </summary>
+public sealed class DotNetPublishBundleScript
+{
+    /// <summary>Script path resolved relative to project root when not rooted.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional argument list passed to the script. Supports tokens: <c>{bundle}</c>, <c>{target}</c>, <c>{rid}</c>,
+    /// <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>, <c>{projectRoot}</c>, <c>{output}</c>,
+    /// <c>{sourceOutput}</c>, <c>{zip}</c>.
+    /// </summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional working directory resolved relative to project root when not rooted. Defaults to project root.
+    /// Supports the same tokens as <see cref="Arguments"/>.
+    /// </summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>
+    /// Maximum script execution time in seconds. Default: 600.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 600;
+
+    /// <summary>
+    /// When true, prefer pwsh; otherwise allow Windows PowerShell first on Windows. Default: true.
+    /// </summary>
+    public bool PreferPwsh { get; set; } = true;
+
+    /// <summary>
+    /// When true, script failures fail the bundle step. Default: true.
+    /// </summary>
+    public bool Required { get; set; } = true;
 }
 
 /// <summary>

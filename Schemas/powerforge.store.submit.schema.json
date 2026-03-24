@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge Store Submission Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "Authentication", "Targets" ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SellerId": { "type": [ "string", "null" ] },
+        "TenantId": { "type": [ "string", "null" ] },
+        "ClientId": { "type": [ "string", "null" ] },
+        "ClientSecret": { "type": [ "string", "null" ] },
+        "ClientSecretEnvVar": { "type": [ "string", "null" ] },
+        "AccessToken": { "type": [ "string", "null" ] },
+        "AccessTokenEnvVar": { "type": [ "string", "null" ] },
+        "AuthorityHost": { "type": [ "string", "null" ] },
+        "Resource": { "type": [ "string", "null" ] },
+        "Scope": { "type": [ "string", "null" ] }
+      }
+    },
+    "Targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [ "Name", "ApplicationId" ],
+        "properties": {
+          "Name": { "type": "string" },
+          "Description": { "type": [ "string", "null" ] },
+          "Provider": { "type": "string", "enum": [ "PackagedApp", "DesktopInstaller" ] },
+          "ApplicationId": { "type": "string" },
+          "SubmissionId": { "type": [ "string", "null" ] },
+          "SourceDirectory": { "type": [ "string", "null" ] },
+          "RecurseSourceDirectory": { "type": "boolean" },
+          "PackagePatterns": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "PackagePaths": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "ZipPath": { "type": [ "string", "null" ] },
+          "Commit": { "type": "boolean" },
+          "WaitForCommit": { "type": "boolean" },
+          "PollIntervalSeconds": { "type": "integer", "minimum": 1 },
+          "PollTimeoutMinutes": { "type": "integer", "minimum": 1 },
+          "MinimumDirectXVersion": { "type": [ "string", "null" ] },
+          "MinimumSystemRam": { "type": [ "string", "null" ] },
+          "DesktopPackages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [ "PackageUrl", "Languages", "Architectures" ],
+              "properties": {
+                "PackageUrl": { "type": "string" },
+                "Languages": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "Architectures": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "IsSilentInstall": { "type": "boolean" },
+                "InstallerParameters": { "type": [ "string", "null" ] },
+                "GenericDocUrl": { "type": [ "string", "null" ] },
+                "PackageType": { "type": [ "string", "null" ] }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

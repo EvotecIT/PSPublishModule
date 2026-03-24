@@ -50,8 +50,14 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved targets (paths + publish options).</summary>
     public DotNetPublishTargetPlan[] Targets { get; set; } = Array.Empty<DotNetPublishTargetPlan>();
 
+    /// <summary>Resolved bundle definitions.</summary>
+    public DotNetPublishBundlePlan[] Bundles { get; set; } = Array.Empty<DotNetPublishBundlePlan>();
+
     /// <summary>Resolved installer definitions.</summary>
     public DotNetPublishInstallerPlan[] Installers { get; set; } = Array.Empty<DotNetPublishInstallerPlan>();
+
+    /// <summary>Resolved Microsoft Store / MSIX packaging definitions.</summary>
+    public DotNetPublishStorePackagePlan[] StorePackages { get; set; } = Array.Empty<DotNetPublishStorePackagePlan>();
 
     /// <summary>Resolved benchmark gates.</summary>
     public DotNetPublishBenchmarkGatePlan[] BenchmarkGates { get; set; } = Array.Empty<DotNetPublishBenchmarkGatePlan>();
@@ -110,6 +116,18 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Source target used for payload preparation.</summary>
     public string PrepareFromTarget { get; set; } = string.Empty;
 
+    /// <summary>Optional source bundle identifier used for payload preparation.</summary>
+    public string? PrepareFromBundleId { get; set; }
+
+    /// <summary>Optional runtime filters for installer generation.</summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional framework filters for installer generation.</summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional style filters for installer generation.</summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
     /// <summary>Optional payload staging path template.</summary>
     public string? StagingPath { get; set; }
 
@@ -142,6 +160,141 @@ public sealed class DotNetPublishInstallerPlan
 
     /// <summary>Optional client-license injection options used by MSI build steps.</summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+}
+
+/// <summary>
+/// Resolved Microsoft Store / MSIX packaging definition.
+/// </summary>
+public sealed class DotNetPublishStorePackagePlan
+{
+    /// <summary>Store package identifier.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Source target used for Store packaging.</summary>
+    public string PrepareFromTarget { get; set; } = string.Empty;
+
+    /// <summary>Optional runtime filters for Store package generation.</summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional framework filters for Store package generation.</summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional style filters for Store package generation.</summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
+    /// <summary>Optional packaging project ID used for project-catalog resolution.</summary>
+    public string? PackagingProjectId { get; set; }
+
+    /// <summary>Optional resolved packaging project path (for example <c>*.wapproj</c>).</summary>
+    public string? PackagingProjectPath { get; set; }
+
+    /// <summary>Optional resolved Store package output path template.</summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>When true, clears the Store package output directory before build.</summary>
+    public bool ClearOutput { get; set; } = true;
+
+    /// <summary>Store packaging build mode.</summary>
+    public DotNetPublishStoreBuildMode BuildMode { get; set; } = DotNetPublishStoreBuildMode.StoreUpload;
+
+    /// <summary>Appx/MSIX bundle behavior.</summary>
+    public DotNetPublishStoreBundleMode Bundle { get; set; } = DotNetPublishStoreBundleMode.Auto;
+
+    /// <summary>When true, generates an app installer file when the packaging project supports it.</summary>
+    public bool GenerateAppInstaller { get; set; }
+
+    /// <summary>Optional Store packaging MSBuild properties.</summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+}
+
+/// <summary>
+/// Resolved bundle definition for composition flows.
+/// </summary>
+public sealed class DotNetPublishBundlePlan
+{
+    /// <summary>Bundle identifier.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Primary source target used for bundle composition.</summary>
+    public string PrepareFromTarget { get; set; } = string.Empty;
+
+    /// <summary>Optional runtime filters for bundle generation.</summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional framework filters for bundle generation.</summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional style filters for bundle generation.</summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
+
+    /// <summary>Optional resolved bundle output path template.</summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>When true, clears the bundle output directory before composition.</summary>
+    public bool ClearOutput { get; set; } = true;
+
+    /// <summary>When true, creates a bundle zip.</summary>
+    public bool Zip { get; set; }
+
+    /// <summary>Optional resolved bundle zip path template.</summary>
+    public string? ZipPath { get; set; }
+
+    /// <summary>Optional bundle zip name template.</summary>
+    public string? ZipNameTemplate { get; set; }
+
+    /// <summary>Additional published target includes.</summary>
+    public DotNetPublishBundleIncludePlan[] Includes { get; set; } = Array.Empty<DotNetPublishBundleIncludePlan>();
+
+    /// <summary>Bundle post-copy scripts.</summary>
+    public DotNetPublishBundleScriptPlan[] Scripts { get; set; } = Array.Empty<DotNetPublishBundleScriptPlan>();
+}
+
+/// <summary>
+/// Resolved include target for a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleIncludePlan
+{
+    /// <summary>Included target name.</summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>Optional bundle subdirectory for copied files.</summary>
+    public string? Subdirectory { get; set; }
+
+    /// <summary>Optional framework override for the included target.</summary>
+    public string? Framework { get; set; }
+
+    /// <summary>Optional runtime override for the included target.</summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>Optional style override for the included target.</summary>
+    public DotNetPublishStyle? Style { get; set; }
+
+    /// <summary>When true, missing include artefacts fail the bundle step.</summary>
+    public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// Resolved PowerShell hook for bundle composition.
+/// </summary>
+public sealed class DotNetPublishBundleScriptPlan
+{
+    /// <summary>Resolved script path.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Script arguments with templates preserved for step-time expansion.</summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional working directory template.</summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>Maximum script execution time in seconds.</summary>
+    public int TimeoutSeconds { get; set; } = 600;
+
+    /// <summary>When true, prefer pwsh.</summary>
+    public bool PreferPwsh { get; set; } = true;
+
+    /// <summary>When true, script failures fail the bundle step.</summary>
+    public bool Required { get; set; } = true;
 }
 
 /// <summary>
@@ -239,6 +392,12 @@ public sealed class DotNetPublishStep
     /// <summary>Optional installer identifier for installer-related steps.</summary>
     public string? InstallerId { get; set; }
 
+    /// <summary>Optional Store package identifier for Store-related steps.</summary>
+    public string? StorePackageId { get; set; }
+
+    /// <summary>Optional bundle identifier for bundle-related steps.</summary>
+    public string? BundleId { get; set; }
+
     /// <summary>Optional gate identifier for benchmark-related steps.</summary>
     public string? GateId { get; set; }
 
@@ -259,4 +418,16 @@ public sealed class DotNetPublishStep
 
     /// <summary>Optional resolved installer project path for build steps.</summary>
     public string? InstallerProjectPath { get; set; }
+
+    /// <summary>Optional resolved Store packaging project path for Store build steps.</summary>
+    public string? StorePackageProjectPath { get; set; }
+
+    /// <summary>Optional resolved bundle output path for bundle steps.</summary>
+    public string? BundleOutputPath { get; set; }
+
+    /// <summary>Optional resolved bundle zip path for bundle steps.</summary>
+    public string? BundleZipPath { get; set; }
+
+    /// <summary>Optional resolved Store package output path for Store build steps.</summary>
+    public string? StorePackageOutputPath { get; set; }
 }

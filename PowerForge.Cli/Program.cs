@@ -69,6 +69,12 @@ internal static partial class Program
             return CommandDotNet(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
+        case "store":
+            return CommandStore(filteredArgs, cli, logger);
+        case "run":
+            return CommandRun(filteredArgs, cli, logger);
+        case "workspace":
+            return CommandWorkspace(filteredArgs, cli, logger);
         case "github":
             return CommandGitHub(filteredArgs, cli, logger);
         case "normalize":
@@ -363,7 +369,6 @@ internal static partial class Program
             }
         }
         case "pipeline":
-        case "run":
         {
             var argv = filteredArgs.Skip(1).ToArray();
             var configPath = TryGetOptionValue(argv, "--config");

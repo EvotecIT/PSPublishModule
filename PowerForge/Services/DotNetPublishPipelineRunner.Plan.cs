@@ -17,6 +17,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private const string DefaultMsiHarvestPathTemplate =
         "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/harvest.wxs";
 
+    private const string DefaultStorePackageOutputPathTemplate =
+        "Artifacts/DotNetPublish/Store/{storePackage}/{target}/{rid}/{framework}/{style}";
+
     /// <summary>
     /// Resolves paths/defaults from <paramref name="spec"/> and produces an ordered execution plan.
     /// </summary>
@@ -146,7 +149,18 @@ public sealed partial class DotNetPublishPipelineRunner
                 ZipNameTemplate = t.Publish.ZipNameTemplate,
                 RenameTo = t.Publish.RenameTo,
                 ReadyToRun = t.Publish.ReadyToRun,
-                Sign = t.Publish.Sign,
+                MsBuildProperties = t.Publish.MsBuildProperties is null
+                    ? null
+                    : new Dictionary<string, string>(t.Publish.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
+                StyleOverrides = CloneStyleOverrides(t.Publish.StyleOverrides),
+                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                    spec.SigningProfiles,
+                    t.Publish.SignProfile,
+                    t.Publish.Sign,
+                    t.Publish.SignOverrides,
+                    $"Target '{t.Name.Trim()}'"),
+                SignProfile = t.Publish.SignProfile,
+                SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(t.Publish.SignOverrides),
                 Service = CloneServicePackageOptions(t.Publish.Service),
                 State = NormalizeStatePreservationOptions(t.Name.Trim(), t.Publish.State)
             };
@@ -161,7 +175,9 @@ public sealed partial class DotNetPublishPipelineRunner
             });
         }
 
-        var installers = BuildInstallerPlans(spec.Installers, targets, projectCatalog, projectRoot);
+        var bundles = BuildBundlePlans(spec.Bundles, targets, projectRoot);
+        var installers = BuildInstallerPlans(spec.Installers, bundles, targets, projectCatalog, projectRoot, spec.SigningProfiles);
+        var storePackages = BuildStorePackagePlans(spec.StorePackages, targets, projectCatalog, projectRoot);
 
         var outputs = new DotNetPublishOutputs
         {
@@ -228,12 +244,49 @@ public sealed partial class DotNetPublishPipelineRunner
                     EnsurePathWithinRoot(projectRoot, zipPath, $"Target '{target.Name}' zip path");
                 }
             }
+
+            foreach (var bundle in bundles)
+            {
+                var sourceTarget = targets.FirstOrDefault(t => string.Equals(t.Name, bundle.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+                if (sourceTarget is null)
+                    continue;
+
+                foreach (var combo in sourceTarget.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                {
+                    if (!BundleMatchesCombo(bundle, combo))
+                        continue;
+
+                    var bundleStep = CreateBundleStep(projectRoot, cfg, bundle, sourceTarget.Name, combo);
+                    EnsurePathWithinRoot(projectRoot, bundleStep.BundleOutputPath!, $"Bundle '{bundle.Id}' output path");
+                    if (!string.IsNullOrWhiteSpace(bundleStep.BundleZipPath))
+                        EnsurePathWithinRoot(projectRoot, bundleStep.BundleZipPath!, $"Bundle '{bundle.Id}' zip path");
+                }
+            }
+
+            foreach (var storePackage in storePackages)
+            {
+                var sourceTarget = targets.FirstOrDefault(t => string.Equals(t.Name, storePackage.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+                if (sourceTarget is null)
+                    continue;
+
+                foreach (var combo in sourceTarget.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                {
+                    if (!StorePackageMatchesCombo(storePackage, combo))
+                        continue;
+
+                    var storeStep = CreateStorePackageStep(projectRoot, cfg, storePackage, sourceTarget.Name, combo);
+                    EnsurePathWithinRoot(projectRoot, storeStep.StorePackageOutputPath!, $"Store package '{storePackage.Id}' output path");
+                }
+            }
         }
 
         var steps = new List<DotNetPublishStep>();
+        var bundleOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var bundleZipPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var msiStagingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var msiManifestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var msiHarvestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var storeOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var distinctRuntimes = targets
             .SelectMany(t => t.Publish.Runtimes ?? Array.Empty<string>())
@@ -318,8 +371,41 @@ public sealed partial class DotNetPublishPipelineRunner
                     });
                 }
 
+                foreach (var bundle in bundles.Where(b => string.Equals(b.PrepareFromTarget, t.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (!BundleMatchesCombo(bundle, combo))
+                        continue;
+
+                    var bundleStep = CreateBundleStep(projectRoot, cfg, bundle, t.Name, combo);
+                    if (!spec.DotNet.AllowOutputOutsideProjectRoot)
+                    {
+                        EnsurePathWithinRoot(projectRoot, bundleStep.BundleOutputPath!, $"Bundle '{bundle.Id}' output path");
+                        if (!string.IsNullOrWhiteSpace(bundleStep.BundleZipPath))
+                            EnsurePathWithinRoot(projectRoot, bundleStep.BundleZipPath!, $"Bundle '{bundle.Id}' zip path");
+                    }
+
+                    if (!bundleOutputPaths.Add(bundleStep.BundleOutputPath!))
+                    {
+                        throw new InvalidOperationException(
+                            $"Bundle '{bundle.Id}' output path collision detected: {bundleStep.BundleOutputPath}. " +
+                            "Use unique bundle IDs or path templates.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(bundleStep.BundleZipPath) && !bundleZipPaths.Add(bundleStep.BundleZipPath!))
+                    {
+                        throw new InvalidOperationException(
+                            $"Bundle '{bundle.Id}' zip path collision detected: {bundleStep.BundleZipPath}. " +
+                            "Use unique bundle IDs or path templates.");
+                    }
+
+                    steps.Add(bundleStep);
+                }
+
                 foreach (var installer in installers.Where(i => string.Equals(i.PrepareFromTarget, t.Name, StringComparison.OrdinalIgnoreCase)))
                 {
+                    if (!InstallerMatchesCombo(installer, combo))
+                        continue;
+
                     var msiStep = CreateMsiPrepareStep(projectRoot, cfg, installer, t.Name, combo);
                     if (!spec.DotNet.AllowOutputOutsideProjectRoot)
                     {
@@ -362,6 +448,25 @@ public sealed partial class DotNetPublishPipelineRunner
                             steps.Add(msiSignStep);
                     }
                 }
+
+                foreach (var storePackage in storePackages.Where(i => string.Equals(i.PrepareFromTarget, t.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (!StorePackageMatchesCombo(storePackage, combo))
+                        continue;
+
+                    var storeStep = CreateStorePackageStep(projectRoot, cfg, storePackage, t.Name, combo);
+                    if (!spec.DotNet.AllowOutputOutsideProjectRoot)
+                        EnsurePathWithinRoot(projectRoot, storeStep.StorePackageOutputPath!, $"Store package '{storePackage.Id}' output path");
+
+                    if (!storeOutputPaths.Add(storeStep.StorePackageOutputPath!))
+                    {
+                        throw new InvalidOperationException(
+                            $"Store package '{storePackage.Id}' output path collision detected: {storeStep.StorePackageOutputPath}. " +
+                            "Use unique store package IDs or path templates.");
+                    }
+
+                    steps.Add(storeStep);
+                }
             }
         }
 
@@ -402,7 +507,9 @@ public sealed partial class DotNetPublishPipelineRunner
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
             MsBuildProperties = msbuildProps,
             Targets = targets.ToArray(),
+            Bundles = bundles,
             Installers = installers,
+            StorePackages = storePackages,
             BenchmarkGates = benchmarkGates,
             Outputs = outputs,
             Steps = steps.ToArray()
@@ -498,7 +605,18 @@ public sealed partial class DotNetPublishPipelineRunner
             Profile = profile.Name,
             Profiles = spec.Profiles ?? Array.Empty<DotNetPublishProfile>(),
             Projects = CloneProjects(spec.Projects),
+            SigningProfiles = DotNetPublishSigningProfileResolver.CloneSigningProfiles(spec.SigningProfiles),
+            Bundles = CloneBundles(spec.Bundles)
+                .Where(b =>
+                    string.IsNullOrWhiteSpace(b.PrepareFromTarget)
+                    || selectedTargetNames.Contains(b.PrepareFromTarget.Trim()))
+                .ToArray(),
             Installers = CloneInstallers(spec.Installers)
+                .Where(i =>
+                    string.IsNullOrWhiteSpace(i.PrepareFromTarget)
+                    || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
+                .ToArray(),
+            StorePackages = CloneStorePackages(spec.StorePackages)
                 .Where(i =>
                     string.IsNullOrWhiteSpace(i.PrepareFromTarget)
                     || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
@@ -569,6 +687,10 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 Id = i.Id,
                 PrepareFromTarget = i.PrepareFromTarget,
+                PrepareFromBundleId = i.PrepareFromBundleId,
+                Runtimes = NormalizeStrings(i.Runtimes),
+                Frameworks = NormalizeStrings(i.Frameworks),
+                Styles = NormalizeStyles(i.Styles),
                 StagingPath = i.StagingPath,
                 ManifestPath = i.ManifestPath,
                 InstallerProjectId = i.InstallerProjectId,
@@ -578,8 +700,89 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestDirectoryRefId = i.HarvestDirectoryRefId,
                 HarvestComponentGroupId = i.HarvestComponentGroupId,
                 Versioning = CloneMsiVersionOptions(i.Versioning),
-                Sign = CloneSignOptions(i.Sign),
+                SignProfile = i.SignProfile,
+                Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(i.Sign),
+                SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(i.SignOverrides),
                 ClientLicense = CloneMsiClientLicenseOptions(i.ClientLicense)
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishStorePackage[] CloneStorePackages(DotNetPublishStorePackage[] storePackages)
+    {
+        return (storePackages ?? Array.Empty<DotNetPublishStorePackage>())
+            .Where(i => i is not null)
+            .Select(i => new DotNetPublishStorePackage
+            {
+                Id = i.Id,
+                PrepareFromTarget = i.PrepareFromTarget,
+                Runtimes = NormalizeStrings(i.Runtimes),
+                Frameworks = NormalizeStrings(i.Frameworks),
+                Styles = NormalizeStyles(i.Styles),
+                PackagingProjectId = i.PackagingProjectId,
+                PackagingProjectPath = i.PackagingProjectPath,
+                OutputPath = i.OutputPath,
+                ClearOutput = i.ClearOutput,
+                BuildMode = i.BuildMode,
+                Bundle = i.Bundle,
+                GenerateAppInstaller = i.GenerateAppInstaller,
+                MsBuildProperties = i.MsBuildProperties is null
+                    ? null
+                    : new Dictionary<string, string>(i.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishBundle[] CloneBundles(DotNetPublishBundle[] bundles)
+    {
+        return (bundles ?? Array.Empty<DotNetPublishBundle>())
+            .Where(b => b is not null)
+            .Select(b => new DotNetPublishBundle
+            {
+                Id = b.Id,
+                PrepareFromTarget = b.PrepareFromTarget,
+                Runtimes = NormalizeStrings(b.Runtimes),
+                Frameworks = NormalizeStrings(b.Frameworks),
+                Styles = NormalizeStyles(b.Styles),
+                OutputPath = b.OutputPath,
+                ClearOutput = b.ClearOutput,
+                Zip = b.Zip,
+                ZipPath = b.ZipPath,
+                ZipNameTemplate = b.ZipNameTemplate,
+                Includes = CloneBundleIncludes(b.Includes),
+                Scripts = CloneBundleScripts(b.Scripts)
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishBundleInclude[] CloneBundleIncludes(DotNetPublishBundleInclude[] includes)
+    {
+        return (includes ?? Array.Empty<DotNetPublishBundleInclude>())
+            .Where(i => i is not null)
+            .Select(i => new DotNetPublishBundleInclude
+            {
+                Target = i.Target,
+                Subdirectory = i.Subdirectory,
+                Framework = i.Framework,
+                Runtime = i.Runtime,
+                Style = i.Style,
+                Required = i.Required
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishBundleScript[] CloneBundleScripts(DotNetPublishBundleScript[] scripts)
+    {
+        return (scripts ?? Array.Empty<DotNetPublishBundleScript>())
+            .Where(s => s is not null)
+            .Select(s => new DotNetPublishBundleScript
+            {
+                Path = s.Path,
+                Arguments = NormalizeStrings(s.Arguments),
+                WorkingDirectory = s.WorkingDirectory,
+                TimeoutSeconds = s.TimeoutSeconds,
+                PreferPwsh = s.PreferPwsh,
+                Required = s.Required
             })
             .ToArray();
     }
@@ -708,7 +911,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     ZipNameTemplate = t.Publish?.ZipNameTemplate,
                     RenameTo = t.Publish?.RenameTo,
                     ReadyToRun = t.Publish?.ReadyToRun,
-                    Sign = CloneSignOptions(t.Publish?.Sign),
+                    MsBuildProperties = t.Publish?.MsBuildProperties is null
+                        ? null
+                        : new Dictionary<string, string>(t.Publish.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
+                    StyleOverrides = CloneStyleOverrides(t.Publish?.StyleOverrides),
+                    Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(t.Publish?.Sign),
+                    SignProfile = t.Publish?.SignProfile,
+                    SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(t.Publish?.SignOverrides),
                     Service = CloneServicePackageOptions(t.Publish?.Service),
                     State = CloneStatePreservationOptions(t.Publish?.State)
                 }
@@ -716,23 +925,27 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static DotNetPublishSignOptions? CloneSignOptions(DotNetPublishSignOptions? sign)
+    private static Dictionary<string, DotNetPublishStyleOverride>? CloneStyleOverrides(
+        Dictionary<string, DotNetPublishStyleOverride>? overrides)
     {
-        if (sign is null) return null;
-        return new DotNetPublishSignOptions
+        if (overrides is null || overrides.Count == 0)
+            return null;
+
+        var clone = new Dictionary<string, DotNetPublishStyleOverride>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in overrides)
         {
-            Enabled = sign.Enabled,
-            ToolPath = sign.ToolPath,
-            OnMissingTool = sign.OnMissingTool,
-            OnSignFailure = sign.OnSignFailure,
-            Thumbprint = sign.Thumbprint,
-            SubjectName = sign.SubjectName,
-            TimestampUrl = sign.TimestampUrl,
-            Description = sign.Description,
-            Url = sign.Url,
-            Csp = sign.Csp,
-            KeyContainer = sign.KeyContainer
-        };
+            if (string.IsNullOrWhiteSpace(kv.Key) || kv.Value is null)
+                continue;
+
+            clone[kv.Key.Trim()] = new DotNetPublishStyleOverride
+            {
+                MsBuildProperties = kv.Value.MsBuildProperties is null
+                    ? null
+                    : new Dictionary<string, string>(kv.Value.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
+        return clone.Count == 0 ? null : clone;
     }
 
     private static DotNetPublishServicePackageOptions? CloneServicePackageOptions(DotNetPublishServicePackageOptions? service)
@@ -881,17 +1094,130 @@ public sealed partial class DotNetPublishPipelineRunner
         return path;
     }
 
-    private static DotNetPublishInstallerPlan[] BuildInstallerPlans(
-        IEnumerable<DotNetPublishInstaller>? installers,
+    private static DotNetPublishBundlePlan[] BuildBundlePlans(
+        IEnumerable<DotNetPublishBundle>? bundles,
         IEnumerable<DotNetPublishTargetPlan>? targets,
-        IReadOnlyDictionary<string, string> projectCatalog,
         string projectRoot)
     {
+        var targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+            .ToArray();
+        var targetMap = targetPlans.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+
+        var plans = new List<DotNetPublishBundlePlan>();
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var bundle in bundles ?? Array.Empty<DotNetPublishBundle>())
+        {
+            if (bundle is null) continue;
+            var id = (bundle.Id ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Bundles[].Id is required.");
+            if (!ids.Add(id))
+                throw new ArgumentException($"Duplicate bundle ID detected: {id}");
+
+            var sourceTarget = (bundle.PrepareFromTarget ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(sourceTarget))
+                throw new ArgumentException($"Bundles['{id}'].PrepareFromTarget is required.");
+            if (!targetMap.TryGetValue(sourceTarget, out var sourceTargetPlan))
+                throw new ArgumentException($"Bundle '{id}' references unknown PrepareFromTarget '{sourceTarget}'.");
+
+            var runtimes = NormalizeStrings(bundle.Runtimes);
+            var frameworks = NormalizeStrings(bundle.Frameworks);
+            var styles = NormalizeStyles(bundle.Styles);
+            var matchingCombinations = (sourceTargetPlan.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                .Where(combo => InstallerMatchesCombo(runtimes, frameworks, styles, combo))
+                .ToArray();
+            if (matchingCombinations.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Bundle '{id}' does not match any publish combination for target '{sourceTarget}'. " +
+                    $"{BuildInstallerFilterSummary(runtimes, frameworks, styles)}");
+            }
+
+            var includePlans = new List<DotNetPublishBundleIncludePlan>();
+            foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleInclude>())
+            {
+                if (include is null) continue;
+                var includeTarget = (include.Target ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(includeTarget))
+                    throw new ArgumentException($"Bundle '{id}' include Target is required.");
+                if (!targetMap.ContainsKey(includeTarget))
+                    throw new ArgumentException($"Bundle '{id}' references unknown include target '{includeTarget}'.");
+
+                includePlans.Add(new DotNetPublishBundleIncludePlan
+                {
+                    Target = includeTarget,
+                    Subdirectory = string.IsNullOrWhiteSpace(include.Subdirectory) ? null : include.Subdirectory!.Trim(),
+                    Framework = string.IsNullOrWhiteSpace(include.Framework) ? null : include.Framework!.Trim(),
+                    Runtime = string.IsNullOrWhiteSpace(include.Runtime) ? null : include.Runtime!.Trim(),
+                    Style = include.Style,
+                    Required = include.Required
+                });
+            }
+
+            var scriptPlans = new List<DotNetPublishBundleScriptPlan>();
+            foreach (var script in bundle.Scripts ?? Array.Empty<DotNetPublishBundleScript>())
+            {
+                if (script is null) continue;
+                var scriptPath = ResolvePath(projectRoot, script.Path ?? string.Empty);
+                if (string.IsNullOrWhiteSpace(script.Path))
+                    throw new ArgumentException($"Bundle '{id}' script Path is required.");
+                if (!File.Exists(scriptPath))
+                    throw new FileNotFoundException($"Bundle script path not found for '{id}': {scriptPath}", scriptPath);
+
+                scriptPlans.Add(new DotNetPublishBundleScriptPlan
+                {
+                    Path = scriptPath,
+                    Arguments = NormalizeStrings(script.Arguments),
+                    WorkingDirectory = string.IsNullOrWhiteSpace(script.WorkingDirectory)
+                        ? null
+                        : script.WorkingDirectory!.Trim(),
+                    TimeoutSeconds = Math.Max(1, script.TimeoutSeconds),
+                    PreferPwsh = script.PreferPwsh,
+                    Required = script.Required
+                });
+            }
+
+            plans.Add(new DotNetPublishBundlePlan
+            {
+                Id = id,
+                PrepareFromTarget = sourceTarget,
+                Runtimes = runtimes,
+                Frameworks = frameworks,
+                Styles = styles,
+                OutputPath = bundle.OutputPath,
+                ClearOutput = bundle.ClearOutput,
+                Zip = bundle.Zip,
+                ZipPath = bundle.ZipPath,
+                ZipNameTemplate = bundle.ZipNameTemplate,
+                Includes = includePlans.ToArray(),
+                Scripts = scriptPlans.ToArray()
+            });
+        }
+
+        return plans.ToArray();
+    }
+
+    private static DotNetPublishInstallerPlan[] BuildInstallerPlans(
+        IEnumerable<DotNetPublishInstaller>? installers,
+        IEnumerable<DotNetPublishBundlePlan>? bundles,
+        IEnumerable<DotNetPublishTargetPlan>? targets,
+        IReadOnlyDictionary<string, string> projectCatalog,
+        string projectRoot,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
+    {
+        var targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+            .ToArray();
+        var bundlePlans = (bundles ?? Array.Empty<DotNetPublishBundlePlan>())
+            .Where(b => b is not null && !string.IsNullOrWhiteSpace(b.Id))
+            .ToArray();
         var targetNames = new HashSet<string>(
-            (targets ?? Array.Empty<DotNetPublishTargetPlan>())
-                .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
-                .Select(t => t.Name),
+            targetPlans.Select(t => t.Name),
             StringComparer.OrdinalIgnoreCase);
+        var targetMap = targetPlans.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        var bundleMap = bundlePlans.ToDictionary(b => b.Id, StringComparer.OrdinalIgnoreCase);
 
         var plans = new List<DotNetPublishInstallerPlan>();
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -914,10 +1240,43 @@ public sealed partial class DotNetPublishPipelineRunner
                     $"Installer '{id}' references unknown PrepareFromTarget '{sourceTarget}'.");
             }
 
+            var prepareFromBundleId = string.IsNullOrWhiteSpace(installer.PrepareFromBundleId)
+                ? null
+                : installer.PrepareFromBundleId!.Trim();
+            if (!string.IsNullOrWhiteSpace(prepareFromBundleId))
+            {
+                if (!bundleMap.TryGetValue(prepareFromBundleId!, out var bundlePlan))
+                    throw new ArgumentException($"Installer '{id}' references unknown PrepareFromBundleId '{prepareFromBundleId}'.");
+                if (!string.Equals(bundlePlan.PrepareFromTarget, sourceTarget, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ArgumentException(
+                        $"Installer '{id}' PrepareFromBundleId '{prepareFromBundleId}' is bound to target '{bundlePlan.PrepareFromTarget}', not '{sourceTarget}'.");
+                }
+            }
+
+            var runtimes = NormalizeStrings(installer.Runtimes);
+            var frameworks = NormalizeStrings(installer.Frameworks);
+            var styles = NormalizeStyles(installer.Styles);
+            var sourceTargetPlan = targetMap[sourceTarget];
+            var matchingCombinations = (sourceTargetPlan.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                .Where(combo => InstallerMatchesCombo(runtimes, frameworks, styles, combo))
+                .ToArray();
+
+            if (matchingCombinations.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Installer '{id}' does not match any publish combination for target '{sourceTarget}'. " +
+                    $"{BuildInstallerFilterSummary(runtimes, frameworks, styles)}");
+            }
+
             plans.Add(new DotNetPublishInstallerPlan
             {
                 Id = id,
                 PrepareFromTarget = sourceTarget,
+                PrepareFromBundleId = prepareFromBundleId,
+                Runtimes = runtimes,
+                Frameworks = frameworks,
+                Styles = styles,
                 StagingPath = installer.StagingPath,
                 ManifestPath = installer.ManifestPath,
                 InstallerProjectId = installer.InstallerProjectId,
@@ -927,12 +1286,127 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestDirectoryRefId = installer.HarvestDirectoryRefId,
                 HarvestComponentGroupId = installer.HarvestComponentGroupId,
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
-                Sign = CloneSignOptions(installer.Sign),
+                Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                    signingProfiles,
+                    installer.SignProfile,
+                    installer.Sign,
+                    installer.SignOverrides,
+                    $"Installer '{id}'"),
                 ClientLicense = NormalizeInstallerClientLicense(id, installer.ClientLicense)
             });
         }
 
         return plans.ToArray();
+    }
+
+    private static DotNetPublishStorePackagePlan[] BuildStorePackagePlans(
+        IEnumerable<DotNetPublishStorePackage>? storePackages,
+        IEnumerable<DotNetPublishTargetPlan>? targets,
+        IReadOnlyDictionary<string, string> projectCatalog,
+        string projectRoot)
+    {
+        var targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+            .ToArray();
+        var targetNames = new HashSet<string>(
+            targetPlans.Select(t => t.Name),
+            StringComparer.OrdinalIgnoreCase);
+        var targetMap = targetPlans.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+
+        var plans = new List<DotNetPublishStorePackagePlan>();
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var storePackage in storePackages ?? Array.Empty<DotNetPublishStorePackage>())
+        {
+            if (storePackage is null) continue;
+            var id = (storePackage.Id ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("StorePackages[].Id is required.");
+            if (!ids.Add(id))
+                throw new ArgumentException($"Duplicate store package ID detected: {id}");
+
+            var sourceTarget = (storePackage.PrepareFromTarget ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(sourceTarget))
+                throw new ArgumentException($"StorePackages['{id}'].PrepareFromTarget is required.");
+            if (!targetNames.Contains(sourceTarget))
+                throw new ArgumentException($"Store package '{id}' references unknown PrepareFromTarget '{sourceTarget}'.");
+
+            var runtimes = NormalizeStrings(storePackage.Runtimes);
+            var frameworks = NormalizeStrings(storePackage.Frameworks);
+            var styles = NormalizeStyles(storePackage.Styles);
+            var sourceTargetPlan = targetMap[sourceTarget];
+            var matchingCombinations = (sourceTargetPlan.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                .Where(combo => StorePackageMatchesCombo(runtimes, frameworks, styles, combo))
+                .ToArray();
+
+            if (matchingCombinations.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Store package '{id}' does not match any publish combination for target '{sourceTarget}'. " +
+                    $"{BuildInstallerFilterSummary(runtimes, frameworks, styles)}");
+            }
+
+            plans.Add(new DotNetPublishStorePackagePlan
+            {
+                Id = id,
+                PrepareFromTarget = sourceTarget,
+                Runtimes = runtimes,
+                Frameworks = frameworks,
+                Styles = styles,
+                PackagingProjectId = storePackage.PackagingProjectId,
+                PackagingProjectPath = ResolveStorePackagingProjectPath(id, storePackage, projectCatalog, projectRoot),
+                OutputPath = storePackage.OutputPath,
+                ClearOutput = storePackage.ClearOutput,
+                BuildMode = storePackage.BuildMode,
+                Bundle = storePackage.Bundle,
+                GenerateAppInstaller = storePackage.GenerateAppInstaller,
+                MsBuildProperties = storePackage.MsBuildProperties is null
+                    ? null
+                    : new Dictionary<string, string>(storePackage.MsBuildProperties, StringComparer.OrdinalIgnoreCase)
+            });
+        }
+
+        return plans.ToArray();
+    }
+
+    private static string ResolveStorePackagingProjectPath(
+        string storePackageId,
+        DotNetPublishStorePackage storePackage,
+        IReadOnlyDictionary<string, string> projectCatalog,
+        string projectRoot)
+    {
+        var hasProjectPath = !string.IsNullOrWhiteSpace(storePackage.PackagingProjectPath);
+        var hasProjectId = !string.IsNullOrWhiteSpace(storePackage.PackagingProjectId);
+
+        if (!hasProjectPath && !hasProjectId)
+            throw new ArgumentException($"Store package '{storePackageId}' requires PackagingProjectPath or PackagingProjectId.");
+
+        if (hasProjectPath)
+        {
+            var resolvedPath = ResolvePath(projectRoot, storePackage.PackagingProjectPath!);
+            if (!File.Exists(resolvedPath))
+            {
+                throw new FileNotFoundException(
+                    $"Store packaging project path not found for store package '{storePackageId}': {resolvedPath}",
+                    resolvedPath);
+            }
+
+            return resolvedPath;
+        }
+
+        var id = storePackage.PackagingProjectId!.Trim();
+        if (!projectCatalog.TryGetValue(id, out var path) || string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException($"Store package '{storePackageId}' references unknown PackagingProjectId '{id}'.");
+
+        var catalogResolvedPath = path;
+        if (!File.Exists(catalogResolvedPath))
+        {
+            throw new FileNotFoundException(
+                $"Store packaging project path not found for store package '{storePackageId}': {catalogResolvedPath}",
+                catalogResolvedPath);
+        }
+
+        return catalogResolvedPath;
     }
 
     private static DotNetPublishBenchmarkGatePlan[] BuildBenchmarkGatePlans(
@@ -1098,6 +1572,58 @@ public sealed partial class DotNetPublishPipelineRunner
         };
     }
 
+    private static DotNetPublishStep CreateBundleStep(
+        string projectRoot,
+        string configuration,
+        DotNetPublishBundlePlan bundle,
+        string targetName,
+        DotNetPublishTargetCombination combo)
+    {
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["bundle"] = bundle.Id,
+            ["target"] = targetName,
+            ["rid"] = combo.Runtime,
+            ["framework"] = combo.Framework,
+            ["style"] = combo.Style.ToString(),
+            ["configuration"] = configuration
+        };
+
+        var outputTemplate = string.IsNullOrWhiteSpace(bundle.OutputPath)
+            ? Path.Combine("Artifacts", "DotNetPublish", "Bundles", "{bundle}", "{rid}", "{framework}", "{style}")
+            : bundle.OutputPath!;
+        var outputPath = ResolvePath(projectRoot, ApplyTemplate(outputTemplate, tokens));
+
+        string? zipPath = null;
+        if (bundle.Zip)
+        {
+            var zipNameTemplate = string.IsNullOrWhiteSpace(bundle.ZipNameTemplate)
+                ? "{bundle}-{framework}-{rid}-{style}.zip"
+                : bundle.ZipNameTemplate!;
+            var zipName = ApplyTemplate(zipNameTemplate, tokens);
+            if (!zipName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                zipName += ".zip";
+
+            zipPath = string.IsNullOrWhiteSpace(bundle.ZipPath)
+                ? Path.Combine(Path.GetDirectoryName(outputPath)!, zipName)
+                : ResolvePath(projectRoot, ApplyTemplate(bundle.ZipPath!, tokens));
+        }
+
+        return new DotNetPublishStep
+        {
+            Key = $"bundle:{bundle.Id}:{targetName}:{combo.Framework}:{combo.Runtime}:{combo.Style}",
+            Kind = DotNetPublishStepKind.Bundle,
+            Title = "Bundle",
+            BundleId = bundle.Id,
+            TargetName = targetName,
+            Framework = combo.Framework,
+            Runtime = combo.Runtime,
+            Style = combo.Style,
+            BundleOutputPath = outputPath,
+            BundleZipPath = zipPath
+        };
+    }
+
     private static DotNetPublishStep? CreateMsiBuildStep(
         DotNetPublishInstallerPlan installer,
         string targetName,
@@ -1139,6 +1665,130 @@ public sealed partial class DotNetPublishPipelineRunner
             Runtime = combo.Runtime,
             Style = combo.Style
         };
+    }
+
+    private static DotNetPublishStep CreateStorePackageStep(
+        string projectRoot,
+        string configuration,
+        DotNetPublishStorePackagePlan storePackage,
+        string targetName,
+        DotNetPublishTargetCombination combo)
+    {
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["storePackage"] = storePackage.Id,
+            ["target"] = targetName,
+            ["rid"] = combo.Runtime,
+            ["framework"] = combo.Framework,
+            ["style"] = combo.Style.ToString(),
+            ["configuration"] = configuration
+        };
+
+        var outputTemplate = string.IsNullOrWhiteSpace(storePackage.OutputPath)
+            ? DefaultStorePackageOutputPathTemplate
+            : storePackage.OutputPath!;
+        var outputPath = ResolvePath(projectRoot, ApplyTemplate(outputTemplate, tokens));
+
+        return new DotNetPublishStep
+        {
+            Key = $"store.package:{storePackage.Id}:{targetName}:{combo.Framework}:{combo.Runtime}:{combo.Style}",
+            Kind = DotNetPublishStepKind.StorePackage,
+            Title = "Store package",
+            StorePackageId = storePackage.Id,
+            TargetName = targetName,
+            Framework = combo.Framework,
+            Runtime = combo.Runtime,
+            Style = combo.Style,
+            StorePackageProjectPath = storePackage.PackagingProjectPath,
+            StorePackageOutputPath = outputPath
+        };
+    }
+
+    private static bool InstallerMatchesCombo(
+        DotNetPublishInstallerPlan installer,
+        DotNetPublishTargetCombination combo)
+    {
+        return InstallerMatchesCombo(
+            installer.Runtimes ?? Array.Empty<string>(),
+            installer.Frameworks ?? Array.Empty<string>(),
+            installer.Styles ?? Array.Empty<DotNetPublishStyle>(),
+            combo);
+    }
+
+    private static bool InstallerMatchesCombo(
+        string[] runtimes,
+        string[] frameworks,
+        DotNetPublishStyle[] styles,
+        DotNetPublishTargetCombination combo)
+    {
+        if (combo is null) return false;
+
+        if ((runtimes?.Length ?? 0) > 0
+            && !runtimes!.Any(runtime => string.Equals(runtime, combo.Runtime, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if ((frameworks?.Length ?? 0) > 0
+            && !frameworks!.Any(framework => string.Equals(framework, combo.Framework, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if ((styles?.Length ?? 0) > 0 && !styles!.Contains(combo.Style))
+            return false;
+
+        return true;
+    }
+
+    private static bool StorePackageMatchesCombo(
+        DotNetPublishStorePackagePlan storePackage,
+        DotNetPublishTargetCombination combo)
+    {
+        return StorePackageMatchesCombo(
+            storePackage.Runtimes ?? Array.Empty<string>(),
+            storePackage.Frameworks ?? Array.Empty<string>(),
+            storePackage.Styles ?? Array.Empty<DotNetPublishStyle>(),
+            combo);
+    }
+
+    private static bool StorePackageMatchesCombo(
+        string[] runtimes,
+        string[] frameworks,
+        DotNetPublishStyle[] styles,
+        DotNetPublishTargetCombination combo)
+    {
+        return InstallerMatchesCombo(runtimes, frameworks, styles, combo);
+    }
+
+    private static bool BundleMatchesCombo(
+        DotNetPublishBundlePlan bundle,
+        DotNetPublishTargetCombination combo)
+    {
+        return InstallerMatchesCombo(
+            bundle.Runtimes ?? Array.Empty<string>(),
+            bundle.Frameworks ?? Array.Empty<string>(),
+            bundle.Styles ?? Array.Empty<DotNetPublishStyle>(),
+            combo);
+    }
+
+    private static string BuildInstallerFilterSummary(
+        string[] runtimes,
+        string[] frameworks,
+        DotNetPublishStyle[] styles)
+    {
+        var parts = new List<string>();
+
+        if (runtimes.Length > 0)
+            parts.Add($"Runtimes=[{string.Join(", ", runtimes)}]");
+        if (frameworks.Length > 0)
+            parts.Add($"Frameworks=[{string.Join(", ", frameworks)}]");
+        if (styles.Length > 0)
+            parts.Add($"Styles=[{string.Join(", ", styles)}]");
+
+        return parts.Count == 0
+            ? "The source target may not produce any combinations."
+            : $"Resolved filters: {string.Join("; ", parts)}";
     }
 
     private static string? ResolveInstallerProjectPath(

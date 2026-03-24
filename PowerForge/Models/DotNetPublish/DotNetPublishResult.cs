@@ -34,6 +34,9 @@ public sealed class DotNetPublishResult
     /// <summary>Installer build outputs (for example wixproj-based MSI builds).</summary>
     public DotNetPublishMsiBuildResult[] MsiBuilds { get; set; } = Array.Empty<DotNetPublishMsiBuildResult>();
 
+    /// <summary>Microsoft Store / MSIX package build outputs.</summary>
+    public DotNetPublishStorePackageResult[] StorePackages { get; set; } = Array.Empty<DotNetPublishStorePackageResult>();
+
     /// <summary>Benchmark gate outcomes.</summary>
     public DotNetPublishBenchmarkGateResult[] BenchmarkGates { get; set; } = Array.Empty<DotNetPublishBenchmarkGateResult>();
 
@@ -64,6 +67,9 @@ public sealed class DotNetPublishFailure
     /// <summary>Optional installer identifier associated with the failure.</summary>
     public string? InstallerId { get; set; }
 
+    /// <summary>Optional Store package identifier associated with the failure.</summary>
+    public string? StorePackageId { get; set; }
+
     /// <summary>Optional gate identifier associated with the failure.</summary>
     public string? GateId { get; set; }
 
@@ -91,8 +97,14 @@ public sealed class DotNetPublishFailure
 /// </summary>
 public sealed class DotNetPublishArtefactResult
 {
+    /// <summary>Artifact category (publish output or composed bundle).</summary>
+    public DotNetPublishArtefactCategory Category { get; set; } = DotNetPublishArtefactCategory.Publish;
+
     /// <summary>Target name.</summary>
     public string Target { get; set; } = string.Empty;
+
+    /// <summary>Optional bundle identifier for bundle artifacts.</summary>
+    public string? BundleId { get; set; }
 
     /// <summary>Target kind.</summary>
     public DotNetPublishTargetKind Kind { get; set; } = DotNetPublishTargetKind.Unknown;
@@ -249,6 +261,42 @@ public sealed class DotNetPublishMsiBuildResult
 
     /// <summary>Resolved client identifier used for license lookup (when configured).</summary>
     public string? ClientId { get; set; }
+}
+
+/// <summary>
+/// Result of a Microsoft Store / MSIX packaging build step.
+/// </summary>
+public sealed class DotNetPublishStorePackageResult
+{
+    /// <summary>Store package identifier.</summary>
+    public string StorePackageId { get; set; } = string.Empty;
+
+    /// <summary>Source target name.</summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>Source target framework.</summary>
+    public string Framework { get; set; } = string.Empty;
+
+    /// <summary>Source runtime identifier.</summary>
+    public string Runtime { get; set; } = string.Empty;
+
+    /// <summary>Source publish style.</summary>
+    public DotNetPublishStyle Style { get; set; }
+
+    /// <summary>Packaging project path used by the build step.</summary>
+    public string ProjectPath { get; set; } = string.Empty;
+
+    /// <summary>Resolved Store package output directory.</summary>
+    public string OutputDir { get; set; } = string.Empty;
+
+    /// <summary>Store/MSIX package files produced by the build.</summary>
+    public string[] OutputFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Upload artifacts produced by the build (for example <c>*.msixupload</c>).</summary>
+    public string[] UploadFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Symbol artifacts produced by the build (for example <c>*.appxsym</c>).</summary>
+    public string[] SymbolFiles { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

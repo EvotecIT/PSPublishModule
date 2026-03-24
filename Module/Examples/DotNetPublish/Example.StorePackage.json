@@ -1,0 +1,70 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "Projects": [
+    {
+      "Id": "app",
+      "Path": "src/App/App.csproj"
+    },
+    {
+      "Id": "store",
+      "Path": "src/App.Package/App.Package.wapproj"
+    }
+  ],
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true,
+    "Runtimes": [ "win-x64" ]
+  },
+  "Targets": [
+    {
+      "Name": "App",
+      "ProjectId": "app",
+      "Publish": {
+        "Framework": "net8.0-windows10.0.26100.0",
+        "Styles": [ "FrameworkDependent", "PortableCompat" ],
+        "Runtimes": [ "win-x64" ],
+        "OutputPath": "Artifacts/DotNetPublish/{target}/{rid}/{framework}/{style}",
+        "Zip": true,
+        "StyleOverrides": {
+          "PortableCompat": {
+            "MsBuildProperties": {
+              "EnableMsixTooling": "true",
+              "WindowsAppSDKSelfContained": "true"
+            }
+          },
+          "FrameworkDependent": {
+            "MsBuildProperties": {
+              "EnableMsixTooling": "true",
+              "WindowsAppSDKSelfContained": "false"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "StorePackages": [
+    {
+      "Id": "App.Store",
+      "PrepareFromTarget": "App",
+      "PackagingProjectId": "store",
+      "Frameworks": [ "net8.0-windows10.0.26100.0" ],
+      "Runtimes": [ "win-x64" ],
+      "Styles": [ "FrameworkDependent", "PortableCompat" ],
+      "OutputPath": "Artifacts/DotNetPublish/Store/{storePackage}/{target}/{rid}/{framework}/{style}",
+      "BuildMode": "StoreUpload",
+      "Bundle": "Always",
+      "GenerateAppInstaller": false
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}

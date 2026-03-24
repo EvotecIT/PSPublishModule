@@ -11,6 +11,8 @@ public enum DotNetPublishStyle
     PortableCompat,
     /// <summary>Single-file, self-contained publish (IL + JIT) tuned for size (trimming enabled where supported).</summary>
     PortableSize,
+    /// <summary>Framework-dependent publish (runtime required on target machine). Smaller than self-contained outputs.</summary>
+    FrameworkDependent,
     /// <summary>NativeAOT publish optimized for startup/runtime speed.</summary>
     AotSpeed,
     /// <summary>NativeAOT publish optimized for size.</summary>
@@ -68,6 +70,30 @@ public enum DotNetPublishMsiHarvestMode
 }
 
 /// <summary>
+/// Microsoft Store / MSIX packaging build mode.
+/// </summary>
+public enum DotNetPublishStoreBuildMode
+{
+    /// <summary>Build Store-upload packages suitable for Partner Center submission flows.</summary>
+    StoreUpload,
+    /// <summary>Build sideload packages for local/private distribution.</summary>
+    SideloadOnly
+}
+
+/// <summary>
+/// Appx/MSIX bundle generation mode for Store packaging.
+/// </summary>
+public enum DotNetPublishStoreBundleMode
+{
+    /// <summary>Let the packaging project decide automatically.</summary>
+    Auto,
+    /// <summary>Always produce a bundle when the packaging project supports it.</summary>
+    Always,
+    /// <summary>Never produce a bundle.</summary>
+    Never
+}
+
+/// <summary>
 /// Extraction source type for benchmark metrics.
 /// </summary>
 public enum DotNetPublishBenchmarkMetricSource
@@ -119,6 +145,8 @@ public enum DotNetPublishStepKind
     Build,
     /// <summary>Publish a target for a runtime identifier.</summary>
     Publish,
+    /// <summary>Compose a distributable bundle from one or more published target outputs.</summary>
+    Bundle,
     /// <summary>Execute Windows service lifecycle actions for a published target.</summary>
     ServiceLifecycle,
     /// <summary>Prepare installer payload and manifest for a published target.</summary>
@@ -127,10 +155,23 @@ public enum DotNetPublishStepKind
     MsiBuild,
     /// <summary>Sign MSI build outputs using configured signing policy.</summary>
     MsiSign,
+    /// <summary>Build Microsoft Store / MSIX packaging outputs.</summary>
+    StorePackage,
     /// <summary>Extract benchmark metrics from JSON/log inputs.</summary>
     BenchmarkExtract,
     /// <summary>Evaluate benchmark metrics against baseline policy.</summary>
     BenchmarkGate,
     /// <summary>Write manifest outputs.</summary>
     Manifest
+}
+
+/// <summary>
+/// Category of produced artifact in the dotnet publish pipeline.
+/// </summary>
+public enum DotNetPublishArtefactCategory
+{
+    /// <summary>Direct publish output from a target.</summary>
+    Publish,
+    /// <summary>Composed bundle output derived from one or more published targets.</summary>
+    Bundle
 }

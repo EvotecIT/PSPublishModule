@@ -7,12 +7,53 @@
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
     "Packages": { "$ref": "project.build.schema.json" },
+    "WorkspaceValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ConfigPath": { "type": [ "string", "null" ] },
+        "Profile": { "type": [ "string", "null" ] },
+        "EnableFeatures": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "DisableFeatures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "Outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ManifestJsonPath": { "type": [ "string", "null" ] },
+        "ChecksumsPath": { "type": [ "string", "null" ] },
+        "Staging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "RootPath": { "type": [ "string", "null" ] },
+            "PackagesPath": { "type": [ "string", "null" ] },
+            "PortablePath": { "type": [ "string", "null" ] },
+            "InstallerPath": { "type": [ "string", "null" ] },
+            "StorePath": { "type": [ "string", "null" ] },
+            "ToolsPath": { "type": [ "string", "null" ] },
+            "MetadataPath": { "type": [ "string", "null" ] },
+            "OtherPath": { "type": [ "string", "null" ] }
+          }
+        }
+      }
+    },
     "Tools": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "ProjectRoot": { "type": [ "string", "null" ] },
         "Configuration": { "type": "string", "enum": [ "Release", "Debug" ] },
+        "DotNetPublishConfigPath": { "type": [ "string", "null" ] },
+        "DotNetPublishProfile": { "type": [ "string", "null" ] },
+        "DotNetPublish": { "$ref": "powerforge.dotnetpublish.schema.json" },
         "Targets": {
           "type": "array",
           "items": {

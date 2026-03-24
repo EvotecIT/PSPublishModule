@@ -101,7 +101,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -125,7 +126,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -149,7 +151,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -174,7 +177,8 @@ internal static partial class Program
                     var full = Path.GetFullPath(Path.Combine(dir, rel));
                     if (File.Exists(full)) return full;
                 }
-                catch { /* ignore */ }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
             }
         }
 
@@ -189,6 +193,83 @@ internal static partial class Program
             Path.Combine(".powerforge", "release.json"),
             Path.Combine("Build", "release.json"),
             "release.json"
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
+    static string? FindDefaultRunProfilesConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "run.profiles.json",
+            Path.Combine(".powerforge", "run.profiles.json"),
+            Path.Combine("Build", "run.profiles.json")
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
+    static string? FindDefaultStoreSubmissionConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "powerforge.store.submit.json",
+            Path.Combine(".powerforge", "store.submit.json"),
+            Path.Combine("Build", "store.submit.json"),
+            "store.submit.json"
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
+    static string? FindDefaultWorkspaceValidationConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "workspace.validation.json",
+            Path.Combine(".powerforge", "workspace.validation.json"),
+            Path.Combine("Build", "workspace.validation.json")
         };
 
         foreach (var dir in EnumerateSelfAndParents(baseDir))
@@ -318,6 +399,30 @@ internal static partial class Program
         var full = ResolveExistingFilePath(path);
         var json = File.ReadAllText(full);
         var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleTestSuiteSpec, full);
+        return (spec, full);
+    }
+
+    static (RunProfileSpec Value, string FullPath) LoadRunProfileSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.RunProfileSpec, full);
+        return (spec, full);
+    }
+
+    static (StoreSubmissionSpec Value, string FullPath) LoadStoreSubmissionSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.StoreSubmissionSpec, full);
+        return (spec, full);
+    }
+
+    static (WorkspaceValidationSpec Value, string FullPath) LoadWorkspaceValidationSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.WorkspaceValidationSpec, full);
         return (spec, full);
     }
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../Schemas/powerforge.store.submit.schema.json",
+  "SchemaVersion": 1,
+  "Authentication": {
+    "SellerId": "12345678",
+    "TenantId": "00000000-0000-0000-0000-000000000000",
+    "ClientId": "11111111-1111-1111-1111-111111111111",
+    "ClientSecretEnvVar": "PARTNER_CENTER_CLIENT_SECRET",
+    "Scope": "https://api.store.microsoft.com/.default"
+  },
+  "Targets": [
+    {
+      "Name": "PowerForgeDesktop",
+      "Provider": "DesktopInstaller",
+      "ApplicationId": "9NBLGGH00000",
+      "Commit": true,
+      "WaitForCommit": true,
+      "DesktopPackages": [
+        {
+          "PackageUrl": "https://downloads.contoso.com/powerforge/PowerForgeSetup.msi",
+          "Languages": [ "en-us" ],
+          "Architectures": [ "X64" ],
+          "IsSilentInstall": true,
+          "PackageType": "msi"
+        }
+      ]
+    }
+  ]
+}
