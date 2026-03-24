@@ -60,6 +60,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Framework = stepEx.Step.Framework,
             Runtime = stepEx.Step.Runtime,
             InstallerId = stepEx.Step.InstallerId,
+            StorePackageId = stepEx.Step.StorePackageId,
             GateId = stepEx.Step.GateId,
         };
 
@@ -171,9 +172,20 @@ public sealed partial class DotNetPublishPipelineRunner
             comparison);
     }
 
-    private static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) WriteManifests(DotNetPublishPlan plan, List<DotNetPublishArtefactResult> artefacts)
+    private static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) WriteManifests(
+        DotNetPublishPlan plan,
+        List<DotNetPublishArtefactResult> artefacts,
+        List<DotNetPublishStorePackageResult>? storePackages = null,
+        List<DotNetPublishMsiBuildResult>? msiBuilds = null)
     {
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
+            .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Framework, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Runtime, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.OutputDir, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var orderedStorePackages = (storePackages ?? new List<DotNetPublishStorePackageResult>())
             .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.Framework, StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.Runtime, StringComparer.OrdinalIgnoreCase)
@@ -213,6 +225,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 var zip = string.IsNullOrWhiteSpace(a.ZipPath) ? string.Empty : $" zip={a.ZipPath}";
                 lines.Add($"{a.Target} ({a.Framework}, {a.Runtime}) -> {a.OutputDir} ({a.Files} files, {mb:N1} MB; exe {exeMb:N1} MB){zip}");
             }
+
+            foreach (var store in orderedStorePackages)
+            {
+                var fileCount = (store.OutputFiles?.Length ?? 0) + (store.UploadFiles?.Length ?? 0) + (store.SymbolFiles?.Length ?? 0);
+                lines.Add($"Store {store.StorePackageId} from {store.Target} ({store.Framework}, {store.Runtime}, {store.Style}) -> {store.OutputDir} ({fileCount} files)");
+            }
+
             File.WriteAllLines(txtPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
@@ -234,6 +253,32 @@ public sealed partial class DotNetPublishPipelineRunner
                     var zip = Path.GetFullPath(a.ZipPath!);
                     if (File.Exists(zip))
                         filesToHash[zip] = ToManifestRelativePath(plan.ProjectRoot, zip);
+                }
+            }
+
+            foreach (var store in orderedStorePackages)
+            {
+                foreach (var file in (store.OutputFiles ?? Array.Empty<string>())
+                    .Concat(store.UploadFiles ?? Array.Empty<string>())
+                    .Concat(store.SymbolFiles ?? Array.Empty<string>()))
+                {
+                    if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+                        continue;
+
+                    var full = Path.GetFullPath(file);
+                    filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
+                }
+            }
+
+            foreach (var build in msiBuilds ?? new List<DotNetPublishMsiBuildResult>())
+            {
+                foreach (var file in build.OutputFiles ?? Array.Empty<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+                        continue;
+
+                    var full = Path.GetFullPath(file);
+                    filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
                 }
             }
 

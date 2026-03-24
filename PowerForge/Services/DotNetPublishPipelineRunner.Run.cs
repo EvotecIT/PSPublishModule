@@ -20,6 +20,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var artefacts = new List<DotNetPublishArtefactResult>();
         var msiPrepares = new List<DotNetPublishMsiPrepareResult>();
         var msiBuilds = new List<DotNetPublishMsiBuildResult>();
+        var storePackages = new List<DotNetPublishStorePackageResult>();
         var benchmarkGates = new List<DotNetPublishBenchmarkGateResult>();
         var benchmarkExtracts = new Dictionary<string, DotNetPublishBenchmarkExtractionResult>(StringComparer.OrdinalIgnoreCase);
         var stepReports = new List<DotNetPublishRunReportStep>();
@@ -53,6 +54,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.Publish:
                             artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!, step.Style));
                             break;
+                        case DotNetPublishStepKind.Bundle:
+                            artefacts.Add(BuildBundle(plan, artefacts, step));
+                            break;
                         case DotNetPublishStepKind.ServiceLifecycle:
                             RunServiceLifecycleStep(plan, artefacts, step);
                             break;
@@ -65,6 +69,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.MsiSign:
                             SignMsiPackage(plan, msiBuilds, step);
                             break;
+                        case DotNetPublishStepKind.StorePackage:
+                            storePackages.Add(BuildStorePackage(plan, step));
+                            break;
                         case DotNetPublishStepKind.BenchmarkExtract:
                             RunBenchmarkExtractStep(plan, benchmarkExtracts, step);
                             break;
@@ -72,7 +79,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             benchmarkGates.Add(RunBenchmarkGateStep(plan, benchmarkExtracts, step));
                             break;
                         case DotNetPublishStepKind.Manifest:
-                            (manifestJson, manifestText, checksumsPath) = WriteManifests(plan, artefacts);
+                            (manifestJson, manifestText, checksumsPath) = WriteManifests(plan, artefacts, storePackages, msiBuilds);
                             break;
                     }
 
@@ -109,6 +116,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Artefacts = artefacts.ToArray(),
                 MsiPrepares = msiPrepares.ToArray(),
                 MsiBuilds = msiBuilds.ToArray(),
+                StorePackages = storePackages.ToArray(),
                 BenchmarkGates = benchmarkGates.ToArray(),
                 ManifestJsonPath = manifestJson,
                 ManifestTextPath = manifestText,
@@ -139,6 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Artefacts = artefacts.ToArray(),
                 MsiPrepares = msiPrepares.ToArray(),
                 MsiBuilds = msiBuilds.ToArray(),
+                StorePackages = storePackages.ToArray(),
                 BenchmarkGates = benchmarkGates.ToArray(),
                 ManifestJsonPath = manifestJson,
                 ManifestTextPath = manifestText,
