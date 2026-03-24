@@ -108,6 +108,64 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_IgnoresNestedGitWorktreeRoots_DuringProjectDiscovery()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var nestedWorktreeRoot = Directory.CreateDirectory(Path.Combine(root.FullName, ".claude", "worktrees", "sample-review"));
+            File.WriteAllText(Path.Combine(nestedWorktreeRoot.FullName, ".git"), "gitdir: C:/Support/GitHub/PSPublishModule/.git/worktrees/sample-review");
+
+            var nestedProjectDir = Directory.CreateDirectory(Path.Combine(nestedWorktreeRoot.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(nestedProjectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>9.9.9</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                Pack = false,
+                Publish = false,
+                UpdateVersions = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("Sample.Package", project.ProjectName);
+            Assert.Equal("1.2.3", project.NewVersion);
+            Assert.DoesNotContain("Duplicate project name", result.ErrorMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ClassifyNuGetPushOutcome_ReturnsSkippedDuplicate_WhenDotNetReportsExistingPackage()
     {
         var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(

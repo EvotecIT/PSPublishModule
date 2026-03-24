@@ -14,6 +14,27 @@ Unified release entrypoint
 - Schema: `Schemas/powerforge.release.schema.json`
 - Wrapper: `Build/Build-Project.ps1`
 - CLI: `powerforge release --config .\Build\release.json`
+- Packages continue to use `project.build.json` / `Invoke-ProjectBuild`.
+- Tools/apps can now use either legacy `Tools.Targets` or the richer `Tools.DotNetPublish` / `Tools.DotNetPublishConfigPath`
+  path backed by `Schemas/powerforge.dotnetpublish.schema.json`.
+- Unified release can also declare a reusable workspace preflight via `WorkspaceValidation`
+  backed by `workspace.validation.json` and `powerforge workspace validate`.
+- Common release-time overrides:
+  - `--configuration Debug|Release`
+  - `--skip-workspace-validation`, `--workspace-config`, `--workspace-profile`
+  - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-testimox-root`
+  - `--target`, `--rid`, `--framework`, `--style`
+  - `--skip-restore` and `--skip-build` for DotNetPublish-backed tool/app flows
+  - `--output-root <path>` to remap DotNetPublish tool/app artefacts, manifests, bundle outputs, and installer staging under a different root
+  - `--stage-root <path>` to copy unified release assets into a categorized release folder (`nuget`, `portable`, `installer`, `tools`, `metadata`) and write `release-manifest.json` / `SHA256SUMS.txt` there by default
+  - `Outputs.Staging` in `release.json` for default folder names when you want the same categorized layout without repeating CLI switches
+  - `--keep-symbols` for symbol-preserving tool/app outputs
+  - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`
+  - `--sign`, `--sign-profile`, and raw overrides such as `--sign-thumbprint`, `--sign-subject-name`, `--sign-timestamp-url`, `--sign-tool-path`
+  - `--sign-on-missing-tool` and `--sign-on-failure` (`Warn|Fail|Skip`) for shared signing policy control
+  - `--package-sign-thumbprint`, `--package-sign-store`, and `--package-sign-timestamp-url` for package-signing overrides without editing `release.json`
+  - signing now emits a heuristic interaction hint when PowerForge can infer the certificate provider:
+    likely hardware-token/smart-card vs likely local software-backed certificate
 
 Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,
@@ -65,6 +86,7 @@ Discovery and selection
 - `IncludeProjects`: only process named projects.
 - `ExcludeProjects`: skip named projects even if discovered.
 - `ExcludeDirectories`: skip project discovery under these directory names.
+- Project discovery automatically stops at nested Git repository/worktree roots (for example review clones or `.claude/worktrees` entries inside the current repo).
 - `ExpectedVersionMapAsInclude`: if true, only projects matching the map are included.
 - `ExpectedVersionMapUseWildcards`: allows `*` and `?` in map keys.
 
@@ -115,6 +137,9 @@ GitHub releases
 Signing
 - `CertificateThumbprint`, `CertificateStore`, `TimeStampServer` control package signing.
 - If a certificate cannot be found, the run fails before publishing.
+- DotNetPublish-based unified release also emits a best-effort signing interaction note.
+  It can often detect likely hardware-token providers such as SafeNet/eToken versus local software-backed certs,
+  but it remains heuristic because final prompt behavior still depends on middleware and machine policy.
 
 Plan mode
 - `PlanOnly` (config) or `-Plan` (cmdlet): compute a plan without modifying files or publishing.
