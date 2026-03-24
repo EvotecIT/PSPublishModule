@@ -17,8 +17,10 @@ public static class ProcessStartInfoEncoding
     public static void TryApplyUtf8(ProcessStartInfo startInfo)
     {
         if (startInfo is null) return;
-        TrySetEncodingProperty(startInfo, "StandardOutputEncoding");
-        TrySetEncodingProperty(startInfo, "StandardErrorEncoding");
+        if (startInfo.RedirectStandardOutput)
+            TrySetEncodingProperty(startInfo, "StandardOutputEncoding");
+        if (startInfo.RedirectStandardError)
+            TrySetEncodingProperty(startInfo, "StandardErrorEncoding");
     }
 
     private static void TrySetEncodingProperty(ProcessStartInfo startInfo, string propertyName)
@@ -35,4 +37,3 @@ public static class ProcessStartInfoEncoding
         }
     }
 }
-

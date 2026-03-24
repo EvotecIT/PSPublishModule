@@ -42,6 +42,10 @@ public sealed class PowerShellRunRequest
     public IReadOnlyDictionary<string, string?>? EnvironmentVariables { get; }
     /// <summary>Optional explicit executable name or path.</summary>
     public string? ExecutableOverride { get; }
+    /// <summary>When true, capture standard output.</summary>
+    public bool CaptureOutput { get; }
+    /// <summary>When true, capture standard error.</summary>
+    public bool CaptureError { get; }
     /// <summary>Gets the invocation mode for the request.</summary>
     public PowerShellInvocationMode InvocationMode { get; }
     /// <summary>
@@ -54,7 +58,9 @@ public sealed class PowerShellRunRequest
         bool preferPwsh = true,
         string? workingDirectory = null,
         IReadOnlyDictionary<string, string?>? environmentVariables = null,
-        string? executableOverride = null)
+        string? executableOverride = null,
+        bool captureOutput = true,
+        bool captureError = true)
     {
         ScriptPath = scriptPath;
         CommandText = null;
@@ -64,6 +70,8 @@ public sealed class PowerShellRunRequest
         WorkingDirectory = workingDirectory;
         EnvironmentVariables = environmentVariables;
         ExecutableOverride = executableOverride;
+        CaptureOutput = captureOutput;
+        CaptureError = captureError;
         InvocationMode = PowerShellInvocationMode.File;
     }
 
@@ -76,6 +84,8 @@ public sealed class PowerShellRunRequest
     /// <param name="workingDirectory">Optional working directory for the PowerShell process.</param>
     /// <param name="environmentVariables">Optional environment variable overrides.</param>
     /// <param name="executableOverride">Optional explicit executable name or path.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
     /// <returns>PowerShell command request.</returns>
     public static PowerShellRunRequest ForCommand(
         string commandText,
@@ -83,7 +93,9 @@ public sealed class PowerShellRunRequest
         bool preferPwsh = true,
         string? workingDirectory = null,
         IReadOnlyDictionary<string, string?>? environmentVariables = null,
-        string? executableOverride = null)
+        string? executableOverride = null,
+        bool captureOutput = true,
+        bool captureError = true)
     {
         if (string.IsNullOrWhiteSpace(commandText))
             throw new ArgumentException("Command text is required.", nameof(commandText));
@@ -97,6 +109,8 @@ public sealed class PowerShellRunRequest
             workingDirectory: workingDirectory,
             environmentVariables: environmentVariables,
             executableOverride: executableOverride,
+            captureOutput: captureOutput,
+            captureError: captureError,
             invocationMode: PowerShellInvocationMode.Command);
     }
 
@@ -109,6 +123,8 @@ public sealed class PowerShellRunRequest
         string? workingDirectory,
         IReadOnlyDictionary<string, string?>? environmentVariables,
         string? executableOverride,
+        bool captureOutput,
+        bool captureError,
         PowerShellInvocationMode invocationMode)
     {
         ScriptPath = scriptPath;
@@ -119,6 +135,8 @@ public sealed class PowerShellRunRequest
         WorkingDirectory = workingDirectory;
         EnvironmentVariables = environmentVariables;
         ExecutableOverride = executableOverride;
+        CaptureOutput = captureOutput;
+        CaptureError = captureError;
         InvocationMode = invocationMode;
     }
 }
@@ -183,7 +201,9 @@ public sealed class PowerShellRunner : IPowerShellRunner
                 request.WorkingDirectory ?? Environment.CurrentDirectory,
                 arguments,
                 request.Timeout,
-                request.EnvironmentVariables)).GetAwaiter().GetResult();
+                request.EnvironmentVariables,
+                request.CaptureOutput,
+                request.CaptureError)).GetAwaiter().GetResult();
 
         return new PowerShellRunResult(processResult.ExitCode, processResult.StdOut, processResult.StdErr, exe);
     }
