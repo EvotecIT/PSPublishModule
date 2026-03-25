@@ -45,6 +45,9 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      INDEXNOW_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -55,114 +58,20 @@ concurrency:
 
 jobs:
   website-ci:
-    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
-    timeout-minutes: ${{ inputs.timeout_minutes }}
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
-    steps:
-      - name: Checkout website
-        uses: actions/checkout@v4
-        with:
-          token: ${{ github.token }}
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ inputs.dotnet_version }}
-
-      - name: Resolve PowerForge engine source
-        id: powerforge
-        shell: pwsh
-        run: |
-          $websiteRoot = [string]'${{ inputs.website_root }}'
-          $lockPath = [string]'${{ inputs.powerforge_lock_path }}'
-          if ([string]::IsNullOrWhiteSpace($lockPath)) {
-            $lockPath = Join-Path $websiteRoot '.powerforge/engine-lock.json'
-          }
-
-          $resolvedRepository = [string]'${{ inputs.powerforge_repository }}'
-          $resolvedRef = [string]'${{ inputs.powerforge_ref }}'
-
-          if (([string]::IsNullOrWhiteSpace($resolvedRepository) -or [string]::IsNullOrWhiteSpace($resolvedRef)) -and (Test-Path -LiteralPath $lockPath)) {
-            $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-            if ($null -eq $lock) {
-              throw "Invalid engine lock JSON: $lockPath"
-            }
-
-            if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
-              $resolvedRepository = [string]$lock.repository
-            }
-
-            if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-              $resolvedRef = [string]$lock.ref
-            }
-          }
-
-          if ([string]::IsNullOrWhiteSpace($resolvedRepository) -or [string]::IsNullOrWhiteSpace($resolvedRef)) {
-            throw "Provide either powerforge_repository + powerforge_ref or a valid engine lock file at '$lockPath'."
-          }
-
-          $repoOverride = [string]'${{ inputs.powerforge_repository_override }}'
-          $refOverride = [string]'${{ inputs.powerforge_ref_override }}'
-
-          $finalRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $resolvedRepository } else { $repoOverride }
-          $finalRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $resolvedRef } else { $refOverride }
-
-          if ($finalRepository -ne $resolvedRepository -or $finalRef -ne $resolvedRef) {
-            Write-Warning "Using PowerForge override instead of resolved source (${resolvedRepository}@${resolvedRef})."
-          }
-
-          if ($finalRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
-            throw "PowerForge ref must be an immutable commit SHA (40/64 hex): '$finalRef'."
-          }
-
-          "repository=$finalRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$finalRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Checkout PowerForge engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.powerforge.outputs.repository }}
-          ref: ${{ steps.powerforge.outputs.ref }}
-          path: ./.powerforge-engine
-          token: ${{ github.token }}
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Initialize Playwright cache directory
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
-
-      - name: Run website pipeline (ci mode)
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
-        run: |
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./${{ inputs.pipeline_config }} --mode ci
-
-      - name: Upload website reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ inputs.report_artifact_name }}
-          path: |
-            ./${{ inputs.website_root }}/_reports/**
-            ./${{ inputs.website_root }}/_site/_reports/**
-          if-no-files-found: ignore
-
-      - name: Cleanup Playwright cache
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
-            rm -rf "${PLAYWRIGHT_BROWSERS_PATH}"
-          fi
+    uses: ./.github/workflows/powerforge-website-run.yml
+    with:
+      website_root: ${{ inputs.website_root }}
+      pipeline_config: ${{ inputs.pipeline_config }}
+      runner_labels_json: ${{ inputs.runner_labels_json }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      dotnet_version: ${{ inputs.dotnet_version }}
+      report_artifact_name: ${{ inputs.report_artifact_name }}
+      powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
+      powerforge_repository: ${{ inputs.powerforge_repository }}
+      powerforge_ref: ${{ inputs.powerforge_ref }}
+      powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
+      powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      pipeline_mode: ci
+      use_playwright_cache: true
+    secrets:
+      indexnow_key: ${{ secrets.INDEXNOW_KEY }}
