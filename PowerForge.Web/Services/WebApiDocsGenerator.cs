@@ -713,6 +713,7 @@ public static partial class WebApiDocsGenerator
             ValidateCssContract(outputPath, options, warnings);
         }
 
+        AppendSourceCoverageWarnings(types, warnings);
         var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
 
@@ -787,6 +788,8 @@ public static partial class WebApiDocsGenerator
         if (trimmed.StartsWith("Source links disabled:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs source coverage:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("API docs source:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;

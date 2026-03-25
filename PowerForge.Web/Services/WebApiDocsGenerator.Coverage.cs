@@ -36,6 +36,50 @@ public static partial class WebApiDocsGenerator
         }
     }
 
+    private static void AppendSourceCoverageWarnings(
+        IReadOnlyList<ApiTypeModel> types,
+        List<string> warnings)
+    {
+        if (types is null || warnings is null)
+            return;
+
+        var allMembers = types
+            .SelectMany(static t => t.Methods
+                .Concat(t.Constructors)
+                .Concat(t.Properties)
+                .Concat(t.Fields)
+                .Concat(t.Events)
+                .Concat(t.ExtensionMethods))
+            .ToArray();
+        var commandTypes = types.Where(IsPowerShellCommandType).ToArray();
+
+        var groups = new[]
+        {
+            new SourceCoverageGroup("types", AnalyzeSourceCoverage(types.Select(static t => t.Source))),
+            new SourceCoverageGroup("members", AnalyzeSourceCoverage(allMembers.Select(static m => m.Source))),
+            new SourceCoverageGroup("powershell", AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source)))
+        };
+
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.UnresolvedTemplateTokenCount,
+            static group => group.Stats.UnresolvedTemplateSamples,
+            "generated source URLs still contain unresolved template tokens",
+            warnings);
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.InvalidUrlCount,
+            static group => group.Stats.InvalidUrlSamples,
+            "generated source URLs are not valid http/https URLs",
+            warnings);
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.RepoMismatchHintCount,
+            static group => group.Stats.RepoMismatchUrlSamples,
+            "generated GitHub source URLs look mismatched to the inferred repo and may 404",
+            warnings);
+    }
+
     private static Dictionary<string, object?> BuildCoveragePayload(
         IReadOnlyList<ApiTypeModel> types,
         string? assemblyName,
@@ -148,6 +192,43 @@ public static partial class WebApiDocsGenerator
         };
     }
 
+    private static void AppendSourceCoverageWarning(
+        IReadOnlyList<SourceCoverageGroup> groups,
+        Func<SourceCoverageGroup, int> countSelector,
+        Func<SourceCoverageGroup, IReadOnlyList<string>> sampleSelector,
+        string message,
+        List<string> warnings)
+    {
+        if (groups is null || groups.Count == 0 || string.IsNullOrWhiteSpace(message) || warnings is null)
+            return;
+
+        var active = groups
+            .Select(group => new
+            {
+                Group = group,
+                Count = Math.Max(0, countSelector(group)),
+                Samples = (sampleSelector(group) ?? Array.Empty<string>())
+                    .Where(static sample => !string.IsNullOrWhiteSpace(sample))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            })
+            .Where(static entry => entry.Count > 0)
+            .ToArray();
+        if (active.Length == 0)
+            return;
+
+        var breakdown = string.Join(", ", active.Select(static entry => $"{entry.Group.Label} {entry.Count}"));
+        var samples = active
+            .SelectMany(static entry => entry.Samples)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+        var sampleText = samples.Length == 0
+            ? string.Empty
+            : $" (samples: {string.Join(" | ", samples)})";
+        warnings.Add($"API docs source coverage: {message} ({breakdown}){sampleText}.");
+    }
+
     private static Dictionary<string, object?> BuildSourceCoveragePayload(int total, SourceCoverageStats coverage)
     {
         return new Dictionary<string, object?>
@@ -221,6 +302,16 @@ public static partial class WebApiDocsGenerator
                     stats.RepoMismatchHintCount++;
                     if (mismatchSamples.Count < sampleLimit && !string.IsNullOrWhiteSpace(mismatchHint))
                         mismatchSamples.Add(mismatchHint);
+                    if (stats.RepoMismatchUrlSamples.Length < sampleLimit)
+                    {
+                        var urlSample = url.Trim();
+                        if (!string.IsNullOrWhiteSpace(urlSample))
+                            stats.RepoMismatchUrlSamples = stats.RepoMismatchUrlSamples
+                                .Append(urlSample)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .Take(sampleLimit)
+                                .ToArray();
+                    }
                 }
             }
             else
@@ -294,5 +385,18 @@ public static partial class WebApiDocsGenerator
         public string[] InvalidUrlSamples { get; set; } = Array.Empty<string>();
         public string[] UnresolvedTemplateSamples { get; set; } = Array.Empty<string>();
         public string[] RepoMismatchSamples { get; set; } = Array.Empty<string>();
+        public string[] RepoMismatchUrlSamples { get; set; } = Array.Empty<string>();
+    }
+
+    private sealed class SourceCoverageGroup
+    {
+        public SourceCoverageGroup(string label, SourceCoverageStats stats)
+        {
+            Label = label;
+            Stats = stats;
+        }
+
+        public string Label { get; }
+        public SourceCoverageStats Stats { get; }
     }
 }

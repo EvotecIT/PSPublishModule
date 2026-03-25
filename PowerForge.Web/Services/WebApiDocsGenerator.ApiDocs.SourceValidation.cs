@@ -192,6 +192,7 @@ public static partial class WebApiDocsGenerator
 
         var hintCount = 0;
         var samples = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var urlSamples = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         void ObserveSource(ApiSourceLink? source)
         {
@@ -214,6 +215,8 @@ public static partial class WebApiDocsGenerator
             hintCount++;
             if (samples.Count < 8 && !string.IsNullOrWhiteSpace(hint))
                 samples.Add(hint);
+            if (urlSamples.Count < 4)
+                urlSamples.Add(source.Url.Trim());
         }
 
         foreach (var type in types)
@@ -232,9 +235,12 @@ public static partial class WebApiDocsGenerator
 
         var samplePreview = string.Join(", ", samples.Take(4));
         var more = samples.Count > 4 ? $" (+{samples.Count - 4} more samples)" : string.Empty;
+        var urlPreview = urlSamples.Count == 0
+            ? string.Empty
+            : $" Example URLs: {string.Join(" | ", urlSamples.Take(2))}.";
         warnings.Add(
             $"API docs source: detected likely duplicated path prefixes in GitHub source URLs for {hintCount} symbol(s) (samples: {samplePreview}{more}). " +
-            "Check sourceUrl/sourceUrlMappings/sourcePathPrefix; in mixed layouts prefer pathNoPrefix with stripPathPrefix:true.");
+            $"Check sourceUrl/sourceUrlMappings/sourcePathPrefix; in mixed layouts prefer pathNoPrefix with stripPathPrefix:true.{urlPreview}");
     }
 
     private static bool TryBuildPathDuplicationHint(string sourcePath, string githubFilePath, out string hint)

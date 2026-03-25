@@ -384,7 +384,9 @@ public class WebApiDocsGeneratorSourceAndCssTests
             var result = WebApiDocsGenerator.Generate(options);
             Assert.True(result.TypeCount > 0);
             Assert.Contains(result.Warnings, w =>
-                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase));
+                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Example URLs:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("https://github.com/example/PowerForge.Web/blob/main/PowerForge.Web/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -467,6 +469,10 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains(result.Warnings, w =>
                 w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
                 w.Contains("unsupported token(s): {branch}", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("generated source URLs still contain unresolved template tokens", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("{branch}", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
