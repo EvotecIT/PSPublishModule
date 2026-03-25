@@ -1003,6 +1003,101 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_PrefersCommandSpecificExampleScriptsOverGenericOnes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-fallback-ranking-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Example.Generic.ps1"),
+                """
+                Invoke-SampleFunction -Name "FromGeneric"
+                """);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.ps1"),
+                """
+                Invoke-SampleFunction -Name "FromSpecific"
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                PowerShellFallbackExampleLimitPerCommand = 1
+            };
+
+            WebApiDocsGenerator.Generate(options);
+            using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
+            var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var codeExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "code")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+
+            Assert.Single(codeExamples);
+            Assert.Contains("FromSpecific", codeExamples[0], StringComparison.Ordinal);
+            Assert.DoesNotContain("FromGeneric", codeExamples[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_GeneratesFallbackExamplesFromBestParameterSets()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-generated-fallback-" + Guid.NewGuid().ToString("N"));

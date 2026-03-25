@@ -6,6 +6,7 @@ namespace PowerForge.Web;
 public static partial class WebApiDocsGenerator
 {
     private sealed record GeneratedPowerShellExample(string Label, string Code);
+    private sealed record ImportedPowerShellExampleCandidate(string Command, string Snippet, string FilePath, int Score, int LineNumber);
 
     private static readonly Regex PowerShellCommandTokenRegex = new(
         @"\b[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][A-Za-z0-9_.-]*\b",
@@ -161,6 +162,7 @@ public static partial class WebApiDocsGenerator
     {
         var results = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var dedupe = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
         if (files.Count == 0 || commandNames.Count == 0)
             return results;
 
@@ -209,18 +211,102 @@ public static partial class WebApiDocsGenerator
                     if (!dedupeSet.Add(snippet))
                         continue;
 
-                    if (!results.TryGetValue(command, out var snippets))
+                    if (!candidates.TryGetValue(command, out var commandCandidates))
                     {
-                        snippets = new List<string>();
-                        results[command] = snippets;
+                        commandCandidates = new List<ImportedPowerShellExampleCandidate>();
+                        candidates[command] = commandCandidates;
                     }
 
-                    snippets.Add(snippet);
+                    commandCandidates.Add(new ImportedPowerShellExampleCandidate(
+                        command,
+                        snippet,
+                        file,
+                        GetImportedPowerShellExampleScore(command, file, snippet, i),
+                        i));
                 }
             }
         }
 
+        foreach (var pair in candidates)
+        {
+            results[pair.Key] = pair.Value
+                .OrderByDescending(static candidate => candidate.Score)
+                .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static candidate => candidate.LineNumber)
+                .Take(Math.Max(1, maxPerCommand))
+                .Select(static candidate => candidate.Snippet)
+                .ToList();
+        }
+
         return results;
+    }
+
+    private static int GetImportedPowerShellExampleScore(string commandName, string filePath, string snippet, int lineNumber)
+    {
+        var score = 0;
+        var normalizedCommand = NormalizePowerShellExampleToken(commandName);
+        var commandNoun = GetPowerShellCommandNoun(commandName);
+        var normalizedNoun = NormalizePowerShellExampleToken(commandNoun);
+        var fileName = Path.GetFileNameWithoutExtension(filePath) ?? string.Empty;
+        var normalizedFileName = NormalizePowerShellExampleToken(fileName);
+        var normalizedPath = NormalizePowerShellExampleToken(filePath.Replace('\\', '/'));
+
+        if (!string.IsNullOrWhiteSpace(normalizedCommand))
+        {
+            if (string.Equals(normalizedFileName, normalizedCommand, StringComparison.Ordinal))
+                score += 140;
+            else if (normalizedFileName.Contains(normalizedCommand, StringComparison.Ordinal))
+                score += 100;
+
+            if (normalizedPath.Contains(normalizedCommand, StringComparison.Ordinal))
+                score += 35;
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedNoun))
+        {
+            if (string.Equals(normalizedFileName, normalizedNoun, StringComparison.Ordinal))
+                score += 70;
+            else if (normalizedFileName.Contains(normalizedNoun, StringComparison.Ordinal))
+                score += 35;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snippet))
+        {
+            var firstLine = snippet
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                .FirstOrDefault(static line => !string.IsNullOrWhiteSpace(line))
+                ?.Trim() ?? string.Empty;
+            if (firstLine.StartsWith(commandName + " ", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(firstLine, commandName, StringComparison.OrdinalIgnoreCase))
+                score += 18;
+        }
+
+        score -= Math.Max(0, lineNumber);
+        return score;
+    }
+
+    private static string NormalizePowerShellExampleToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var chars = value
+            .Where(static ch => char.IsLetterOrDigit(ch))
+            .Select(static ch => char.ToLowerInvariant(ch))
+            .ToArray();
+        return new string(chars);
+    }
+
+    private static string GetPowerShellCommandNoun(string? commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return string.Empty;
+
+        var dash = commandName.IndexOf('-', StringComparison.Ordinal);
+        if (dash < 0 || dash + 1 >= commandName.Length)
+            return commandName;
+
+        return commandName[(dash + 1)..];
     }
 
     private static string CapturePowerShellExampleSnippet(string[] lines, int startIndex)
