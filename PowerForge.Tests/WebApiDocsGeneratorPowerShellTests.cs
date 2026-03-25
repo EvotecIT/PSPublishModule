@@ -1991,6 +1991,93 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_WarnsWhenPlaybackAssetsAreOversizedStaleOrUnsupported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-health-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+
+            var examplePath = Path.Combine(examplesDir, "Invoke-SampleOne.ps1");
+            var castPath = Path.Combine(examplesDir, "Invoke-SampleOne.cast");
+            var posterPath = Path.Combine(examplesDir, "Invoke-SampleOne.png");
+            var unsupportedPath = Path.Combine(examplesDir, "Invoke-SampleOne.gif");
+
+            File.WriteAllText(examplePath, "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllBytes(castPath, new byte[(2 * 1024 * 1024) + 128]);
+            File.WriteAllBytes(posterPath, new byte[(1024 * 1024) + 128]);
+            File.WriteAllBytes(unsupportedPath, new byte[] { 1, 2, 3, 4 });
+
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(castPath, now.AddMinutes(-20));
+            File.SetLastWriteTimeUtc(posterPath, now.AddMinutes(-30));
+            File.SetLastWriteTimeUtc(examplePath, now.AddMinutes(-5));
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("unsupported playback sidecar", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.gif", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("playback sidecar", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("recommended 2 MiB", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.cast", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("playback poster", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("recommended 1 MiB", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.cast", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_ReportsPlaybackCoverage_AndWarnsWhenPosterIsMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-coverage-" + Guid.NewGuid().ToString("N"));
