@@ -13,6 +13,10 @@ public sealed class WebApiDocsPowerShellExampleValidationOptions
     public int TimeoutSeconds { get; set; } = 60;
     /// <summary>When true, prefer pwsh over Windows PowerShell when both are available.</summary>
     public bool PreferPwsh { get; set; } = true;
+    /// <summary>When true, execute matched example scripts after syntax validation.</summary>
+    public bool ExecuteMatchedExamples { get; set; }
+    /// <summary>Maximum allowed execution time in seconds for each matched example script.</summary>
+    public int ExecutionTimeoutSeconds { get; set; } = 60;
 }
 
 /// <summary>Validation result for PowerShell example scripts.</summary>
@@ -42,6 +46,18 @@ public sealed class WebApiDocsPowerShellExampleValidationResult
     public int UnmatchedFileCount { get; set; }
     /// <summary>Total parse error count across all validated files.</summary>
     public int ParseErrorCount { get; set; }
+    /// <summary>True when matched example execution was requested.</summary>
+    public bool ExecutionRequested { get; set; }
+    /// <summary>True when the execution phase completed without runner-level failures.</summary>
+    public bool ExecutionCompleted { get; set; }
+    /// <summary>Executable used to run matched examples, when execution was requested.</summary>
+    public string? ExecutionExecutable { get; set; }
+    /// <summary>Number of example files that were executed.</summary>
+    public int ExecutedFileCount { get; set; }
+    /// <summary>Number of executed example files that exited successfully.</summary>
+    public int PassedExecutionFileCount { get; set; }
+    /// <summary>Number of executed example files that exited with failure.</summary>
+    public int FailedExecutionFileCount { get; set; }
     /// <summary>Per-file validation results.</summary>
     public WebApiDocsPowerShellExampleFileValidationResult[] Files { get; set; } = Array.Empty<WebApiDocsPowerShellExampleFileValidationResult>();
     /// <summary>Warnings emitted while resolving or validating example files.</summary>
@@ -63,4 +79,16 @@ public sealed class WebApiDocsPowerShellExampleFileValidationResult
     public string[] Commands { get; set; } = Array.Empty<string>();
     /// <summary>Documented command names matched by this example file.</summary>
     public string[] MatchedCommands { get; set; } = Array.Empty<string>();
+    /// <summary>True when the execution phase attempted to run this file.</summary>
+    public bool ExecutionAttempted { get; set; }
+    /// <summary>True when the executed example exited with code 0; null when not executed.</summary>
+    public bool? ExecutionSucceeded { get; set; }
+    /// <summary>Exit code returned by the example process, when executed.</summary>
+    public int? ExecutionExitCode { get; set; }
+    /// <summary>Captured standard output from execution, when available.</summary>
+    public string? ExecutionStdOut { get; set; }
+    /// <summary>Captured standard error from execution, when available.</summary>
+    public string? ExecutionStdErr { get; set; }
+    /// <summary>Reason this file was skipped during execution, when execution was requested but not attempted.</summary>
+    public string? ExecutionSkippedReason { get; set; }
 }

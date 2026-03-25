@@ -1723,6 +1723,85 @@ public class WebApiDocsGeneratorPowerShellTests
         }
     }
 
+    [Fact]
+    public void ValidatePowerShellExamples_ExecutesMatchedScripts_AndCapturesFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-execute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleTwo.Fail.ps1"), "Invoke-SampleTwo -Name 'Beta'; throw 'boom'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60,
+                ExecuteMatchedExamples = true,
+                ExecutionTimeoutSeconds = 60
+            });
+
+            Assert.True(validation.ValidationSucceeded);
+            Assert.True(validation.ExecutionRequested);
+            Assert.True(validation.ExecutionCompleted);
+            Assert.Equal(2, validation.ExecutedFileCount);
+            Assert.Equal(1, validation.PassedExecutionFileCount);
+            Assert.Equal(1, validation.FailedExecutionFileCount);
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("failed execution", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var passing = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(passing.ExecutionAttempted);
+            Assert.True(passing.ExecutionSucceeded);
+            Assert.Equal(0, passing.ExecutionExitCode);
+            Assert.Contains("Ran one for Alpha", passing.ExecutionStdOut, StringComparison.Ordinal);
+
+            var failing = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(failing.ExecutionAttempted);
+            Assert.False(failing.ExecutionSucceeded);
+            Assert.NotEqual(0, failing.ExecutionExitCode);
+            Assert.Contains("boom", failing.ExecutionStdErr ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            var reportRoot = Path.Combine(root, "_site", "api");
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.True(report.RootElement.GetProperty("executionRequested").GetBoolean());
+            Assert.Equal(2, report.RootElement.GetProperty("executedFileCount").GetInt32());
+            Assert.Equal(1, report.RootElement.GetProperty("failedExecutionFileCount").GetInt32());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalPowerShellHelpForValidation()
     {
         return

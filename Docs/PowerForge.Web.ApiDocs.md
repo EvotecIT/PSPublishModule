@@ -404,8 +404,15 @@ Notes:
   - report path: `--ps-example-validation-report <file>` / `powerShellExampleValidationReport`
   - timeout: `--ps-example-validation-timeout <seconds>` / `powerShellExampleValidationTimeoutSeconds`
   - fail on invalid scripts: `--fail-on-ps-example-validation` / `failOnPowerShellExampleValidation: true`
+- Optional matched-example execution can run curated PowerShell example scripts after syntax validation:
+  - CLI: `--execute-ps-examples`
+  - Pipeline: `executePowerShellExamples: true`
+  - execution timeout: `--ps-example-execution-timeout <seconds>` / `powerShellExampleExecutionTimeoutSeconds`
+  - fail on execution failures: `--fail-on-ps-example-execution` / `failOnPowerShellExampleExecution: true`
+  - only scripts that both parse cleanly and reference documented commands are executed
+  - enabling execution implicitly enables validation
 - Validation reports default to `powershell-example-validation.json` under the API output root when validation is enabled.
-- Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation or when a script does not reference any documented command from the selected help file.
+- Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation, when a script does not reference any documented command from the selected help file, or when a matched example script fails execution.
 - PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:
   - `AuthoredHelp` for examples from MAML help XML
   - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`

@@ -75,6 +75,15 @@ internal static partial class WebCliCommandHandlers
             60);
         var failOnPowerShellExampleValidation = HasOption(subArgs, "--fail-on-ps-example-validation") ||
                                                 HasOption(subArgs, "--fail-on-powershell-example-validation");
+        var executePowerShellExamples = HasOption(subArgs, "--execute-ps-examples") || HasOption(subArgs, "--execute-powershell-examples");
+        var powerShellExampleExecutionTimeoutSeconds = ParseIntOption(
+            TryGetOptionValue(subArgs, "--ps-example-execution-timeout") ??
+            TryGetOptionValue(subArgs, "--powershell-example-execution-timeout"),
+            60);
+        var failOnPowerShellExampleExecution = HasOption(subArgs, "--fail-on-ps-example-execution") ||
+                                               HasOption(subArgs, "--fail-on-powershell-example-execution");
+        if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            validatePowerShellExamples = true;
         var generateGitFreshness = HasOption(subArgs, "--git-freshness") || HasOption(subArgs, "--generate-git-freshness");
         if (HasOption(subArgs, "--no-git-freshness"))
             generateGitFreshness = false;
@@ -223,7 +232,9 @@ internal static partial class WebCliCommandHandlers
                 HelpPath = helpPath ?? string.Empty,
                 PowerShellModuleManifestPath = powerShellManifestPath,
                 PowerShellExamplesPath = powerShellExamplesPath,
-                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                ExecuteMatchedExamples = executePowerShellExamples,
+                ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
             });
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
@@ -237,6 +248,14 @@ internal static partial class WebCliCommandHandlers
                 var reason = !powerShellExampleValidation.ValidationSucceeded
                     ? "PowerShell example validation did not complete successfully."
                     : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                return Fail($"{reason} Report: {powerShellExampleValidationPath}", outputJson, logger, "web.apidocs");
+            }
+            if (failOnPowerShellExampleExecution &&
+                (!powerShellExampleValidation.ExecutionCompleted || powerShellExampleValidation.FailedExecutionFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ExecutionCompleted
+                    ? "PowerShell example execution did not complete successfully."
+                    : $"PowerShell example execution failed for {powerShellExampleValidation.FailedExecutionFileCount} script(s).";
                 return Fail($"{reason} Report: {powerShellExampleValidationPath}", outputJson, logger, "web.apidocs");
             }
         }

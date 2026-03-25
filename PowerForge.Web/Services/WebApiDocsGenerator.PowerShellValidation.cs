@@ -138,6 +138,28 @@ public static partial class WebApiDocsGenerator
         result.MatchedFileCount = result.Files.Count(static file => file.MatchedCommands.Length > 0);
         result.UnmatchedFileCount = result.Files.Length - result.MatchedFileCount;
         result.ParseErrorCount = result.Files.Sum(static file => file.ParseErrorCount);
+        result.ExecutionRequested = options.ExecuteMatchedExamples;
+
+        if (options.ExecuteMatchedExamples)
+        {
+            var executionResult = ExecuteMatchedPowerShellExamples(
+                result.Files,
+                manifestPath,
+                TimeSpan.FromSeconds(Math.Clamp(options.ExecutionTimeoutSeconds, 5, 600)),
+                options.PreferPwsh,
+                runnerToUse,
+                result.Executable);
+            result.ExecutionCompleted = executionResult.ExecutionCompleted;
+            result.ExecutionExecutable = executionResult.Executable;
+            result.ExecutedFileCount = result.Files.Count(static file => file.ExecutionAttempted);
+            result.PassedExecutionFileCount = result.Files.Count(static file => file.ExecutionSucceeded == true);
+            result.FailedExecutionFileCount = result.Files.Count(static file => file.ExecutionSucceeded == false);
+            if (!executionResult.ExecutionCompleted && !string.IsNullOrWhiteSpace(executionResult.ErrorMessage))
+            {
+                warnings.Add(
+                    $"API docs PowerShell coverage: matched example execution did not complete successfully ({executionResult.ErrorMessage}).");
+            }
+        }
 
         AppendPowerShellExampleValidationWarnings(result.Files, warnings);
 
@@ -217,6 +239,20 @@ public static partial class WebApiDocsGenerator
                 $"API docs PowerShell coverage: {unmatchedFiles.Length} example script(s) did not reference any documented commands " +
                 $"(samples: {BuildPreviewList(unmatchedFiles, 4)}).");
         }
+
+        var failedExecutionFiles = files
+            .Where(static file => file.ExecutionAttempted && file.ExecutionSucceeded == false)
+            .Select(static file => Path.GetFileName(file.FilePath))
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (failedExecutionFiles.Length > 0)
+        {
+            warnings.Add(
+                $"API docs PowerShell coverage: {failedExecutionFiles.Length} example script(s) failed execution " +
+                $"(samples: {BuildPreviewList(failedExecutionFiles, 4)}).");
+        }
     }
 
     private static string BuildPreviewList(IReadOnlyList<string> values, int previewCount)
@@ -228,6 +264,135 @@ public static partial class WebApiDocsGenerator
         var preview = string.Join(", ", values.Take(limit));
         var remaining = values.Count - Math.Min(values.Count, limit);
         return remaining > 0 ? $"{preview} (+{remaining} more)" : preview;
+    }
+
+    private static PowerShellExampleExecutionProcessResult ExecuteMatchedPowerShellExamples(
+        IReadOnlyList<WebApiDocsPowerShellExampleFileValidationResult> files,
+        string? manifestPath,
+        TimeSpan timeout,
+        bool preferPwsh,
+        IPowerShellRunner runner,
+        string? executableOverride)
+    {
+        if (files is null)
+            throw new ArgumentNullException(nameof(files));
+        if (runner is null)
+            throw new ArgumentNullException(nameof(runner));
+
+        var result = new PowerShellExampleExecutionProcessResult { ExecutionCompleted = true };
+        foreach (var file in files)
+        {
+            if (!file.ValidSyntax)
+            {
+                file.ExecutionSkippedReason = "Syntax validation failed.";
+                continue;
+            }
+
+            if (file.MatchedCommands.Length == 0)
+            {
+                file.ExecutionSkippedReason = "No documented commands matched.";
+                continue;
+            }
+
+            file.ExecutionAttempted = true;
+
+            try
+            {
+                var commandText = BuildPowerShellExampleExecutionCommand(file.FilePath, manifestPath);
+                var runResult = runner.Run(PowerShellRunRequest.ForCommand(
+                    commandText,
+                    timeout,
+                    preferPwsh: preferPwsh,
+                    workingDirectory: Path.GetDirectoryName(file.FilePath),
+                    executableOverride: string.IsNullOrWhiteSpace(executableOverride) ? null : executableOverride,
+                    captureOutput: true,
+                    captureError: true));
+
+                result.Executable ??= string.IsNullOrWhiteSpace(runResult.Executable) ? null : runResult.Executable;
+                file.ExecutionExitCode = runResult.ExitCode;
+                file.ExecutionSucceeded = runResult.ExitCode == 0;
+                file.ExecutionStdOut = NormalizeExecutionCapture(runResult.StdOut);
+                file.ExecutionStdErr = NormalizeExecutionCapture(runResult.StdErr);
+            }
+            catch (Exception ex)
+            {
+                result.ExecutionCompleted = false;
+                result.ErrorMessage ??= $"{ex.GetType().Name}: {ex.Message}";
+                file.ExecutionSucceeded = false;
+                file.ExecutionExitCode = -1;
+                file.ExecutionStdErr = NormalizeExecutionCapture($"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        return result;
+    }
+
+    private static string BuildPowerShellExampleExecutionCommand(string filePath, string? manifestPath)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("$ErrorActionPreference = 'Stop'");
+        sb.AppendLine("$ProgressPreference = 'SilentlyContinue'");
+        var bootstrapModulePath = ResolvePowerShellExampleExecutionBootstrapModulePath(manifestPath);
+        if (!string.IsNullOrWhiteSpace(bootstrapModulePath) && File.Exists(bootstrapModulePath))
+        {
+            sb.Append("Import-Module -Name ");
+            sb.Append(ToPowerShellSingleQuotedLiteral(Path.GetFullPath(bootstrapModulePath)));
+            sb.AppendLine(" -Force | Out-Null");
+        }
+        else if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
+        {
+            sb.Append("Import-Module -Name ");
+            sb.Append(ToPowerShellSingleQuotedLiteral(Path.GetFullPath(manifestPath)));
+            sb.AppendLine(" -Force | Out-Null");
+        }
+
+        sb.Append("& ");
+        sb.Append(ToPowerShellSingleQuotedLiteral(Path.GetFullPath(filePath)));
+        return sb.ToString();
+    }
+
+    private static string? ResolvePowerShellExampleExecutionBootstrapModulePath(string? manifestPath)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            return null;
+
+        try
+        {
+            var text = File.ReadAllText(manifestPath);
+            var rootModule = ParseManifestScalarValue(text, "RootModule");
+            if (string.IsNullOrWhiteSpace(rootModule))
+                return null;
+
+            var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? string.Empty;
+            var candidate = Path.IsPathRooted(rootModule)
+                ? rootModule
+                : Path.Combine(manifestDirectory, rootModule);
+            return candidate.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) && File.Exists(candidate)
+                ? candidate
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ToPowerShellSingleQuotedLiteral(string value)
+    {
+        return "'" + (value ?? string.Empty).Replace("'", "''", StringComparison.Ordinal) + "'";
+    }
+
+    private static string? NormalizeExecutionCapture(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        const int maxLength = 16000;
+        var normalized = value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return normalized[..maxLength] + "\n...[truncated]";
     }
 
     private static PowerShellExampleSyntaxValidationProcessResult RunPowerShellExampleSyntaxValidation(
@@ -346,6 +511,13 @@ public static partial class WebApiDocsGenerator
         public bool ValidationSucceeded { get; set; }
         public string? ErrorMessage { get; set; }
         public Dictionary<string, string[]> ParseErrorsByFile { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class PowerShellExampleExecutionProcessResult
+    {
+        public string? Executable { get; set; }
+        public bool ExecutionCompleted { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 
     private const string PowerShellExampleValidationScript =

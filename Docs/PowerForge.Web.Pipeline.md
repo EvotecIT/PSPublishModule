@@ -326,7 +326,12 @@ Notes:
     - `powerShellExampleValidationReport`: custom report path (default: `powershell-example-validation.json` under apidocs output)
     - `powerShellExampleValidationTimeoutSeconds`: parser timeout (default: `60`)
     - `failOnPowerShellExampleValidation`: fail the step when validation cannot run cleanly or when imported scripts contain syntax errors
-  - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation or does not reference any documented command from the selected help input
+  - optional matched example execution:
+    - `executePowerShellExamples`: run matched PowerShell example scripts after syntax validation
+    - `powerShellExampleExecutionTimeoutSeconds`: per-example execution timeout (default: `60`)
+    - `failOnPowerShellExampleExecution`: fail the step when matched examples fail execution or execution cannot complete cleanly
+    - execution implicitly enables `validatePowerShellExamples`
+  - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:
 ```json

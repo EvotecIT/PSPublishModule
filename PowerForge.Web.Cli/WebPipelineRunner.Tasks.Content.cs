@@ -79,6 +79,11 @@ internal static partial class WebPipelineRunner
         var powerShellExampleValidationReportPath = ResolvePath(baseDir, GetString(step, "powerShellExampleValidationReport") ?? GetString(step, "powershell-example-validation-report") ?? GetString(step, "powerShellExampleValidationReportPath") ?? GetString(step, "powershell-example-validation-report-path"));
         var powerShellExampleValidationTimeoutSeconds = GetInt(step, "powerShellExampleValidationTimeoutSeconds") ?? GetInt(step, "powershell-example-validation-timeout-seconds") ?? 60;
         var failOnPowerShellExampleValidation = GetBool(step, "failOnPowerShellExampleValidation") ?? GetBool(step, "fail-on-powershell-example-validation") ?? false;
+        var executePowerShellExamples = GetBool(step, "executePowerShellExamples") ?? GetBool(step, "execute-powershell-examples") ?? false;
+        var powerShellExampleExecutionTimeoutSeconds = GetInt(step, "powerShellExampleExecutionTimeoutSeconds") ?? GetInt(step, "powershell-example-execution-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleExecution = GetBool(step, "failOnPowerShellExampleExecution") ?? GetBool(step, "fail-on-powershell-example-execution") ?? false;
+        if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            validatePowerShellExamples = true;
         var generateGitFreshness = GetBool(step, "generateGitFreshness") ?? GetBool(step, "generate-git-freshness") ?? false;
         var gitFreshnessNewDays = GetInt(step, "gitFreshnessNewDays") ?? GetInt(step, "git-freshness-new-days") ?? 14;
         var gitFreshnessUpdatedDays = GetInt(step, "gitFreshnessUpdatedDays") ?? GetInt(step, "git-freshness-updated-days") ?? 90;
@@ -408,7 +413,9 @@ internal static partial class WebPipelineRunner
                 HelpPath = help ?? string.Empty,
                 PowerShellModuleManifestPath = powerShellManifestPath,
                 PowerShellExamplesPath = powerShellExamplesPath,
-                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                ExecuteMatchedExamples = executePowerShellExamples,
+                ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
             });
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
@@ -422,6 +429,14 @@ internal static partial class WebPipelineRunner
                 var reason = !powerShellExampleValidation.ValidationSucceeded
                     ? "PowerShell example validation did not complete successfully."
                     : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+            if (failOnPowerShellExampleExecution &&
+                (!powerShellExampleValidation.ExecutionCompleted || powerShellExampleValidation.FailedExecutionFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ExecutionCompleted
+                    ? "PowerShell example execution did not complete successfully."
+                    : $"PowerShell example execution failed for {powerShellExampleValidation.FailedExecutionFileCount} script(s).";
                 throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
             }
         }
