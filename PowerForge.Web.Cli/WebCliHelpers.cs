@@ -80,6 +80,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
         Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
+        Console.WriteLine("                     [--git-freshness] [--git-freshness-new-days <n>] [--git-freshness-updated-days <n>]");
         Console.WriteLine("                     [--fail-on-warnings] [--suppress-warning <pattern>]");
         Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");

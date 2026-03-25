@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -438,6 +440,105 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApiDocs_EmitsGitFreshnessMetadataWhenEnabled()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-freshness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            var helpPath = Path.Combine(helpDirectory, "Sample.Module-help.xml");
+            var aboutPath = Path.Combine(root, "about_SampleTopic.help.txt");
+
+            RunGit(root, "init");
+            RunGit(root, "config", "user.email", "tests@example.invalid");
+            RunGit(root, "config", "user.name", "PowerForge Tests");
+
+            File.WriteAllText(aboutPath,
+                """
+                # about_SampleTopic
+
+                Topic body.
+                """);
+            RunGit(root, "add", "about_SampleTopic.help.txt");
+            var olderCommitDate = DateTimeOffset.UtcNow.AddDays(-35).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = olderCommitDate,
+                    ["GIT_COMMITTER_DATE"] = olderCommitDate
+                },
+                "commit", "-m", "Add about topic");
+
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>For more details, see about_SampleTopic.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+            RunGit(root, "add", "en-US/Sample.Module-help.xml");
+            var recentCommitDate = DateTimeOffset.UtcNow.AddDays(-2).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = recentCommitDate,
+                    ["GIT_COMMITTER_DATE"] = recentCommitDate
+                },
+                "commit", "-m", "Add help xml");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": ".",
+                      "out": "./_site/api",
+                      "format": "both",
+                      "template": "docs",
+                      "generateGitFreshness": true,
+                      "gitFreshnessNewDays": 14,
+                      "gitFreshnessUpdatedDays": 90
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            using var commandJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "_site", "api", "types", "get-samplecmdlet.json")));
+            using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "_site", "api", "types", "about-sampletopic.json")));
+            Assert.Equal("new", commandJson.RootElement.GetProperty("freshness").GetProperty("status").GetString());
+            Assert.Equal("updated", aboutJson.RootElement.GetProperty("freshness").GetProperty("status").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return
@@ -556,5 +657,67 @@ public class WebPipelineRunnerApiDocsPreflightTests
         {
             // ignore cleanup failures in tests
         }
+    }
+
+    private static bool IsGitAvailable()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("--version");
+            using var process = Process.Start(psi);
+            if (process is null)
+                return false;
+
+            process.WaitForExit(2000);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void RunGit(string workingDirectory, params string[] args)
+    {
+        RunGit(workingDirectory, null, args);
+    }
+
+    private static void RunGit(string workingDirectory, IReadOnlyDictionary<string, string>? environment, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
+        if (environment is not null)
+        {
+            foreach (var pair in environment)
+                psi.Environment[pair.Key] = pair.Value;
+        }
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            throw new InvalidOperationException("Failed to start git.");
+
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(10000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(" ", args)} failed: {stderr}{Environment.NewLine}{stdout}");
     }
 }

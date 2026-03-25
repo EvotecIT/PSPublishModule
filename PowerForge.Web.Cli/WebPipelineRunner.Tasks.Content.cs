@@ -79,6 +79,9 @@ internal static partial class WebPipelineRunner
         var powerShellExampleValidationReportPath = ResolvePath(baseDir, GetString(step, "powerShellExampleValidationReport") ?? GetString(step, "powershell-example-validation-report") ?? GetString(step, "powerShellExampleValidationReportPath") ?? GetString(step, "powershell-example-validation-report-path"));
         var powerShellExampleValidationTimeoutSeconds = GetInt(step, "powerShellExampleValidationTimeoutSeconds") ?? GetInt(step, "powershell-example-validation-timeout-seconds") ?? 60;
         var failOnPowerShellExampleValidation = GetBool(step, "failOnPowerShellExampleValidation") ?? GetBool(step, "fail-on-powershell-example-validation") ?? false;
+        var generateGitFreshness = GetBool(step, "generateGitFreshness") ?? GetBool(step, "generate-git-freshness") ?? false;
+        var gitFreshnessNewDays = GetInt(step, "gitFreshnessNewDays") ?? GetInt(step, "git-freshness-new-days") ?? 14;
+        var gitFreshnessUpdatedDays = GetInt(step, "gitFreshnessUpdatedDays") ?? GetInt(step, "git-freshness-updated-days") ?? 90;
         var sourceUrlMappings = GetApiDocsSourceUrlMappings(
             step,
             "sourceUrlMappings",
@@ -316,6 +319,9 @@ internal static partial class WebPipelineRunner
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
             PowerShellExamplesPath = powerShellExamplesPath,
             PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
+            GenerateGitFreshness = generateGitFreshness,
+            GitFreshnessNewDays = gitFreshnessNewDays,
+            GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = nav,
             // Default to root context for profile selection to avoid accidental "API header has different nav"

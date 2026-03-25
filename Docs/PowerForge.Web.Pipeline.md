@@ -252,6 +252,10 @@ Notes:
   - `noindex` (default): keep compatibility alias pages, mark them `noindex,follow`
   - `redirect`: emit lightweight alias redirect pages to canonical `/api/<slug>/`
   - `omit`: do not emit flat alias pages
+- `generateGitFreshness` (`generate-git-freshness`) opt-in enables git-aware API freshness metadata/badges
+  - `gitFreshnessNewDays` / `git-freshness-new-days`: max age for `new` badges (default `14`)
+  - `gitFreshnessUpdatedDays` / `git-freshness-updated-days`: max age for `updated` badges (default `90`)
+  - best-effort only: if git metadata is unavailable, generation continues without freshness fields
 - `templateRoot` lets you override built-in templates/assets by placing files like
   `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
   `search.js`, or `fallback.css` in that folder

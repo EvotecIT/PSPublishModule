@@ -43,6 +43,11 @@ Overview identity and quick start:
   - `short` keeps short names only
   - `namespace-suffix` (default) disambiguates duplicates as `Type (Namespace.Part)`
   - `full` uses full type names
+- `generateGitFreshness` (pipeline) / `--git-freshness` (CLI) enables opt-in git freshness metadata:
+  - `gitFreshnessNewDays` / `--git-freshness-new-days` controls the `new` window (default `14`)
+  - `gitFreshnessUpdatedDays` / `--git-freshness-updated-days` controls the `updated` window (default `90`)
+  - emitted JSON adds `freshness.status`, `freshness.lastModifiedUtc`, `freshness.commitSha`, `freshness.ageDays`, and `freshness.sourcePath`
+  - HTML badges render only for `new` / `updated`; `stable` remains unbadged to avoid visual noise
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `/`)
@@ -150,6 +155,13 @@ Overview chips:
 - `.type-chip` – type chip link
 - `.type-chip.<kind>` – kind class (`class`, `struct`, `enum`, `interface`, `delegate`)
 - `.type-chip` includes `data-kind` and `data-namespace` for filtering
+- `.freshness-badge` – freshness badge shell
+- `.freshness-badge.new` – recent/new state
+- `.freshness-badge.updated` – recently updated state
+- `.type-freshness-badge` – type detail header placement
+- `.type-list-freshness` – sidebar row placement
+- `.quick-card-freshness` – quick-start card placement
+- `.type-chip-freshness` – namespace chip placement
 
 Member layout:
 - `.member-toolbar` – member filter toolbar

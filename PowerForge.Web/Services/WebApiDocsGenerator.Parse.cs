@@ -157,6 +157,7 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            type.OriginFiles.Add(resolved);
             foreach (var alias in commandAliases)
                 type.Aliases.Add(alias);
             foreach (var inputType in inputTypes)
@@ -1024,6 +1025,7 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            type.OriginFiles.Add(file);
 
             apiDoc.Types[type.FullName] = type;
             existing.Add(type.FullName);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using PowerForge.Web;
 
@@ -152,8 +153,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -212,8 +212,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -297,8 +296,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -585,6 +583,113 @@ public class WebApiDocsGeneratorPowerShellTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_EmitsGitFreshnessMetadataForCommandsAndAboutTopics()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-freshness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            var helpPath = Path.Combine(helpDirectory, "Sample.Module-help.xml");
+            var aboutPath = Path.Combine(root, "about_SampleTopic.help.txt");
+
+            RunGit(root, "init");
+            RunGit(root, "config", "user.email", "tests@example.invalid");
+            RunGit(root, "config", "user.name", "PowerForge Tests");
+
+            File.WriteAllText(aboutPath,
+                """
+                # about_SampleTopic
+
+                Describes sample topic behavior.
+                """);
+            RunGit(root, "add", "about_SampleTopic.help.txt");
+            var olderCommitDate = DateTimeOffset.UtcNow.AddDays(-40).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = olderCommitDate,
+                    ["GIT_COMMITTER_DATE"] = olderCommitDate
+                },
+                "commit", "-m", "Add about topic");
+
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>For more details, see about_SampleTopic.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+            RunGit(root, "add", "en-US/Sample.Module-help.xml");
+            var recentCommitDate = DateTimeOffset.UtcNow.AddDays(-3).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = recentCommitDate,
+                    ["GIT_COMMITTER_DATE"] = recentCommitDate
+                },
+                "commit", "-m", "Add help xml");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                GenerateGitFreshness = true,
+                GitFreshnessNewDays = 14,
+                GitFreshnessUpdatedDays = 90
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(2, result.TypeCount);
+
+            using var commandJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "get-samplecmdlet.json")));
+            using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-sampletopic.json")));
+
+            var commandFreshness = commandJson.RootElement.GetProperty("freshness");
+            var aboutFreshness = aboutJson.RootElement.GetProperty("freshness");
+
+            Assert.Equal("new", commandFreshness.GetProperty("status").GetString());
+            Assert.True(commandFreshness.GetProperty("ageDays").GetInt32() <= 14);
+            Assert.EndsWith(Path.Combine("en-US", "Sample.Module-help.xml"), commandFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            Assert.Equal("updated", aboutFreshness.GetProperty("status").GetString());
+            Assert.True(aboutFreshness.GetProperty("ageDays").GetInt32() >= 30);
+            Assert.EndsWith("about_SampleTopic.help.txt", aboutFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            var commandHtml = File.ReadAllText(Path.Combine(outputPath, "get-samplecmdlet", "index.html"));
+            var aboutHtml = File.ReadAllText(Path.Combine(outputPath, "about-sampletopic", "index.html"));
+            Assert.Contains("freshness-badge new", commandHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">new<", commandHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("freshness-badge updated", aboutHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">updated<", aboutHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
         }
     }
 
@@ -1672,5 +1777,80 @@ public class WebApiDocsGeneratorPowerShellTests
               </command:command>
             </helpItems>
             """;
+    }
+
+    private static bool IsGitAvailable()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("--version");
+            using var process = Process.Start(psi);
+            if (process is null)
+                return false;
+
+            process.WaitForExit(2000);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void RunGit(string workingDirectory, params string[] args)
+    {
+        RunGit(workingDirectory, null, args);
+    }
+
+    private static void RunGit(string workingDirectory, IReadOnlyDictionary<string, string>? environment, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
+        if (environment is not null)
+        {
+            foreach (var pair in environment)
+                psi.Environment[pair.Key] = pair.Value;
+        }
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            throw new InvalidOperationException("Failed to start git.");
+
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(10000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(" ", args)} failed: {stderr}{Environment.NewLine}{stdout}");
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, true);
+        }
+        catch
+        {
+            // best-effort cleanup for git temp repos on Windows
+        }
     }
 }

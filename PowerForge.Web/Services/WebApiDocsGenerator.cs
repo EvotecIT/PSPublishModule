@@ -24,6 +24,12 @@ public sealed class WebApiDocsOptions
     public string? PowerShellModuleManifestPath { get; set; }
     /// <summary>Optional path to exported PowerShell command metadata (kind + aliases).</summary>
     public string? PowerShellCommandMetadataPath { get; set; }
+    /// <summary>When true, compute git-based freshness metadata for API pages.</summary>
+    public bool GenerateGitFreshness { get; set; }
+    /// <summary>Max age in days for a page to be marked as <c>new</c>.</summary>
+    public int GitFreshnessNewDays { get; set; } = 14;
+    /// <summary>Max age in days for a page to be marked as <c>updated</c> before falling back to <c>stable</c>.</summary>
+    public int GitFreshnessUpdatedDays { get; set; } = 90;
     /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
     /// <summary>Output directory for generated docs.</summary>
@@ -375,6 +381,7 @@ public static partial class WebApiDocsGenerator
         ValidateSourceUrlPatternConsistency(options, types, warnings);
         ValidateConfiguredQuickStartTypes(types, options, warnings);
         ValidateDuplicateMemberSignatures(types, warnings);
+        AppendGitFreshnessMetadata(types, options);
 
         var index = new Dictionary<string, object?>
         {
@@ -398,6 +405,7 @@ public static partial class WebApiDocsGenerator
                     ["fullName"] = t.FullName,
                     ["namespace"] = t.Namespace,
                     ["kind"] = t.Kind,
+                    ["freshness"] = BuildFreshnessJson(t.Freshness),
                     ["slug"] = t.Slug,
                     ["summary"] = t.Summary,
                     ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
@@ -424,6 +432,7 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = t.Summary ?? string.Empty,
                 ["kind"] = t.Kind,
                 ["namespace"] = t.Namespace,
+                ["freshness"] = BuildFreshnessJson(t.Freshness),
                 ["slug"] = t.Slug,
                 ["url"] = $"{options.BaseUrl.TrimEnd('/')}/types/{t.Slug}.json"
             };
@@ -450,6 +459,7 @@ public static partial class WebApiDocsGenerator
                 ["outputTypes"] = type.OutputTypes,
                 ["assembly"] = type.Assembly,
                 ["source"] = BuildSourceJson(type.Source),
+                ["freshness"] = BuildFreshnessJson(type.Freshness),
                 ["baseType"] = type.BaseType,
                 ["interfaces"] = type.Interfaces,
                 ["attributes"] = type.Attributes,

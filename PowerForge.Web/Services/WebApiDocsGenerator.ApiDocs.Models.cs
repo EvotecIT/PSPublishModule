@@ -41,15 +41,26 @@ public static partial class WebApiDocsGenerator
         public List<string> SeeAlso { get; } = new();
         public string Kind { get; set; } = "Class";
         public string Slug { get; set; } = string.Empty;
+        public ApiFreshnessModel? Freshness { get; set; }
         public bool IsStatic { get; set; }
         public bool IsAbstract { get; set; }
         public bool IsSealed { get; set; }
+        public List<string> OriginFiles { get; } = new();
         public List<ApiMemberModel> Methods { get; } = new();
         public List<ApiMemberModel> Constructors { get; } = new();
         public List<ApiMemberModel> Properties { get; } = new();
         public List<ApiMemberModel> Fields { get; } = new();
         public List<ApiMemberModel> Events { get; } = new();
         public List<ApiMemberModel> ExtensionMethods { get; } = new();
+    }
+
+    private sealed class ApiFreshnessModel
+    {
+        public string Status { get; set; } = "stable";
+        public DateTimeOffset LastModifiedUtc { get; set; }
+        public string? CommitSha { get; set; }
+        public int AgeDays { get; set; }
+        public string? SourcePath { get; set; }
     }
 
     private sealed class ApiMemberModel

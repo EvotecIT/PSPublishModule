@@ -1016,8 +1016,9 @@ $@"<!doctype html>
         var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
         var aliasAttr = BuildAliasTitleAttribute(type);
+        var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-list-freshness");
         return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\"{aliasAttr}>" +
-               $"{icon}<span class=\"type-name\">{name}</span></a>";
+               $"{icon}<span class=\"type-name\">{name}</span>{freshnessBadge}</a>";
     }
 
     private static string BuildDocsOverview(
@@ -1059,6 +1060,9 @@ $@"<!doctype html>
                 sb.AppendLine("            <div class=\"quick-card-header\">");
                 sb.AppendLine($"              {quickIcon}");
                 sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(displayName)}</strong>");
+                var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "quick-card-freshness");
+                if (!string.IsNullOrWhiteSpace(freshnessBadge))
+                    sb.AppendLine($"              {freshnessBadge}");
                 sb.AppendLine("            </div>");
                 AppendAliasInlineMeta(sb, type, "quick-card-meta", "quick-card-aliases");
                 if (!string.IsNullOrWhiteSpace(summary))
@@ -1117,9 +1121,12 @@ $@"<!doctype html>
             var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
             var aliasAttr = BuildAliasTitleAttribute(type);
             var overflowAttr = hasOverflow && index >= visibleLimit ? " data-overview-extra hidden" : string.Empty;
+            var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-chip-freshness");
             sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\"{aliasAttr}{overflowAttr}>");
             sb.AppendLine($"              {chipIcon}");
             sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
+            if (!string.IsNullOrWhiteSpace(freshnessBadge))
+                sb.AppendLine($"              {freshnessBadge}");
             AppendAliasInlineMeta(sb, type, "type-chip-meta", "type-chip-aliases");
             sb.AppendLine("            </a>");
         }
@@ -1193,6 +1200,21 @@ $@"<!doctype html>
         return distinctKinds[0].Equals("function", StringComparison.OrdinalIgnoreCase)
             ? "Function"
             : GetKindLabel(distinctKinds[0], 0).Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+    }
+
+    private static string BuildFreshnessBadgeHtml(ApiFreshnessModel? freshness, string cssClass)
+    {
+        if (freshness is null)
+            return string.Empty;
+
+        var status = (freshness.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (!status.Equals("new", StringComparison.Ordinal) &&
+            !status.Equals("updated", StringComparison.Ordinal))
+            return string.Empty;
+
+        var label = status.Equals("new", StringComparison.Ordinal) ? "New" : "Updated";
+        var title = System.Web.HttpUtility.HtmlAttributeEncode(RenderFreshnessText(freshness));
+        return $"<span class=\"freshness-badge {System.Web.HttpUtility.HtmlEncode(status)} {System.Web.HttpUtility.HtmlEncode(cssClass)}\" title=\"{title}\">{System.Web.HttpUtility.HtmlEncode(label)}</span>";
     }
 
     private static void AppendAliasInlineMeta(StringBuilder sb, ApiTypeModel type, string wrapperClass, string aliasesClass)

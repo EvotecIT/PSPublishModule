@@ -75,6 +75,17 @@ internal static partial class WebCliCommandHandlers
             60);
         var failOnPowerShellExampleValidation = HasOption(subArgs, "--fail-on-ps-example-validation") ||
                                                 HasOption(subArgs, "--fail-on-powershell-example-validation");
+        var generateGitFreshness = HasOption(subArgs, "--git-freshness") || HasOption(subArgs, "--generate-git-freshness");
+        if (HasOption(subArgs, "--no-git-freshness"))
+            generateGitFreshness = false;
+        var gitFreshnessNewDays = ParseIntOption(
+            TryGetOptionValue(subArgs, "--git-freshness-new-days") ??
+            TryGetOptionValue(subArgs, "--gitFreshnessNewDays"),
+            14);
+        var gitFreshnessUpdatedDays = ParseIntOption(
+            TryGetOptionValue(subArgs, "--git-freshness-updated-days") ??
+            TryGetOptionValue(subArgs, "--gitFreshnessUpdatedDays"),
+            90);
         var sourceMapValues = GetOptionValues(subArgs, "--source-map");
         var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
         if (HasOption(subArgs, "--include-undocumented"))
@@ -152,7 +163,10 @@ internal static partial class WebCliCommandHandlers
             XrefMapPath = xrefMapPath,
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
             PowerShellExamplesPath = powerShellExamplesPath,
-            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2
+            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2,
+            GenerateGitFreshness = generateGitFreshness,
+            GitFreshnessNewDays = gitFreshnessNewDays,
+            GitFreshnessUpdatedDays = gitFreshnessUpdatedDays
         };
         if (memberXrefKinds.Count > 0)
             options.MemberXrefKinds.AddRange(memberXrefKinds);

@@ -46,6 +46,7 @@ public static partial class WebApiDocsGenerator
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         sb.AppendLine("        <div class=\"type-title-row\">");
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
+        AppendFreshnessBadge(sb, type.Freshness, "type-freshness-badge");
         sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
         sb.AppendLine("        </div>");
         AppendAliasInlineMeta(sb, type, "type-header-meta", "type-header-aliases");
@@ -119,6 +120,13 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"type-meta-row type-meta-source\">");
             sb.AppendLine("          <span class=\"type-meta-label\">Source</span>");
             sb.AppendLine($"          {RenderSourceLink(type.Source)}");
+            sb.AppendLine("        </div>");
+        }
+        if (type.Freshness is not null)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-freshness\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Updated</span>");
+            sb.AppendLine($"          <span>{RenderFreshnessText(type.Freshness)}</span>");
             sb.AppendLine("        </div>");
         }
         if (!string.IsNullOrWhiteSpace(type.BaseType))
@@ -821,5 +829,34 @@ public static partial class WebApiDocsGenerator
         }
 
         return candidate;
+    }
+
+    private static void AppendFreshnessBadge(StringBuilder sb, ApiFreshnessModel? freshness, string cssClass)
+    {
+        if (sb is null || freshness is null)
+            return;
+
+        var status = (freshness.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (!status.Equals("new", StringComparison.Ordinal) &&
+            !status.Equals("updated", StringComparison.Ordinal))
+            return;
+
+        var label = status.Equals("new", StringComparison.Ordinal) ? "New" : "Updated";
+        var title = RenderFreshnessText(freshness);
+        sb.AppendLine($"          <span class=\"freshness-badge {System.Web.HttpUtility.HtmlEncode(status)} {System.Web.HttpUtility.HtmlEncode(cssClass)}\" title=\"{System.Web.HttpUtility.HtmlAttributeEncode(title)}\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+    }
+
+    private static string RenderFreshnessText(ApiFreshnessModel freshness)
+    {
+        if (freshness is null)
+            return string.Empty;
+
+        var lastModified = freshness.LastModifiedUtc == default
+            ? string.Empty
+            : freshness.LastModifiedUtc.ToString("yyyy-MM-dd");
+        var ageText = freshness.AgeDays <= 0 ? "today" : $"{freshness.AgeDays} day{(freshness.AgeDays == 1 ? string.Empty : "s")} ago";
+        return string.IsNullOrWhiteSpace(lastModified)
+            ? ageText
+            : $"{lastModified} ({ageText})";
     }
 }
