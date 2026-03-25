@@ -491,8 +491,8 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "6.6.0",
-        "contentHash": "rDzWFaCLsnFMRifEs9F95mCQ1f9thva2ckXlHZ6xzCJ5SFqsB1u1Y/ZtQlc0iySg+H7HOR75J7ya2X4RmJvOFw=="
+        "resolved": "7.0.0",
+        "contentHash": "Y4/BGU/c2TjvGUfMBm5jZfPjHe8B4dk8ej72Vsy+nTsRCb/TNqZ1PdGQnV+04p7RJ85UiM4ni2Dx2F7yKOORNw=="
       },
       "SixLabors.Fonts": {
         "type": "Transitive",
@@ -851,7 +851,7 @@
           "Magick.NET-Q8-AnyCPU": "[14.11.0, )",
           "OfficeIMO.Markdown": "[0.5.2, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[6.6.0, )",
+          "Scriban": "[7.0.0, )",
           "YamlDotNet": "[15.1.2, )"
         }
       },
