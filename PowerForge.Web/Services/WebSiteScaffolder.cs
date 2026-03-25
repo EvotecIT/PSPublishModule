@@ -602,15 +602,10 @@ a { color: inherit; text-decoration: none; }
 
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
         Directory.CreateDirectory(powerforgeRoot);
-        var powerforgeScriptsRoot = Path.Combine(powerforgeRoot, "scripts");
-        Directory.CreateDirectory(powerforgeScriptsRoot);
         var engineLock = WebEngineLockFile.CreateDefault();
         created += WriteFile(
             Path.Combine(powerforgeRoot, "engine-lock.json"),
             JsonSerializer.Serialize(engineLock, new JsonSerializerOptions(WebJson.Options) { WriteIndented = true }));
-        created += WriteFile(
-            Path.Combine(powerforgeScriptsRoot, "resolve-engine-lock.ps1"),
-            ResolveEngineLockScriptTemplate);
 
         var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
         Directory.CreateDirectory(workflowsRoot);
@@ -635,54 +630,14 @@ env:
 
 jobs:
   verify-site:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout website
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Resolve PowerForge engine lock
-        id: powerforge-lock
-        shell: pwsh
-        env:
-          POWERFORGE_REPOSITORY: ${{ vars.POWERFORGE_REPOSITORY }}
-          POWERFORGE_REF: ${{ vars.POWERFORGE_REF }}
-        run: |
-          ./.powerforge/scripts/resolve-engine-lock.ps1
-
-      - name: Checkout PowerForge engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.powerforge-lock.outputs.repository }}
-          ref: ${{ steps.powerforge-lock.outputs.ref }}
-          path: ./.powerforge-engine
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Run pipeline (ci mode)
-        shell: pwsh
-        run: |
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci
-
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: powerforge-reports
-          path: |
-            ./_reports/**
-            ./_site/_reports/**
-          if-no-files-found: ignore
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main
+    with:
+      website_root: .
+      pipeline_config: pipeline.json
+      powerforge_lock_path: ./.powerforge/engine-lock.json
+      powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}
+      powerforge_ref_override: ${{ vars.POWERFORGE_REF }}
+    secrets: inherit
 """;
         created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowTemplate);
 
@@ -707,53 +662,14 @@ env:
 
 jobs:
   maintenance:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout website
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Resolve PowerForge engine lock
-        id: powerforge-lock
-        shell: pwsh
-        env:
-          POWERFORGE_REPOSITORY: ${{ vars.POWERFORGE_REPOSITORY }}
-          POWERFORGE_REF: ${{ vars.POWERFORGE_REF }}
-        run: |
-          ./.powerforge/scripts/resolve-engine-lock.ps1
-
-      - name: Checkout PowerForge engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.powerforge-lock.outputs.repository }}
-          ref: ${{ steps.powerforge-lock.outputs.ref }}
-          path: ./.powerforge-engine
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Run maintenance pipeline
-        shell: pwsh
-        run: |
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.maintenance.json --mode ci
-
-      - name: Upload maintenance reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: powerforge-maintenance-reports
-          path: |
-            ./_reports/**
-          if-no-files-found: ignore
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml@main
+    with:
+      website_root: .
+      pipeline_config: pipeline.maintenance.json
+      powerforge_lock_path: ./.powerforge/engine-lock.json
+      powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}
+      powerforge_ref_override: ${{ vars.POWERFORGE_REF }}
+    secrets: inherit
 """;
         created += WriteFile(Path.Combine(workflowsRoot, "website-maintenance.yml"), maintenanceWorkflowTemplate);
 

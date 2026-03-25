@@ -129,8 +129,8 @@ powerforge-web publish --config ./publish.json
 
 Scaffolded CI workflow:
 - `./.github/workflows/website-ci.yml` is generated automatically.
-- It resolves engine checkout from `./.powerforge/engine-lock.json` and runs `pipeline --mode ci`.
-- It keeps the lock parsing in `./.powerforge/scripts/resolve-engine-lock.ps1` so the workflow YAML stays small.
+- It is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml`.
+- The reusable workflow resolves engine checkout from `./.powerforge/engine-lock.json` and runs `pipeline --mode ci`.
 - The generated quality preset includes an `engine-lock` verify step in CI mode with `requireImmutableRef:true`.
 - The generated quality preset also includes a `github-artifacts-prune` dry-run step (`optional:true`) so storage hygiene is visible without breaking forks/local runs.
 - Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
@@ -139,6 +139,7 @@ Scaffolded CI workflow:
 
 Scaffolded maintenance workflow:
 - `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
+- It is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml`.
 - It runs `pipeline.maintenance.json` in CI mode.
 - Maintenance preset applies GitHub artifact cleanup with caps based on `--maintenance-profile` and `continueOnError:true`.
 
