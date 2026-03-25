@@ -698,6 +698,8 @@ internal static partial class WebPipelineRunner
         AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourceUrlPercent", "min-member-source-url-percent", "source.members.url.percent", "Member source URL coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourcePathPercent", "min-powershell-source-path-percent", "source.powershell.path.percent", "PowerShell command source path coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourceUrlPercent", "min-powershell-source-url-percent", "source.powershell.url.percent", "PowerShell command source URL coverage", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExamplePercent", "max-powershell-generated-fallback-only-example-percent", "powershell.generatedFallbackOnlyExamples.percent", "PowerShell generated-only fallback example percent", powerShellCommandMetric: true, formatAsPercent: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExampleCount", "max-powershell-generated-fallback-only-example-count", "powershell.generatedFallbackOnlyExamples.covered", "PowerShell generated-only fallback example count", powerShellCommandMetric: true);
         AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
@@ -744,7 +746,8 @@ internal static partial class WebPipelineRunner
         string aliasName,
         string metricPath,
         string label,
-        bool powerShellCommandMetric = false)
+        bool powerShellCommandMetric = false,
+        bool formatAsPercent = false)
     {
         var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
         if (!value.HasValue)
@@ -759,7 +762,7 @@ internal static partial class WebPipelineRunner
             MetricPath = metricPath,
             TargetValue = value.Value,
             Comparison = ApiDocsCoverageComparison.Maximum,
-            FormatAsPercent = false,
+            FormatAsPercent = formatAsPercent,
             SkipWhenNoPowerShellCommands = powerShellCommandMetric
         });
     }
