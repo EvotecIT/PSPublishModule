@@ -386,6 +386,14 @@ Notes:
 - When importing script-based fallback examples, command-specific files (for example `Invoke-Thing.ps1`) are preferred over generic demo scripts when multiple snippets match the same command.
 - When PowerShell help has no authored examples, generated fallback examples prefer the most user-friendly parameter sets and can emit multiple examples per command up to `powerShellFallbackExampleLimit`.
 - API docs now emit `[PFWEB.APIDOCS.POWERSHELL]` warnings when PowerShell commands rely only on generated fallback examples, so CI can distinguish “has some example” from “has authored examples”.
+- Optional PowerShell example validation can parse imported example scripts with the PowerShell parser before publish:
+  - CLI: `--validate-ps-examples`
+  - Pipeline: `validatePowerShellExamples: true`
+  - report path: `--ps-example-validation-report <file>` / `powerShellExampleValidationReport`
+  - timeout: `--ps-example-validation-timeout <seconds>` / `powerShellExampleValidationTimeoutSeconds`
+  - fail on invalid scripts: `--fail-on-ps-example-validation` / `failOnPowerShellExampleValidation: true`
+- Validation reports default to `powershell-example-validation.json` under the API output root when validation is enabled.
+- Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation or when a script does not reference any documented command from the selected help file.
 - PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:
   - `AuthoredHelp` for examples from MAML help XML
   - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`

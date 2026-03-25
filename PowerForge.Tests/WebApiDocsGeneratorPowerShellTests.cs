@@ -1533,4 +1533,144 @@ public class WebApiDocsGeneratorPowerShellTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void ValidatePowerShellExamples_FindsInvalidAndUnmatchedScripts_AndWritesReport()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-validate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) }
+                function Invoke-SampleTwo { param([string]$Name) }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "BrokenExample.ps1"), "Invoke-SampleTwo -Name (");
+            File.WriteAllText(Path.Combine(examplesDir, "GenericDemo.ps1"), "Get-UnrelatedThing -Name 'Other'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60
+            });
+
+            Assert.True(validation.ValidationSucceeded);
+            Assert.Equal(3, validation.FileCount);
+            Assert.Equal(2, validation.ValidSyntaxFileCount);
+            Assert.Equal(1, validation.InvalidSyntaxFileCount);
+            Assert.Equal(2, validation.MatchedFileCount);
+            Assert.Equal(1, validation.UnmatchedFileCount);
+            Assert.Equal(2, validation.KnownCommandCount);
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("failed syntax validation", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("BrokenExample.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("did not reference any documented commands", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("GenericDemo.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var broken = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "BrokenExample.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.False(broken.ValidSyntax);
+            Assert.Contains("Invoke-SampleTwo", broken.MatchedCommands, StringComparer.OrdinalIgnoreCase);
+            Assert.NotEmpty(broken.ParseErrors);
+
+            var generic = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "GenericDemo.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(generic.ValidSyntax);
+            Assert.Empty(generic.MatchedCommands);
+            Assert.Contains("Get-UnrelatedThing", generic.Commands, StringComparer.OrdinalIgnoreCase);
+
+            var reportRoot = Path.Combine(root, "_site", "api");
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            Assert.True(File.Exists(reportPath));
+
+            using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.Equal(1, report.RootElement.GetProperty("invalidSyntaxFileCount").GetInt32());
+            Assert.Equal(1, report.RootElement.GetProperty("unmatchedFileCount").GetInt32());
+            Assert.Equal(3, report.RootElement.GetProperty("fileCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    private static string BuildMinimalPowerShellHelpForValidation()
+    {
+        return
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+              <command:command>
+                <command:details>
+                  <command:name>Invoke-SampleOne</command:name>
+                  <command:commandType>Function</command:commandType>
+                  <maml:description><maml:para>Runs the first sample.</maml:para></maml:description>
+                </command:details>
+                <command:syntax>
+                  <command:syntaxItem>
+                    <command:name>Invoke-SampleOne</command:name>
+                    <command:parameter required="true">
+                      <maml:name>Name</maml:name>
+                      <command:parameterValue required="true">string</command:parameterValue>
+                    </command:parameter>
+                  </command:syntaxItem>
+                </command:syntax>
+                <command:parameters>
+                  <command:parameter required="true">
+                    <maml:name>Name</maml:name>
+                    <maml:description><maml:para>Name value.</maml:para></maml:description>
+                    <command:parameterValue required="true">string</command:parameterValue>
+                  </command:parameter>
+                </command:parameters>
+              </command:command>
+              <command:command>
+                <command:details>
+                  <command:name>Invoke-SampleTwo</command:name>
+                  <command:commandType>Function</command:commandType>
+                  <maml:description><maml:para>Runs the second sample.</maml:para></maml:description>
+                </command:details>
+                <command:syntax>
+                  <command:syntaxItem>
+                    <command:name>Invoke-SampleTwo</command:name>
+                    <command:parameter required="true">
+                      <maml:name>Name</maml:name>
+                      <command:parameterValue required="true">string</command:parameterValue>
+                    </command:parameter>
+                  </command:syntaxItem>
+                </command:syntax>
+                <command:parameters>
+                  <command:parameter required="true">
+                    <maml:name>Name</maml:name>
+                    <maml:description><maml:para>Name value.</maml:para></maml:description>
+                    <command:parameterValue required="true">string</command:parameterValue>
+                  </command:parameter>
+                </command:parameters>
+              </command:command>
+            </helpItems>
+            """;
+    }
 }

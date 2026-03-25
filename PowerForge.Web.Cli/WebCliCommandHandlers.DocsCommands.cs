@@ -66,6 +66,15 @@ internal static partial class WebCliCommandHandlers
         if (HasOption(subArgs, "--ps-fallback-examples-off"))
             generatePowerShellFallbackExamples = false;
         var powerShellFallbackLimit = ParseIntOption(TryGetOptionValue(subArgs, "--ps-fallback-limit"), 2);
+        var validatePowerShellExamples = HasOption(subArgs, "--validate-ps-examples") || HasOption(subArgs, "--validate-powershell-examples");
+        var powerShellExampleValidationReport = TryGetOptionValue(subArgs, "--ps-example-validation-report") ??
+                                                TryGetOptionValue(subArgs, "--powershell-example-validation-report");
+        var powerShellExampleValidationTimeoutSeconds = ParseIntOption(
+            TryGetOptionValue(subArgs, "--ps-example-validation-timeout") ??
+            TryGetOptionValue(subArgs, "--powershell-example-validation-timeout"),
+            60);
+        var failOnPowerShellExampleValidation = HasOption(subArgs, "--fail-on-ps-example-validation") ||
+                                                HasOption(subArgs, "--fail-on-powershell-example-validation");
         var sourceMapValues = GetOptionValues(subArgs, "--source-map");
         var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
         if (HasOption(subArgs, "--include-undocumented"))
@@ -191,8 +200,35 @@ internal static partial class WebCliCommandHandlers
         }
 
         var result = WebApiDocsGenerator.Generate(options);
+        WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
+        string? powerShellExampleValidationPath = null;
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
+        {
+            powerShellExampleValidation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath ?? string.Empty,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds
+            });
+            powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                outPath!,
+                powerShellExampleValidationReport,
+                powerShellExampleValidation);
+            result.PowerShellExampleValidationPath = powerShellExampleValidationPath;
+
+            if (failOnPowerShellExampleValidation &&
+                (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ValidationSucceeded
+                    ? "PowerShell example validation did not complete successfully."
+                    : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                return Fail($"{reason} Report: {powerShellExampleValidationPath}", outputJson, logger, "web.apidocs");
+            }
+        }
         var generatorWarnings = result.Warnings ?? Array.Empty<string>();
         var combinedWarnings = filteredPreflightWarnings
+            .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
             .Concat(generatorWarnings)
             .Where(static w => !string.IsNullOrWhiteSpace(w))
             .ToArray();
@@ -214,7 +250,8 @@ internal static partial class WebCliCommandHandlers
 
         if (outputJson)
         {
-            if (filteredWarnings.Length != generatorWarnings.Length)
+            if (filteredWarnings.Length != generatorWarnings.Length ||
+                !string.Equals(powerShellExampleValidationPath, result.PowerShellExampleValidationPath, StringComparison.Ordinal))
             {
                 result = new WebApiDocsResult
                 {
@@ -224,6 +261,7 @@ internal static partial class WebCliCommandHandlers
                     TypesPath = result.TypesPath,
                     CoveragePath = result.CoveragePath,
                     XrefPath = result.XrefPath,
+                    PowerShellExampleValidationPath = powerShellExampleValidationPath,
                     TypeCount = result.TypeCount,
                     UsedReflectionFallback = result.UsedReflectionFallback,
                     Warnings = filteredWarnings
@@ -244,6 +282,8 @@ internal static partial class WebCliCommandHandlers
         logger.Success($"API docs generated: {result.OutputPath}");
         logger.Info($"Types: {result.TypeCount}");
         logger.Info($"Index: {result.IndexPath}");
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            logger.Info($"PowerShell example validation: {powerShellExampleValidationPath}");
         return 0;
     }
 

@@ -12,6 +12,10 @@ public static partial class WebApiDocsGenerator
         @"\b[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][A-Za-z0-9_.-]*\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    private static readonly Regex PowerShellCultureFolderRegex = new(
+        @"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+        RegexTimeout);
 
     private static void AppendPowerShellFallbackExamples(
         ApiDocModel apiDoc,
@@ -127,8 +131,12 @@ public static partial class WebApiDocsGenerator
         {
             roots.Add(Path.GetFullPath(helpDir));
             var parent = Directory.GetParent(helpDir);
-            if (parent is not null && parent.Exists)
+            if (parent is not null &&
+                parent.Exists &&
+                ShouldProbePowerShellHelpParentDirectory(helpDir))
+            {
                 roots.Add(parent.FullName);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(manifestPath))
@@ -155,6 +163,21 @@ public static partial class WebApiDocsGenerator
         }
 
         return files.OrderBy(static f => f, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool ShouldProbePowerShellHelpParentDirectory(string helpDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(helpDirectory))
+            return false;
+
+        var folderName = Path.GetFileName(helpDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(folderName))
+            return false;
+
+        return folderName.Equals("help", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+               folderName.Equals("reference", StringComparison.OrdinalIgnoreCase) ||
+               PowerShellCultureFolderRegex.IsMatch(folderName);
     }
 
     private static Dictionary<string, List<string>> CollectPowerShellExamplesFromScripts(
@@ -186,15 +209,8 @@ public static partial class WebApiDocsGenerator
             for (var i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith("#", StringComparison.Ordinal))
-                    continue;
-
-                foreach (Match match in PowerShellCommandTokenRegex.Matches(line))
+                foreach (var command in EnumeratePowerShellCommandTokensFromLine(line))
                 {
-                    var command = match.Value;
                     if (!commands.Contains(command))
                         continue;
 
@@ -242,6 +258,50 @@ public static partial class WebApiDocsGenerator
         }
 
         return results;
+    }
+
+    private static string[] CollectPowerShellCommandTokensFromFile(string filePath, List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Array.Empty<string>();
+
+        try
+        {
+            return CollectPowerShellCommandTokens(File.ReadAllLines(filePath));
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"API docs PowerShell coverage: skipped PowerShell examples file '{Path.GetFileName(filePath)}' ({ex.GetType().Name}: {ex.Message})");
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string[] CollectPowerShellCommandTokens(IEnumerable<string> lines)
+    {
+        if (lines is null)
+            return Array.Empty<string>();
+
+        return lines
+            .SelectMany(EnumeratePowerShellCommandTokensFromLine)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static command => command, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> EnumeratePowerShellCommandTokensFromLine(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            yield break;
+
+        var trimmed = line.TrimStart();
+        if (trimmed.StartsWith("#", StringComparison.Ordinal))
+            yield break;
+
+        foreach (Match match in PowerShellCommandTokenRegex.Matches(line))
+        {
+            if (!string.IsNullOrWhiteSpace(match.Value))
+                yield return match.Value;
+        }
     }
 
     private static int GetImportedPowerShellExampleScore(string commandName, string filePath, string snippet, int lineNumber)

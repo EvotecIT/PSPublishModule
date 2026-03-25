@@ -75,6 +75,10 @@ internal static partial class WebPipelineRunner
         var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
         var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
         var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
+        var validatePowerShellExamples = GetBool(step, "validatePowerShellExamples") ?? GetBool(step, "validate-powershell-examples") ?? false;
+        var powerShellExampleValidationReportPath = ResolvePath(baseDir, GetString(step, "powerShellExampleValidationReport") ?? GetString(step, "powershell-example-validation-report") ?? GetString(step, "powerShellExampleValidationReportPath") ?? GetString(step, "powershell-example-validation-report-path"));
+        var powerShellExampleValidationTimeoutSeconds = GetInt(step, "powerShellExampleValidationTimeoutSeconds") ?? GetInt(step, "powershell-example-validation-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleValidation = GetBool(step, "failOnPowerShellExampleValidation") ?? GetBool(step, "fail-on-powershell-example-validation") ?? false;
         var sourceUrlMappings = GetApiDocsSourceUrlMappings(
             step,
             "sourceUrlMappings",
@@ -389,10 +393,42 @@ internal static partial class WebPipelineRunner
             options.MemberXrefKinds.AddRange(memberXrefKindList);
 
         var res = WebApiDocsGenerator.Generate(options);
+        WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
+        string? powerShellExampleValidationPath = null;
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
+        {
+            powerShellExampleValidation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = help ?? string.Empty,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds
+            });
+            powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                outPath!,
+                powerShellExampleValidationReportPath,
+                powerShellExampleValidation);
+            res.PowerShellExampleValidationPath = powerShellExampleValidationPath;
+
+            if (failOnPowerShellExampleValidation &&
+                (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ValidationSucceeded
+                    ? "PowerShell example validation did not complete successfully."
+                    : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+        }
         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
         var filteredWarnings = suppressWarnings is { Length: > 0 }
-            ? WebVerifyPolicy.FilterWarnings(res.Warnings, suppressWarnings)
-            : res.Warnings;
+            ? WebVerifyPolicy.FilterWarnings(
+                res.Warnings
+                    .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                    .ToArray(),
+                suppressWarnings)
+            : res.Warnings
+                .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                .ToArray();
 
         if (filteredWarnings.Length > 0)
         {
@@ -456,6 +492,8 @@ internal static partial class WebPipelineRunner
         }
 
         stepResult.Success = true;
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            note += $" (ps-example-validation: {Path.GetFileName(powerShellExampleValidationPath)})";
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
     }
 

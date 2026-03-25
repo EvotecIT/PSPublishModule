@@ -317,6 +317,12 @@ Notes:
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
   - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`
+  - optional PowerShell example validation:
+    - `validatePowerShellExamples`: enable parser-based validation for imported example scripts
+    - `powerShellExampleValidationReport`: custom report path (default: `powershell-example-validation.json` under apidocs output)
+    - `powerShellExampleValidationTimeoutSeconds`: parser timeout (default: `60`)
+    - `failOnPowerShellExampleValidation`: fail the step when validation cannot run cleanly or when imported scripts contain syntax errors
+  - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation or does not reference any documented command from the selected help input
 
 Multi-library batch example:
 ```json

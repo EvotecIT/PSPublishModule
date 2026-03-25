@@ -379,6 +379,65 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenPowerShellExampleValidationFindsInvalidScripts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-validate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "BrokenExample.ps1"), "Invoke-SampleFunction -Name (");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "validatePowerShellExamples": true,
+                      "failOnPowerShellExampleValidation": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("PowerShell example validation found 1 invalid script", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            var reportPath = Path.Combine(root, "_site", "api", "powershell-example-validation.json");
+            Assert.True(File.Exists(reportPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return
@@ -421,6 +480,39 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     private static string BuildMinimalPowerShellHelpWithoutExamples()
+    {
+        return
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+              <command:command>
+                <command:details>
+                  <command:name>Invoke-SampleFunction</command:name>
+                  <command:commandType>Function</command:commandType>
+                  <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                </command:details>
+                <command:syntax>
+                  <command:syntaxItem>
+                    <command:name>Invoke-SampleFunction</command:name>
+                    <command:parameter required="true">
+                      <maml:name>Name</maml:name>
+                      <command:parameterValue required="true">string</command:parameterValue>
+                    </command:parameter>
+                  </command:syntaxItem>
+                </command:syntax>
+                <command:parameters>
+                  <command:parameter required="true">
+                    <maml:name>Name</maml:name>
+                    <maml:description><maml:para>Name value.</maml:para></maml:description>
+                    <command:parameterValue required="true">string</command:parameterValue>
+                  </command:parameter>
+                </command:parameters>
+              </command:command>
+            </helpItems>
+            """;
+    }
+
+    private static string BuildMinimalPowerShellHelpForValidation()
     {
         return
             """
