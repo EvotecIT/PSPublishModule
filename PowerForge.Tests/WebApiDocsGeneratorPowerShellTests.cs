@@ -1003,6 +1003,131 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_GeneratesFallbackExamplesFromBestParameterSets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-generated-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                      <command:syntaxItem parameterSetName="ById">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Id</maml:name>
+                          <command:parameterValue required="true">int</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                      <command:syntaxItem parameterSetName="ByInputObject">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>InputObject</maml:name>
+                          <command:parameterValue required="true">Sample.Module.Item</command:parameterValue>
+                        </command:parameter>
+                        <command:parameter required="false">
+                          <maml:name>Credential</maml:name>
+                          <command:parameterValue required="false">pscredential</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="true">
+                        <maml:name>Id</maml:name>
+                        <maml:description><maml:para>Identifier.</maml:para></maml:description>
+                        <command:parameterValue required="true">int</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="true">
+                        <maml:name>InputObject</maml:name>
+                        <maml:description><maml:para>Pipeline object.</maml:para></maml:description>
+                        <command:parameterValue required="true">Sample.Module.Item</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="false">
+                        <maml:name>Credential</maml:name>
+                        <maml:description><maml:para>Credential.</maml:para></maml:description>
+                        <command:parameterValue required="false">pscredential</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name, [int]$Id, $InputObject, [pscredential]$Credential) }");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                PowerShellFallbackExampleLimitPerCommand = 2
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
+            var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var codeExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "code")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+            var textExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "text")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+
+            Assert.Equal(2, codeExamples.Length);
+            Assert.Contains(codeExamples, example => example!.Contains("Invoke-SampleFunction -Name 'Name'", StringComparison.Ordinal));
+            Assert.Contains(codeExamples, example => example!.Contains("Invoke-SampleFunction -Id 1", StringComparison.Ordinal));
+            Assert.DoesNotContain(codeExamples, example => example!.Contains("-InputObject", StringComparison.Ordinal));
+            Assert.Contains(textExamples, example => example!.Contains("parameter set 'ByName'", StringComparison.Ordinal));
+            Assert.Contains(textExamples, example => example!.Contains("parameter set 'ById'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_ApiDocs_WritesCoverageReport()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-coverage-" + Guid.NewGuid().ToString("N"));

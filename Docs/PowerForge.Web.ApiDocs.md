@@ -361,4 +361,5 @@ Notes:
 - PowerShell syntax signatures append `[<CommonParameters>]` for command kinds that support common parameters,
   and docs pages render a dedicated `Common Parameters` section with an `about_CommonParameters` reference.
 - PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
+- When PowerShell help has no authored examples, generated fallback examples prefer the most user-friendly parameter sets and can emit multiple examples per command up to `powerShellFallbackExampleLimit`.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

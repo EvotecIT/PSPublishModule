@@ -5,6 +5,8 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
+    private sealed record GeneratedPowerShellExample(string Label, string Code);
+
     private static readonly Regex PowerShellCommandTokenRegex = new(
         @"\b[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][A-Za-z0-9_.-]*\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -50,18 +52,17 @@ public static partial class WebApiDocsGenerator
                 continue;
             }
 
-            var fallback = BuildGeneratedPowerShellExample(type);
-            if (!string.IsNullOrWhiteSpace(fallback))
+            foreach (var fallback in BuildGeneratedPowerShellExamples(type, limit))
             {
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = "Generated fallback example from command syntax."
+                    Text = fallback.Label
                 });
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "code",
-                    Text = fallback
+                    Text = fallback.Code
                 });
             }
         }
@@ -253,15 +254,39 @@ public static partial class WebApiDocsGenerator
         return string.Join(Environment.NewLine, snippet).Trim();
     }
 
-    private static string? BuildGeneratedPowerShellExample(ApiTypeModel type)
+    private static IReadOnlyList<GeneratedPowerShellExample> BuildGeneratedPowerShellExamples(ApiTypeModel type, int limit)
     {
-        if (type is null || string.IsNullOrWhiteSpace(type.Name))
-            return null;
+        if (type is null || string.IsNullOrWhiteSpace(type.Name) || limit <= 0)
+            return Array.Empty<GeneratedPowerShellExample>();
 
-        var method = type.Methods
-            .OrderByDescending(static m => m.Parameters.Count(static p => !p.IsOptional))
-            .ThenByDescending(static m => m.Parameters.Count)
-            .FirstOrDefault();
+        var examples = new List<GeneratedPowerShellExample>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var methods = type.Methods
+            .Where(static method => method is not null)
+            .OrderByDescending(GetGeneratedPowerShellExampleScore)
+            .ThenBy(static method => method.Parameters.Count(static p => !p.IsOptional))
+            .ThenBy(static method => method.Parameters.Count)
+            .ThenBy(static method => method.ParameterSetName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var method in methods)
+        {
+            var code = BuildGeneratedPowerShellExample(type.Name, method);
+            if (string.IsNullOrWhiteSpace(code) || !seen.Add(code))
+                continue;
+
+            examples.Add(new GeneratedPowerShellExample(BuildGeneratedPowerShellExampleLabel(method), code));
+            if (examples.Count >= limit)
+                break;
+        }
+
+        return examples;
+    }
+
+    private static string? BuildGeneratedPowerShellExample(string commandName, ApiMemberModel? method)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return null;
 
         var parameters = method?.Parameters ?? new List<ApiParameterModel>();
         var picked = parameters
@@ -271,19 +296,16 @@ public static partial class WebApiDocsGenerator
 
         if (picked.Count == 0)
         {
-            var candidate =
-                parameters.FirstOrDefault(p => p.Name.Equals("Path", StringComparison.OrdinalIgnoreCase)) ??
-                parameters.FirstOrDefault(p => p.Name.EndsWith("Path", StringComparison.OrdinalIgnoreCase)) ??
-                parameters.FirstOrDefault(p => p.Name.Equals("ModuleName", StringComparison.OrdinalIgnoreCase)) ??
-                parameters.FirstOrDefault(p => p.Name.Equals("Name", StringComparison.OrdinalIgnoreCase)) ??
-                parameters.FirstOrDefault(p => p.Name.Equals("Id", StringComparison.OrdinalIgnoreCase)) ??
-                parameters.FirstOrDefault();
+            var candidate = parameters
+                .OrderByDescending(GetGeneratedPowerShellExampleParameterScore)
+                .ThenBy(static p => p.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
 
             if (candidate is not null)
                 picked.Add(candidate);
         }
 
-        var parts = new List<string> { type.Name };
+        var parts = new List<string> { commandName };
         foreach (var parameter in picked)
         {
             if (string.IsNullOrWhiteSpace(parameter.Name))
@@ -296,6 +318,154 @@ public static partial class WebApiDocsGenerator
         }
 
         return string.Join(" ", parts.Where(static p => !string.IsNullOrWhiteSpace(p)));
+    }
+
+    private static string BuildGeneratedPowerShellExampleLabel(ApiMemberModel method)
+    {
+        if (!string.IsNullOrWhiteSpace(method?.ParameterSetName))
+            return $"Generated fallback example from parameter set '{method.ParameterSetName}'.";
+        return "Generated fallback example from command syntax.";
+    }
+
+    private static int GetGeneratedPowerShellExampleScore(ApiMemberModel method)
+    {
+        if (method is null)
+            return int.MinValue;
+
+        var required = method.Parameters.Where(static p => !p.IsOptional).ToList();
+        var optional = method.Parameters.Where(static p => p.IsOptional).ToList();
+        var score = 0;
+
+        if (required.Count == 0)
+        {
+            score += 14;
+        }
+        else
+        {
+            score += Math.Max(0, 36 - Math.Abs(required.Count - 1) * 10);
+        }
+
+        if (required.Count <= 3)
+            score += 8;
+        if (required.Count > 4)
+            score -= (required.Count - 4) * 8;
+
+        score += required.Sum(GetGeneratedPowerShellExampleParameterScore);
+        score += optional
+            .Select(GetGeneratedPowerShellExampleParameterScore)
+            .DefaultIfEmpty(0)
+            .Max() / 3;
+
+        return score;
+    }
+
+    private static int GetGeneratedPowerShellExampleParameterScore(ApiParameterModel? parameter)
+    {
+        if (parameter is null)
+            return int.MinValue;
+
+        var score = 0;
+        var name = parameter.Name?.Trim() ?? string.Empty;
+        var type = parameter.Type?.Trim() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            if (name.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Path", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Id", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Mode", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Uri", StringComparison.OrdinalIgnoreCase))
+                score += 30;
+            else if (name.EndsWith("Name", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Path", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+                     name.EndsWith("Uri", StringComparison.OrdinalIgnoreCase))
+                score += 22;
+
+            if (name.Equals("InputObject", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Credential", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Session", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("CimSession", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("PSSession", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase))
+                score -= 28;
+
+            if (name.Equals("WhatIf", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Confirm", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Verbose", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Debug", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ErrorAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("WarningAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("InformationAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("ProgressAction", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("OutVariable", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("OutBuffer", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("PipelineVariable", StringComparison.OrdinalIgnoreCase))
+                score -= 40;
+        }
+
+        if (IsPowerShellFriendlyExampleType(type))
+            score += 12;
+        else if (!string.IsNullOrWhiteSpace(type))
+            score -= 16;
+
+        if (parameter.PossibleValues.Count > 0)
+            score += 8;
+        if (IsPowerShellSwitchParameter(type))
+            score -= 6;
+
+        return score;
+    }
+
+    private static bool IsPowerShellFriendlyExampleType(string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+            return true;
+
+        var type = typeName.Trim();
+        if (type.EndsWith("[]", StringComparison.Ordinal))
+            return IsPowerShellFriendlyExampleType(type[..^2]);
+
+        return type.Equals("String", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("string", StringComparison.OrdinalIgnoreCase) ||
+               type.EndsWith(".String", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Int32", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("int", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Int64", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("long", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("UInt32", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("uint", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("UInt64", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("ulong", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Int16", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("short", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("UInt16", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("ushort", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Byte", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("byte", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("SByte", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("sbyte", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Double", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("double", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Single", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("float", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Decimal", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("decimal", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Bool", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("bool", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Guid", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("guid", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Uri", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("uri", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("DateTime", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("datetime", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("Hashtable", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("IDictionary", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
+               type.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPowerShellSwitchParameter(string? typeName)
@@ -340,9 +510,16 @@ public static partial class WebApiDocsGenerator
         if (type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) || type.Equals("Bool", StringComparison.OrdinalIgnoreCase))
             return "$true";
         if (type.Equals("Int32", StringComparison.OrdinalIgnoreCase) || type.Equals("Int64", StringComparison.OrdinalIgnoreCase) ||
-            type.Equals("UInt32", StringComparison.OrdinalIgnoreCase) || type.Equals("UInt64", StringComparison.OrdinalIgnoreCase))
+            type.Equals("UInt32", StringComparison.OrdinalIgnoreCase) || type.Equals("UInt64", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("Int16", StringComparison.OrdinalIgnoreCase) || type.Equals("UInt16", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("Byte", StringComparison.OrdinalIgnoreCase) || type.Equals("SByte", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("int", StringComparison.OrdinalIgnoreCase) || type.Equals("long", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("uint", StringComparison.OrdinalIgnoreCase) || type.Equals("ulong", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("short", StringComparison.OrdinalIgnoreCase) || type.Equals("ushort", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("byte", StringComparison.OrdinalIgnoreCase) || type.Equals("sbyte", StringComparison.OrdinalIgnoreCase))
             return "1";
-        if (type.Equals("Double", StringComparison.OrdinalIgnoreCase) || type.Equals("Single", StringComparison.OrdinalIgnoreCase) || type.Equals("Decimal", StringComparison.OrdinalIgnoreCase))
+        if (type.Equals("Double", StringComparison.OrdinalIgnoreCase) || type.Equals("Single", StringComparison.OrdinalIgnoreCase) || type.Equals("Decimal", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("double", StringComparison.OrdinalIgnoreCase) || type.Equals("float", StringComparison.OrdinalIgnoreCase) || type.Equals("decimal", StringComparison.OrdinalIgnoreCase))
             return "1";
         if (type.Equals("DateTime", StringComparison.OrdinalIgnoreCase))
             return "'2000-01-01'";
