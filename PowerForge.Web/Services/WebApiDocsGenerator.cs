@@ -714,6 +714,7 @@ public static partial class WebApiDocsGenerator
         }
 
         AppendSourceCoverageWarnings(types, warnings);
+        AppendPowerShellExampleQualityWarnings(types, warnings);
         var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
 
@@ -793,6 +794,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("API docs source:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs PowerShell coverage:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.POWERSHELL] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("Multiple PowerShell help files found", StringComparison.OrdinalIgnoreCase))

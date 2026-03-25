@@ -80,6 +80,32 @@ public static partial class WebApiDocsGenerator
             warnings);
     }
 
+    private static void AppendPowerShellExampleQualityWarnings(
+        IReadOnlyList<ApiTypeModel> types,
+        List<string> warnings)
+    {
+        if (types is null || warnings is null)
+            return;
+
+        var commands = types.Where(IsPowerShellCommandType).ToArray();
+        if (commands.Length == 0)
+            return;
+
+        var generatedOnly = commands
+            .Where(HasOnlyGeneratedPowerShellFallbackExamples)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (generatedOnly.Length == 0)
+            return;
+
+        var preview = string.Join(", ", generatedOnly.Take(4));
+        var more = generatedOnly.Length > 4 ? $" (+{generatedOnly.Length - 4} more)" : string.Empty;
+        warnings.Add(
+            $"API docs PowerShell coverage: {generatedOnly.Length} command(s) rely only on generated fallback examples. " +
+            $"Add authored examples or example scripts for better docs quality (samples: {preview}{more}).");
+    }
+
     private static Dictionary<string, object?> BuildCoveragePayload(
         IReadOnlyList<ApiTypeModel> types,
         string? assemblyName,
@@ -121,12 +147,19 @@ public static partial class WebApiDocsGenerator
         var commandsWithCodeExamples = commandTypes.Count(static c => c.Examples.Any(static ex =>
             ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(ex.Text)));
+        var commandsWithGeneratedFallbackOnlyExamples = commandTypes.Count(HasOnlyGeneratedPowerShellFallbackExamples);
         var commandSourceCoverage = AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source));
 
         var commandsMissingExamples = commandTypes
             .Where(static c => !c.Examples.Any(static ex =>
                 ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(ex.Text)))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingGeneratedFallbackOnlyExamples = commandTypes
+            .Where(HasOnlyGeneratedPowerShellFallbackExamples)
             .Select(static c => c.FullName)
             .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
             .Take(100)
@@ -186,8 +219,10 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = MakeCoverage(commandCount, commandsWithSummary),
                 ["remarks"] = MakeCoverage(commandCount, commandsWithRemarks),
                 ["codeExamples"] = MakeCoverage(commandCount, commandsWithCodeExamples),
+                ["generatedFallbackOnlyExamples"] = MakeCoverage(commandCount, commandsWithGeneratedFallbackOnlyExamples),
                 ["parameters"] = MakeCoverage(commandParameterCount, commandParametersWithSummary),
-                ["commandsMissingCodeExamples"] = commandsMissingExamples
+                ["commandsMissingCodeExamples"] = commandsMissingExamples,
+                ["commandsUsingGeneratedFallbackOnlyExamples"] = commandsUsingGeneratedFallbackOnlyExamples
             }
         };
     }
@@ -228,6 +263,39 @@ public static partial class WebApiDocsGenerator
             : $" (samples: {string.Join(" | ", samples)})";
         warnings.Add($"API docs source coverage: {message} ({breakdown}){sampleText}.");
     }
+
+    private static bool HasOnlyGeneratedPowerShellFallbackExamples(ApiTypeModel type)
+    {
+        if (type is null || type.Examples.Count == 0)
+            return false;
+
+        var hasCode = false;
+        var hasGeneratedFallbackCode = false;
+        for (var i = 0; i < type.Examples.Count; i++)
+        {
+            var example = type.Examples[i];
+            if (example is null ||
+                !example.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(example.Text))
+                continue;
+
+            hasCode = true;
+            var generated = i > 0 &&
+                            type.Examples[i - 1] is not null &&
+                            type.Examples[i - 1].Kind.Equals("text", StringComparison.OrdinalIgnoreCase) &&
+                            IsGeneratedPowerShellFallbackLabel(type.Examples[i - 1].Text);
+            if (!generated)
+                return false;
+
+            hasGeneratedFallbackCode = true;
+        }
+
+        return hasCode && hasGeneratedFallbackCode;
+    }
+
+    private static bool IsGeneratedPowerShellFallbackLabel(string? text)
+        => !string.IsNullOrWhiteSpace(text) &&
+           text.TrimStart().StartsWith("Generated fallback example", StringComparison.OrdinalIgnoreCase);
 
     private static Dictionary<string, object?> BuildSourceCoveragePayload(int total, SourceCoverageStats coverage)
     {
