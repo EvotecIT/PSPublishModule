@@ -64,9 +64,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban]");
         Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--output json]");
-        Console.WriteLine("  powerforge-web engine-lock [--config <site.json>] [--path <file>] [--mode show|resolve|verify|update]");
+        Console.WriteLine("  powerforge-web engine-lock [--config <site.json>] [--path <file>] [--mode show|verify|update]");
         Console.WriteLine("                     [--repository <owner/repo>] [--ref <sha|tag|branch>] [--channel <name>] [--use-env]");
-        Console.WriteLine("                     [--repository-override <owner/repo>] [--ref-override <sha|tag|branch>] [--github-output <file>]");
         Console.WriteLine("                     [--require-immutable-ref|--require-sha]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");

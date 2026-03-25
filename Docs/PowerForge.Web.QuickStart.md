@@ -148,11 +148,6 @@ Upgrade engine pin intentionally:
 powerforge-web engine-lock --mode update --path ./.powerforge/engine-lock.json --ref <new-sha>
 ```
 
-Resolve the effective engine source for CI/bootstrap scripts:
-```
-powerforge-web engine-lock --mode resolve --path ./.powerforge/engine-lock.json --use-env --require-immutable-ref
-```
-
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
 ```
 powerforge-web audit --site-root ./Artifacts --summary
