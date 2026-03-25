@@ -62,6 +62,8 @@ jobs:
     steps:
       - name: Checkout website
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -123,6 +125,7 @@ jobs:
           repository: ${{ steps.powerforge.outputs.repository }}
           ref: ${{ steps.powerforge.outputs.ref }}
           path: ./.powerforge-engine
+          token: ${{ github.token }}
 
       - name: Cache NuGet packages
         uses: actions/cache@v4

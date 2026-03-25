@@ -52,15 +52,19 @@ permissions:
 
 concurrency:
   group: powerforge-website-maintenance-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   website-maintenance:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout website
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -122,6 +126,7 @@ jobs:
           repository: ${{ steps.powerforge.outputs.repository }}
           ref: ${{ steps.powerforge.outputs.ref }}
           path: ./.powerforge-engine
+          token: ${{ github.token }}
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -131,11 +136,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Run website maintenance pipeline
+      - name: Initialize Playwright cache directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
+
+      - name: Run website maintenance pipeline (ci mode)
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # Maintenance uses the same strict CI mode; the selected pipeline config controls which tasks run.
           dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./${{ inputs.pipeline_config }} --mode ci
 
       - name: Upload maintenance reports
@@ -147,3 +159,11 @@ jobs:
             ./${{ inputs.website_root }}/_reports/**
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
+
+      - name: Cleanup Playwright cache
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
+            rm -rf "${PLAYWRIGHT_BROWSERS_PATH}"
+          fi
