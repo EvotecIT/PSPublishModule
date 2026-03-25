@@ -344,6 +344,11 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(artifactUrl))
             return null;
 
+        DateTimeOffset? capturedAtUtc = null;
+        DateTimeOffset? sourceUpdatedAtUtc = null;
+        TryReadFileTimestampUtc(artifactPath, out capturedAtUtc);
+        TryReadFileTimestampUtc(normalizedExamplePath, out sourceUpdatedAtUtc);
+
         return new ApiExampleModel
         {
             Kind = "media",
@@ -355,7 +360,9 @@ public static partial class WebApiDocsGenerator
                 Title = "Open execution transcript",
                 Caption = $"Captured terminal transcript from executing {Path.GetFileName(exampleFilePath)}.",
                 Alt = "Execution transcript",
-                MimeType = "text/plain"
+                MimeType = "text/plain",
+                CapturedAtUtc = capturedAtUtc,
+                SourceUpdatedAtUtc = sourceUpdatedAtUtc
             }
         };
     }
@@ -401,6 +408,10 @@ public static partial class WebApiDocsGenerator
         var posterUrl = string.IsNullOrWhiteSpace(posterPath)
             ? null
             : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, emittedAssetPaths, warnings);
+        DateTimeOffset? capturedAtUtc = null;
+        DateTimeOffset? sourceUpdatedAtUtc = null;
+        TryReadFileTimestampUtc(castPath, out capturedAtUtc);
+        TryReadFileTimestampUtc(exampleFilePath, out sourceUpdatedAtUtc);
 
         return new ApiExampleModel
         {
@@ -415,6 +426,8 @@ public static partial class WebApiDocsGenerator
                 Alt = "Terminal playback",
                 PosterUrl = posterUrl,
                 MimeType = "application/x-asciicast",
+                CapturedAtUtc = capturedAtUtc,
+                SourceUpdatedAtUtc = sourceUpdatedAtUtc,
                 HasUnsupportedSidecars = playbackAssetHealth.HasUnsupportedSidecars,
                 HasOversizedAssets = playbackAssetHealth.HasOversizedAssets,
                 HasStaleAssets = playbackAssetHealth.HasStaleAssets
@@ -562,6 +575,23 @@ public static partial class WebApiDocsGenerator
 
         var mib = kib / 1024d;
         return $"{Math.Round(mib, 1, MidpointRounding.AwayFromZero):0.#} MiB";
+    }
+
+    private static bool TryReadFileTimestampUtc(string? filePath, out DateTimeOffset? timestampUtc)
+    {
+        timestampUtc = null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return false;
+
+        try
+        {
+            timestampUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(filePath), TimeSpan.Zero);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? ResolvePowerShellExamplePlaybackSidecar(string exampleFilePath, params string[] extensions)

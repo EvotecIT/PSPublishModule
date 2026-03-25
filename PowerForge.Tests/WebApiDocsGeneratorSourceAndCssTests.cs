@@ -527,6 +527,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("\"type\": \"terminal\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"url\": \"/casts/sample.cast\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"posterUrl\": \"/images/sample-terminal.png\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"capturedAtUtc\":", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"type\": \"image\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"width\": 1280", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"height\": 720", json, StringComparison.OrdinalIgnoreCase);
@@ -537,6 +538,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("class=\"example-media example-media-terminal\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/casts/sample.cast\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Recorded terminal output.", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);

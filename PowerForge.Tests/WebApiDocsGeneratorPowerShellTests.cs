@@ -1892,12 +1892,15 @@ public class WebApiDocsGeneratorPowerShellTests
                 string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
             var mediaUrl = transcriptMedia.GetProperty("media").GetProperty("url").GetString();
             Assert.Contains("/api/powershell/powershell-example-validation-artifacts/", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(transcriptMedia.GetProperty("media").GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(transcriptMedia.GetProperty("media").GetProperty("sourceUpdatedAtUtc").GetString()));
             Assert.Contains("Open execution transcript", transcriptMedia.GetProperty("media").GetProperty("title").GetString(), StringComparison.Ordinal);
 
             var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
             Assert.Contains("example-media example-media-terminal", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Open execution transcript", sampleOneHtml, StringComparison.Ordinal);
             Assert.Contains("Captured terminal transcript from executing Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("Captured ", sampleOneHtml, StringComparison.Ordinal);
 
             using var sampleTwoJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampletwo.json")));
             var sampleTwoExamples = sampleTwoJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
@@ -1973,6 +1976,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("/api/powershell/powershell-example-media/", posterUrl, StringComparison.OrdinalIgnoreCase);
             Assert.EndsWith(".png", posterUrl, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("application/x-asciicast", media.GetProperty("mimeType").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(media.GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(media.GetProperty("sourceUpdatedAtUtc").GetString()));
             Assert.Contains("Open terminal playback", media.GetProperty("title").GetString(), StringComparison.Ordinal);
 
             var castFileName = Path.GetFileName(new Uri("https://example.test" + mediaUrl).LocalPath);
@@ -1984,6 +1989,7 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("Open terminal playback", sampleOneHtml, StringComparison.Ordinal);
             Assert.Contains("Captured terminal playback for Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
             Assert.Contains("example-media-poster", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Captured ", sampleOneHtml, StringComparison.Ordinal);
         }
         finally
         {
@@ -2071,6 +2077,15 @@ public class WebApiDocsGeneratorPowerShellTests
                 warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var staleMedia = Assert.Single(sampleOneJson.RootElement.GetProperty("examples").EnumerateArray(), example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.IsNullOrWhiteSpace(staleMedia.GetProperty("media").GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(staleMedia.GetProperty("media").GetProperty("sourceUpdatedAtUtc").GetString()));
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Contains("Script changed after this capture", sampleOneHtml, StringComparison.Ordinal);
 
             using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
             var powershell = coverage.RootElement.GetProperty("powershell");

@@ -219,6 +219,7 @@ Member layout:
 - `.example-media-frame` – media surface (image/video/link frame)
 - `.example-media-link` – terminal/download link for non-inline example media
 - `.example-media-caption` – media caption
+- `.example-media-meta` – capture recency / freshness metadata line
 - `.type-see-also` – see also section
 
 ## JavaScript expectations
@@ -293,7 +294,7 @@ Supported media nodes:
 - `<terminal ... />`
 - `<media kind="image|video|terminal|link" ... />`
 
-Generated JSON keeps those entries under `examples[]` with `kind: "media"` and a structured `media` object (`type`, `url`, `title`, `alt`, `caption`, `posterUrl`, `mimeType`, `width`, `height`).
+Generated JSON keeps those entries under `examples[]` with `kind: "media"` and a structured `media` object (`type`, `url`, `title`, `alt`, `caption`, `posterUrl`, `mimeType`, `width`, `height`, optional `capturedAtUtc`, optional `sourceUpdatedAtUtc`).
 
 ## PowerShell help
 
@@ -415,6 +416,7 @@ Notes:
 - When execution is enabled, report writing also emits reusable transcript artifacts under a sibling `powershell-example-validation-artifacts/` folder and records each path as `executionArtifactPath`.
 - When generated docs also receive that validation result, successful imported PowerShell examples can surface those transcript artifacts as terminal-style example media links in the rendered API reference.
 - Imported PowerShell example scripts can also ship richer playback sidecars next to the `.ps1` file: matching `.cast` / `.asciinema` files are staged into API output automatically, and matching `.png` / `.jpg` / `.jpeg` / `.webp` files are used as poster art when present.
+- Generated PowerShell playback/transcript media also records `capturedAtUtc` and `sourceUpdatedAtUtc`, so rendered docs can show when a terminal asset was captured and when the backing example script last changed.
 - The generator also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when curated playback sidecars look unhealthy: unsupported same-name sidecars (for example `.gif` / `.mp4` / `.webm`), oversized casts/posters, or stale playback assets that are older than the `.ps1` script they document.
 - Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation, when a script does not reference any documented command from the selected help file, or when a matched example script fails execution.
 - PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:

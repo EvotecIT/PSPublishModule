@@ -292,6 +292,7 @@ public static partial class WebApiDocsGenerator
         ".member-signature",
         ".example-origin",
         ".example-origin-badge",
+        ".example-media-meta",
         ".member-toggle input",
         ".member-header pre.member-signature",
         ".member-card pre::-webkit-scrollbar",
@@ -758,6 +759,10 @@ public static partial class WebApiDocsGenerator
                     ["width"] = example.Media.Width,
                     ["height"] = example.Media.Height
                 };
+                if (example.Media.CapturedAtUtc is not null)
+                    ((Dictionary<string, object?>)payload["media"]!)["capturedAtUtc"] = example.Media.CapturedAtUtc.Value.ToString("O");
+                if (example.Media.SourceUpdatedAtUtc is not null)
+                    ((Dictionary<string, object?>)payload["media"]!)["sourceUpdatedAtUtc"] = example.Media.SourceUpdatedAtUtc.Value.ToString("O");
             }
 
             items.Add(payload);

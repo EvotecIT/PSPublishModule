@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -714,8 +715,29 @@ public static partial class WebApiDocsGenerator
 
         if (!string.IsNullOrWhiteSpace(caption))
             sb.AppendLine($"          <figcaption class=\"example-media-caption\">{RenderLinkedText(caption, baseUrl, slugMap)}</figcaption>");
+        var mediaMeta = BuildExampleMediaMeta(media);
+        if (!string.IsNullOrWhiteSpace(mediaMeta))
+            sb.AppendLine($"          <p class=\"example-media-meta\">{System.Web.HttpUtility.HtmlEncode(mediaMeta)}</p>");
 
         sb.AppendLine("        </figure>");
+    }
+
+    private static string BuildExampleMediaMeta(ApiExampleMediaModel media)
+    {
+        if (media is null)
+            return string.Empty;
+
+        var parts = new List<string>();
+        if (media.CapturedAtUtc is not null)
+            parts.Add("Captured " + media.CapturedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture));
+        if (media.HasStaleAssets)
+            parts.Add("Script changed after this capture");
+        else if (media.SourceUpdatedAtUtc is not null &&
+                 media.CapturedAtUtc is not null &&
+                 media.SourceUpdatedAtUtc.Value > media.CapturedAtUtc.Value)
+            parts.Add("Script changed after this capture");
+
+        return string.Join(" | ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
     }
 
     private static IEnumerable<string> SplitExampleParagraphs(string text)
