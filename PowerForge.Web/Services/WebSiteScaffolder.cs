@@ -651,11 +651,13 @@ on:
 
 permissions:
   contents: read
+  # Required for maintenance tasks such as GitHub artifact pruning.
   actions: write
 
 concurrency:
   group: website-maintenance-${{ github.ref }}
-  cancel-in-progress: true
+  # Let scheduled/manual maintenance finish once started.
+  cancel-in-progress: false
 
 env:
   POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json

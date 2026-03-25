@@ -48,10 +48,12 @@ on:
 
 permissions:
   contents: read
+  # Required for maintenance tasks such as GitHub artifact pruning.
   actions: write
 
 concurrency:
   group: powerforge-website-maintenance-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}
+  # Let scheduled/manual maintenance finish once started.
   cancel-in-progress: false
 
 jobs:
@@ -69,6 +71,7 @@ jobs:
       powerforge_ref: ${{ inputs.powerforge_ref }}
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      # Maintenance stays on strict CI mode; the selected pipeline config decides which tasks run.
       pipeline_mode: ci
       use_playwright_cache: true
       maintenance_mode_note: true

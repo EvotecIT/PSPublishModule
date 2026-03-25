@@ -156,11 +156,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           INDEXNOW_KEY: ${{ secrets.indexnow_key }}
         run: |
+          $pipelineConfig = [string]'${{ inputs.pipeline_config }}'
+          $pipelineMode = [string]'${{ inputs.pipeline_mode }}'
+
           if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
             Write-Host 'Maintenance uses the same strict CI mode; the selected pipeline config controls which tasks run.'
           }
 
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./${{ inputs.pipeline_config }} --mode ${{ inputs.pipeline_mode }}
+          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config "./$pipelineConfig" --mode $pipelineMode
 
       - name: Upload website reports
         if: always()

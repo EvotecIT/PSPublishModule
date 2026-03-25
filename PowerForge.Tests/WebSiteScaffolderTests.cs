@@ -95,6 +95,7 @@ public class WebSiteScaffolderTests
             Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml@main", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("pipeline_config: pipeline.maintenance.json", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("powerforge_lock_path: ./.powerforge/engine-lock.json", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("cancel-in-progress: false", maintenanceWorkflow, StringComparison.Ordinal);
 
             using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
