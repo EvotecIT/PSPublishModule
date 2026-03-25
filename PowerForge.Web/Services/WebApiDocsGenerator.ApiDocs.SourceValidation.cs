@@ -215,8 +215,9 @@ public static partial class WebApiDocsGenerator
             hintCount++;
             if (samples.Count < 8 && !string.IsNullOrWhiteSpace(hint))
                 samples.Add(hint);
-            if (urlSamples.Count < 4)
-                urlSamples.Add(source.Url.Trim());
+            var trimmedUrl = source.Url.Trim();
+            if (urlSamples.Count < 4 && !string.IsNullOrWhiteSpace(trimmedUrl))
+                urlSamples.Add(trimmedUrl);
         }
 
         foreach (var type in types)

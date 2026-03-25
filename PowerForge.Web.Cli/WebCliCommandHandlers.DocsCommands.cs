@@ -82,7 +82,11 @@ internal static partial class WebCliCommandHandlers
             60);
         var failOnPowerShellExampleExecution = HasOption(subArgs, "--fail-on-ps-example-execution") ||
                                                HasOption(subArgs, "--fail-on-powershell-example-execution");
+        if (failOnPowerShellExampleValidation)
+            validatePowerShellExamples = true;
         if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            executePowerShellExamples = true;
+        if (executePowerShellExamples)
             validatePowerShellExamples = true;
         var generateGitFreshness = HasOption(subArgs, "--git-freshness") || HasOption(subArgs, "--generate-git-freshness");
         if (HasOption(subArgs, "--no-git-freshness"))

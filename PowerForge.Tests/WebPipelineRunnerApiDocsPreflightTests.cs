@@ -564,6 +564,47 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ApiDocsPreflight_AllowsSourceRootParentWhenSourceUrlUsesPathNoRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-preflight-pathnoroot-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "TestRepo"));
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnWarnings": true,
+                      "sourceRoot": ".",
+                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ApiDocs_FailsWhenPowerShellExampleValidationFindsInvalidScripts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-validate-" + Guid.NewGuid().ToString("N"));
@@ -615,6 +656,61 @@ public class WebPipelineRunnerApiDocsPreflightTests
 
             var reportPath = Path.Combine(root, "_site", "api", "powershell-example-validation.json");
             Assert.True(File.Exists(reportPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ApiDocs_FailOnPowerShellExampleValidationImpliesValidation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-validate-implicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "BrokenExample.ps1"), "Invoke-SampleFunction -Name (");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnPowerShellExampleValidation": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("PowerShell example validation found 1 invalid script", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "_site", "api", "powershell-example-validation.json")));
         }
         finally
         {
@@ -689,6 +785,103 @@ public class WebPipelineRunnerApiDocsPreflightTests
                 .ToArray();
             Assert.True(artifactPaths.Length >= 1);
             Assert.All(artifactPaths, path => Assert.True(File.Exists(path)));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ApiDocs_FailOnPowerShellExampleExecutionImpliesExecution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-execute-implicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleFunction { param([string]$Name) "Executed $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.Fail.ps1"), "Invoke-SampleFunction -Name 'Beta'; throw 'boom'");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnPowerShellExampleExecution": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("PowerShell example execution failed for 1 script", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "_site", "api", "powershell-example-validation.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenPercentCoverageThresholdExceedsOneHundred()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-threshold-percent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "maxPowerShellGeneratedFallbackOnlyExamplePercent": 150
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("must be less than or equal to 100", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

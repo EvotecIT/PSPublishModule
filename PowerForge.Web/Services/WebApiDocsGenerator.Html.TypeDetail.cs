@@ -676,6 +676,7 @@ public static partial class WebApiDocsGenerator
         var safeAlt = System.Web.HttpUtility.HtmlEncode(alt);
         var safeTitle = System.Web.HttpUtility.HtmlEncode(title);
         var safePoster = string.IsNullOrWhiteSpace(media.PosterUrl) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.PosterUrl);
+        var safeMimeType = string.IsNullOrWhiteSpace(media.MimeType) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.MimeType);
         var widthAttr = media.Width is > 0 ? $" width=\"{media.Width.Value}\"" : string.Empty;
         var heightAttr = media.Height is > 0 ? $" height=\"{media.Height.Value}\"" : string.Empty;
 
@@ -695,7 +696,10 @@ public static partial class WebApiDocsGenerator
                 if (!string.IsNullOrWhiteSpace(safeTitle))
                     sb.Append($" title=\"{safeTitle}\"");
                 sb.AppendLine($"{widthAttr}{heightAttr}>");
-                sb.AppendLine($"              <source src=\"{safeUrl}\" />");
+                sb.Append($"              <source src=\"{safeUrl}\"");
+                if (!string.IsNullOrWhiteSpace(safeMimeType))
+                    sb.Append($" type=\"{safeMimeType}\"");
+                sb.AppendLine(" />");
                 sb.AppendLine("            </video>");
                 sb.AppendLine("          </div>");
                 break;
