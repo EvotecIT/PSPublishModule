@@ -332,6 +332,7 @@ Notes:
     - `failOnPowerShellExampleExecution`: fail the step when matched examples fail execution or execution cannot complete cleanly
     - execution implicitly enables `validatePowerShellExamples`
     - report writing emits per-example transcript artifacts beside `powershell-example-validation.json`
+    - validation JSON keeps paths normalized when possible and includes captured stdout/stderr/skip reasons for each executed script
     - successful imported examples can reuse those transcript artifacts as terminal-style example media links in generated API docs
     - curated `.cast` / `.asciinema` sidecars beside imported `.ps1` examples are also staged automatically, with matching image sidecars used as poster art when present
     - asset-health warnings flag unsupported same-name sidecars, oversized playback assets, and stale captures/posters that are older than the current example script

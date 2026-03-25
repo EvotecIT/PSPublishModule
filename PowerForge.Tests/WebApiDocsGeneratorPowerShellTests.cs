@@ -676,11 +676,13 @@ public class WebApiDocsGeneratorPowerShellTests
 
             Assert.Equal("new", commandFreshness.GetProperty("status").GetString());
             Assert.True(commandFreshness.GetProperty("ageDays").GetInt32() <= 14);
-            Assert.EndsWith(Path.Combine("en-US", "Sample.Module-help.xml"), commandFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith("en-US/Sample.Module-help.xml", commandFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root, commandFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
 
             Assert.Equal("updated", aboutFreshness.GetProperty("status").GetString());
             Assert.True(aboutFreshness.GetProperty("ageDays").GetInt32() >= 30);
             Assert.EndsWith("about_SampleTopic.help.txt", aboutFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root, aboutFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
 
             var commandHtml = File.ReadAllText(Path.Combine(outputPath, "get-samplecmdlet", "index.html"));
             var aboutHtml = File.ReadAllText(Path.Combine(outputPath, "about-sampletopic", "index.html"));
@@ -1768,13 +1770,30 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("Get-UnrelatedThing", generic.Commands, StringComparer.OrdinalIgnoreCase);
 
             var reportRoot = Path.Combine(root, "_site", "api");
-            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                reportRoot,
+                null,
+                validation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = helpPath,
+                    PowerShellExamplesPath = examplesDir,
+                    TimeoutSeconds = 60
+                });
             Assert.True(File.Exists(reportPath));
 
             using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.DoesNotContain(root, report.RootElement.GetProperty("helpPath").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Sample.Module-help.xml", report.RootElement.GetProperty("helpPath").GetString());
             Assert.Equal(1, report.RootElement.GetProperty("invalidSyntaxFileCount").GetInt32());
             Assert.Equal(1, report.RootElement.GetProperty("unmatchedFileCount").GetInt32());
             Assert.Equal(3, report.RootElement.GetProperty("fileCount").GetInt32());
+            var reportFiles = report.RootElement.GetProperty("files").EnumerateArray().ToArray();
+            Assert.All(reportFiles, file =>
+            {
+                Assert.DoesNotContain(root, file.GetProperty("filePath").GetString(), StringComparison.OrdinalIgnoreCase);
+                Assert.False(Path.IsPathRooted(file.GetProperty("filePath").GetString()));
+            });
         }
         finally
         {
@@ -1850,11 +1869,23 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("boom", failing.ExecutionStdErr ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
             var reportRoot = Path.Combine(root, "_site", "api");
-            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                reportRoot,
+                null,
+                validation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = helpPath,
+                    PowerShellExamplesPath = examplesDir,
+                    TimeoutSeconds = 60,
+                    ExecuteMatchedExamples = true,
+                    ExecutionTimeoutSeconds = 60
+                });
             using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
             Assert.True(report.RootElement.GetProperty("executionRequested").GetBoolean());
             Assert.Equal(2, report.RootElement.GetProperty("executedFileCount").GetInt32());
             Assert.Equal(1, report.RootElement.GetProperty("failedExecutionFileCount").GetInt32());
+            Assert.DoesNotContain(root, report.RootElement.GetProperty("helpPath").GetString(), StringComparison.OrdinalIgnoreCase);
 
             var reportedFiles = report.RootElement.GetProperty("files").EnumerateArray().ToArray();
             var passingReport = Assert.Single(reportedFiles, file =>
@@ -1866,10 +1897,116 @@ public class WebApiDocsGeneratorPowerShellTests
             var failingArtifactPath = failingReport.GetProperty("executionArtifactPath").GetString();
             Assert.False(string.IsNullOrWhiteSpace(passingArtifactPath));
             Assert.False(string.IsNullOrWhiteSpace(failingArtifactPath));
-            Assert.True(File.Exists(passingArtifactPath));
-            Assert.True(File.Exists(failingArtifactPath));
-            Assert.Contains("Ran one for Alpha", File.ReadAllText(passingArtifactPath!), StringComparison.Ordinal);
-            Assert.Contains("boom", File.ReadAllText(failingArtifactPath!), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root, passingArtifactPath, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root, failingArtifactPath, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Path.IsPathRooted(passingArtifactPath));
+            Assert.False(Path.IsPathRooted(failingArtifactPath));
+            var passingArtifactFullPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(reportPath)!, passingArtifactPath!));
+            var failingArtifactFullPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(reportPath)!, failingArtifactPath!));
+            Assert.True(File.Exists(passingArtifactFullPath));
+            Assert.True(File.Exists(failingArtifactFullPath));
+            Assert.Contains("File: Invoke-SampleOne.ps1", File.ReadAllText(passingArtifactFullPath), StringComparison.Ordinal);
+            Assert.Contains("Ran one for Alpha", File.ReadAllText(passingArtifactFullPath), StringComparison.Ordinal);
+            Assert.Contains("boom", File.ReadAllText(failingArtifactFullPath), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ValidatePowerShellExamples_WithExecutionRequestedAndNoScripts_MarksExecutionCompleted()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-execute-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60,
+                ExecuteMatchedExamples = true,
+                ExecutionTimeoutSeconds = 60
+            });
+
+            Assert.True(validation.ValidationSucceeded);
+            Assert.True(validation.ExecutionRequested);
+            Assert.True(validation.ExecutionCompleted);
+            Assert.Equal(0, validation.FileCount);
+            Assert.Equal(0, validation.ExecutedFileCount);
+            Assert.Equal(0, validation.FailedExecutionFileCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ValidatePowerShellExamples_SkipsExecutionOutsideConfiguredExamplesPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-execute-rootguard-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                """);
+
+            var approvedExamplesDir = Path.Combine(root, "ApprovedExamples");
+            Directory.CreateDirectory(approvedExamplesDir);
+            File.WriteAllText(Path.Combine(approvedExamplesDir, "Invoke-SampleOne.Approved.ps1"), "Invoke-SampleOne -Name 'Approved'");
+
+            var discoveredExamplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(discoveredExamplesDir);
+            File.WriteAllText(Path.Combine(discoveredExamplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Discovered'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = approvedExamplesDir,
+                TimeoutSeconds = 60,
+                ExecuteMatchedExamples = true,
+                ExecutionTimeoutSeconds = 60
+            });
+
+            var approved = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleOne.Approved.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(approved.ExecutionAttempted);
+            Assert.True(approved.ExecutionSucceeded);
+
+            var discovered = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.False(discovered.ExecutionAttempted);
+            Assert.Null(discovered.ExecutionSucceeded);
+            Assert.Equal("Outside configured PowerShell examples path.", discovered.ExecutionSkippedReason);
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("outside the configured examples path", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

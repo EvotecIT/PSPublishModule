@@ -161,7 +161,7 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static Dictionary<string, object?>? BuildFreshnessJson(ApiFreshnessModel? freshness)
+    private static Dictionary<string, object?>? BuildFreshnessJson(ApiFreshnessModel? freshness, WebApiDocsOptions options)
     {
         if (freshness is null)
             return null;
@@ -172,7 +172,44 @@ public static partial class WebApiDocsGenerator
             ["lastModifiedUtc"] = freshness.LastModifiedUtc.ToString("O"),
             ["commitSha"] = freshness.CommitSha,
             ["ageDays"] = freshness.AgeDays,
-            ["sourcePath"] = freshness.SourcePath
+            ["sourcePath"] = NormalizeFreshnessSourcePath(freshness.SourcePath, options)
         };
+    }
+
+    private static string? NormalizeFreshnessSourcePath(string? path, WebApiDocsOptions? options)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            foreach (var root in EnumerateFreshnessNormalizationRoots(options))
+            {
+                var relativePath = TryGetRelativePathWithinRoot(root, fullPath);
+                if (!string.IsNullOrWhiteSpace(relativePath))
+                    return relativePath;
+            }
+
+            return Path.GetFileName(fullPath);
+        }
+        catch
+        {
+            return Path.GetFileName(path);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateFreshnessNormalizationRoots(WebApiDocsOptions? options)
+    {
+        if (options is null)
+            yield break;
+
+        foreach (var root in EnumerateNonEmptyDirectories(
+                     options.SourceRootPath,
+                     GetParentDirectory(options.HelpPath),
+                     GetParentDirectory(options.XmlPath)))
+        {
+            yield return root;
+        }
     }
 }

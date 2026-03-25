@@ -38,6 +38,10 @@ public sealed class WebApiDocsOptions
     public string Title { get; set; } = "API Reference";
     /// <summary>Base URL for API documentation routes.</summary>
     public string BaseUrl { get; set; } = "/api";
+    /// <summary>Optional absolute site base URL used for canonical/OpenGraph URL generation.</summary>
+    public string? SiteBaseUrl { get; set; }
+    /// <summary>Optional language code used for hreflang output on generated API pages.</summary>
+    public string? LanguageCode { get; set; }
       /// <summary>Optional docs home URL for the "Back to Docs" link.</summary>
       public string? DocsHomeUrl { get; set; }
       /// <summary>Sidebar position for docs template (left or right).</summary>
@@ -412,7 +416,7 @@ public static partial class WebApiDocsGenerator
                     ["fullName"] = t.FullName,
                     ["namespace"] = t.Namespace,
                     ["kind"] = t.Kind,
-                    ["freshness"] = BuildFreshnessJson(t.Freshness),
+                    ["freshness"] = BuildFreshnessJson(t.Freshness, options),
                     ["slug"] = t.Slug,
                     ["summary"] = t.Summary,
                     ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
@@ -439,7 +443,7 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = t.Summary ?? string.Empty,
                 ["kind"] = t.Kind,
                 ["namespace"] = t.Namespace,
-                ["freshness"] = BuildFreshnessJson(t.Freshness),
+                ["freshness"] = BuildFreshnessJson(t.Freshness, options),
                 ["slug"] = t.Slug,
                 ["url"] = $"{options.BaseUrl.TrimEnd('/')}/types/{t.Slug}.json"
             };
@@ -466,7 +470,7 @@ public static partial class WebApiDocsGenerator
                 ["outputTypes"] = type.OutputTypes,
                 ["assembly"] = type.Assembly,
                 ["source"] = BuildSourceJson(type.Source),
-                ["freshness"] = BuildFreshnessJson(type.Freshness),
+                ["freshness"] = BuildFreshnessJson(type.Freshness, options),
                 ["baseType"] = type.BaseType,
                 ["interfaces"] = type.Interfaces,
                 ["attributes"] = type.Attributes,

@@ -428,7 +428,17 @@ internal static partial class WebPipelineRunner
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
                 powerShellExampleValidationReportPath,
-                powerShellExampleValidation);
+                powerShellExampleValidation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = help ?? string.Empty,
+                    PowerShellModuleManifestPath = powerShellManifestPath,
+                    PowerShellExamplesPath = powerShellExamplesPath,
+                    TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                    PreferPwsh = true,
+                    ExecuteMatchedExamples = executePowerShellExamples,
+                    ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+                });
             options.PowerShellExampleValidationResult = powerShellExampleValidation;
         }
 

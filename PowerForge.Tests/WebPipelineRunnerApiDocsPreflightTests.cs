@@ -784,7 +784,12 @@ public class WebPipelineRunnerApiDocsPreflightTests
                 .Where(static path => !string.IsNullOrWhiteSpace(path))
                 .ToArray();
             Assert.True(artifactPaths.Length >= 1);
-            Assert.All(artifactPaths, path => Assert.True(File.Exists(path)));
+            var reportDirectory = Path.GetDirectoryName(reportPath)!;
+            Assert.All(artifactPaths, path =>
+            {
+                Assert.False(Path.IsPathRooted(path));
+                Assert.True(File.Exists(Path.GetFullPath(Path.Combine(reportDirectory, path!))));
+            });
         }
         finally
         {
@@ -981,6 +986,8 @@ public class WebPipelineRunnerApiDocsPreflightTests
             using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "_site", "api", "types", "about-sampletopic.json")));
             Assert.Equal("new", commandJson.RootElement.GetProperty("freshness").GetProperty("status").GetString());
             Assert.Equal("updated", aboutJson.RootElement.GetProperty("freshness").GetProperty("status").GetString());
+            Assert.DoesNotContain(root, commandJson.RootElement.GetProperty("freshness").GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root, aboutJson.RootElement.GetProperty("freshness").GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

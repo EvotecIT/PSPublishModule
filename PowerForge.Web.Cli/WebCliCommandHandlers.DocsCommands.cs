@@ -242,7 +242,17 @@ internal static partial class WebCliCommandHandlers
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
                 powerShellExampleValidationReport,
-                powerShellExampleValidation);
+                powerShellExampleValidation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = helpPath ?? string.Empty,
+                    PowerShellModuleManifestPath = powerShellManifestPath,
+                    PowerShellExamplesPath = powerShellExamplesPath,
+                    TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                    PreferPwsh = true,
+                    ExecuteMatchedExamples = executePowerShellExamples,
+                    ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+                });
             options.PowerShellExampleValidationResult = powerShellExampleValidation;
         }
 
