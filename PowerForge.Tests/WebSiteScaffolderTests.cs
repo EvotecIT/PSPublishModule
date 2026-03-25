@@ -23,6 +23,7 @@ public class WebSiteScaffolderTests
             Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-ci.yml")));
             Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-maintenance.yml")));
             Assert.True(File.Exists(Path.Combine(root, ".powerforge", "engine-lock.json")));
+            Assert.True(File.Exists(Path.Combine(root, ".powerforge", "scripts", "resolve-engine-lock.ps1")));
             Assert.True(File.Exists(Path.Combine(root, "pipeline.maintenance.json")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
@@ -80,9 +81,11 @@ public class WebSiteScaffolderTests
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
             Assert.Contains("Resolve PowerForge engine lock", workflow, StringComparison.Ordinal);
+            Assert.Contains("POWERFORGE_REPOSITORY: ${{ vars.POWERFORGE_REPOSITORY }}", workflow, StringComparison.Ordinal);
+            Assert.Contains("POWERFORGE_REF: ${{ vars.POWERFORGE_REF }}", workflow, StringComparison.Ordinal);
+            Assert.Contains("./.powerforge/scripts/resolve-engine-lock.ps1", workflow, StringComparison.Ordinal);
             Assert.Contains("steps.powerforge-lock.outputs.repository", workflow, StringComparison.Ordinal);
             Assert.Contains("steps.powerforge-lock.outputs.ref", workflow, StringComparison.Ordinal);
-            Assert.Contains("immutable commit SHA", workflow, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
             Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
             Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
@@ -92,7 +95,14 @@ public class WebSiteScaffolderTests
             Assert.Contains("name: Website Maintenance", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("schedule:", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("actions: write", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("./.powerforge/scripts/resolve-engine-lock.ps1", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("--config ./pipeline.maintenance.json --mode ci", maintenanceWorkflow, StringComparison.Ordinal);
+
+            var resolveScript = File.ReadAllText(Path.Combine(root, ".powerforge", "scripts", "resolve-engine-lock.ps1"));
+            Assert.Contains("POWERFORGE_REPOSITORY", resolveScript, StringComparison.Ordinal);
+            Assert.Contains("POWERFORGE_REF", resolveScript, StringComparison.Ordinal);
+            Assert.Contains("immutable commit SHA", resolveScript, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("GITHUB_OUTPUT", resolveScript, StringComparison.Ordinal);
 
             using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();

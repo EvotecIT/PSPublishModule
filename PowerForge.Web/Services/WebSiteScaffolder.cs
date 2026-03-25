@@ -602,10 +602,15 @@ a { color: inherit; text-decoration: none; }
 
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
         Directory.CreateDirectory(powerforgeRoot);
+        var powerforgeScriptsRoot = Path.Combine(powerforgeRoot, "scripts");
+        Directory.CreateDirectory(powerforgeScriptsRoot);
         var engineLock = WebEngineLockFile.CreateDefault();
         created += WriteFile(
             Path.Combine(powerforgeRoot, "engine-lock.json"),
             JsonSerializer.Serialize(engineLock, new JsonSerializerOptions(WebJson.Options) { WriteIndented = true }));
+        created += WriteFile(
+            Path.Combine(powerforgeScriptsRoot, "resolve-engine-lock.ps1"),
+            ResolveEngineLockScriptTemplate);
 
         var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
         Directory.CreateDirectory(workflowsRoot);
@@ -643,40 +648,11 @@ jobs:
       - name: Resolve PowerForge engine lock
         id: powerforge-lock
         shell: pwsh
+        env:
+          POWERFORGE_REPOSITORY: ${{ vars.POWERFORGE_REPOSITORY }}
+          POWERFORGE_REF: ${{ vars.POWERFORGE_REF }}
         run: |
-          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
-          if (-not (Test-Path -LiteralPath $lockPath)) {
-            throw "Missing engine lock file: $lockPath"
-          }
-
-          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-          if ($null -eq $lock) {
-            throw "Invalid engine lock JSON: $lockPath"
-          }
-
-          $lockedRepository = [string]$lock.repository
-          $lockedRef = [string]$lock.ref
-
-          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
-            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
-          }
-
-          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
-          $refOverride = "${{ vars.POWERFORGE_REF }}"
-
-          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
-          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
-
-          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
-            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
-          }
-
-          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
-            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
-          }
-
-          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          ./.powerforge/scripts/resolve-engine-lock.ps1
 
       - name: Checkout PowerForge engine
         uses: actions/checkout@v4
@@ -744,40 +720,11 @@ jobs:
       - name: Resolve PowerForge engine lock
         id: powerforge-lock
         shell: pwsh
+        env:
+          POWERFORGE_REPOSITORY: ${{ vars.POWERFORGE_REPOSITORY }}
+          POWERFORGE_REF: ${{ vars.POWERFORGE_REF }}
         run: |
-          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
-          if (-not (Test-Path -LiteralPath $lockPath)) {
-            throw "Missing engine lock file: $lockPath"
-          }
-
-          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-          if ($null -eq $lock) {
-            throw "Invalid engine lock JSON: $lockPath"
-          }
-
-          $lockedRepository = [string]$lock.repository
-          $lockedRef = [string]$lock.ref
-
-          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
-            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
-          }
-
-          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
-          $refOverride = "${{ vars.POWERFORGE_REF }}"
-
-          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
-          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
-
-          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
-            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
-          }
-
-          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
-            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
-          }
-
-          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          ./.powerforge/scripts/resolve-engine-lock.ps1
 
       - name: Checkout PowerForge engine
         uses: actions/checkout@v4

@@ -2,6 +2,51 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteScaffolder
 {
+    private const string ResolveEngineLockScriptTemplate =
+@"$lockPath = if ([string]::IsNullOrWhiteSpace($env:POWERFORGE_LOCK_PATH)) {
+  ""./.powerforge/engine-lock.json""
+} else {
+  $env:POWERFORGE_LOCK_PATH
+}
+
+if (-not (Test-Path -LiteralPath $lockPath)) {
+  throw ""Missing engine lock file: $lockPath""
+}
+
+$lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+if ($null -eq $lock) {
+  throw ""Invalid engine lock JSON: $lockPath""
+}
+
+$lockedRepository = [string]$lock.repository
+$lockedRef = [string]$lock.ref
+
+if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
+  throw ""Engine lock requires non-empty 'repository' and 'ref': $lockPath""
+}
+
+$repoOverride = [string]$env:POWERFORGE_REPOSITORY
+$refOverride = [string]$env:POWERFORGE_REF
+
+$resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
+$resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
+
+if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
+  Write-Warning ""Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef}).""
+}
+
+if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+  throw ""Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'.""
+}
+
+if ([string]::IsNullOrWhiteSpace($env:GITHUB_OUTPUT)) {
+  throw ""GITHUB_OUTPUT is not set. This script is intended for GitHub Actions workflow steps.""
+}
+
+""repository=$resolvedRepository"" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+""ref=$resolvedRef"" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+";
+
     private const string SimpleLayoutTemplate =
 @"<!doctype html>
 <html lang=""en"">
