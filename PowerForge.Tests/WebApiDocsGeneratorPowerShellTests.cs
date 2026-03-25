@@ -1912,6 +1912,84 @@ public class WebApiDocsGeneratorPowerShellTests
         }
     }
 
+    [Fact]
+    public void Generate_PowerShellHelp_PrefersPlaybackSidecars_ForImportedExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.cast"), "dummy cast");
+            File.WriteAllBytes(Path.Combine(examplesDir, "Invoke-SampleOne.png"), new byte[] { 1, 2, 3, 4 });
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var sampleOneExamples = sampleOneJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var playbackMedia = Assert.Single(sampleOneExamples, example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase) &&
+                example.TryGetProperty("media", out var media) &&
+                string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
+            var media = playbackMedia.GetProperty("media");
+            var mediaUrl = media.GetProperty("url").GetString();
+            var posterUrl = media.GetProperty("posterUrl").GetString();
+            Assert.Contains("/api/powershell/powershell-example-media/", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(".cast", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/api/powershell/powershell-example-media/", posterUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(".png", posterUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("application/x-asciicast", media.GetProperty("mimeType").GetString());
+            Assert.Contains("Open terminal playback", media.GetProperty("title").GetString(), StringComparison.Ordinal);
+
+            var castFileName = Path.GetFileName(new Uri("https://example.test" + mediaUrl).LocalPath);
+            var posterFileName = Path.GetFileName(new Uri("https://example.test" + posterUrl).LocalPath);
+            Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", castFileName)));
+            Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", posterFileName)));
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Contains("Open terminal playback", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("Captured terminal playback for Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("example-media-poster", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalPowerShellHelpForValidation()
     {
         return

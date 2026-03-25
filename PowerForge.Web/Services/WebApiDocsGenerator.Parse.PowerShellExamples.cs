@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 
 namespace PowerForge.Web;
 
@@ -62,7 +63,8 @@ public static partial class WebApiDocsGenerator
                         snippet.FilePath,
                         options,
                         validationByFile,
-                        emittedArtifactPaths);
+                        emittedArtifactPaths,
+                        warnings);
                     if (mediaExample is not null)
                         type.Examples.Add(mediaExample);
                 }
@@ -292,18 +294,28 @@ public static partial class WebApiDocsGenerator
         string? exampleFilePath,
         WebApiDocsOptions options,
         IReadOnlyDictionary<string, WebApiDocsPowerShellExampleFileValidationResult> validationByFile,
-        ISet<string> emittedArtifactPaths)
+        ISet<string> emittedArtifactPaths,
+        List<string>? warnings)
     {
         if (string.IsNullOrWhiteSpace(exampleFilePath) ||
             options is null ||
-            validationByFile is null ||
-            validationByFile.Count == 0 ||
             string.IsNullOrWhiteSpace(options.OutputPath))
         {
             return null;
         }
 
         var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
+        var playbackMedia = TryBuildPowerShellImportedPlaybackMedia(
+            normalizedExamplePath,
+            options,
+            emittedArtifactPaths,
+            warnings);
+        if (playbackMedia is not null)
+            return playbackMedia;
+
+        if (validationByFile is null || validationByFile.Count == 0)
+            return null;
+
         if (!validationByFile.TryGetValue(normalizedExamplePath, out var validationFile) ||
             validationFile.ExecutionSucceeded != true ||
             string.IsNullOrWhiteSpace(validationFile.ExecutionArtifactPath))
@@ -354,6 +366,117 @@ public static partial class WebApiDocsGenerator
 
         var normalizedBase = NormalizeApiRoute(baseUrl ?? "/api").TrimEnd('/');
         return normalizedBase + "/" + relative.Replace('\\', '/');
+    }
+
+    private static ApiExampleModel? TryBuildPowerShellImportedPlaybackMedia(
+        string exampleFilePath,
+        WebApiDocsOptions options,
+        ISet<string>? emittedAssetPaths,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) || options is null || string.IsNullOrWhiteSpace(options.OutputPath))
+            return null;
+
+        var castPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, ".cast", ".asciinema");
+        if (string.IsNullOrWhiteSpace(castPath))
+            return null;
+
+        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, emittedAssetPaths, warnings);
+        if (string.IsNullOrWhiteSpace(castUrl))
+            return null;
+
+        var posterPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, ".png", ".jpg", ".jpeg", ".webp");
+        var posterUrl = string.IsNullOrWhiteSpace(posterPath)
+            ? null
+            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, emittedAssetPaths, warnings);
+
+        return new ApiExampleModel
+        {
+            Kind = "media",
+            Origin = ApiExampleOrigins.ImportedScript,
+            Media = new ApiExampleMediaModel
+            {
+                Type = "terminal",
+                Url = castUrl,
+                Title = "Open terminal playback",
+                Caption = $"Captured terminal playback for {Path.GetFileName(exampleFilePath)}.",
+                Alt = "Terminal playback",
+                PosterUrl = posterUrl,
+                MimeType = "application/x-asciicast"
+            }
+        };
+    }
+
+    private static string? ResolvePowerShellExamplePlaybackSidecar(string exampleFilePath, params string[] extensions)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) || extensions is null || extensions.Length == 0)
+            return null;
+
+        var directory = Path.GetDirectoryName(exampleFilePath);
+        var baseName = Path.GetFileNameWithoutExtension(exampleFilePath);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(baseName))
+            return null;
+
+        foreach (var extension in extensions)
+        {
+            if (string.IsNullOrWhiteSpace(extension))
+                continue;
+
+            var normalizedExtension = extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
+            var candidate = Path.Combine(directory, baseName + normalizedExtension);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static string? TryStageApiExampleAsset(
+        string outputPath,
+        string? baseUrl,
+        string sourceFilePath,
+        ISet<string>? emittedAssetPaths,
+        List<string>? warnings)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
+            return null;
+
+        try
+        {
+            var sourceFullPath = Path.GetFullPath(sourceFilePath);
+            var outputRoot = Path.GetFullPath(outputPath);
+            var stagedDirectory = Path.Combine(outputRoot, "powershell-example-media");
+            Directory.CreateDirectory(stagedDirectory);
+
+            var extension = Path.GetExtension(sourceFullPath);
+            var baseName = Path.GetFileNameWithoutExtension(sourceFullPath);
+            var fileName = $"{SanitizePowerShellExampleArtifactName(baseName)}-{ComputeStableShortHash(sourceFullPath)}{extension.ToLowerInvariant()}";
+            var destinationPath = Path.Combine(stagedDirectory, fileName);
+
+            if (!File.Exists(destinationPath) ||
+                File.GetLastWriteTimeUtc(sourceFullPath) > File.GetLastWriteTimeUtc(destinationPath))
+            {
+                File.Copy(sourceFullPath, destinationPath, overwrite: true);
+            }
+
+            if (emittedAssetPaths is not null && !emittedAssetPaths.Add(destinationPath))
+            {
+                // Already staged/referenced for this example group; still return the route.
+            }
+
+            return TryConvertApiOutputPathToRoute(outputRoot, baseUrl, destinationPath);
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"API docs PowerShell coverage: failed to stage example media asset '{Path.GetFileName(sourceFilePath)}' ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
+    }
+
+    private static string ComputeStableShortHash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty));
+        return Convert.ToHexString(bytes[..4]).ToLowerInvariant();
     }
 
     private static string[] CollectPowerShellCommandTokensFromFile(string filePath, List<string>? warnings)
