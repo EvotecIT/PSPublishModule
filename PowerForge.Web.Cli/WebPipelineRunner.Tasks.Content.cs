@@ -521,6 +521,8 @@ internal static partial class WebPipelineRunner
         stepResult.Success = true;
         if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             note += $" (ps-example-validation: {Path.GetFileName(powerShellExampleValidationPath)})";
+        if (!string.IsNullOrWhiteSpace(res.PowerShellExampleMediaManifestPath))
+            note += $" (ps-example-media: {Path.GetFileName(res.PowerShellExampleMediaManifestPath)})";
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
     }
 

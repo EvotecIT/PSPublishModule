@@ -301,6 +301,7 @@ internal static partial class WebCliCommandHandlers
                     CoveragePath = result.CoveragePath,
                     XrefPath = result.XrefPath,
                     PowerShellExampleValidationPath = powerShellExampleValidationPath,
+                    PowerShellExampleMediaManifestPath = result.PowerShellExampleMediaManifestPath,
                     TypeCount = result.TypeCount,
                     UsedReflectionFallback = result.UsedReflectionFallback,
                     Warnings = filteredWarnings
@@ -323,6 +324,8 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Index: {result.IndexPath}");
         if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             logger.Info($"PowerShell example validation: {powerShellExampleValidationPath}");
+        if (!string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath))
+            logger.Info($"PowerShell example media manifest: {result.PowerShellExampleMediaManifestPath}");
         return 0;
     }
 

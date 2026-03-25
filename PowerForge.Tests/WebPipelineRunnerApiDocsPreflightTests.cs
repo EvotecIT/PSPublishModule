@@ -441,6 +441,64 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ApiDocs_ReportsPowerShellExampleMediaManifestInStepMessage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-media-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) \"Ran $Name\" }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.ps1"), "Invoke-SampleFunction -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.cast"), "dummy cast");
+            File.WriteAllBytes(Path.Combine(examplesDir, "Invoke-SampleFunction.png"), new byte[] { 1, 2, 3, 4 });
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "psExamplesPath": "./Examples",
+                      "out": "./_site/api",
+                      "format": "json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("ps-example-media: powershell-example-media-manifest.json", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "_site", "api", "powershell-example-media-manifest.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ApiDocs_FailsWhenImportedPlaybackMediaAssetsLookStale()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-playback-stale-threshold-" + Guid.NewGuid().ToString("N"));
