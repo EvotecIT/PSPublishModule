@@ -106,6 +106,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 ex => ex.GetProperty("kind").GetString() == "heading");
             Assert.Contains(examples.EnumerateArray(),
                 ex => ex.GetProperty("kind").GetString() == "code" &&
+                      ex.GetProperty("origin").GetString() == "AuthoredHelp" &&
                       ex.GetProperty("text").GetString()!.Contains("New-SampleCmdlet -Name \"Demo\"", StringComparison.Ordinal));
             Assert.True(rootElement.TryGetProperty("inputTypes", out _));
             Assert.True(rootElement.TryGetProperty("outputTypes", out _));
@@ -993,6 +994,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
             Assert.Contains(examples,
                 ex => ex.GetProperty("kind").GetString() == "code" &&
+                      ex.GetProperty("origin").GetString() == "ImportedScript" &&
                       ex.GetProperty("text").GetString()!.Contains("Invoke-SampleFunction -Name \"FromScript\"", StringComparison.Ordinal));
         }
         finally
@@ -1214,6 +1216,14 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.DoesNotContain(codeExamples, example => example!.Contains("-InputObject", StringComparison.Ordinal));
             Assert.Contains(textExamples, example => example!.Contains("parameter set 'ByName'", StringComparison.Ordinal));
             Assert.Contains(textExamples, example => example!.Contains("parameter set 'ById'", StringComparison.Ordinal));
+            Assert.All(
+                examples.Where(ex =>
+                {
+                    var kind = ex.GetProperty("kind").GetString();
+                    return string.Equals(kind, "code", StringComparison.Ordinal) ||
+                           string.Equals(kind, "text", StringComparison.Ordinal);
+                }),
+                ex => Assert.Equal("GeneratedFallback", ex.GetProperty("origin").GetString()));
         }
         finally
         {
@@ -1264,6 +1274,164 @@ public class WebApiDocsGeneratorPowerShellTests
             using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
             Assert.Equal(1, coverage.RootElement.GetProperty("types").GetProperty("count").GetInt32());
             Assert.Equal(1, coverage.RootElement.GetProperty("powershell").GetProperty("commandCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_CoverageDistinguishesAuthoredImportedAndGeneratedExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-example-origins-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-AuthoredExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets authored example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Get-AuthoredExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                    <command:examples>
+                      <command:example>
+                        <maml:title>----------  Example 1: Authored.  ----------</maml:title>
+                        <dev:code>Get-AuthoredExample -Name "Alpha"</dev:code>
+                      </command:example>
+                    </command:examples>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-ImportedExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets imported example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-ImportedExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Set-GeneratedExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets generated example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Set-GeneratedExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Get-AuthoredExample', 'Invoke-ImportedExample', 'Set-GeneratedExample')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Get-AuthoredExample { param([string]$Name) }
+                function Invoke-ImportedExample { param([string]$Name) }
+                function Set-GeneratedExample { param([string]$Name) }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-ImportedExample.ps1"),
+                """
+                Invoke-ImportedExample -Name "FromScript"
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Format = "json",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var powershell = coverage.RootElement.GetProperty("powershell");
+
+            Assert.Equal(3, powershell.GetProperty("commandCount").GetInt32());
+            Assert.Equal(3, powershell.GetProperty("codeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("authoredHelpCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("generatedFallbackCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("generatedFallbackOnlyExamples").GetProperty("covered").GetInt32());
+
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingAuthoredHelpCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Get-AuthoredExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-ImportedExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingGeneratedFallbackCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Set-GeneratedExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingGeneratedFallbackOnlyExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Set-GeneratedExample", StringComparison.Ordinal));
         }
         finally
         {
@@ -1346,8 +1514,17 @@ public class WebApiDocsGeneratorPowerShellTests
                 .GetProperty("powershell")
                 .GetProperty("generatedFallbackOnlyExamples");
             Assert.Equal(1, generatedFallbackOnly.GetProperty("covered").GetInt32());
+            var generatedFallback = coverage.RootElement
+                .GetProperty("powershell")
+                .GetProperty("generatedFallbackCodeExamples");
+            Assert.Equal(1, generatedFallback.GetProperty("covered").GetInt32());
+            Assert.Equal(0, coverage.RootElement.GetProperty("powershell").GetProperty("authoredHelpCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(0, coverage.RootElement.GetProperty("powershell").GetProperty("importedScriptCodeExamples").GetProperty("covered").GetInt32());
             Assert.Contains(
                 coverage.RootElement.GetProperty("powershell").GetProperty("commandsUsingGeneratedFallbackOnlyExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleFunction", StringComparison.Ordinal));
+            Assert.Contains(
+                coverage.RootElement.GetProperty("powershell").GetProperty("commandsUsingGeneratedFallbackCodeExamples").EnumerateArray().Select(x => x.GetString()),
                 value => string.Equals(value, "Invoke-SampleFunction", StringComparison.Ordinal));
         }
         finally

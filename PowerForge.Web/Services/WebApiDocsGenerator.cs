@@ -465,11 +465,7 @@ public static partial class WebApiDocsGenerator
                     ["name"] = tp.Name,
                     ["summary"] = tp.Summary
                 }).ToList(),
-                ["examples"] = type.Examples.Select(ex => new Dictionary<string, object?>
-                {
-                    ["kind"] = ex.Kind,
-                    ["text"] = ex.Text
-                }).ToList(),
+                ["examples"] = SerializeExamples(type.Examples),
                 ["seeAlso"] = type.SeeAlso,
                 ["methods"] = type.Methods.Select(m => new Dictionary<string, object?>
                 {
@@ -498,11 +494,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -546,11 +538,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -585,11 +573,7 @@ public static partial class WebApiDocsGenerator
                     ["access"] = p.Access,
                     ["modifiers"] = p.Modifiers,
                     ["valueSummary"] = p.ValueSummary,
-                    ["examples"] = p.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(p.Examples),
                     ["exceptions"] = p.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -613,11 +597,7 @@ public static partial class WebApiDocsGenerator
                     ["modifiers"] = f.Modifiers,
                     ["value"] = f.Value,
                     ["valueSummary"] = f.ValueSummary,
-                    ["examples"] = f.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(f.Examples),
                     ["exceptions"] = f.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -639,11 +619,7 @@ public static partial class WebApiDocsGenerator
                     ["isStatic"] = e.IsStatic,
                     ["access"] = e.Access,
                     ["modifiers"] = e.Modifiers,
-                    ["examples"] = e.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(e.Examples),
                     ["exceptions"] = e.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -676,11 +652,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -735,6 +707,32 @@ public static partial class WebApiDocsGenerator
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
         };
+    }
+
+    private static List<Dictionary<string, object?>> SerializeExamples(IEnumerable<ApiExampleModel> examples)
+    {
+        if (examples is null)
+            return new List<Dictionary<string, object?>>();
+
+        var items = new List<Dictionary<string, object?>>();
+        foreach (var example in examples)
+        {
+            if (example is null)
+                continue;
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["kind"] = example.Kind,
+                ["text"] = example.Text
+            };
+
+            if (!string.IsNullOrWhiteSpace(example.Origin))
+                payload["origin"] = example.Origin;
+
+            items.Add(payload);
+        }
+
+        return items;
     }
 
     private static string NormalizeWarningCode(string warning)

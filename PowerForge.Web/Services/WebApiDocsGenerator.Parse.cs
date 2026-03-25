@@ -865,7 +865,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "heading",
-                    Text = title
+                    Text = title,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -874,7 +875,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = introduction
+                    Text = introduction,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -888,7 +890,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "code",
-                    Text = code
+                    Text = code,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -897,7 +900,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = remark
+                    Text = remark,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -908,7 +912,8 @@ public static partial class WebApiDocsGenerator
                     type.Examples.Add(new ApiExampleModel
                     {
                         Kind = "text",
-                        Text = remark
+                        Text = remark,
+                        Origin = ApiExampleOrigins.AuthoredHelp
                     });
                 }
             }

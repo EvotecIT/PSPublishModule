@@ -47,7 +47,8 @@ public static partial class WebApiDocsGenerator
                     type.Examples.Add(new ApiExampleModel
                     {
                         Kind = "code",
-                        Text = snippet
+                        Text = snippet,
+                        Origin = ApiExampleOrigins.ImportedScript
                     });
                 }
                 continue;
@@ -58,12 +59,14 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = fallback.Label
+                    Text = fallback.Label,
+                    Origin = ApiExampleOrigins.GeneratedFallback
                 });
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "code",
-                    Text = fallback.Code
+                    Text = fallback.Code,
+                    Origin = ApiExampleOrigins.GeneratedFallback
                 });
             }
         }

@@ -144,22 +144,39 @@ public static partial class WebApiDocsGenerator
         var commandCount = commandTypes.Length;
         var commandsWithSummary = commandTypes.Count(static c => !string.IsNullOrWhiteSpace(c.Summary));
         var commandsWithRemarks = commandTypes.Count(static c => !string.IsNullOrWhiteSpace(c.Remarks));
-        var commandsWithCodeExamples = commandTypes.Count(static c => c.Examples.Any(static ex =>
-            ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(ex.Text)));
+        var commandsWithCodeExamples = commandTypes.Count(HasCodeExamples);
+        var commandsWithAuthoredHelpCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.AuthoredHelp));
+        var commandsWithImportedScriptCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.ImportedScript));
+        var commandsWithGeneratedFallbackCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.GeneratedFallback));
         var commandsWithGeneratedFallbackOnlyExamples = commandTypes.Count(HasOnlyGeneratedPowerShellFallbackExamples);
         var commandSourceCoverage = AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source));
 
         var commandsMissingExamples = commandTypes
-            .Where(static c => !c.Examples.Any(static ex =>
-                ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(ex.Text)))
+            .Where(static c => !HasCodeExamples(c))
             .Select(static c => c.FullName)
             .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
             .Take(100)
             .ToArray();
         var commandsUsingGeneratedFallbackOnlyExamples = commandTypes
             .Where(HasOnlyGeneratedPowerShellFallbackExamples)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingAuthoredHelpCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.AuthoredHelp))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.ImportedScript))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingGeneratedFallbackCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.GeneratedFallback))
             .Select(static c => c.FullName)
             .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
             .Take(100)
@@ -219,9 +236,15 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = MakeCoverage(commandCount, commandsWithSummary),
                 ["remarks"] = MakeCoverage(commandCount, commandsWithRemarks),
                 ["codeExamples"] = MakeCoverage(commandCount, commandsWithCodeExamples),
+                ["authoredHelpCodeExamples"] = MakeCoverage(commandCount, commandsWithAuthoredHelpCodeExamples),
+                ["importedScriptCodeExamples"] = MakeCoverage(commandCount, commandsWithImportedScriptCodeExamples),
+                ["generatedFallbackCodeExamples"] = MakeCoverage(commandCount, commandsWithGeneratedFallbackCodeExamples),
                 ["generatedFallbackOnlyExamples"] = MakeCoverage(commandCount, commandsWithGeneratedFallbackOnlyExamples),
                 ["parameters"] = MakeCoverage(commandParameterCount, commandParametersWithSummary),
                 ["commandsMissingCodeExamples"] = commandsMissingExamples,
+                ["commandsUsingAuthoredHelpCodeExamples"] = commandsUsingAuthoredHelpCodeExamples,
+                ["commandsUsingImportedScriptCodeExamples"] = commandsUsingImportedScriptCodeExamples,
+                ["commandsUsingGeneratedFallbackCodeExamples"] = commandsUsingGeneratedFallbackCodeExamples,
                 ["commandsUsingGeneratedFallbackOnlyExamples"] = commandsUsingGeneratedFallbackOnlyExamples
             }
         };
@@ -269,33 +292,32 @@ public static partial class WebApiDocsGenerator
         if (type is null || type.Examples.Count == 0)
             return false;
 
-        var hasCode = false;
-        var hasGeneratedFallbackCode = false;
-        for (var i = 0; i < type.Examples.Count; i++)
-        {
-            var example = type.Examples[i];
-            if (example is null ||
-                !example.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(example.Text))
-                continue;
-
-            hasCode = true;
-            var generated = i > 0 &&
-                            type.Examples[i - 1] is not null &&
-                            type.Examples[i - 1].Kind.Equals("text", StringComparison.OrdinalIgnoreCase) &&
-                            IsGeneratedPowerShellFallbackLabel(type.Examples[i - 1].Text);
-            if (!generated)
-                return false;
-
-            hasGeneratedFallbackCode = true;
-        }
-
-        return hasCode && hasGeneratedFallbackCode;
+        var codeExamples = type.Examples.Where(IsCodeExample).ToArray();
+        return codeExamples.Length > 0 &&
+               codeExamples.All(static example =>
+                   string.Equals(example.Origin, ApiExampleOrigins.GeneratedFallback, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsGeneratedPowerShellFallbackLabel(string? text)
-        => !string.IsNullOrWhiteSpace(text) &&
-           text.TrimStart().StartsWith("Generated fallback example", StringComparison.OrdinalIgnoreCase);
+    private static bool HasCodeExamples(ApiTypeModel type)
+    {
+        return type is not null && type.Examples.Any(IsCodeExample);
+    }
+
+    private static bool HasCodeExamplesFromOrigin(ApiTypeModel type, string origin)
+    {
+        return type is not null &&
+               !string.IsNullOrWhiteSpace(origin) &&
+               type.Examples.Any(example =>
+                   IsCodeExample(example) &&
+                   string.Equals(example.Origin, origin, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsCodeExample(ApiExampleModel example)
+    {
+        return example is not null &&
+               example.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(example.Text);
+    }
 
     private static Dictionary<string, object?> BuildSourceCoveragePayload(int total, SourceCoverageStats coverage)
     {

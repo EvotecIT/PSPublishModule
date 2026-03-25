@@ -104,6 +104,14 @@ public static partial class WebApiDocsGenerator
     {
         public string Kind { get; set; } = "text";
         public string Text { get; set; } = string.Empty;
+        public string? Origin { get; set; }
+    }
+
+    private static class ApiExampleOrigins
+    {
+        public const string AuthoredHelp = "AuthoredHelp";
+        public const string ImportedScript = "ImportedScript";
+        public const string GeneratedFallback = "GeneratedFallback";
     }
 
     private sealed class ApiSourceLink

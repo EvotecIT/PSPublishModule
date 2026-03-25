@@ -364,5 +364,10 @@ Notes:
 - When importing script-based fallback examples, command-specific files (for example `Invoke-Thing.ps1`) are preferred over generic demo scripts when multiple snippets match the same command.
 - When PowerShell help has no authored examples, generated fallback examples prefer the most user-friendly parameter sets and can emit multiple examples per command up to `powerShellFallbackExampleLimit`.
 - API docs now emit `[PFWEB.APIDOCS.POWERSHELL]` warnings when PowerShell commands rely only on generated fallback examples, so CI can distinguish “has some example” from “has authored examples”.
+- PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:
+  - `AuthoredHelp` for examples from MAML help XML
+  - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`
+  - `GeneratedFallback` for auto-generated fallback examples
+- Coverage reports now split PowerShell example coverage into `authoredHelpCodeExamples`, `importedScriptCodeExamples`, and `generatedFallbackCodeExamples`, alongside the existing `generatedFallbackOnlyExamples` guardrail.
 - Pipeline coverage thresholds can now gate that metric via `maxPowerShellGeneratedFallbackOnlyExamplePercent` or `maxPowerShellGeneratedFallbackOnlyExampleCount`.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.
