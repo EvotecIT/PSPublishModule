@@ -144,6 +144,50 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ApiDocsPreflight_FailsWhenSourceRootLooksOneLevelAboveGitHubRepo()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-preflight-root-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "TestRepo"));
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnWarnings": true,
+                      "sourceRoot": ".",
+                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{path}#L{line}"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("[PFWEB.APIDOCS.SOURCE]", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("looks one level above repo 'TestRepo'", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ApiDocs_RespectsMemberXrefKindsAndMaxPerType()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-member-xref-" + Guid.NewGuid().ToString("N"));

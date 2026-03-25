@@ -352,6 +352,7 @@ Notes:
 - Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
   - `sourceUrlMappings` prefixes that never match discovered source paths
   - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
+  - `sourceRoot` pointing one level above the GitHub repo while `sourceUrl` targets a single repo without `{root}`
   - source URL templates missing a path token (`{path}`, `{pathNoRoot}`, or `{pathNoPrefix}`)
   - unsupported source URL template tokens (anything outside `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
 - Display + member diagnostics:

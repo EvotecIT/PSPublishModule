@@ -1032,16 +1032,7 @@ $@"<!doctype html>
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var aliasCount = types.Sum(static type => type.Aliases
-            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
-            .Select(static alias => alias.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count());
         var primaryKindLabel = ResolvePrimaryKindLabel(types);
-        var primaryKindCount = types.Count(type =>
-            string.Equals(NormalizeKind(type.Kind), NormalizeKind(primaryKindLabel), StringComparison.OrdinalIgnoreCase) ||
-            (primaryKindLabel.Equals("Function", StringComparison.OrdinalIgnoreCase) &&
-             string.Equals(NormalizeKind(type.Kind), "function", StringComparison.OrdinalIgnoreCase)));
 
         sb.AppendLine("    <div class=\"api-overview ev-page-body\">");
         sb.AppendLine("      <header class=\"ev-docs-header api-overview-header\">");
@@ -1049,8 +1040,7 @@ $@"<!doctype html>
         sb.AppendLine($"        <h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
         sb.AppendLine("        <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
         sb.AppendLine("      </header>");
-        sb.AppendLine("      <div class=\"api-overview-grid\">");
-        sb.AppendLine("        <div class=\"api-overview-main\">");
+        sb.AppendLine("      <div class=\"api-overview-main api-overview-main--full\">");
 
         var mainTypes = GetMainTypes(types, options);
         if (mainTypes.Count > 0)
@@ -1089,36 +1079,6 @@ $@"<!doctype html>
             AppendOverviewNamespaceGroup(sb, group, baseUrl, typeDisplayNames);
         }
         sb.AppendLine("      </section>");
-        sb.AppendLine("        </div>");
-        sb.AppendLine("        <aside class=\"api-overview-rail\">");
-        sb.AppendLine("          <section class=\"api-overview-rail-card api-overview-rail-card--stats\">");
-        sb.AppendLine("            <p class=\"api-overview-rail-eyebrow\">Workspace Stats</p>");
-        sb.AppendLine("            <h2>Browse smarter</h2>");
-        sb.AppendLine("            <p>Use the left filter rail to narrow by name, kind, or namespace. Namespace sections below open in batches so large modules stay easier to scan.</p>");
-        sb.AppendLine("            <div class=\"overview-stat-grid\">");
-        AppendOverviewStat(sb, "Entries", types.Count.ToString("N0", CultureInfo.InvariantCulture));
-        AppendOverviewStat(sb, "Namespaces", namespaceGroups.Count.ToString("N0", CultureInfo.InvariantCulture));
-        AppendOverviewStat(sb, "Aliases", aliasCount.ToString("N0", CultureInfo.InvariantCulture));
-        if (primaryKindCount > 0)
-            AppendOverviewStat(sb, primaryKindLabel + "s", primaryKindCount.ToString("N0", CultureInfo.InvariantCulture));
-        sb.AppendLine("            </div>");
-        sb.AppendLine("          </section>");
-        if (namespaceGroups.Count > 0)
-        {
-            sb.AppendLine("          <section class=\"api-overview-rail-card api-overview-rail-card--jump\">");
-            sb.AppendLine("            <p class=\"api-overview-rail-eyebrow\">Jump To</p>");
-            sb.AppendLine("            <h3>Namespaces</h3>");
-            sb.AppendLine("            <div class=\"overview-jump-list\">");
-            foreach (var group in namespaceGroups.Take(10))
-            {
-                var anchor = BuildNamespaceAnchorId(group.Key);
-                var nsLabel = System.Web.HttpUtility.HtmlEncode(group.Key);
-                sb.AppendLine($"              <a href=\"#{anchor}\" class=\"overview-jump-link\">{nsLabel}<span>{group.Count().ToString("N0", CultureInfo.InvariantCulture)}</span></a>");
-            }
-            sb.AppendLine("            </div>");
-            sb.AppendLine("          </section>");
-        }
-        sb.AppendLine("        </aside>");
         sb.AppendLine("      </div>");
         sb.AppendLine("    </div>");
         return sb.ToString().TrimEnd();
@@ -1172,17 +1132,6 @@ $@"<!doctype html>
             sb.AppendLine("          </div>");
         }
         sb.AppendLine("        </div>");
-    }
-
-    private static void AppendOverviewStat(StringBuilder sb, string label, string value)
-    {
-        if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(value))
-            return;
-
-        sb.AppendLine("              <div class=\"overview-stat\">");
-        sb.AppendLine($"                <span class=\"overview-stat-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
-        sb.AppendLine($"                <strong class=\"overview-stat-value\">{System.Web.HttpUtility.HtmlEncode(value)}</strong>");
-        sb.AppendLine("              </div>");
     }
 
     private static string BuildNamespaceAnchorId(string namespaceName)

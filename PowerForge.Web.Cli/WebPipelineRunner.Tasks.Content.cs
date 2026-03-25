@@ -568,6 +568,28 @@ internal static partial class WebPipelineRunner
             warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrl does not include a path token ({path}, {pathNoRoot}, or {pathNoPrefix}).");
         }
 
+        if (hasSourceRoot &&
+            hasSourceUrl &&
+            !hasMappings &&
+            sourceUrl!.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (Directory.Exists(fullSourceRoot) &&
+                TryExtractGitHubRepoName(sourceUrl, out var repoName) &&
+                !string.IsNullOrWhiteSpace(repoName))
+            {
+                var sourceRootName = new DirectoryInfo(fullSourceRoot).Name;
+                var nestedRepoRoot = Path.Combine(fullSourceRoot, repoName);
+                if (!string.Equals(sourceRootName, repoName, StringComparison.OrdinalIgnoreCase) &&
+                    Directory.Exists(nestedRepoRoot))
+                {
+                    warnings.Add(
+                        $"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot '{fullSourceRoot}' looks one level above repo '{repoName}'. " +
+                        "Use the repo folder as sourceRoot, or switch sourceUrl to {root}/sourceUrlMappings for mixed-repo layouts.");
+                }
+            }
+        }
+
         if (hasMappings)
         {
             var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -631,6 +653,31 @@ internal static partial class WebPipelineRunner
         return value.IndexOf("{path}", StringComparison.OrdinalIgnoreCase) >= 0 ||
                value.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) >= 0 ||
                value.IndexOf("{pathNoPrefix}", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool TryExtractGitHubRepoName(string pattern, out string repoName)
+    {
+        repoName = string.Empty;
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var candidate = pattern
+            .Replace("{path}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoRoot}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoPrefix}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{root}", "SampleRepo", StringComparison.OrdinalIgnoreCase)
+            .Replace("{line}", "1", StringComparison.OrdinalIgnoreCase);
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+            return false;
+        if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length < 2)
+            return false;
+
+        repoName = segments[1];
+        return !string.IsNullOrWhiteSpace(repoName);
     }
 
     private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)

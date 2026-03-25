@@ -818,17 +818,29 @@ public class WebApiDocsGeneratorContractTests
             .api-content{}
             .api-overview{}
             .api-overview-grid{}
+            .namespace-group-header{}
+            .namespace-group-actions{}
+            .overview-group-toggle{}
             .type-chips{}
             .type-chip{}
             .chip-icon{}
             .sidebar-count{}
             .sidebar-toggle{}
+            .pf-combobox{}
+            .pf-combobox-trigger{}
+            .pf-combobox-list{}
+            .pf-combobox-option{}
+            .pf-enhanced-native{}
             .type-item{}
             .type-detail-shell{}
             .type-detail-rail{}
+            .type-toc{}
+            .type-toc-header{}
+            .type-toc-toggle{}
             .filter-button{}
             .member-card{}
             .member-signature{}
+            .member-toggle input{}
             """);
 
         var outputPath = Path.Combine(root, "api");

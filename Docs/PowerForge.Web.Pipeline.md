@@ -286,11 +286,12 @@ Notes:
 - Full warning code catalog: `Docs/PowerForge.Web.WarningCodes.md`.
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
 - Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
+- Preflight also warns when `sourceRoot` appears to be one level above the targeted GitHub repo and `sourceUrl` does not use `{root}`. This usually means links will render as `<Repo>/<Repo>/...` and 404.
 - Source URL templates are validated preflight:
   - require at least one path token (`{path}`, `{pathNoRoot}`, `{pathNoPrefix}`)
   - warn on unsupported tokens (supported: `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
 - Additional `apidocs` preflight checks emit warning codes before generation starts:
-  - `[PFWEB.APIDOCS.SOURCE]` for source-link config issues (for example `sourceUrlMappings` configured without `sourceRoot`/`sourceUrl`, missing `sourceRoot` directory, duplicate mapping prefixes)
+  - `[PFWEB.APIDOCS.SOURCE]` for source-link config issues (for example `sourceUrlMappings` configured without `sourceRoot`/`sourceUrl`, missing `sourceRoot` directory, duplicate mapping prefixes, or `sourceRoot` aimed above the repo root)
   - `[PFWEB.APIDOCS.NAV]` for nav config issues (for example `navSurface` configured without `nav`)
   - `[PFWEB.APIDOCS.POWERSHELL]` for missing PowerShell examples paths when `psExamplesPath` is set
 - `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)

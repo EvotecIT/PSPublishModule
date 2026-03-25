@@ -163,6 +163,59 @@ public class WebApiDocsGeneratorSourceAndCssTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_OmitsOverviewWorkspaceRail_WhenUsingDocsTemplate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-overview-layout-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        File.WriteAllText(cssPath, ".api-layout { outline: 0; }");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.DoesNotContain("Workspace Stats", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Browse smarter", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Jump To", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_SourceUrlMappings_UseMostSpecificPrefix_AndHonorStripPathPrefix()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-specific-" + Guid.NewGuid().ToString("N"));
