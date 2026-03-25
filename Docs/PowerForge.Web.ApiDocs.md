@@ -412,6 +412,7 @@ Notes:
   - only scripts that both parse cleanly and reference documented commands are executed
   - enabling execution implicitly enables validation
 - Validation reports default to `powershell-example-validation.json` under the API output root when validation is enabled.
+- When execution is enabled, report writing also emits reusable transcript artifacts under a sibling `powershell-example-validation-artifacts/` folder and records each path as `executionArtifactPath`.
 - Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation, when a script does not reference any documented command from the selected help file, or when a matched example script fails execution.
 - PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:
   - `AuthoredHelp` for examples from MAML help XML

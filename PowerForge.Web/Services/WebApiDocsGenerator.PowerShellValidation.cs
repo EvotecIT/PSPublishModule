@@ -196,6 +196,8 @@ public static partial class WebApiDocsGenerator
         var parent = Path.GetDirectoryName(reportPath);
         if (!string.IsNullOrWhiteSpace(parent))
             Directory.CreateDirectory(parent);
+
+        WritePowerShellExampleExecutionArtifacts(reportPath, result);
         var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -203,6 +205,78 @@ public static partial class WebApiDocsGenerator
         });
         File.WriteAllText(reportPath, json, Encoding.UTF8);
         return reportPath;
+    }
+
+    private static void WritePowerShellExampleExecutionArtifacts(
+        string reportPath,
+        WebApiDocsPowerShellExampleValidationResult result)
+    {
+        if (string.IsNullOrWhiteSpace(reportPath) || result?.Files is null || result.Files.Length == 0)
+            return;
+
+        var reportDirectory = Path.GetDirectoryName(reportPath);
+        if (string.IsNullOrWhiteSpace(reportDirectory))
+            return;
+
+        var artifactRoot = Path.Combine(
+            reportDirectory,
+            Path.GetFileNameWithoutExtension(reportPath) + "-artifacts");
+
+        var wroteAny = false;
+        for (var i = 0; i < result.Files.Length; i++)
+        {
+            var file = result.Files[i];
+            file.ExecutionArtifactPath = null;
+            if (!file.ExecutionAttempted)
+                continue;
+
+            if (file.ExecutionExitCode is null &&
+                string.IsNullOrWhiteSpace(file.ExecutionStdOut) &&
+                string.IsNullOrWhiteSpace(file.ExecutionStdErr))
+            {
+                continue;
+            }
+
+            Directory.CreateDirectory(artifactRoot);
+            var artifactName = $"{i + 1:D2}-{SanitizePowerShellExampleArtifactName(Path.GetFileNameWithoutExtension(file.FilePath))}.txt";
+            var artifactPath = Path.Combine(artifactRoot, artifactName);
+            File.WriteAllText(artifactPath, BuildPowerShellExampleExecutionArtifactContent(file), new UTF8Encoding(false));
+            file.ExecutionArtifactPath = artifactPath;
+            wroteAny = true;
+        }
+
+        if (!wroteAny && Directory.Exists(artifactRoot))
+            TryDeleteDirectory(artifactRoot);
+    }
+
+    private static string SanitizePowerShellExampleArtifactName(string? value)
+    {
+        var candidate = string.IsNullOrWhiteSpace(value) ? "example" : value.Trim();
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = candidate
+            .Select(ch => invalid.Contains(ch) ? '-' : ch)
+            .ToArray();
+        var sanitized = new string(chars).Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "example" : sanitized;
+    }
+
+    private static string BuildPowerShellExampleExecutionArtifactContent(WebApiDocsPowerShellExampleFileValidationResult file)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"File: {file.FilePath}");
+        sb.AppendLine($"ExecutionSucceeded: {file.ExecutionSucceeded}");
+        if (file.ExecutionExitCode is not null)
+            sb.AppendLine($"ExitCode: {file.ExecutionExitCode.Value}");
+        if (file.MatchedCommands.Length > 0)
+            sb.AppendLine($"MatchedCommands: {string.Join(", ", file.MatchedCommands)}");
+        sb.AppendLine();
+
+        sb.AppendLine("[stdout]");
+        sb.AppendLine(string.IsNullOrWhiteSpace(file.ExecutionStdOut) ? "<empty>" : file.ExecutionStdOut);
+        sb.AppendLine();
+        sb.AppendLine("[stderr]");
+        sb.AppendLine(string.IsNullOrWhiteSpace(file.ExecutionStdErr) ? "<empty>" : file.ExecutionStdErr);
+        return sb.ToString().TrimEnd() + Environment.NewLine;
     }
 
     private static void AppendPowerShellExampleValidationWarnings(

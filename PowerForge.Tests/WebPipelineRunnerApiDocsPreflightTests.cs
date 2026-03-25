@@ -500,6 +500,13 @@ public class WebPipelineRunnerApiDocsPreflightTests
             using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
             Assert.True(report.RootElement.GetProperty("executionRequested").GetBoolean());
             Assert.Equal(1, report.RootElement.GetProperty("failedExecutionFileCount").GetInt32());
+            var artifactPaths = report.RootElement.GetProperty("files")
+                .EnumerateArray()
+                .Select(file => file.TryGetProperty("executionArtifactPath", out var path) ? path.GetString() : null)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .ToArray();
+            Assert.True(artifactPaths.Length >= 1);
+            Assert.All(artifactPaths, path => Assert.True(File.Exists(path)));
         }
         finally
         {

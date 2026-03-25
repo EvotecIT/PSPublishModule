@@ -331,6 +331,7 @@ Notes:
     - `powerShellExampleExecutionTimeoutSeconds`: per-example execution timeout (default: `60`)
     - `failOnPowerShellExampleExecution`: fail the step when matched examples fail execution or execution cannot complete cleanly
     - execution implicitly enables `validatePowerShellExamples`
+    - report writing emits per-example transcript artifacts beside `powershell-example-validation.json`
   - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:

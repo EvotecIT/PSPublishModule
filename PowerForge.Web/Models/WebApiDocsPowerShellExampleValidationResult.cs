@@ -91,4 +91,6 @@ public sealed class WebApiDocsPowerShellExampleFileValidationResult
     public string? ExecutionStdErr { get; set; }
     /// <summary>Reason this file was skipped during execution, when execution was requested but not attempted.</summary>
     public string? ExecutionSkippedReason { get; set; }
+    /// <summary>Path to the written execution transcript artifact, when report writing emitted one.</summary>
+    public string? ExecutionArtifactPath { get; set; }
 }

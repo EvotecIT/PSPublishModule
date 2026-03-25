@@ -1795,6 +1795,21 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.True(report.RootElement.GetProperty("executionRequested").GetBoolean());
             Assert.Equal(2, report.RootElement.GetProperty("executedFileCount").GetInt32());
             Assert.Equal(1, report.RootElement.GetProperty("failedExecutionFileCount").GetInt32());
+
+            var reportedFiles = report.RootElement.GetProperty("files").EnumerateArray().ToArray();
+            var passingReport = Assert.Single(reportedFiles, file =>
+                string.Equals(Path.GetFileName(file.GetProperty("filePath").GetString()), "Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
+            var failingReport = Assert.Single(reportedFiles, file =>
+                string.Equals(Path.GetFileName(file.GetProperty("filePath").GetString()), "Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var passingArtifactPath = passingReport.GetProperty("executionArtifactPath").GetString();
+            var failingArtifactPath = failingReport.GetProperty("executionArtifactPath").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(passingArtifactPath));
+            Assert.False(string.IsNullOrWhiteSpace(failingArtifactPath));
+            Assert.True(File.Exists(passingArtifactPath));
+            Assert.True(File.Exists(failingArtifactPath));
+            Assert.Contains("Ran one for Alpha", File.ReadAllText(passingArtifactPath!), StringComparison.Ordinal);
+            Assert.Contains("boom", File.ReadAllText(failingArtifactPath!), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
