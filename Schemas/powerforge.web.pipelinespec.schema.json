@@ -2383,6 +2383,12 @@
         "max-powershell-generated-fallback-only-example-count": { "type": "number", "minimum": 0 },
         "maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount": { "type": "number", "minimum": 0 },
         "max-powershell-imported-script-playback-media-without-poster-count": { "type": "number", "minimum": 0 },
+        "maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount": { "type": "number", "minimum": 0 },
+        "max-powershell-imported-script-playback-media-unsupported-sidecar-count": { "type": "number", "minimum": 0 },
+        "maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount": { "type": "number", "minimum": 0 },
+        "max-powershell-imported-script-playback-media-oversized-asset-count": { "type": "number", "minimum": 0 },
+        "maxPowerShellImportedScriptPlaybackMediaStaleAssetCount": { "type": "number", "minimum": 0 },
+        "max-powershell-imported-script-playback-media-stale-asset-count": { "type": "number", "minimum": 0 },
         "suppressWarnings": { "type": "array", "items": { "type": "string" } },
         "warningPreviewCount": { "type": "integer", "minimum": 0 },
         "inputs": {

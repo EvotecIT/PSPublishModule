@@ -166,6 +166,9 @@ public static partial class WebApiDocsGenerator
         var commandsWithImportedScriptPlaybackMedia = commandTypes.Count(HasImportedPlaybackMedia);
         var commandsWithImportedScriptPlaybackMediaWithPoster = commandTypes.Count(HasImportedPlaybackMediaWithPoster);
         var commandsWithImportedScriptPlaybackMediaWithoutPoster = commandTypes.Count(HasImportedPlaybackMediaWithoutPoster);
+        var commandsWithImportedScriptPlaybackMediaUnsupportedSidecars = commandTypes.Count(HasImportedPlaybackMediaWithUnsupportedSidecars);
+        var commandsWithImportedScriptPlaybackMediaOversizedAssets = commandTypes.Count(HasImportedPlaybackMediaWithOversizedAssets);
+        var commandsWithImportedScriptPlaybackMediaStaleAssets = commandTypes.Count(HasImportedPlaybackMediaWithStaleAssets);
         var commandSourceCoverage = AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source));
 
         var commandsMissingExamples = commandTypes
@@ -206,6 +209,24 @@ public static partial class WebApiDocsGenerator
             .ToArray();
         var commandsUsingImportedScriptPlaybackMediaWithoutPoster = commandTypes
             .Where(HasImportedPlaybackMediaWithoutPoster)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars = commandTypes
+            .Where(HasImportedPlaybackMediaWithUnsupportedSidecars)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaOversizedAssets = commandTypes
+            .Where(HasImportedPlaybackMediaWithOversizedAssets)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaStaleAssets = commandTypes
+            .Where(HasImportedPlaybackMediaWithStaleAssets)
             .Select(static c => c.FullName)
             .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
             .Take(100)
@@ -272,6 +293,9 @@ public static partial class WebApiDocsGenerator
                 ["importedScriptPlaybackMedia"] = MakeCoverage(commandCount, commandsWithImportedScriptPlaybackMedia),
                 ["importedScriptPlaybackMediaWithPoster"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaWithPoster),
                 ["importedScriptPlaybackMediaWithoutPoster"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaWithoutPoster),
+                ["importedScriptPlaybackMediaUnsupportedSidecars"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaUnsupportedSidecars),
+                ["importedScriptPlaybackMediaOversizedAssets"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaOversizedAssets),
+                ["importedScriptPlaybackMediaStaleAssets"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaStaleAssets),
                 ["parameters"] = MakeCoverage(commandParameterCount, commandParametersWithSummary),
                 ["commandsMissingCodeExamples"] = commandsMissingExamples,
                 ["commandsUsingAuthoredHelpCodeExamples"] = commandsUsingAuthoredHelpCodeExamples,
@@ -279,7 +303,10 @@ public static partial class WebApiDocsGenerator
                 ["commandsUsingGeneratedFallbackCodeExamples"] = commandsUsingGeneratedFallbackCodeExamples,
                 ["commandsUsingGeneratedFallbackOnlyExamples"] = commandsUsingGeneratedFallbackOnlyExamples,
                 ["commandsUsingImportedScriptPlaybackMedia"] = commandsUsingImportedScriptPlaybackMedia,
-                ["commandsUsingImportedScriptPlaybackMediaWithoutPoster"] = commandsUsingImportedScriptPlaybackMediaWithoutPoster
+                ["commandsUsingImportedScriptPlaybackMediaWithoutPoster"] = commandsUsingImportedScriptPlaybackMediaWithoutPoster,
+                ["commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars"] = commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars,
+                ["commandsUsingImportedScriptPlaybackMediaOversizedAssets"] = commandsUsingImportedScriptPlaybackMediaOversizedAssets,
+                ["commandsUsingImportedScriptPlaybackMediaStaleAssets"] = commandsUsingImportedScriptPlaybackMediaStaleAssets
             }
         };
     }
@@ -362,6 +389,24 @@ public static partial class WebApiDocsGenerator
     {
         return GetImportedPlaybackMediaExamples(type)
             .Any(static example => string.IsNullOrWhiteSpace(example.Media?.PosterUrl));
+    }
+
+    private static bool HasImportedPlaybackMediaWithUnsupportedSidecars(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasUnsupportedSidecars == true);
+    }
+
+    private static bool HasImportedPlaybackMediaWithOversizedAssets(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasOversizedAssets == true);
+    }
+
+    private static bool HasImportedPlaybackMediaWithStaleAssets(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasStaleAssets == true);
     }
 
     private static IEnumerable<ApiExampleModel> GetImportedPlaybackMediaExamples(ApiTypeModel? type)

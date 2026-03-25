@@ -130,6 +130,9 @@ public static partial class WebApiDocsGenerator
         public string? MimeType { get; set; }
         public int? Width { get; set; }
         public int? Height { get; set; }
+        public bool HasUnsupportedSidecars { get; set; }
+        public bool HasOversizedAssets { get; set; }
+        public bool HasStaleAssets { get; set; }
     }
 
     private static class ApiExampleOrigins

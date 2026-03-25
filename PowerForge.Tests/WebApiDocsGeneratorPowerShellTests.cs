@@ -1953,7 +1953,8 @@ public class WebApiDocsGeneratorPowerShellTests
                 Title = "PowerShell API",
                 BaseUrl = "/api/powershell",
                 Template = "docs",
-                Format = "both"
+                Format = "both",
+                CoverageReportPath = "reports/api-coverage.json"
             };
 
             WebApiDocsGenerator.Generate(options);
@@ -2070,6 +2071,22 @@ public class WebApiDocsGeneratorPowerShellTests
                 warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var powershell = coverage.RootElement.GetProperty("powershell");
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMedia").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaUnsupportedSidecars").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaOversizedAssets").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaStaleAssets").GetProperty("covered").GetInt32());
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaOversizedAssets").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaStaleAssets").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
         }
         finally
         {
@@ -2190,6 +2207,9 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMediaWithPoster").GetProperty("total").GetInt32());
             Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaWithoutPoster").GetProperty("covered").GetInt32());
             Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMediaWithoutPoster").GetProperty("total").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaUnsupportedSidecars").GetProperty("covered").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaOversizedAssets").GetProperty("covered").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaStaleAssets").GetProperty("covered").GetInt32());
 
             Assert.Contains(
                 powershell.GetProperty("commandsUsingImportedScriptPlaybackMedia").EnumerateArray().Select(x => x.GetString()),

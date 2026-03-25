@@ -316,7 +316,7 @@ Notes:
   - `memberXrefMaxPerType`: optional cap for member xref entries per type/command (`0` = unlimited)
   - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellAuthoredHelpCodeExamplesPercent`, `minPowerShellImportedScriptCodeExamplesPercent`, `minPowerShellImportedScriptPlaybackMediaPercent`, `minPowerShellImportedScriptPlaybackMediaWithPosterPercent`, `minPowerShellParameterSummaryPercent`
   - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
-  - PowerShell example quality thresholds: `maxPowerShellGeneratedFallbackOnlyExamplePercent` (0-100), `maxPowerShellGeneratedFallbackOnlyExampleCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount` (>=0)
+  - PowerShell example quality thresholds: `maxPowerShellGeneratedFallbackOnlyExamplePercent` (0-100), `maxPowerShellGeneratedFallbackOnlyExampleCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaStaleAssetCount` (>=0)
   - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
@@ -336,6 +336,7 @@ Notes:
     - curated `.cast` / `.asciinema` sidecars beside imported `.ps1` examples are also staged automatically, with matching image sidecars used as poster art when present
     - asset-health warnings flag unsupported same-name sidecars, oversized playback assets, and stale captures/posters that are older than the current example script
     - coverage reports can distinguish imported playback media from plain imported code examples, including whether poster art is present for every playback embed
+    - coverage can also track playback-sidecar health issues directly, so CI can fail on stale, oversized, or unsupported playback assets without depending on generic warning handling
   - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:

@@ -8,6 +8,7 @@ public static partial class WebApiDocsGenerator
 {
     private sealed record GeneratedPowerShellExample(string Label, string Code);
     private sealed record ImportedPowerShellExampleCandidate(string Command, string Snippet, string FilePath, int Score, int LineNumber);
+    private sealed record PowerShellPlaybackAssetHealth(bool HasUnsupportedSidecars, bool HasOversizedAssets, bool HasStaleAssets);
     private const long RecommendedPowerShellPlaybackAssetMaxBytes = 2 * 1024 * 1024;
     private const long RecommendedPowerShellPlaybackPosterMaxBytes = 1024 * 1024;
     private static readonly string[] SupportedPowerShellPlaybackExtensions = [".cast", ".asciinema"];
@@ -313,10 +314,11 @@ public static partial class WebApiDocsGenerator
         }
 
         var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
-        AnalyzePowerShellImportedPlaybackAssets(normalizedExamplePath, inspectedPlaybackMediaFiles, warnings);
+        var playbackAssetHealth = AnalyzePowerShellImportedPlaybackAssets(normalizedExamplePath, inspectedPlaybackMediaFiles, warnings);
         var playbackMedia = TryBuildPowerShellImportedPlaybackMedia(
             normalizedExamplePath,
             options,
+            playbackAssetHealth,
             emittedArtifactPaths,
             warnings);
         if (playbackMedia is not null)
@@ -380,6 +382,7 @@ public static partial class WebApiDocsGenerator
     private static ApiExampleModel? TryBuildPowerShellImportedPlaybackMedia(
         string exampleFilePath,
         WebApiDocsOptions options,
+        PowerShellPlaybackAssetHealth playbackAssetHealth,
         ISet<string>? emittedAssetPaths,
         List<string>? warnings)
     {
@@ -411,45 +414,50 @@ public static partial class WebApiDocsGenerator
                 Caption = $"Captured terminal playback for {Path.GetFileName(exampleFilePath)}.",
                 Alt = "Terminal playback",
                 PosterUrl = posterUrl,
-                MimeType = "application/x-asciicast"
+                MimeType = "application/x-asciicast",
+                HasUnsupportedSidecars = playbackAssetHealth.HasUnsupportedSidecars,
+                HasOversizedAssets = playbackAssetHealth.HasOversizedAssets,
+                HasStaleAssets = playbackAssetHealth.HasStaleAssets
             }
         };
     }
 
-    private static void AnalyzePowerShellImportedPlaybackAssets(
+    private static PowerShellPlaybackAssetHealth AnalyzePowerShellImportedPlaybackAssets(
         string exampleFilePath,
         ISet<string>? inspectedPlaybackMediaFiles,
         List<string>? warnings)
     {
         if (string.IsNullOrWhiteSpace(exampleFilePath) || warnings is null)
-            return;
+            return new PowerShellPlaybackAssetHealth(false, false, false);
 
         var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
         if (inspectedPlaybackMediaFiles is not null && !inspectedPlaybackMediaFiles.Add(normalizedExamplePath))
-            return;
+            return new PowerShellPlaybackAssetHealth(false, false, false);
 
-        WarnOnUnsupportedPowerShellPlaybackSidecars(normalizedExamplePath, warnings);
+        var hasUnsupportedSidecars = WarnOnUnsupportedPowerShellPlaybackSidecars(normalizedExamplePath, warnings);
+        var hasOversizedAssets = false;
+        var hasStaleAssets = false;
 
         var castPath = ResolvePowerShellExamplePlaybackSidecar(normalizedExamplePath, SupportedPowerShellPlaybackExtensions);
         var posterPath = ResolvePowerShellExamplePlaybackSidecar(normalizedExamplePath, SupportedPowerShellPlaybackPosterExtensions);
         if (string.IsNullOrWhiteSpace(castPath))
-            return;
+            return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, false, false);
 
-        WarnOnOversizedPowerShellPlaybackAsset(
+        hasOversizedAssets |= WarnOnOversizedPowerShellPlaybackAsset(
             castPath,
             RecommendedPowerShellPlaybackAssetMaxBytes,
             "playback sidecar",
             warnings);
-        WarnOnStalePowerShellPlaybackAsset(
+        hasStaleAssets |= WarnOnStalePowerShellPlaybackAsset(
             normalizedExamplePath,
             castPath,
             "playback sidecar",
             warnings);
 
         if (string.IsNullOrWhiteSpace(posterPath))
-            return;
+            return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, hasOversizedAssets, hasStaleAssets);
 
-        WarnOnOversizedPowerShellPlaybackAsset(
+        hasOversizedAssets |= WarnOnOversizedPowerShellPlaybackAsset(
             posterPath,
             RecommendedPowerShellPlaybackPosterMaxBytes,
             "playback poster",
@@ -458,21 +466,25 @@ public static partial class WebApiDocsGenerator
         var referencePath = File.GetLastWriteTimeUtc(castPath) > File.GetLastWriteTimeUtc(normalizedExamplePath)
             ? castPath
             : normalizedExamplePath;
-        WarnOnStalePowerShellPlaybackAsset(
+        hasStaleAssets |= WarnOnStalePowerShellPlaybackAsset(
             referencePath,
             posterPath,
             "playback poster",
             warnings);
+
+        return new PowerShellPlaybackAssetHealth(hasUnsupportedSidecars, hasOversizedAssets, hasStaleAssets);
     }
 
-    private static void WarnOnUnsupportedPowerShellPlaybackSidecars(
+    private static bool WarnOnUnsupportedPowerShellPlaybackSidecars(
         string exampleFilePath,
         List<string> warnings)
     {
         var directory = Path.GetDirectoryName(exampleFilePath);
         var baseName = Path.GetFileNameWithoutExtension(exampleFilePath);
         if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(baseName))
-            return;
+            return false;
+
+        var found = false;
 
         foreach (var extension in UnsupportedPowerShellPlaybackSidecarExtensions)
         {
@@ -480,56 +492,63 @@ public static partial class WebApiDocsGenerator
             if (!File.Exists(candidate))
                 continue;
 
+            found = true;
+
             warnings.Add(
                 $"API docs PowerShell coverage: unsupported playback sidecar '{Path.GetFileName(candidate)}'. " +
                 $"Supported playback assets are {string.Join(", ", SupportedPowerShellPlaybackExtensions)} with poster sidecars {string.Join(", ", SupportedPowerShellPlaybackPosterExtensions)}.");
         }
+
+        return found;
     }
 
-    private static void WarnOnOversizedPowerShellPlaybackAsset(
+    private static bool WarnOnOversizedPowerShellPlaybackAsset(
         string assetPath,
         long recommendedMaxBytes,
         string assetLabel,
         List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(assetPath) || recommendedMaxBytes <= 0 || warnings is null)
-            return;
+            return false;
 
         try
         {
             var file = new FileInfo(assetPath);
             if (!file.Exists || file.Length <= recommendedMaxBytes)
-                return;
+                return false;
 
             warnings.Add(
                 $"API docs PowerShell coverage: {assetLabel} '{file.Name}' is {FormatByteCount(file.Length)}, above the recommended {FormatByteCount(recommendedMaxBytes)}. " +
                 "Consider trimming or recompressing it to keep API pages lean.");
+            return true;
         }
         catch (Exception ex)
         {
             warnings.Add($"API docs PowerShell coverage: failed to inspect playback asset '{Path.GetFileName(assetPath)}' ({ex.GetType().Name}: {ex.Message})");
+            return false;
         }
     }
 
-    private static void WarnOnStalePowerShellPlaybackAsset(
+    private static bool WarnOnStalePowerShellPlaybackAsset(
         string referencePath,
         string assetPath,
         string assetLabel,
         List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(referencePath) || string.IsNullOrWhiteSpace(assetPath) || warnings is null)
-            return;
+            return false;
         if (!File.Exists(referencePath) || !File.Exists(assetPath))
-            return;
+            return false;
 
         var referenceTimestamp = File.GetLastWriteTimeUtc(referencePath);
         var assetTimestamp = File.GetLastWriteTimeUtc(assetPath);
         if (assetTimestamp >= referenceTimestamp)
-            return;
+            return false;
 
         warnings.Add(
             $"API docs PowerShell coverage: {assetLabel} '{Path.GetFileName(assetPath)}' looks stale because it is older than '{Path.GetFileName(referencePath)}'. " +
             "Refresh the captured media so it matches the current example script.");
+        return true;
     }
 
     private static string FormatByteCount(long bytes)
