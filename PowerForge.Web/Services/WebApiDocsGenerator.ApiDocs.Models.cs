@@ -130,6 +130,9 @@ public static partial class WebApiDocsGenerator
         public string? MimeType { get; set; }
         public int? Width { get; set; }
         public int? Height { get; set; }
+        public string? SourcePath { get; set; }
+        public string? AssetPath { get; set; }
+        public string? PosterAssetPath { get; set; }
         public DateTimeOffset? CapturedAtUtc { get; set; }
         public DateTimeOffset? SourceUpdatedAtUtc { get; set; }
         public bool HasUnsupportedSidecars { get; set; }

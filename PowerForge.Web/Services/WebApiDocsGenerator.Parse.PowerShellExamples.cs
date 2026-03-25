@@ -361,6 +361,8 @@ public static partial class WebApiDocsGenerator
                 Caption = $"Captured terminal transcript from executing {Path.GetFileName(exampleFilePath)}.",
                 Alt = "Execution transcript",
                 MimeType = "text/plain",
+                SourcePath = normalizedExamplePath,
+                AssetPath = artifactPath,
                 CapturedAtUtc = capturedAtUtc,
                 SourceUpdatedAtUtc = sourceUpdatedAtUtc
             }
@@ -426,6 +428,9 @@ public static partial class WebApiDocsGenerator
                 Alt = "Terminal playback",
                 PosterUrl = posterUrl,
                 MimeType = "application/x-asciicast",
+                SourcePath = exampleFilePath,
+                AssetPath = castPath,
+                PosterAssetPath = posterPath,
                 CapturedAtUtc = capturedAtUtc,
                 SourceUpdatedAtUtc = sourceUpdatedAtUtc,
                 HasUnsupportedSidecars = playbackAssetHealth.HasUnsupportedSidecars,

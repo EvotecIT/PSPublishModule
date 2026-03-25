@@ -203,7 +203,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 Prism = new PrismSpec { Mode = "off" }
             };
 
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
             var html = File.ReadAllText(Path.Combine(outputPath, "get-sampledata", "index.html"));
 
             Assert.Contains("language-powershell", html, StringComparison.OrdinalIgnoreCase);
@@ -829,7 +829,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 Format = "both"
             };
 
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
             using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
             Assert.Equal("Function", functionJson.RootElement.GetProperty("kind").GetString());
         }
@@ -1960,7 +1960,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 CoverageReportPath = "reports/api-coverage.json"
             };
 
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
 
             using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
             var sampleOneExamples = sampleOneJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
@@ -1984,6 +1984,17 @@ public class WebApiDocsGeneratorPowerShellTests
             var posterFileName = Path.GetFileName(new Uri("https://example.test" + posterUrl).LocalPath);
             Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", castFileName)));
             Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", posterFileName)));
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
+            Assert.True(File.Exists(result.PowerShellExampleMediaManifestPath!));
+
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            Assert.Equal(1, mediaManifest.RootElement.GetProperty("entryCount").GetInt32());
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("Invoke-SampleOne", manifestEntry.GetProperty("commandName").GetString());
+            Assert.Equal("Invoke-SampleOne.ps1", manifestEntry.GetProperty("sourcePath").GetString());
+            Assert.Equal("Invoke-SampleOne.cast", manifestEntry.GetProperty("assetPath").GetString());
+            Assert.Equal("Invoke-SampleOne.png", manifestEntry.GetProperty("posterAssetPath").GetString());
+            Assert.True(manifestEntry.GetProperty("hasPoster").GetBoolean());
 
             var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
             Assert.Contains("Open terminal playback", sampleOneHtml, StringComparison.Ordinal);
@@ -2077,6 +2088,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
 
             using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
             var staleMedia = Assert.Single(sampleOneJson.RootElement.GetProperty("examples").EnumerateArray(), example =>
@@ -2086,6 +2098,12 @@ public class WebApiDocsGeneratorPowerShellTests
 
             var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
             Assert.Contains("Script changed after this capture", sampleOneHtml, StringComparison.Ordinal);
+
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.True(manifestEntry.GetProperty("hasUnsupportedSidecars").GetBoolean());
+            Assert.True(manifestEntry.GetProperty("hasOversizedAssets").GetBoolean());
+            Assert.True(manifestEntry.GetProperty("hasStaleAssets").GetBoolean());
 
             using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
             var powershell = coverage.RootElement.GetProperty("powershell");

@@ -706,6 +706,7 @@ public static partial class WebApiDocsGenerator
         AppendPowerShellExampleQualityWarnings(types, warnings);
         var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+        var powerShellExampleMediaManifestPath = WritePowerShellExampleMediaManifest(outputPath, options, types, warnings);
 
         var normalizedWarnings = warnings
             .Where(static w => !string.IsNullOrWhiteSpace(w))
@@ -720,6 +721,7 @@ public static partial class WebApiDocsGenerator
             TypesPath = typesDir,
             CoveragePath = coveragePath,
             XrefPath = xrefPath,
+            PowerShellExampleMediaManifestPath = powerShellExampleMediaManifestPath,
             TypeCount = types.Count,
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
