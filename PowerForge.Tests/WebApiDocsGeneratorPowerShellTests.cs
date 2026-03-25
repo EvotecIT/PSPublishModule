@@ -2267,6 +2267,124 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_UsesParentDirectoryWhenPowerShellExamplesPathPointsToSingleFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-single-file-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            var examplePath = Path.Combine(examplesDir, "Invoke-SampleOne.ps1");
+            File.WriteAllText(examplePath, "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.cast"), "dummy cast");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplePath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("Invoke-SampleOne.ps1", manifestEntry.GetProperty("sourcePath").GetString());
+            Assert.Equal("Invoke-SampleOne.cast", manifestEntry.GetProperty("assetPath").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_RestagesPlaybackMediaWhenSourceTimestampChangesBackward()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-restage-playback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            var examplePath = Path.Combine(examplesDir, "Invoke-SampleOne.ps1");
+            var castPath = Path.Combine(examplesDir, "Invoke-SampleOne.cast");
+            File.WriteAllText(examplePath, "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(castPath, "newer capture");
+            File.SetLastWriteTimeUtc(castPath, DateTime.UtcNow.AddMinutes(5));
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            File.WriteAllText(castPath, "older but current capture");
+            File.SetLastWriteTimeUtc(castPath, DateTime.UtcNow.AddMinutes(-30));
+
+            WebApiDocsGenerator.Generate(options);
+
+            var stagedCast = Directory.GetFiles(Path.Combine(outputPath, "powershell-example-media"), "*.cast").Single();
+            Assert.Equal("older but current capture", File.ReadAllText(stagedCast));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_WarnsWhenPlaybackAssetsAreOversizedStaleOrUnsupported()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-health-" + Guid.NewGuid().ToString("N"));

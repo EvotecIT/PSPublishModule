@@ -726,7 +726,7 @@ public static partial class WebApiDocsGenerator
             var destinationPath = Path.Combine(stagedDirectory, fileName);
 
             if (!File.Exists(destinationPath) ||
-                File.GetLastWriteTimeUtc(sourceFullPath) > File.GetLastWriteTimeUtc(destinationPath))
+                File.GetLastWriteTimeUtc(sourceFullPath) != File.GetLastWriteTimeUtc(destinationPath))
             {
                 File.Copy(sourceFullPath, destinationPath, overwrite: true);
             }
