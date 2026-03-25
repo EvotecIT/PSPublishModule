@@ -176,6 +176,12 @@ Verify lock drift (for local checks/scripts):
 powerforge-web engine-lock --mode verify --path .\.powerforge\engine-lock.json --ref <expected-sha> --require-immutable-ref
 ```
 
+Resolve the effective engine source for reusable workflows/bootstrap steps:
+
+```powershell
+powerforge-web engine-lock --mode resolve --path .\.powerforge\engine-lock.json --use-env --require-immutable-ref
+```
+
 ## Theme Inheritance (extends)
 
 If a theme declares `extends`, the base theme must be present on disk (vendored into the repo).

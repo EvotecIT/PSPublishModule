@@ -9,10 +9,11 @@ internal static partial class WebCliCommandHandlers
     {
         var mode = ResolveEngineLockMode(subArgs);
         if (!mode.Equals("show", StringComparison.OrdinalIgnoreCase) &&
+            !mode.Equals("resolve", StringComparison.OrdinalIgnoreCase) &&
             !mode.Equals("verify", StringComparison.OrdinalIgnoreCase) &&
             !mode.Equals("update", StringComparison.OrdinalIgnoreCase))
         {
-            return Fail("Invalid --mode. Supported values: show, verify, update.", outputJson, logger, "web.engine-lock");
+            return Fail("Invalid --mode. Supported values: show, resolve, verify, update.", outputJson, logger, "web.engine-lock");
         }
 
         var configPath = TryGetOptionValue(subArgs, "--config");
@@ -29,12 +30,23 @@ internal static partial class WebCliCommandHandlers
         var expectedRepository = TryGetOptionValue(subArgs, "--repository") ?? TryGetOptionValue(subArgs, "--repo");
         var expectedRef = TryGetOptionValue(subArgs, "--ref");
         var expectedChannel = TryGetOptionValue(subArgs, "--channel");
+        var repositoryOverride = TryGetOptionValue(subArgs, "--repository-override") ??
+                                 TryGetOptionValue(subArgs, "--repositoryOverride");
+        var refOverride = TryGetOptionValue(subArgs, "--ref-override") ??
+                          TryGetOptionValue(subArgs, "--refOverride");
+        var githubOutputPath = TryGetOptionValue(subArgs, "--github-output") ??
+                               TryGetOptionValue(subArgs, "--githubOutput");
         var requireImmutableRef = HasOption(subArgs, "--require-immutable-ref") ||
                                   HasOption(subArgs, "--requireImmutableRef") ||
                                   HasOption(subArgs, "--require-sha") ||
                                   HasOption(subArgs, "--requireSha");
         var useEnv = HasOption(subArgs, "--use-env") || HasOption(subArgs, "--env");
-        if (useEnv)
+        if (useEnv && mode.Equals("resolve", StringComparison.OrdinalIgnoreCase))
+        {
+            repositoryOverride ??= Environment.GetEnvironmentVariable("POWERFORGE_REPOSITORY");
+            refOverride ??= Environment.GetEnvironmentVariable("POWERFORGE_REF");
+        }
+        else if (useEnv)
         {
             expectedRepository ??= Environment.GetEnvironmentVariable("POWERFORGE_REPOSITORY");
             expectedRef ??= Environment.GetEnvironmentVariable("POWERFORGE_REF");
@@ -73,6 +85,38 @@ internal static partial class WebCliCommandHandlers
             case "show":
                 if (lockSpec is null)
                     error = $"Engine lock file not found: {lockPath}";
+                break;
+
+            case "resolve":
+                var resolvedSpec = lockSpec is null
+                    ? WebEngineLockFile.CreateDefault()
+                    : WebEngineLockFile.Normalize(lockSpec, stampUpdatedUtc: false);
+
+                if (!string.IsNullOrWhiteSpace(expectedRepository) && string.IsNullOrWhiteSpace(resolvedSpec.Repository))
+                    resolvedSpec.Repository = expectedRepository.Trim();
+                if (!string.IsNullOrWhiteSpace(expectedRef) && string.IsNullOrWhiteSpace(resolvedSpec.Ref))
+                    resolvedSpec.Ref = expectedRef.Trim();
+                if (!string.IsNullOrWhiteSpace(expectedChannel) && string.IsNullOrWhiteSpace(resolvedSpec.Channel))
+                    resolvedSpec.Channel = expectedChannel.Trim();
+
+                if (!string.IsNullOrWhiteSpace(repositoryOverride))
+                    resolvedSpec.Repository = repositoryOverride.Trim();
+                if (!string.IsNullOrWhiteSpace(refOverride))
+                    resolvedSpec.Ref = refOverride.Trim();
+
+                var resolveValidation = WebEngineLockFile.Validate(resolvedSpec);
+                if (resolveValidation.Length > 0)
+                {
+                    error = string.Join(" ", resolveValidation);
+                }
+                else if (requireImmutableRef && !WebEngineLockFile.IsCommitSha(resolvedSpec.Ref))
+                {
+                    error = $"engine-lock resolve failed: ref '{resolvedSpec.Ref}' is not an immutable commit SHA (40/64 hex).";
+                }
+                else
+                {
+                    lockSpec = resolvedSpec;
+                }
                 break;
 
             case "verify":
@@ -150,6 +194,8 @@ internal static partial class WebCliCommandHandlers
             error = "Engine lock drift detected.";
 
         var success = string.IsNullOrWhiteSpace(error);
+        if (success && mode.Equals("resolve", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(githubOutputPath))
+            WriteGitHubOutput(githubOutputPath!, result);
         return CompleteEngineLock(outputJson, logger, outputSchemaVersion, success, error, result);
     }
 
@@ -162,6 +208,8 @@ internal static partial class WebCliCommandHandlers
             return "verify";
         if (HasOption(args, "--update"))
             return "update";
+        if (HasOption(args, "--resolve"))
+            return "resolve";
         return "show";
     }
 
@@ -175,6 +223,25 @@ internal static partial class WebCliCommandHandlers
             return;
 
         driftReasons.Add($"expected {name} '{expected}' but lock has '{actualValue}'.");
+    }
+
+    private static void WriteGitHubOutput(string githubOutputPath, WebEngineLockResult result)
+    {
+        var outputPath = githubOutputPath;
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new InvalidOperationException("engine-lock resolve: missing --github-output path.");
+
+        var lines = new[]
+        {
+            $"repository={result.Repository}",
+            $"ref={result.Ref}"
+        };
+
+        var directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        File.AppendAllLines(outputPath, lines);
     }
 
     private static int CompleteEngineLock(bool outputJson, WebConsoleLogger logger, int outputSchemaVersion, bool success, string? error, WebEngineLockResult result)
