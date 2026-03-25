@@ -403,7 +403,6 @@ internal static partial class WebPipelineRunner
         if (memberXrefKindList.Count > 0)
             options.MemberXrefKinds.AddRange(memberXrefKindList);
 
-        var res = WebApiDocsGenerator.Generate(options);
         WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
         string? powerShellExampleValidationPath = null;
         if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
@@ -421,8 +420,15 @@ internal static partial class WebPipelineRunner
                 outPath!,
                 powerShellExampleValidationReportPath,
                 powerShellExampleValidation);
+            options.PowerShellExampleValidationResult = powerShellExampleValidation;
+        }
+
+        var res = WebApiDocsGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             res.PowerShellExampleValidationPath = powerShellExampleValidationPath;
 
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples && powerShellExampleValidation is not null)
+        {
             if (failOnPowerShellExampleValidation &&
                 (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
             {

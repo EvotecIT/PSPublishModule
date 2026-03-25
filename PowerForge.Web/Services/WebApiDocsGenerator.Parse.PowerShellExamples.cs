@@ -23,6 +23,7 @@ public static partial class WebApiDocsGenerator
         string resolvedHelpPath,
         string? manifestPath,
         WebApiDocsOptions options,
+        WebApiDocsPowerShellExampleValidationResult? validationResult,
         List<string> warnings)
     {
         if (apiDoc is null || options is null || !options.GeneratePowerShellFallbackExamples)
@@ -41,19 +42,29 @@ public static partial class WebApiDocsGenerator
         var commandNames = commandTypes.Select(type => type.Name).ToArray();
         var files = ResolvePowerShellExampleScriptFiles(inputHelpPath, resolvedHelpPath, manifestPath, options, warnings);
         var snippetsByCommand = CollectPowerShellExamplesFromScripts(files, commandNames, limit, warnings);
+        var validationByFile = BuildPowerShellExampleValidationLookup(validationResult);
 
         foreach (var type in commandTypes)
         {
             if (snippetsByCommand.TryGetValue(type.Name, out var snippets) && snippets.Count > 0)
             {
+                var emittedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var snippet in snippets.Take(limit))
                 {
                     type.Examples.Add(new ApiExampleModel
                     {
                         Kind = "code",
-                        Text = snippet,
+                        Text = snippet.Snippet,
                         Origin = ApiExampleOrigins.ImportedScript
                     });
+
+                    var mediaExample = BuildPowerShellImportedExampleMedia(
+                        snippet.FilePath,
+                        options,
+                        validationByFile,
+                        emittedArtifactPaths);
+                    if (mediaExample is not null)
+                        type.Examples.Add(mediaExample);
                 }
                 continue;
             }
@@ -180,13 +191,13 @@ public static partial class WebApiDocsGenerator
                PowerShellCultureFolderRegex.IsMatch(folderName);
     }
 
-    private static Dictionary<string, List<string>> CollectPowerShellExamplesFromScripts(
+    private static Dictionary<string, List<ImportedPowerShellExampleCandidate>> CollectPowerShellExamplesFromScripts(
         IReadOnlyList<string> files,
         IReadOnlyList<string> commandNames,
         int maxPerCommand,
         List<string> warnings)
     {
-        var results = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var results = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
         var dedupe = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var candidates = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
         if (files.Count == 0 || commandNames.Count == 0)
@@ -253,11 +264,96 @@ public static partial class WebApiDocsGenerator
                 .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static candidate => candidate.LineNumber)
                 .Take(Math.Max(1, maxPerCommand))
-                .Select(static candidate => candidate.Snippet)
                 .ToList();
         }
 
         return results;
+    }
+
+    private static Dictionary<string, WebApiDocsPowerShellExampleFileValidationResult> BuildPowerShellExampleValidationLookup(
+        WebApiDocsPowerShellExampleValidationResult? validationResult)
+    {
+        var lookup = new Dictionary<string, WebApiDocsPowerShellExampleFileValidationResult>(StringComparer.OrdinalIgnoreCase);
+        if (validationResult?.Files is null || validationResult.Files.Length == 0)
+            return lookup;
+
+        foreach (var file in validationResult.Files)
+        {
+            if (file is null || string.IsNullOrWhiteSpace(file.FilePath))
+                continue;
+
+            lookup[Path.GetFullPath(file.FilePath)] = file;
+        }
+
+        return lookup;
+    }
+
+    private static ApiExampleModel? BuildPowerShellImportedExampleMedia(
+        string? exampleFilePath,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, WebApiDocsPowerShellExampleFileValidationResult> validationByFile,
+        ISet<string> emittedArtifactPaths)
+    {
+        if (string.IsNullOrWhiteSpace(exampleFilePath) ||
+            options is null ||
+            validationByFile is null ||
+            validationByFile.Count == 0 ||
+            string.IsNullOrWhiteSpace(options.OutputPath))
+        {
+            return null;
+        }
+
+        var normalizedExamplePath = Path.GetFullPath(exampleFilePath);
+        if (!validationByFile.TryGetValue(normalizedExamplePath, out var validationFile) ||
+            validationFile.ExecutionSucceeded != true ||
+            string.IsNullOrWhiteSpace(validationFile.ExecutionArtifactPath))
+        {
+            return null;
+        }
+
+        var artifactPath = Path.GetFullPath(validationFile.ExecutionArtifactPath);
+        if (!File.Exists(artifactPath))
+            return null;
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(artifactPath))
+            return null;
+
+        var artifactUrl = TryConvertApiOutputPathToRoute(options.OutputPath, options.BaseUrl, artifactPath);
+        if (string.IsNullOrWhiteSpace(artifactUrl))
+            return null;
+
+        return new ApiExampleModel
+        {
+            Kind = "media",
+            Origin = ApiExampleOrigins.ImportedScript,
+            Media = new ApiExampleMediaModel
+            {
+                Type = "terminal",
+                Url = artifactUrl,
+                Title = "Open execution transcript",
+                Caption = $"Captured terminal transcript from executing {Path.GetFileName(exampleFilePath)}.",
+                Alt = "Execution transcript",
+                MimeType = "text/plain"
+            }
+        };
+    }
+
+    private static string? TryConvertApiOutputPathToRoute(string outputPath, string? baseUrl, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(filePath))
+            return null;
+
+        var root = Path.GetFullPath(outputPath);
+        var target = Path.GetFullPath(filePath);
+        var relative = Path.GetRelativePath(root, target);
+        if (string.IsNullOrWhiteSpace(relative) ||
+            relative.StartsWith("..", StringComparison.Ordinal) ||
+            Path.IsPathRooted(relative))
+        {
+            return null;
+        }
+
+        var normalizedBase = NormalizeApiRoute(baseUrl ?? "/api").TrimEnd('/');
+        return normalizedBase + "/" + relative.Replace('\\', '/');
     }
 
     private static string[] CollectPowerShellCommandTokensFromFile(string filePath, List<string>? warnings)

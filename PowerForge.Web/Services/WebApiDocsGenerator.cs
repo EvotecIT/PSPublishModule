@@ -212,6 +212,10 @@ public sealed class WebApiDocsOptions
     /// </summary>
     public string? PowerShellExamplesPath { get; set; }
     /// <summary>
+    /// Optional PowerShell example validation result used to enrich imported examples with execution media.
+    /// </summary>
+    public WebApiDocsPowerShellExampleValidationResult? PowerShellExampleValidationResult { get; set; }
+    /// <summary>
     /// Maximum number of fallback code examples imported per PowerShell command.
     /// </summary>
     public int PowerShellFallbackExampleLimitPerCommand { get; set; } = 2;
@@ -286,6 +290,8 @@ public static partial class WebApiDocsGenerator
         ".filter-button",
         ".member-card",
         ".member-signature",
+        ".example-origin",
+        ".example-origin-badge",
         ".member-toggle input",
         ".member-header pre.member-signature",
         ".member-card pre::-webkit-scrollbar",

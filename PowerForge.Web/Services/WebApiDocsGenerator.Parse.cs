@@ -241,7 +241,14 @@ public static partial class WebApiDocsGenerator
             apiDoc.Types[type.FullName] = type;
         }
 
-        AppendPowerShellFallbackExamples(apiDoc, helpPath, resolved, manifestPath, options, warnings);
+        AppendPowerShellFallbackExamples(
+            apiDoc,
+            helpPath,
+            resolved,
+            manifestPath,
+            options,
+            options.PowerShellExampleValidationResult,
+            warnings);
         AppendPowerShellAboutTopics(apiDoc, helpPath, resolved, moduleName ?? string.Empty, manifestPath, warnings);
         return apiDoc;
     }

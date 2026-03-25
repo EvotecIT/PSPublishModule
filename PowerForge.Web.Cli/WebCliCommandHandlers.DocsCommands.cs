@@ -222,7 +222,6 @@ internal static partial class WebCliCommandHandlers
             return Fail(headline, outputJson, logger, "web.apidocs");
         }
 
-        var result = WebApiDocsGenerator.Generate(options);
         WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
         string? powerShellExampleValidationPath = null;
         if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
@@ -240,8 +239,15 @@ internal static partial class WebCliCommandHandlers
                 outPath!,
                 powerShellExampleValidationReport,
                 powerShellExampleValidation);
+            options.PowerShellExampleValidationResult = powerShellExampleValidation;
+        }
+
+        var result = WebApiDocsGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             result.PowerShellExampleValidationPath = powerShellExampleValidationPath;
 
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples && powerShellExampleValidation is not null)
+        {
             if (failOnPowerShellExampleValidation &&
                 (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
             {
