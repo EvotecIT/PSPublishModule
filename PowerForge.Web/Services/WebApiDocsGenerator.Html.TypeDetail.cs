@@ -574,8 +574,10 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage)
     {
+        string? lastOrigin = null;
         foreach (var example in examples)
         {
+            AppendExampleOriginBadge(sb, example, ref lastOrigin);
             if (string.Equals(example.Kind, "media", StringComparison.OrdinalIgnoreCase) && example.Media is not null)
             {
                 AppendExampleMedia(sb, example.Media, baseUrl, slugMap);
@@ -601,6 +603,56 @@ public static partial class WebApiDocsGenerator
                 }
             }
         }
+    }
+
+    private static void AppendExampleOriginBadge(
+        StringBuilder sb,
+        ApiExampleModel example,
+        ref string? lastOrigin)
+    {
+        if (sb is null || example is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(example.Origin))
+        {
+            lastOrigin = null;
+            return;
+        }
+
+        if (string.Equals(lastOrigin, example.Origin, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var (label, description, className) = GetExampleOriginPresentation(example.Origin);
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            lastOrigin = example.Origin;
+            return;
+        }
+
+        var encodedOrigin = System.Web.HttpUtility.HtmlEncode(example.Origin);
+        var encodedClass = System.Web.HttpUtility.HtmlEncode(className);
+        var encodedLabel = System.Web.HttpUtility.HtmlEncode(label);
+        var encodedDescription = System.Web.HttpUtility.HtmlEncode(description);
+
+        sb.AppendLine($"        <div class=\"example-origin\" data-example-origin=\"{encodedOrigin}\">");
+        sb.AppendLine($"          <span class=\"param-meta-chip example-origin-badge {encodedClass}\" title=\"{encodedDescription}\">{encodedLabel}</span>");
+        sb.AppendLine("        </div>");
+        lastOrigin = example.Origin;
+    }
+
+    private static (string Label, string Description, string ClassName) GetExampleOriginPresentation(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            return (string.Empty, string.Empty, string.Empty);
+
+        if (string.Equals(origin, ApiExampleOrigins.AuthoredHelp, StringComparison.OrdinalIgnoreCase))
+            return ("Authored help example", "Example authored directly in source help.", "example-origin-authored");
+        if (string.Equals(origin, ApiExampleOrigins.ImportedScript, StringComparison.OrdinalIgnoreCase))
+            return ("Imported script example", "Example imported from a curated PowerShell script.", "example-origin-imported");
+        if (string.Equals(origin, ApiExampleOrigins.GeneratedFallback, StringComparison.OrdinalIgnoreCase))
+            return ("Generated fallback example", "Example generated from documented parameter sets.", "example-origin-generated");
+
+        return (origin.Trim(), $"Example origin: {origin.Trim()}.", "example-origin-other");
     }
 
     private static void AppendExampleMedia(

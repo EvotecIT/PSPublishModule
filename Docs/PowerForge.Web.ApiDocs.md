@@ -418,6 +418,7 @@ Notes:
   - `AuthoredHelp` for examples from MAML help XML
   - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`
   - `GeneratedFallback` for auto-generated fallback examples
+- Docs-template HTML now surfaces that provenance with example badges, so readers can immediately tell whether a snippet was authored in help, imported from a curated script, or generated as fallback guidance.
 - Coverage reports now split PowerShell example coverage into `authoredHelpCodeExamples`, `importedScriptCodeExamples`, and `generatedFallbackCodeExamples`, alongside the existing `generatedFallbackOnlyExamples` guardrail.
 - Pipeline coverage thresholds can also gate provenance-specific example quality via `minPowerShellAuthoredHelpCodeExamplesPercent` and `minPowerShellImportedScriptCodeExamplesPercent`.
 - Pipeline coverage thresholds can now gate that metric via `maxPowerShellGeneratedFallbackOnlyExamplePercent` or `maxPowerShellGeneratedFallbackOnlyExampleCount`.

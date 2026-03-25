@@ -137,6 +137,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("setTimeout(run,delayMs)", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Authored help example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-authored", html, StringComparison.Ordinal);
 
             var bootstrapIndex = html.IndexOf("window.Prism=window.Prism||{};window.Prism.manual=true;", StringComparison.Ordinal);
             var coreIndex = html.IndexOf("prism-core.min.js", StringComparison.OrdinalIgnoreCase);
@@ -1101,6 +1103,10 @@ public class WebApiDocsGeneratorPowerShellTests
                 ex => ex.GetProperty("kind").GetString() == "code" &&
                       ex.GetProperty("origin").GetString() == "ImportedScript" &&
                       ex.GetProperty("text").GetString()!.Contains("Invoke-SampleFunction -Name \"FromScript\"", StringComparison.Ordinal));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "invoke-samplefunction", "index.html"));
+            Assert.Contains("Imported script example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-imported", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -1329,6 +1335,10 @@ public class WebApiDocsGeneratorPowerShellTests
                            string.Equals(kind, "text", StringComparison.Ordinal);
                 }),
                 ex => Assert.Equal("GeneratedFallback", ex.GetProperty("origin").GetString()));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "invoke-samplefunction", "index.html"));
+            Assert.Contains("Generated fallback example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-generated", html, StringComparison.Ordinal);
         }
         finally
         {
