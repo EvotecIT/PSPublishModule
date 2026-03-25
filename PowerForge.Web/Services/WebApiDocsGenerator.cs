@@ -728,6 +728,21 @@ public static partial class WebApiDocsGenerator
 
             if (!string.IsNullOrWhiteSpace(example.Origin))
                 payload["origin"] = example.Origin;
+            if (example.Media is not null)
+            {
+                payload["media"] = new Dictionary<string, object?>
+                {
+                    ["type"] = example.Media.Type,
+                    ["url"] = example.Media.Url,
+                    ["title"] = example.Media.Title,
+                    ["alt"] = example.Media.Alt,
+                    ["caption"] = example.Media.Caption,
+                    ["posterUrl"] = example.Media.PosterUrl,
+                    ["mimeType"] = example.Media.MimeType,
+                    ["width"] = example.Media.Width,
+                    ["height"] = example.Media.Height
+                };
+            }
 
             items.Add(payload);
         }

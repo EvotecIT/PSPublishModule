@@ -105,6 +105,20 @@ public static partial class WebApiDocsGenerator
         public string Kind { get; set; } = "text";
         public string Text { get; set; } = string.Empty;
         public string? Origin { get; set; }
+        public ApiExampleMediaModel? Media { get; set; }
+    }
+
+    private sealed class ApiExampleMediaModel
+    {
+        public string Type { get; set; } = "link";
+        public string Url { get; set; } = string.Empty;
+        public string? Title { get; set; }
+        public string? Alt { get; set; }
+        public string? Caption { get; set; }
+        public string? PosterUrl { get; set; }
+        public string? MimeType { get; set; }
+        public int? Width { get; set; }
+        public int? Height { get; set; }
     }
 
     private static class ApiExampleOrigins

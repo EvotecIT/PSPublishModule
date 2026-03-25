@@ -159,6 +159,14 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-summary{margin:0;color:#e2e8f0}
 .type-parameters,.type-examples,.type-see-also{margin:12px 0}
 .example-title{margin:8px 0 2px;font-size:1rem;color:#e6e9f3}
+.example-media{margin:12px 0;display:grid;gap:.6rem}
+.example-media-frame{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:.75rem;overflow:hidden}
+.example-media-frame img,.example-media-frame video{display:block;max-width:100%;height:auto;border-radius:10px}
+.example-media-frame video{width:100%;background:#020617}
+.example-media-frame-terminal{display:grid;gap:.75rem}
+.example-media-link{display:inline-flex;align-items:center;justify-content:center;min-height:2.5rem;padding:.7rem 1rem;border-radius:10px;background:#111827;border:1px solid rgba(148,163,184,.24);color:#e2e8f0;text-decoration:none;font-weight:600}
+.example-media-link:hover{border-color:rgba(167,139,250,.44);color:#fff}
+.example-media-caption{margin:0;color:#94a3b8;font-size:.92rem;line-height:1.6}
 .typeparam-list,.exception-list,.see-also-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
 .typeparam-list dt{font-weight:600}
 .typeparam-list dd{margin:0;color:#94a3b8}
@@ -307,10 +315,14 @@ body.pf-api-docs .type-detail-rail .type-toc ul::-webkit-scrollbar-thumb:hover{b
 [data-theme="light"] body.pf-api-docs .inheritance-current,
 [data-theme="light"] body.pf-api-docs .member-summary,
 [data-theme="light"] body.pf-api-docs .example-title,
+[data-theme="light"] body.pf-api-docs .example-media-link,
 [data-theme="light"] body.pf-api-docs .type-toc a,
 [data-theme="light"] body.pf-api-docs .pf-combobox-option,
 [data-theme="light"] body.pf-api-docs .type-item,
 [data-theme="light"] body.pf-api-docs .current{color:var(--pf-ink,#0f172a)}
+[data-theme="light"] body.pf-api-docs .example-media-frame{background:var(--pf-card-bg,#ffffff);border-color:var(--pf-border,rgba(148,163,184,.45))}
+[data-theme="light"] body.pf-api-docs .example-media-link{background:#f8fafc;border-color:rgba(148,163,184,.45)}
+[data-theme="light"] body.pf-api-docs .example-media-caption{color:#475569}
 [data-theme="light"] body.pf-api-docs .member-card pre code{color:var(--pf-ink,#0f172a)}
 [data-theme="light"] body.pf-api-docs .member-card pre{scrollbar-color:rgba(100,116,139,.5) rgba(226,232,240,.92)}
 [data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-track{background:rgba(226,232,240,.92)}

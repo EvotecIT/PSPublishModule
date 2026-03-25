@@ -203,6 +203,10 @@ Member layout:
 - `.derived-list` – derived types list
 - `.type-parameters` – type parameter section
 - `.type-examples` – example section
+- `.example-media` – example media figure wrapper
+- `.example-media-frame` – media surface (image/video/link frame)
+- `.example-media-link` – terminal/download link for non-inline example media
+- `.example-media-caption` – media caption
 - `.type-see-also` – see also section
 
 ## JavaScript expectations
@@ -260,6 +264,24 @@ in the pipeline or pass `--documented-only` to the CLI.
 
 `<see cref="...">` and `<seealso cref="...">` tags are converted into links when the
 referenced type exists in the generated API docs.
+
+XML-doc `<example>` blocks can also include optional media nodes for richer API examples:
+
+```xml
+<example>
+  <code>Sample.Run();</code>
+  <image src="/images/sample-output.png" alt="Rendered output" caption="Example screenshot." />
+  <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
+</example>
+```
+
+Supported media nodes:
+- `<image ... />` / `<img ... />` / `<screenshot ... />`
+- `<video ... />`
+- `<terminal ... />`
+- `<media kind="image|video|terminal|link" ... />`
+
+Generated JSON keeps those entries under `examples[]` with `kind: "media"` and a structured `media` object (`type`, `url`, `title`, `alt`, `caption`, `posterUrl`, `mimeType`, `width`, `height`).
 
 ## PowerShell help
 

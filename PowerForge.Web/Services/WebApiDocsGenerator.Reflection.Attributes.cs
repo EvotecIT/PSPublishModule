@@ -112,7 +112,26 @@ public static partial class WebApiDocsGenerator
         foreach (var tp in source.TypeParameters)
             clone.TypeParameters.Add(new ApiTypeParameterModel { Name = tp.Name, Summary = tp.Summary });
         foreach (var ex in source.Examples)
-            clone.Examples.Add(new ApiExampleModel { Kind = ex.Kind, Text = ex.Text });
+            clone.Examples.Add(new ApiExampleModel
+            {
+                Kind = ex.Kind,
+                Text = ex.Text,
+                Origin = ex.Origin,
+                Media = ex.Media is null
+                    ? null
+                    : new ApiExampleMediaModel
+                    {
+                        Type = ex.Media.Type,
+                        Url = ex.Media.Url,
+                        Title = ex.Media.Title,
+                        Alt = ex.Media.Alt,
+                        Caption = ex.Media.Caption,
+                        PosterUrl = ex.Media.PosterUrl,
+                        MimeType = ex.Media.MimeType,
+                        Width = ex.Media.Width,
+                        Height = ex.Media.Height
+                    }
+            });
         foreach (var ex in source.Exceptions)
             clone.Exceptions.Add(new ApiExceptionModel { Type = ex.Type, Summary = ex.Summary });
         foreach (var see in source.SeeAlso)

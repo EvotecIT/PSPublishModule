@@ -568,6 +568,11 @@ public static partial class WebApiDocsGenerator
     {
         foreach (var example in examples)
         {
+            if (string.Equals(example.Kind, "media", StringComparison.OrdinalIgnoreCase) && example.Media is not null)
+            {
+                AppendExampleMedia(sb, example.Media, baseUrl, slugMap);
+                continue;
+            }
             if (string.IsNullOrWhiteSpace(example.Text)) continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
@@ -588,6 +593,69 @@ public static partial class WebApiDocsGenerator
                 }
             }
         }
+    }
+
+    private static void AppendExampleMedia(
+        StringBuilder sb,
+        ApiExampleMediaModel media,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (media is null || string.IsNullOrWhiteSpace(media.Url))
+            return;
+
+        var mediaType = string.IsNullOrWhiteSpace(media.Type) ? "link" : media.Type.Trim().ToLowerInvariant();
+        var safeType = System.Web.HttpUtility.HtmlEncode(mediaType);
+        var safeUrl = System.Web.HttpUtility.HtmlEncode(media.Url);
+        var caption = string.IsNullOrWhiteSpace(media.Caption) ? string.Empty : media.Caption.Trim();
+        var title = string.IsNullOrWhiteSpace(media.Title) ? string.Empty : media.Title.Trim();
+        var alt = string.IsNullOrWhiteSpace(media.Alt)
+            ? (!string.IsNullOrWhiteSpace(title) ? title : "Example media")
+            : media.Alt.Trim();
+        var safeAlt = System.Web.HttpUtility.HtmlEncode(alt);
+        var safeTitle = System.Web.HttpUtility.HtmlEncode(title);
+        var safePoster = string.IsNullOrWhiteSpace(media.PosterUrl) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.PosterUrl);
+        var widthAttr = media.Width is > 0 ? $" width=\"{media.Width.Value}\"" : string.Empty;
+        var heightAttr = media.Height is > 0 ? $" height=\"{media.Height.Value}\"" : string.Empty;
+
+        sb.AppendLine($"        <figure class=\"example-media example-media-{safeType}\" data-example-media-type=\"{safeType}\">");
+        switch (mediaType)
+        {
+            case "image":
+                sb.AppendLine("          <div class=\"example-media-frame\">");
+                sb.AppendLine($"            <img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
+                sb.AppendLine("          </div>");
+                break;
+            case "video":
+                sb.AppendLine("          <div class=\"example-media-frame\">");
+                sb.Append($"            <video controls preload=\"metadata\"");
+                if (!string.IsNullOrWhiteSpace(safePoster))
+                    sb.Append($" poster=\"{safePoster}\"");
+                if (!string.IsNullOrWhiteSpace(safeTitle))
+                    sb.Append($" title=\"{safeTitle}\"");
+                sb.AppendLine($"{widthAttr}{heightAttr}>");
+                sb.AppendLine($"              <source src=\"{safeUrl}\" />");
+                sb.AppendLine("            </video>");
+                sb.AppendLine("          </div>");
+                break;
+            case "terminal":
+                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-terminal\">");
+                if (!string.IsNullOrWhiteSpace(safePoster))
+                    sb.AppendLine($"            <img src=\"{safePoster}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\" class=\"example-media-poster\"{widthAttr}{heightAttr} />");
+                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? "Open terminal recording" : title)}</a>");
+                sb.AppendLine("          </div>");
+                break;
+            default:
+                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-link\">");
+                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? media.Url : title)}</a>");
+                sb.AppendLine("          </div>");
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(caption))
+            sb.AppendLine($"          <figcaption class=\"example-media-caption\">{RenderLinkedText(caption, baseUrl, slugMap)}</figcaption>");
+
+        sb.AppendLine("        </figure>");
     }
 
     private static IEnumerable<string> SplitExampleParagraphs(string text)
