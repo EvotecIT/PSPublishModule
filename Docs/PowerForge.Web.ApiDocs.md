@@ -369,5 +369,6 @@ Notes:
   - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`
   - `GeneratedFallback` for auto-generated fallback examples
 - Coverage reports now split PowerShell example coverage into `authoredHelpCodeExamples`, `importedScriptCodeExamples`, and `generatedFallbackCodeExamples`, alongside the existing `generatedFallbackOnlyExamples` guardrail.
+- Pipeline coverage thresholds can also gate provenance-specific example quality via `minPowerShellAuthoredHelpCodeExamplesPercent` and `minPowerShellImportedScriptCodeExamplesPercent`.
 - Pipeline coverage thresholds can now gate that metric via `maxPowerShellGeneratedFallbackOnlyExamplePercent` or `maxPowerShellGeneratedFallbackOnlyExampleCount`.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

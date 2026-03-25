@@ -326,6 +326,59 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenAuthoredPowerShellExampleCoverageFallsBelowThreshold()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-authored-threshold-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpWithoutExamples());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnCoverage": true,
+                      "minPowerShellAuthoredHelpCodeExamplesPercent": 100
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("PowerShell authored-help code examples coverage", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("below required 100%", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return
