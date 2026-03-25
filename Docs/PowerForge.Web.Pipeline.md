@@ -314,9 +314,9 @@ Notes:
   - `generateMemberXrefs`: include member/parameter xref entries in the map (default: `true`)
   - `memberXrefKinds`: optional member-kind filter (`constructors,methods,properties,fields,events,extensions,parameters`)
   - `memberXrefMaxPerType`: optional cap for member xref entries per type/command (`0` = unlimited)
-  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellAuthoredHelpCodeExamplesPercent`, `minPowerShellImportedScriptCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
+  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellAuthoredHelpCodeExamplesPercent`, `minPowerShellImportedScriptCodeExamplesPercent`, `minPowerShellImportedScriptPlaybackMediaPercent`, `minPowerShellImportedScriptPlaybackMediaWithPosterPercent`, `minPowerShellParameterSummaryPercent`
   - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
-  - PowerShell example quality thresholds: `maxPowerShellGeneratedFallbackOnlyExamplePercent` (0-100), `maxPowerShellGeneratedFallbackOnlyExampleCount` (>=0)
+  - PowerShell example quality thresholds: `maxPowerShellGeneratedFallbackOnlyExamplePercent` (0-100), `maxPowerShellGeneratedFallbackOnlyExampleCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount` (>=0)
   - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
@@ -334,6 +334,7 @@ Notes:
     - report writing emits per-example transcript artifacts beside `powershell-example-validation.json`
     - successful imported examples can reuse those transcript artifacts as terminal-style example media links in generated API docs
     - curated `.cast` / `.asciinema` sidecars beside imported `.ps1` examples are also staged automatically, with matching image sidecars used as poster art when present
+    - coverage reports can distinguish imported playback media from plain imported code examples, including whether poster art is present for every playback embed
   - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:

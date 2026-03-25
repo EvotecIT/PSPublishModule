@@ -382,6 +382,65 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenImportedPlaybackMediaIsMissingPosterArt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-playback-poster-threshold-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) \"Ran $Name\" }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.ps1"), "Invoke-SampleFunction -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.cast"), "dummy cast");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "PowerShell",
+                      "help": "./Sample.Module-help.xml",
+                      "psExamplesPath": "./Examples",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnCoverage": true,
+                      "maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount": 0
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("PowerShell imported-script playback media without poster count", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exceeds allowed 0", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ApiDocs_FailsWhenPowerShellExampleValidationFindsInvalidScripts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-powershell-validate-" + Guid.NewGuid().ToString("N"));
