@@ -28,16 +28,17 @@ internal static partial class Program
         GitHubHousekeepingReport report,
         GitHubHousekeepingOutputOptions options)
     {
-        var markdown = reports.BuildMarkdown(report);
+        string? markdown = null;
+        string GetMarkdown() => markdown ??= reports.BuildMarkdown(report);
 
         if (!string.IsNullOrWhiteSpace(options.JsonReportPath))
             reports.WriteJsonReport(options.JsonReportPath, report);
 
         if (!string.IsNullOrWhiteSpace(options.MarkdownReportPath))
-            reports.WriteMarkdownReport(options.MarkdownReportPath, report);
+            reports.WriteMarkdownReport(options.MarkdownReportPath, GetMarkdown());
 
         if (!string.IsNullOrWhiteSpace(options.StepSummaryPath))
-            AppendUtf8(options.StepSummaryPath, markdown + Environment.NewLine);
+            AppendUtf8(options.StepSummaryPath, GetMarkdown() + Environment.NewLine);
 
         if (!string.IsNullOrWhiteSpace(options.GitHubOutputPath))
         {

@@ -65,6 +65,7 @@ runs:
           throw "Housekeeping config not found: $configPath"
         }
 
+        # Keep this framework in sync with the runnable TFM in PowerForge.Cli.csproj.
         $dotnetArgs = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $configPath)
         if ($env:INPUT_APPLY -eq 'true') { $dotnetArgs += '--apply' } else { $dotnetArgs += '--dry-run' }
         & dotnet @dotnetArgs

@@ -122,6 +122,14 @@ public sealed class GitHubHousekeepingReportService
     public void WriteMarkdownReport(string path, GitHubHousekeepingReport report)
         => WriteUtf8(path, BuildMarkdown(report));
 
+    /// <summary>
+    /// Writes pre-rendered Markdown report content to disk using UTF-8 without BOM.
+    /// </summary>
+    /// <param name="path">Destination file path.</param>
+    /// <param name="markdown">Markdown content to persist.</param>
+    public void WriteMarkdownReport(string path, string markdown)
+        => WriteUtf8(path, markdown);
+
     private static void AppendStorageSummary(StringBuilder markdown, GitHubHousekeepingResult result)
     {
         var rows = new List<string>();
@@ -323,7 +331,7 @@ public sealed class GitHubHousekeepingReportService
         if (string.IsNullOrWhiteSpace(value))
             return "-";
 
-        var text = value ?? string.Empty;
+        var text = value;
         return text.Replace("|", "\\|")
             .Replace("\r", " ")
             .Replace("\n", "<br/>");
