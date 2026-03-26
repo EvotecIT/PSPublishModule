@@ -197,7 +197,7 @@ permissions:
 
 jobs:
   housekeeping:
-    uses: EvotecIT/PSPublishModule/.github/workflows/reusable-github-housekeeping.yml@main
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-github-housekeeping.yml@main
     with:
       config-path: ./.powerforge/github-housekeeping.json
     secrets: inherit

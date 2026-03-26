@@ -246,6 +246,8 @@ internal static partial class Program
     private static int CommandGitHubHousekeeping(string[] argv, CliOptions cli, ILogger logger)
     {
         var outputJson = IsJsonOutput(argv);
+        var outputOptions = GetGitHubHousekeepingOutputOptions();
+        var reportService = new GitHubHousekeepingReportService();
         if (argv.Length > 0 && IsHelpArg(argv[0]))
         {
             Console.WriteLine(GitHubHousekeepingUsage);
@@ -259,6 +261,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
+            WriteGitHubHousekeepingOutputs(reportService, reportService.CreateFailureReport(2, ex.Message), outputOptions);
             return WriteGitHubCommandArgumentError(outputJson, "github.housekeeping", ex.Message, GitHubHousekeepingUsage, logger);
         }
 
@@ -269,6 +272,7 @@ internal static partial class Program
             var statusText = spec.DryRun ? "Planning GitHub housekeeping" : "Running GitHub housekeeping";
             var result = RunWithStatus(outputJson, cli, statusText, () => service.Run(spec));
             var exitCode = result.Success ? 0 : 1;
+            WriteGitHubHousekeepingOutputs(reportService, reportService.CreateSuccessReport(result), outputOptions);
 
             if (outputJson)
             {
@@ -304,6 +308,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
+            WriteGitHubHousekeepingOutputs(reportService, reportService.CreateFailureReport(1, ex.Message), outputOptions);
             return WriteGitHubCommandFailure(outputJson, "github.housekeeping", ex.Message, logger);
         }
     }

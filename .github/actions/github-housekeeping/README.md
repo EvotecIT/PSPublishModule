@@ -80,5 +80,5 @@ jobs:
 - Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
 - Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.
-- The legacy workflow file `reusable-github-housekeeping.yml` remains as a compatibility alias, but `powerforge-github-housekeeping.yml` is the recommended public entrypoint.
+- The public reusable workflow entrypoint is `powerforge-github-housekeeping.yml`.
 - The composite action exposes `report-path` and `summary-path` outputs for callers that want to publish the generated reports elsewhere.

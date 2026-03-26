@@ -52,12 +52,17 @@ runs:
     - name: Run GitHub housekeeping
       id: housekeeping
       shell: pwsh
-      run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1
+      run: |
+        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
+        $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
+        $args = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $env:INPUT_CONFIG_PATH)
+        if ($env:INPUT_APPLY -eq 'true') { $args += '--apply' } else { $args += '--dry-run' }
+        & dotnet @args
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
         INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
         INPUT_APPLY: ${{ inputs.apply }}
-        INPUT_REPORT_PATH: ${{ inputs['report-path'] }}
-        INPUT_SUMMARY_PATH: ${{ inputs['summary-path'] }}
-        POWERFORGE_GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}
+        GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}
+        POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH: ${{ inputs['report-path'] }}
+        POWERFORGE_GITHUB_HOUSEKEEPING_SUMMARY_PATH: ${{ inputs['summary-path'] }}
