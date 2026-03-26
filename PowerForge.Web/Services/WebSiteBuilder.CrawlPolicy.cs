@@ -17,15 +17,20 @@ public static partial class WebSiteBuilder
 
     private static string BuildCrawlMetaHtml(SiteSpec spec, ContentItem item)
     {
+        var forceFallbackNoIndex = IsLocalizedFallbackCopy(item) && !HasExplicitRobotsOverride(item);
         var resolved = ResolveCrawlPolicy(spec, item);
-        if (!resolved.Enabled)
+        if (!resolved.Enabled && !forceFallbackNoIndex)
             return string.Empty;
 
         var lines = new List<string>();
-        if (!string.IsNullOrWhiteSpace(resolved.Robots))
+        var robots = forceFallbackNoIndex && string.IsNullOrWhiteSpace(resolved.Robots)
+            ? "noindex,follow"
+            : resolved.Robots;
+
+        if (!string.IsNullOrWhiteSpace(robots))
         {
             lines.Add(
-                $"<meta name=\"robots\" content=\"{System.Web.HttpUtility.HtmlEncode(resolved.Robots)}\" />");
+                $"<meta name=\"robots\" content=\"{System.Web.HttpUtility.HtmlEncode(robots)}\" />");
         }
 
         foreach (var bot in resolved.Bots.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -38,6 +43,48 @@ public static partial class WebSiteBuilder
         }
 
         return lines.Count == 0 ? string.Empty : string.Join(Environment.NewLine, lines);
+    }
+
+    private static bool IsLocalizedFallbackCopy(ContentItem? item)
+    {
+        if (item?.Meta is null || item.Meta.Count == 0)
+            return false;
+
+        object? value = null;
+        if (!item.Meta.TryGetValue("i18n.fallback_copy", out value) || value is null)
+        {
+            if (!TryGetMetaValue(item.Meta, "i18n.fallback_copy", out value) || value is null)
+                return false;
+        }
+
+        if (value is null)
+            return false;
+
+        return value switch
+        {
+            bool booleanValue => booleanValue,
+            string text => bool.TryParse(text, out var parsed) && parsed,
+            JsonElement json when json.ValueKind == JsonValueKind.True => true,
+            JsonElement json when json.ValueKind == JsonValueKind.String && bool.TryParse(json.GetString(), out var parsed) => parsed,
+            _ => false
+        };
+    }
+
+    private static bool HasExplicitRobotsOverride(ContentItem? item)
+    {
+        if (item?.Meta is null || item.Meta.Count == 0)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(GetMetaString(item.Meta, "robots")))
+            return true;
+
+        foreach (var botName in DefaultCrawlerMetaNames)
+        {
+            if (!string.IsNullOrWhiteSpace(GetPageBotDirective(item, botName)))
+                return true;
+        }
+
+        return false;
     }
 
     private static void WriteCrawlPolicyReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)

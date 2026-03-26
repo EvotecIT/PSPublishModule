@@ -127,6 +127,7 @@ public static partial class WebSiteBuilder
             Outputs = outputs.ToArray(),
             FeedUrl = ResolvePreferredFeedUrl(outputs),
             Breadcrumbs = breadcrumbs,
+            RootPath = rootPath,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
             JsHtml = jsHtml,
@@ -134,9 +135,10 @@ public static partial class WebSiteBuilder
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
             DescriptionMetaHtml = descriptionMeta,
-            HeadHtml = string.IsNullOrWhiteSpace(alternateHeadLinksHtml)
-                ? headHtml
-                : string.Join(Environment.NewLine, new[] { headHtml, alternateHeadLinksHtml }.Where(v => !string.IsNullOrWhiteSpace(v))),
+            HeadHtml = string.Join(
+                Environment.NewLine,
+                new[] { crawlMeta, headHtml, alternateHeadLinksHtml }
+                    .Where(v => !string.IsNullOrWhiteSpace(v))),
             OpenGraphHtml = openGraph,
             StructuredDataHtml = structuredData,
             ExtraCssHtml = extraCss,
@@ -163,6 +165,7 @@ public static partial class WebSiteBuilder
                     var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
                     return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
                 });
+                html = RebaseSelectedLanguageRootHtml(spec, html);
                 ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
                 return html;
             }
@@ -194,8 +197,51 @@ public static partial class WebSiteBuilder
   {extraScripts}
 </body>
 </html>";
+        fallbackHtml = RebaseSelectedLanguageRootHtml(spec, fallbackHtml);
         ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
         return fallbackHtml;
+    }
+
+    private static string RebaseSelectedLanguageRootHtml(SiteSpec spec, string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        var buildContext = BuildLanguageContextScope.Value;
+        if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
+            return html;
+
+        return RewriteQuotedHtmlAttribute(
+            RewriteQuotedHtmlAttribute(
+                RewriteQuotedHtmlAttribute(
+                    RewriteQuotedHtmlAttribute(
+                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
+    }
+
+    private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
+            return html;
+
+        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
+        return System.Text.RegularExpressions.Regex.Replace(
+            html,
+            pattern,
+            match =>
+            {
+                var value = match.Groups["value"].Value;
+                var rewritten = rewrite(value);
+                if (string.Equals(value, rewritten, StringComparison.Ordinal))
+                    return match.Value;
+
+                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
+            },
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            RegexTimeout);
     }
 
     private static void ReportSlowRenderTiming(

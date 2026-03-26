@@ -21,15 +21,24 @@ public static partial class WebSiteBuilder
         foreach (var language in localization.Languages)
         {
             var route = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
+            var publicRoute = route;
+            if (!string.IsNullOrWhiteSpace(route) &&
+                !route.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !route.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, language.Code);
+            }
+
             var url = string.IsNullOrWhiteSpace(language.BaseUrl)
-                ? route
-                : ResolveAbsoluteUrl(language.BaseUrl, route);
+                ? publicRoute
+                : ResolveAbsoluteUrl(language.BaseUrl, publicRoute);
             languages.Add(new LocalizationLanguageRuntime
             {
                 Code = language.Code,
                 Label = language.Label,
                 Prefix = language.Prefix,
                 BaseUrl = language.BaseUrl,
+                RenderAtRoot = language.RenderAtRoot,
                 IsDefault = language.IsDefault,
                 IsCurrent = language.Code.Equals(currentCode, StringComparison.OrdinalIgnoreCase),
                 Url = string.IsNullOrWhiteSpace(url) ? currentPath : url
@@ -44,6 +53,7 @@ public static partial class WebSiteBuilder
                 Label = currentCode,
                 Prefix = currentCode,
                 BaseUrl = NormalizeAbsoluteBaseUrl(spec.BaseUrl),
+                RenderAtRoot = true,
                 IsDefault = true,
                 IsCurrent = true,
                 Url = currentPath
@@ -99,8 +109,13 @@ public static partial class WebSiteBuilder
                 {
                     if (localization.MaterializeFallbackPages)
                     {
-                        var fallbackBaseRoute = StripLanguagePrefix(localization, fallback.OutputPath);
-                        return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
+                        if (CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage))
+                        {
+                            var fallbackBaseRoute = StripLanguagePrefix(localization, fallback.OutputPath);
+                            return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
+                        }
+
+                        return fallback.OutputPath;
                     }
                     return fallback.OutputPath;
                 }
@@ -117,7 +132,8 @@ public static partial class WebSiteBuilder
             {
                 // When fallback pages are materialized, keep the requested language route
                 // (for example /pl/projects/) while canonical points to default-language source.
-                if (localization.MaterializeFallbackPages)
+                if (localization.MaterializeFallbackPages &&
+                    CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage))
                     return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
 
                 return ApplyLanguagePrefixToRoute(spec, baseRoute, localization.DefaultLanguage);
@@ -386,6 +402,7 @@ public static partial class WebSiteBuilder
                     Label = string.IsNullOrWhiteSpace(language.Label) ? code : language.Label.Trim(),
                     Prefix = prefix,
                     BaseUrl = languageBaseUrl,
+                    RenderAtRoot = language.RenderAtRoot,
                     IsDefault = language.Default
                 });
             }
@@ -398,6 +415,7 @@ public static partial class WebSiteBuilder
                 Code = defaultLanguage,
                 Label = defaultLanguage,
                 Prefix = defaultLanguage,
+                RenderAtRoot = true,
                 IsDefault = true
             });
         }
@@ -502,6 +520,229 @@ public static partial class WebSiteBuilder
         return normalizedSiteBase ?? spec.BaseUrl;
     }
 
+    private static bool ShouldRenderLanguageAtRoot(ResolvedLocalizationConfig localization, string? languageCode)
+    {
+        if (!localization.Enabled)
+            return true;
+
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        if (!localization.ByCode.TryGetValue(effectiveLanguage, out var language))
+            return false;
+
+        return language.RenderAtRoot || (language.IsDefault && !localization.PrefixDefaultLanguage);
+    }
+
+    private static string ResolvePublicRouteForLanguage(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? route,
+        string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        if (IsAbsoluteHttpUrl(route) ||
+            route.StartsWith("//", StringComparison.Ordinal) ||
+            IsNonRouteReference(route))
+            return route;
+
+        var normalizedRoute = string.IsNullOrWhiteSpace(route)
+            ? "/"
+            : route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route.TrimStart('/');
+
+        if (!ShouldRenderLanguageAtRoot(localization, languageCode))
+            return EnsureTrailingSlash(normalizedRoute, spec.TrailingSlash);
+
+        var stripped = StripLanguagePrefix(localization, normalizedRoute);
+        return EnsureTrailingSlash(stripped, spec.TrailingSlash);
+    }
+
+    private static string RebaseRouteForSelectedLanguageRootBuild(
+        SiteSpec spec,
+        string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return route;
+
+        var buildContext = BuildLanguageContextScope.Value;
+        if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
+            return route;
+
+        if (route.StartsWith("//", StringComparison.Ordinal))
+            return route;
+
+        var localization = ResolveLocalizationConfig(spec);
+        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
+        if (!ShouldRenderLanguageAtRoot(localization, selectedLanguage))
+            return route;
+
+        if (TryRebaseAbsoluteUrlForSelectedLanguageRootBuild(spec, localization, route, selectedLanguage, out var absoluteRebased))
+            return absoluteRebased;
+
+        if (IsAbsoluteHttpUrl(route) ||
+            route.StartsWith("//", StringComparison.Ordinal) ||
+            IsNonRouteReference(route))
+            return route;
+
+        return ResolvePublicRouteForLanguage(spec, localization, route, selectedLanguage);
+    }
+
+    private static bool TryRebaseAbsoluteUrlForSelectedLanguageRootBuild(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string route,
+        string selectedLanguage,
+        out string rebased)
+    {
+        rebased = route;
+        if (!IsAbsoluteHttpUrl(route) ||
+            !localization.ByCode.TryGetValue(selectedLanguage, out var language) ||
+            string.IsNullOrWhiteSpace(language.BaseUrl))
+            return false;
+
+        var normalizedBaseUrl = NormalizeAbsoluteBaseUrl(language.BaseUrl);
+        if (string.IsNullOrWhiteSpace(normalizedBaseUrl) ||
+            !Uri.TryCreate(normalizedBaseUrl, UriKind.Absolute, out var languageBaseUri) ||
+            !Uri.TryCreate(route, UriKind.Absolute, out var absoluteUri))
+            return false;
+
+        if (!UrisShareOrigin(absoluteUri, languageBaseUri))
+            return false;
+
+        var rebasedPath = ResolvePublicRouteForLanguage(spec, localization, absoluteUri.AbsolutePath, selectedLanguage);
+        if (string.IsNullOrWhiteSpace(rebasedPath))
+            return false;
+
+        var builder = new UriBuilder(absoluteUri)
+        {
+            Path = rebasedPath,
+            Query = absoluteUri.Query.TrimStart('?'),
+            Fragment = absoluteUri.Fragment.TrimStart('#')
+        };
+
+        rebased = builder.Uri.AbsoluteUri;
+        return true;
+    }
+
+    private static bool UrisShareOrigin(Uri left, Uri right)
+    {
+        return string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
+               left.Port == right.Port;
+    }
+
+    private static bool IsNonRouteReference(string value)
+    {
+        return value.StartsWith("#", StringComparison.Ordinal) ||
+               value.StartsWith("?", StringComparison.Ordinal) ||
+               value.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("tel:", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("blob:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAbsoluteHttpUrl(string value)
+    {
+        return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] ResolveLocalizedLanguagesForCollection(
+        ResolvedLocalizationConfig localization,
+        CollectionSpec? collection)
+    {
+        if (!localization.Enabled || localization.Languages.Length == 0)
+            return new[] { localization.DefaultLanguage };
+
+        var configured = collection?.LocalizedLanguages;
+        if (configured is null || configured.Length == 0)
+            configured = collection?.ExpectedTranslationLanguages;
+
+        if (configured is null || configured.Length == 0)
+        {
+            return localization.Languages
+                .Select(static language => language.Code)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var resolved = configured
+            .Select(NormalizeLanguageToken)
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Where(language => localization.ByCode.ContainsKey(language))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return resolved.Length > 0
+            ? resolved
+            : localization.Languages
+                .Select(static language => language.Code)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+    }
+
+    private static bool CollectionSupportsLocalizedLanguage(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? collectionName,
+        string? languageCode)
+    {
+        var normalizedLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        var collection = ResolveCollectionSpec(spec, collectionName);
+        var supportedLanguages = ResolveLocalizedLanguagesForCollection(localization, collection);
+        return supportedLanguages.Contains(normalizedLanguage, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string[] ResolveFallbackLanguagesForCollection(
+        ResolvedLocalizationConfig localization,
+        CollectionSpec? collection)
+    {
+        if (!localization.Enabled || localization.Languages.Length == 0)
+            return new[] { localization.DefaultLanguage };
+
+        var configured = collection?.FallbackLanguages;
+        if (configured is null || configured.Length == 0)
+        {
+            return localization.Languages
+                .Select(static language => language.Code)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var resolved = configured
+            .Select(NormalizeLanguageToken)
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Where(language => localization.ByCode.ContainsKey(language))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return resolved.Length > 0
+            ? resolved
+            : localization.Languages
+                .Select(static language => language.Code)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+    }
+
+    private static bool CollectionSupportsFallbackLanguage(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? collectionName,
+        string? languageCode)
+    {
+        var normalizedLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        var collection = ResolveCollectionSpec(spec, collectionName);
+        var supportedLanguages = ResolveFallbackLanguagesForCollection(localization, collection);
+        return supportedLanguages.Contains(normalizedLanguage, StringComparer.OrdinalIgnoreCase);
+    }
+
     private sealed class ResolvedLocalizationConfig
     {
         public bool Enabled { get; init; }
@@ -521,6 +762,7 @@ public static partial class WebSiteBuilder
         public string Label { get; init; } = string.Empty;
         public string Prefix { get; init; } = string.Empty;
         public string? BaseUrl { get; init; }
+        public bool RenderAtRoot { get; init; }
         public bool IsDefault { get; set; }
     }
 

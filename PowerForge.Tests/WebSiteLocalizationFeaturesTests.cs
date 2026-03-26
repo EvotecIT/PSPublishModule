@@ -144,6 +144,174 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedPages_RebaseInternalLinks_ForRootLanguageBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-rebase-root-links-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsPlPath);
+
+            File.WriteAllText(Path.Combine(docsPlPath, "index.md"),
+                """
+                ---
+                title: Docs PL
+                ---
+
+                [Body link](/pl/docs/other/)
+                """);
+
+            File.WriteAllText(Path.Combine(docsPlPath, "other.md"),
+                """
+                ---
+                title: Other PL
+                slug: other
+                ---
+
+                # Other PL
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "localization-rebase-root-theme");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "assets"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "docs.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <link rel="alternate" href="https://evotec.pl/pl/docs/other/" />
+                  <link rel="preconnect" href="https://cdn.example.test" crossorigin="anonymous" />
+                  {{ head_html }}
+                </head>
+                <body>
+                  {{ include "header" }}
+                  <main>{{ content }}</main>
+                  <footer>
+                    <a class="footer-link" href="/pl/contact/">Kontakt</a>
+                    <a class="footer-link-absolute" href="https://evotec.pl/pl/contact/">Kontakt absolute</a>
+                  </footer>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "header.html"),
+                """
+                <header>
+                  <a class="brand" href="/pl/">Start</a>
+                  <nav>{{ pf.nav_links "main-pl" }}</nav>
+                </header>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "localization-rebase-root-theme",
+                  "engine": "scriban",
+                  "defaultLayout": "docs"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "assets", "app.css"), "body { font-family: Segoe UI, Arial, sans-serif; }");
+
+            var spec = CreateLocalizedDocsSpec("Localization Root Link Rebase Test", "localization-rebase-root-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Localization.Languages[1].RenderAtRoot = true;
+            spec.Navigation = new NavigationSpec
+            {
+                AutoDefaults = false,
+                Menus = new[]
+                {
+                    new MenuSpec
+                    {
+                        Name = "main-pl",
+                        Items = new[]
+                        {
+                            new MenuItemSpec { Title = "Start", Url = "/pl/" },
+                            new MenuItemSpec { Title = "Docs", Url = "/pl/docs/" },
+                            new MenuItemSpec { Title = "Other", Url = "/pl/docs/other/" }
+                        }
+                    }
+                }
+            };
+
+            var result = BuildSite(root, spec, language: "pl", languageAsRoot: true);
+            var plHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            Assert.True(File.Exists(plHtmlPath));
+
+            var html = File.ReadAllText(plHtmlPath);
+            Assert.Contains("class=\"brand\" href=\"/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Start</a>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Docs</a>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/other/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Other</a>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/other/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"footer-link\" href=\"/contact/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.pl/docs/other/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.pl/contact/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/pl/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/pl/contact/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/https://", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://evotec.pl/pl/docs/other/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://evotec.pl/pl/contact/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedPages_EmitXDefault_WhenOnlyCurrentLanguageAlternateExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-current-xdefault-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsPlPath);
+            CreateSimpleTheme(root, "localization-current-xdefault-theme", "docs");
+
+            File.WriteAllText(Path.Combine(docsPlPath, "tylko-pl.md"),
+                """
+                ---
+                title: Tylko PL
+                slug: tylko-pl
+                translation_key: docs:tylko-pl
+                ---
+
+                # Tylko PL
+                """);
+
+            var spec = CreateLocalizedDocsSpec("Localization Current X-Default Test", "localization-current-xdefault-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec);
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "tylko-pl", "index.html");
+            Assert.True(File.Exists(plHtmlPath));
+
+            var plHtml = File.ReadAllText(plHtmlPath);
+            Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs/tylko-pl/\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"x-default\" href=\"https://evotec.pl/pl/docs/tylko-pl/\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("hreflang=\"en\" href=\"https://evotec.xyz/docs/tylko-pl/\"", plHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizedFallbackPages_KeepLocalizedRoutesAndCanonicalizeToDefaultLanguage()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-fallback-" + Guid.NewGuid().ToString("N"));
@@ -385,6 +553,68 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Sitemap_Generate_EmitsLocalizedAlternates_WithRootServedLanguageBaseUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-root-domain-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-sitemap-root-domain-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Sitemap Root Domain Test", "localization-sitemap-root-domain-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Localization.Languages[1].RenderAtRoot = true;
+
+            var result = BuildSite(root, spec);
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = result.OutputPath,
+                BaseUrl = spec.BaseUrl,
+                IncludeTextFiles = false
+            });
+            Assert.True(File.Exists(sitemap.OutputPath));
+
+            var doc = XDocument.Load(sitemap.OutputPath);
+            var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var xhtmlNs = XNamespace.Get("http://www.w3.org/1999/xhtml");
+            var docsEntry = doc
+                .Descendants(sitemapNs + "url")
+                .FirstOrDefault(url => string.Equals(
+                    url.Element(sitemapNs + "loc")?.Value,
+                    "https://example.test/docs/",
+                    StringComparison.OrdinalIgnoreCase));
+
+            Assert.NotNull(docsEntry);
+            var alternates = docsEntry!
+                .Elements(xhtmlNs + "link")
+                .Select(element => new
+                {
+                    HrefLang = element.Attribute("hreflang")?.Value,
+                    Href = element.Attribute("href")?.Value
+                })
+                .ToArray();
+
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "en", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.xyz/docs/", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "pl", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.pl/docs/", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "x-default", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.xyz/docs/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizedPages_RespectExplicitI18nRoutes_WhenTranslationKeysDiffer()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-explicit-routes-" + Guid.NewGuid().ToString("N"));
@@ -496,6 +726,38 @@ public class WebSiteLocalizationFeaturesTests
             Assert.True(HasRedirect(redirects, "/legacy/shared-faq", "/pl/docs/faq-polski/"));
             Assert.True(HasRedirect(redirects, "/pl/legacy/faq", "/pl/docs/faq-polski/"));
             Assert.False(HasRedirect(redirects, "/docs/legacy-faq-en", "/pl/docs/faq-polski/"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedPages_EmitAlternateHeadLinks_ForRootServedLanguage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-root-alt-head-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-root-alt-head-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Root Alternate Head Test", "localization-root-alt-head-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Localization.Languages[1].RenderAtRoot = true;
+
+            var result = BuildSite(root, spec);
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+
+            var html = File.ReadAllText(enHtmlPath);
+            Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

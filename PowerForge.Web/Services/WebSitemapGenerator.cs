@@ -500,7 +500,34 @@ public static partial class WebSitemapGenerator
             baseUrl = localizedBaseUrl;
         }
 
+        if (localization.RenderAtRootByCode.TryGetValue(languageCode, out var renderAtRoot) && renderAtRoot)
+            route = StripLocalizedRoutePrefix(route, localization, languageCode);
+
         return ResolveAbsoluteUrl(baseUrl, route);
+    }
+
+    private static string StripLocalizedRoutePrefix(string route, ResolvedLocalizationConfig localization, string languageCode)
+    {
+        var normalizedRoute = NormalizeRoute(route);
+        var normalizedLanguage = NormalizeLanguageToken(languageCode);
+        if (string.IsNullOrWhiteSpace(normalizedLanguage))
+            return normalizedRoute;
+
+        var prefix = localization.ByPrefix
+            .FirstOrDefault(pair => string.Equals(pair.Value, normalizedLanguage, StringComparison.OrdinalIgnoreCase))
+            .Key;
+        if (string.IsNullOrWhiteSpace(prefix))
+            return normalizedRoute;
+
+        var prefixedRoot = "/" + prefix;
+        if (normalizedRoute.Equals(prefixedRoot, StringComparison.OrdinalIgnoreCase) ||
+            normalizedRoute.Equals(prefixedRoot + "/", StringComparison.OrdinalIgnoreCase))
+            return "/";
+
+        if (normalizedRoute.StartsWith(prefixedRoot + "/", StringComparison.OrdinalIgnoreCase))
+            return NormalizeRoute(normalizedRoute.Substring(prefixedRoot.Length));
+
+        return normalizedRoute;
     }
 
     private static LocalizedRouteInfo ResolveLocalizedRouteInfo(string route, ResolvedLocalizationConfig localization)
@@ -586,6 +613,7 @@ public static partial class WebSitemapGenerator
 
         var byPrefix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var languageBaseUrlsByCode = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var renderAtRootByCode = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         if (localizationSpec?.Languages is { Length: > 0 })
         {
             foreach (var language in localizationSpec.Languages)
@@ -604,6 +632,9 @@ public static partial class WebSitemapGenerator
                 var languageBaseUrl = NormalizeAbsoluteBaseUrl(language.BaseUrl);
                 if (!string.IsNullOrWhiteSpace(languageBaseUrl))
                     languageBaseUrlsByCode[code] = languageBaseUrl;
+
+                renderAtRootByCode[code] = language.RenderAtRoot ||
+                                           (language.Default && localizationSpec.PrefixDefaultLanguage == false);
             }
         }
 
@@ -612,7 +643,8 @@ public static partial class WebSitemapGenerator
             Enabled = localizationSpec?.Enabled == true && byPrefix.Count > 0,
             DefaultLanguage = defaultLanguage,
             ByPrefix = byPrefix,
-            LanguageBaseUrlsByCode = languageBaseUrlsByCode
+            LanguageBaseUrlsByCode = languageBaseUrlsByCode,
+            RenderAtRootByCode = renderAtRootByCode
         };
     }
 
@@ -1042,6 +1074,7 @@ public static partial class WebSitemapGenerator
         public string DefaultLanguage { get; init; } = "en";
         public Dictionary<string, string> ByPrefix { get; init; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> LanguageBaseUrlsByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, bool> RenderAtRootByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class LocalizedRouteInfo

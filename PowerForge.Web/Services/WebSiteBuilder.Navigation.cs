@@ -425,14 +425,14 @@ public static partial class WebSiteBuilder
                     Template = menu.Template,
                     CssClass = menu.CssClass,
                     Meta = CloneMeta(menu.Meta),
-                    Items = BuildMenuItems(menu.Items, context, spec.LinkRules)
+                    Items = BuildMenuItems(spec, menu.Items, context, spec.LinkRules)
                 })
                 .ToArray();
         }
 
-        nav.Actions = BuildMenuItems(effectiveActions, context, spec.LinkRules);
-        nav.Regions = BuildRegions(effectiveRegions, nav.Menus, nav.Actions, context, spec.LinkRules);
-        nav.Footer = BuildFooter(effectiveFooter, nav.Menus, context, spec.LinkRules);
+        nav.Actions = BuildMenuItems(spec, effectiveActions, context, spec.LinkRules);
+        nav.Regions = BuildRegions(spec, effectiveRegions, nav.Menus, nav.Actions, context, spec.LinkRules);
+        nav.Footer = BuildFooter(spec, effectiveFooter, nav.Menus, context, spec.LinkRules);
         nav.Surfaces = BuildSurfaces(navSpec, nav.Menus);
 
         return nav;

@@ -112,23 +112,24 @@ public static partial class WebSiteBuilder
         if (!localization.Enabled || localization.Languages.Length <= 1)
             return string.Empty;
 
-        var currentLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+        var collection = ResolveCollectionSpec(spec, item.Collection);
+        var localizedLanguages = ResolveLocalizedLanguagesForCollection(localization, collection);
+        if (localizedLanguages.Length == 0)
+            return string.Empty;
+
         var alternates = new List<(string HrefLang, string Url)>();
-        foreach (var language in localization.Languages)
+        foreach (var languageCode in localizedLanguages)
         {
-            var route = ResolveLocalizedPageUrl(spec, localization, item, allItems, language.Code, currentLanguage);
-            if (string.IsNullOrWhiteSpace(route))
+            if (!TryResolveLocalizedAlternateUrl(spec, localization, item, allItems, languageCode, out var absoluteUrl) ||
+                string.IsNullOrWhiteSpace(absoluteUrl))
+            {
                 continue;
+            }
 
-            var baseUrl = ResolveLanguageBaseUrl(spec, localization, language.Code);
-            var absoluteUrl = ResolveAbsoluteUrl(baseUrl, route);
-            if (string.IsNullOrWhiteSpace(absoluteUrl))
-                continue;
-
-            alternates.Add((language.Code, absoluteUrl));
+            alternates.Add((languageCode, absoluteUrl));
         }
 
-        if (alternates.Count <= 1)
+        if (alternates.Count == 0)
             return string.Empty;
 
         var sb = new System.Text.StringBuilder();
@@ -141,18 +142,124 @@ public static partial class WebSiteBuilder
         }
 
         var defaultLanguage = localization.Languages.FirstOrDefault(static language => language.IsDefault);
+        var xDefaultUrl = string.Empty;
         if (defaultLanguage is not null)
         {
             var defaultAlternate = alternates.FirstOrDefault(value =>
                 value.HrefLang.Equals(defaultLanguage.Code, StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrWhiteSpace(defaultAlternate.Url))
-            {
-                sb.AppendLine(
-                    $"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(defaultAlternate.Url)}\" />");
-            }
+            xDefaultUrl = defaultAlternate.Url ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(xDefaultUrl))
+        {
+            var currentLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+            var currentAlternate = alternates.FirstOrDefault(value =>
+                value.HrefLang.Equals(currentLanguage, StringComparison.OrdinalIgnoreCase));
+            xDefaultUrl = currentAlternate.Url ?? alternates[0].Url;
+        }
+
+        if (!string.IsNullOrWhiteSpace(xDefaultUrl))
+        {
+            sb.AppendLine(
+                $"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(xDefaultUrl)}\" />");
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static bool TryResolveLocalizedAlternateUrl(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        IReadOnlyList<ContentItem> allItems,
+        string targetLanguage,
+        out string absoluteUrl)
+    {
+        absoluteUrl = string.Empty;
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        var supportsLocalizedLanguage = CollectionSupportsLocalizedLanguage(spec, localization, page.Collection, resolvedTargetLanguage);
+        var supportsFallbackLanguage = localization.FallbackToDefaultLanguage &&
+                                       CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage);
+        if (!supportsLocalizedLanguage && !supportsFallbackLanguage)
+            return false;
+
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, resolvedTargetLanguage);
+        if (TryResolveExplicitLocalizedRoute(spec, localization, page, resolvedTargetLanguage, out var explicitRoute))
+        {
+            var publicRoute = explicitRoute;
+            if (!explicitRoute.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !explicitRoute.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                publicRoute = ResolvePublicRouteForLanguage(spec, localization, explicitRoute, resolvedTargetLanguage);
+            }
+
+            absoluteUrl = explicitRoute.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                          explicitRoute.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                ? explicitRoute
+                : ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        var resolvedCurrentLanguage = ResolveEffectiveLanguageCode(localization, page.Language);
+        if (resolvedCurrentLanguage.Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            var publicRoute = ResolvePublicRouteForLanguage(spec, localization, page.OutputPath, resolvedTargetLanguage);
+            absoluteUrl = ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        var translated = ResolveConcreteLocalizedAlternateItem(localization, page, allItems, resolvedTargetLanguage);
+        if (translated is not null)
+        {
+            var publicRoute = ResolvePublicRouteForLanguage(spec, localization, translated.OutputPath, resolvedTargetLanguage);
+            absoluteUrl = ResolveAbsoluteUrl(baseUrl, publicRoute);
+            return !string.IsNullOrWhiteSpace(absoluteUrl);
+        }
+
+        if (!localization.FallbackToDefaultLanguage ||
+            resolvedTargetLanguage.Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var fallbackSource = ResolveConcreteLocalizedAlternateItem(localization, page, allItems, localization.DefaultLanguage);
+        if (fallbackSource is null)
+            return false;
+
+        var route = fallbackSource.OutputPath;
+        if (localization.MaterializeFallbackPages && supportsFallbackLanguage)
+        {
+            var fallbackBaseRoute = StripLanguagePrefix(localization, fallbackSource.OutputPath);
+            route = ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
+        }
+
+        var fallbackPublicRoute = ResolvePublicRouteForLanguage(spec, localization, route, resolvedTargetLanguage);
+        absoluteUrl = ResolveAbsoluteUrl(baseUrl, fallbackPublicRoute);
+        return !string.IsNullOrWhiteSpace(absoluteUrl);
+    }
+
+    private static ContentItem? ResolveConcreteLocalizedAlternateItem(
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        IReadOnlyList<ContentItem> allItems,
+        string targetLanguage)
+    {
+        var resolvedTargetLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        if (ResolveEffectiveLanguageCode(localization, page.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase) &&
+            !IsLocalizedFallbackCopy(page))
+        {
+            return page;
+        }
+
+        if (string.IsNullOrWhiteSpace(page.TranslationKey))
+            return null;
+
+        return allItems
+            .Where(static item => item is not null && !item.Draft)
+            .Where(item => string.Equals(item.ProjectSlug ?? string.Empty, page.ProjectSlug ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Where(item => !string.IsNullOrWhiteSpace(item.TranslationKey))
+            .Where(item => item.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase))
+            .Where(item => ResolveEffectiveLanguageCode(localization, item.Language).Equals(resolvedTargetLanguage, StringComparison.OrdinalIgnoreCase))
+            .Where(static item => !IsLocalizedFallbackCopy(item))
+            .FirstOrDefault();
     }
 
     private static string RenderHeadLinks(HeadSpec head)

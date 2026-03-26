@@ -11,7 +11,7 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, NavRenderContext context, LinkRulesSpec? linkRules)
+    private static NavigationItem[] BuildMenuItems(SiteSpec spec, MenuItemSpec[] items, NavRenderContext context, LinkRulesSpec? linkRules)
     {
         if (items is null || items.Length == 0) return Array.Empty<NavigationItem>();
 
@@ -22,7 +22,7 @@ public static partial class WebSiteBuilder
             if (!IsVisible(item.Visibility, context))
                 continue;
 
-            var url = item.Url ?? string.Empty;
+            var url = RebaseRouteForSelectedLanguageRootBuild(spec, item.Url ?? string.Empty);
             var normalized = NormalizeRouteForMatch(url);
             var isExternal = item.External ?? IsExternalUrl(url);
             var isActive = !isExternal && MatchesMenuItem(item, context.Path, normalized, exactOnly: true);
@@ -35,11 +35,11 @@ public static partial class WebSiteBuilder
             if (isExternal && string.IsNullOrWhiteSpace(rel) && !string.IsNullOrWhiteSpace(linkRules?.ExternalRel))
                 rel = linkRules.ExternalRel;
 
-            var children = BuildMenuItems(item.Items, context, linkRules);
+            var children = BuildMenuItems(spec, item.Items, context, linkRules);
             if (children.Any(c => c.IsActive || c.IsAncestor))
                 isAncestor = true;
 
-            var sections = BuildSections(item.Sections, context, linkRules);
+            var sections = BuildSections(spec, item.Sections, context, linkRules);
             if (sections.Any(section =>
                     section.Items.Any(child => child.IsActive || child.IsAncestor) ||
                     section.Columns.Any(column => column.Items.Any(child => child.IsActive || child.IsAncestor))))
@@ -50,7 +50,7 @@ public static partial class WebSiteBuilder
                 Id = item.Id,
                 Title = item.Title,
                 Text = item.Text,
-                Url = item.Url,
+                Url = url,
                 Icon = item.Icon,
                 IconHtml = item.IconHtml,
                 Kind = item.Kind,
@@ -76,7 +76,7 @@ public static partial class WebSiteBuilder
         return result.ToArray();
     }
 
-    private static NavigationSection[] BuildSections(MenuSectionSpec[] sections, NavRenderContext context, LinkRulesSpec? linkRules)
+    private static NavigationSection[] BuildSections(SiteSpec spec, MenuSectionSpec[] sections, NavRenderContext context, LinkRulesSpec? linkRules)
     {
         if (sections is null || sections.Length == 0)
             return Array.Empty<NavigationSection>();
@@ -87,8 +87,8 @@ public static partial class WebSiteBuilder
             if (section is null)
                 continue;
 
-            var sectionItems = BuildMenuItems(section.Items, context, linkRules);
-            var sectionColumns = BuildColumns(section.Columns, context, linkRules);
+            var sectionItems = BuildMenuItems(spec, section.Items, context, linkRules);
+            var sectionColumns = BuildColumns(spec, section.Columns, context, linkRules);
             if (sectionItems.Length == 0 && sectionColumns.Length == 0 && string.IsNullOrWhiteSpace(section.Title) && string.IsNullOrWhiteSpace(section.Name))
                 continue;
 
@@ -106,7 +106,7 @@ public static partial class WebSiteBuilder
         return list.ToArray();
     }
 
-    private static NavigationColumn[] BuildColumns(MenuColumnSpec[] columns, NavRenderContext context, LinkRulesSpec? linkRules)
+    private static NavigationColumn[] BuildColumns(SiteSpec spec, MenuColumnSpec[] columns, NavRenderContext context, LinkRulesSpec? linkRules)
     {
         if (columns is null || columns.Length == 0)
             return Array.Empty<NavigationColumn>();
@@ -117,7 +117,7 @@ public static partial class WebSiteBuilder
             if (column is null)
                 continue;
 
-            var items = BuildMenuItems(column.Items, context, linkRules);
+            var items = BuildMenuItems(spec, column.Items, context, linkRules);
             if (items.Length == 0 && string.IsNullOrWhiteSpace(column.Title) && string.IsNullOrWhiteSpace(column.Name))
                 continue;
 
@@ -241,4 +241,3 @@ public static partial class WebSiteBuilder
                url.StartsWith("//", StringComparison.OrdinalIgnoreCase);
     }
 }
-
