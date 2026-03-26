@@ -6,11 +6,12 @@ Reusable composite action that runs the config-driven `powerforge github houseke
 
 - Loads housekeeping settings from a repo config file, typically `.powerforge/github-housekeeping.json`
 - Runs artifact cleanup, cache cleanup, and optional runner cleanup from one C# entrypoint
-- Writes a workflow summary with the requested sections plus before/after cleanup stats
+- Writes a rich workflow summary with requested sections, storage deltas, and item details
+- Persists a machine-readable JSON report plus a Markdown report artifact for later review
 
 ## Recommended usage
 
-Use the reusable workflow for the leanest repo wiring:
+Use the public reusable workflow for the leanest repo wiring:
 
 ```yaml
 permissions:
@@ -19,10 +20,52 @@ permissions:
 
 jobs:
   housekeeping:
-    uses: EvotecIT/PSPublishModule/.github/workflows/reusable-github-housekeeping.yml@main
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-github-housekeeping.yml@main
     with:
       config-path: ./.powerforge/github-housekeeping.json
+      powerforge-ref: main
     secrets: inherit
+```
+
+For immutable pinning, use the same PSPublishModule commit SHA for both the reusable workflow ref and `powerforge-ref`.
+
+The reusable workflow uploads the generated JSON and Markdown reports as an artifact by default.
+
+For self-hosted runner disk cleanup, use the dedicated reusable workflow entrypoint:
+
+```yaml
+jobs:
+  housekeeping:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-github-runner-housekeeping.yml@main
+    with:
+      config-path: ./.powerforge/runner-housekeeping.json
+      powerforge-ref: main
+      runner-labels: '["self-hosted","ubuntu"]'
+```
+
+Minimal config:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
+  "repository": "EvotecIT/YourRepo",
+  "tokenEnvName": "GITHUB_TOKEN",
+  "artifacts": {
+    "enabled": true,
+    "keepLatestPerName": 10,
+    "maxAgeDays": 7,
+    "maxDelete": 200
+  },
+  "caches": {
+    "enabled": true,
+    "keepLatestPerKey": 2,
+    "maxAgeDays": 14,
+    "maxDelete": 200
+  },
+  "runner": {
+    "enabled": false
+  }
+}
 ```
 
 ## Direct action usage
@@ -47,4 +90,8 @@ jobs:
 
 - Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
+- Prefer letting the workflow decide apply vs dry-run; omit `dryRun` from checked-in repo config unless you have a non-workflow caller that truly needs a local default.
+- A dry-run can still report large cache or artifact totals with `0 eligible` deletes when current keep/latest and age rules retain everything; the Markdown summary explains that breakdown.
 - Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.
+- The public reusable workflow entrypoint is `powerforge-github-housekeeping.yml`.
+- The composite action exposes `report-path` and `summary-path` outputs for callers that want to publish the generated reports elsewhere.

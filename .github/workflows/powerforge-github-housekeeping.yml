@@ -1,4 +1,4 @@
-name: Reusable GitHub Housekeeping
+name: PowerForge GitHub Housekeeping
 
 on:
   workflow_call:
@@ -17,6 +17,21 @@ on:
         description: PSPublishModule ref used to resolve the shared housekeeping action.
         required: false
         default: "main"
+        type: string
+      report-path:
+        description: Optional JSON report path relative to the caller workspace.
+        required: false
+        default: ".powerforge/_reports/github-housekeeping.json"
+        type: string
+      summary-path:
+        description: Optional Markdown summary path relative to the caller workspace.
+        required: false
+        default: ".powerforge/_reports/github-housekeeping.md"
+        type: string
+      report-artifact-name:
+        description: Artifact name used when uploading housekeeping reports.
+        required: false
+        default: "powerforge-github-housekeeping-reports"
         type: string
     secrets:
       github-token:
@@ -41,8 +56,21 @@ jobs:
           path: .powerforge/pspublishmodule
 
       - name: Run PowerForge housekeeping
+        id: housekeeping
         uses: ./.powerforge/pspublishmodule/.github/actions/github-housekeeping
         with:
           config-path: ${{ inputs['config-path'] }}
           apply: ${{ inputs.apply && 'true' || 'false' }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          report-path: ${{ inputs['report-path'] }}
+          summary-path: ${{ inputs['summary-path'] }}
+
+      - name: Upload housekeeping reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs['report-artifact-name'] }}
+          path: |
+            ${{ steps.housekeeping.outputs.report-path }}
+            ${{ steps.housekeeping.outputs.summary-path }}
+          if-no-files-found: ignore
