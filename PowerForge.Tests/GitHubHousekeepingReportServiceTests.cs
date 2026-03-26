@@ -16,6 +16,10 @@ public sealed class GitHubHousekeepingReportServiceTests
             Artifacts = new GitHubArtifactCleanupResult
             {
                 Success = true,
+                ScannedArtifacts = 3,
+                MatchedArtifacts = 1,
+                KeptByRecentWindow = 0,
+                KeptByAgeThreshold = 0,
                 PlannedDeletes = 1,
                 PlannedDeleteBytes = 1024,
                 Planned =
@@ -31,10 +35,14 @@ public sealed class GitHubHousekeepingReportServiceTests
             Caches = new GitHubActionsCacheCleanupResult
             {
                 Success = true,
+                ScannedCaches = 29,
+                MatchedCaches = 29,
+                KeptByRecentWindow = 25,
+                KeptByAgeThreshold = 4,
                 UsageBefore = new GitHubActionsCacheUsage
                 {
-                    ActiveCachesCount = 3,
-                    ActiveCachesSizeInBytes = 4096
+                    ActiveCachesCount = 29,
+                    ActiveCachesSizeInBytes = 10053309332
                 }
             }
         });
@@ -43,9 +51,12 @@ public sealed class GitHubHousekeepingReportServiceTests
 
         Assert.Contains("PowerForge GitHub Housekeeping Report", markdown, StringComparison.Ordinal);
         Assert.Contains("Storage Summary", markdown, StringComparison.Ordinal);
+        Assert.Contains("Selection Breakdown", markdown, StringComparison.Ordinal);
         Assert.Contains("Planned artifacts (1)", markdown, StringComparison.Ordinal);
         Assert.Contains("github-pages", markdown, StringComparison.Ordinal);
-        Assert.Contains("3 caches", markdown, StringComparison.Ordinal);
+        Assert.Contains("29 caches", markdown, StringComparison.Ordinal);
+        Assert.Contains("nothing eligible", markdown, StringComparison.Ordinal);
+        Assert.Contains("all matched items were retained by current policy", markdown, StringComparison.Ordinal);
     }
 
     [Fact]

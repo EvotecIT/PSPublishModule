@@ -99,6 +99,7 @@ public sealed class GitHubHousekeepingReportService
             markdown.AppendLine($"| Message | {EscapeCell(result.Message)} |");
 
         AppendStorageSummary(markdown, result);
+        AppendSelectionSummary(markdown, result);
         AppendArtifactDetails(markdown, result.Artifacts);
         AppendCacheDetails(markdown, result.Caches);
         AppendRunnerDetails(markdown, result.Runner);
@@ -127,17 +128,17 @@ public sealed class GitHubHousekeepingReportService
 
         if (result.Artifacts is not null)
         {
-            rows.Add($"| Artifacts | {Status(result.Artifacts.Success, result.Artifacts.FailedDeletes)} | {CountAndBytes(result.Artifacts.PlannedDeletes, result.Artifacts.PlannedDeleteBytes)} | {CountAndBytes(result.Artifacts.DeletedArtifacts, result.Artifacts.DeletedBytes)} | {result.Artifacts.FailedDeletes} | - | - |");
+            rows.Add($"| Artifacts | {StorageStatus(result.Artifacts.Success, result.Artifacts.FailedDeletes, result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.DeletedArtifacts)} | {CountAndBytes(result.Artifacts.PlannedDeletes, result.Artifacts.PlannedDeleteBytes)} | {CountAndBytes(result.Artifacts.DeletedArtifacts, result.Artifacts.DeletedBytes)} | {result.Artifacts.FailedDeletes} | - | - |");
         }
 
         if (result.Caches is not null)
         {
-            rows.Add($"| Caches | {Status(result.Caches.Success, result.Caches.FailedDeletes)} | {CountAndBytes(result.Caches.PlannedDeletes, result.Caches.PlannedDeleteBytes)} | {CountAndBytes(result.Caches.DeletedCaches, result.Caches.DeletedBytes)} | {result.Caches.FailedDeletes} | {CacheUsage(result.Caches.UsageBefore)} | {CacheUsage(result.Caches.UsageAfter)} |");
+            rows.Add($"| Caches | {StorageStatus(result.Caches.Success, result.Caches.FailedDeletes, result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.DeletedCaches)} | {CountAndBytes(result.Caches.PlannedDeletes, result.Caches.PlannedDeleteBytes)} | {CountAndBytes(result.Caches.DeletedCaches, result.Caches.DeletedBytes)} | {result.Caches.FailedDeletes} | {CacheUsage(result.Caches.UsageBefore)} | {CacheUsage(result.Caches.UsageAfter)} |");
         }
 
         if (result.Runner is not null)
         {
-            rows.Add($"| Runner | {Status(result.Runner.Success, result.Runner.Success ? 0 : 1)} | - | - | {(result.Runner.Success ? "0" : "1")} | {FormatGiB(result.Runner.FreeBytesBefore)} | {FormatGiB(result.Runner.FreeBytesAfter)} |");
+            rows.Add($"| Runner | {(result.Runner.Success ? "ok" : "failed")} | - | - | {(result.Runner.Success ? "0" : "1")} | {FormatGiB(result.Runner.FreeBytesBefore)} | {FormatGiB(result.Runner.FreeBytesAfter)} |");
         }
 
         if (rows.Count == 0)
@@ -148,6 +149,32 @@ public sealed class GitHubHousekeepingReportService
         markdown.AppendLine();
         markdown.AppendLine("| Section | Status | Planned | Deleted | Failed | Before | After |");
         markdown.AppendLine("| --- | --- | ---: | ---: | ---: | --- | --- |");
+        foreach (var row in rows)
+            markdown.AppendLine(row);
+    }
+
+    private static void AppendSelectionSummary(StringBuilder markdown, GitHubHousekeepingResult result)
+    {
+        var rows = new List<string>();
+
+        if (result.Artifacts is not null)
+        {
+            rows.Add($"| Artifacts | {result.Artifacts.ScannedArtifacts} | {result.Artifacts.MatchedArtifacts} | {result.Artifacts.KeptByRecentWindow} | {result.Artifacts.KeptByAgeThreshold} | {result.Artifacts.PlannedDeletes} | {SelectionNote(result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.KeptByRecentWindow, result.Artifacts.KeptByAgeThreshold)} |");
+        }
+
+        if (result.Caches is not null)
+        {
+            rows.Add($"| Caches | {result.Caches.ScannedCaches} | {result.Caches.MatchedCaches} | {result.Caches.KeptByRecentWindow} | {result.Caches.KeptByAgeThreshold} | {result.Caches.PlannedDeletes} | {SelectionNote(result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.KeptByRecentWindow, result.Caches.KeptByAgeThreshold)} |");
+        }
+
+        if (rows.Count == 0)
+            return;
+
+        markdown.AppendLine();
+        markdown.AppendLine("## Selection Breakdown");
+        markdown.AppendLine();
+        markdown.AppendLine("| Section | Scanned | Matched | Kept recent | Kept age | Eligible | Note |");
+        markdown.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | --- |");
         foreach (var row in rows)
             markdown.AppendLine(row);
     }
@@ -253,8 +280,31 @@ public sealed class GitHubHousekeepingReportService
     private static string CacheUsage(GitHubActionsCacheUsage? usage)
         => usage is null ? "-" : $"{usage.ActiveCachesCount} caches / {FormatGiB(usage.ActiveCachesSizeInBytes)}";
 
-    private static string Status(bool success, int failed)
-        => !success ? "failed" : failed > 0 ? "warnings" : "ok";
+    private static string StorageStatus(bool success, int failed, int matched, int eligible, int deleted)
+    {
+        if (!success)
+            return "failed";
+        if (failed > 0)
+            return "warnings";
+        if (deleted > 0)
+            return "cleaned";
+        if (eligible > 0)
+            return "eligible";
+        if (matched > 0)
+            return "nothing eligible";
+        return "no matches";
+    }
+
+    private static string SelectionNote(int matched, int eligible, int keptRecent, int keptAge)
+    {
+        if (matched == 0)
+            return "nothing matched the current filters";
+        if (eligible > 0)
+            return "matched items are eligible for cleanup";
+        if (keptRecent > 0 || keptAge > 0)
+            return "all matched items were retained by current policy";
+        return "nothing eligible";
+    }
 
     private static string DeleteState(int? statusCode, string? error)
     {
