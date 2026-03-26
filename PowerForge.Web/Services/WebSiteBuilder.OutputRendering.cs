@@ -211,15 +211,20 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return html;
 
+        var localization = ResolveLocalizationConfig(spec);
+        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
+        if (!ShouldRenderLanguageAtRoot(localization, selectedLanguage))
+            return html;
+
         return RewriteQuotedHtmlAttribute(
             RewriteQuotedHtmlAttribute(
                 RewriteQuotedHtmlAttribute(
                     RewriteQuotedHtmlAttribute(
-                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
+                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value));
     }
 
     private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
@@ -227,18 +232,21 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
             return html;
 
-        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
+        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?:""(?<doubleValue>[^""]*)""|'(?<singleValue>[^']*)')";
         return System.Text.RegularExpressions.Regex.Replace(
             html,
             pattern,
             match =>
             {
-                var value = match.Groups["value"].Value;
+                var quote = match.Groups["doubleValue"].Success ? "\"" : "'";
+                var value = match.Groups["doubleValue"].Success
+                    ? match.Groups["doubleValue"].Value
+                    : match.Groups["singleValue"].Value;
                 var rewritten = rewrite(value);
                 if (string.Equals(value, rewritten, StringComparison.Ordinal))
                     return match.Value;
 
-                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
+                return match.Groups["prefix"].Value + quote + rewritten + quote;
             },
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
             RegexTimeout);

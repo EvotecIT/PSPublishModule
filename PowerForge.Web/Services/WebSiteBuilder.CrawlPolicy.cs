@@ -57,9 +57,6 @@ public static partial class WebSiteBuilder
                 return false;
         }
 
-        if (value is null)
-            return false;
-
         return value switch
         {
             bool booleanValue => booleanValue,

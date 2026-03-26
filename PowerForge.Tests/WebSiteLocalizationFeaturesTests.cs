@@ -193,6 +193,7 @@ public class WebSiteLocalizationFeaturesTests
                   <footer>
                     <a class="footer-link" href="/pl/contact/">Kontakt</a>
                     <a class="footer-link-absolute" href="https://evotec.pl/pl/contact/">Kontakt absolute</a>
+                    <a class='footer-link-single' href='/pl/contact/faq/'>Kontakt single quoted</a>
                   </footer>
                 </body>
                 </html>
@@ -254,6 +255,7 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains("class=\"footer-link\" href=\"/contact/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://evotec.pl/docs/other/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://evotec.pl/contact/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class='footer-link-single' href='/contact/faq/'", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/pl/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/pl/contact/\"", html, StringComparison.OrdinalIgnoreCase);
