@@ -31,6 +31,18 @@ For immutable pinning, use the same PSPublishModule commit SHA for both the reus
 
 The reusable workflow uploads the generated JSON and Markdown reports as an artifact by default.
 
+For self-hosted runner disk cleanup, use the dedicated reusable workflow entrypoint:
+
+```yaml
+jobs:
+  housekeeping:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-github-runner-housekeeping.yml@main
+    with:
+      config-path: ./.powerforge/runner-housekeeping.json
+      powerforge-ref: main
+      runner-labels: '["self-hosted","ubuntu"]'
+```
+
 Minimal config:
 
 ```json
