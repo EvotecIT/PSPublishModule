@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   housekeeping:
-    uses: ./.github/workflows/reusable-github-housekeeping.yml
+    uses: ./.github/workflows/powerforge-github-housekeeping.yml
     with:
       config-path: ./.powerforge/github-housekeeping.json
       apply: ${{ github.event_name == 'workflow_dispatch' && inputs.apply == 'true' || github.event_name != 'workflow_dispatch' }}

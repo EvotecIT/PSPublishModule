@@ -14,6 +14,22 @@ inputs:
     description: Optional token override for remote GitHub cleanup.
     required: false
     default: ""
+  report-path:
+    description: Optional JSON report output path relative to the workspace.
+    required: false
+    default: ".powerforge/_reports/github-housekeeping.json"
+  summary-path:
+    description: Optional Markdown summary output path relative to the workspace.
+    required: false
+    default: ".powerforge/_reports/github-housekeeping.md"
+
+outputs:
+  report-path:
+    description: Resolved JSON report output path.
+    value: ${{ steps.housekeeping.outputs.report-path }}
+  summary-path:
+    description: Resolved Markdown summary output path.
+    value: ${{ steps.housekeeping.outputs.summary-path }}
 
 runs:
   using: composite
@@ -34,6 +50,7 @@ runs:
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
     - name: Run GitHub housekeeping
+      id: housekeeping
       shell: pwsh
       run: ${{ github.action_path }}/Invoke-PowerForgeHousekeeping.ps1
       env:
@@ -41,4 +58,6 @@ runs:
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
         INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
         INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_REPORT_PATH: ${{ inputs['report-path'] }}
+        INPUT_SUMMARY_PATH: ${{ inputs['summary-path'] }}
         POWERFORGE_GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}

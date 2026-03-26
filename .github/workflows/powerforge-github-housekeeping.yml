@@ -1,4 +1,4 @@
-name: Reusable GitHub Housekeeping (Compatibility)
+name: PowerForge GitHub Housekeeping
 
 on:
   workflow_call:
@@ -43,13 +43,34 @@ permissions:
 
 jobs:
   housekeeping:
-    uses: ./.github/workflows/powerforge-github-housekeeping.yml
-    with:
-      config-path: ${{ inputs['config-path'] }}
-      apply: ${{ inputs.apply }}
-      powerforge-ref: ${{ inputs['powerforge-ref'] }}
-      report-path: ${{ inputs['report-path'] }}
-      summary-path: ${{ inputs['summary-path'] }}
-      report-artifact-name: ${{ inputs['report-artifact-name'] }}
-    secrets:
-      github-token: ${{ secrets['github-token'] }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout PSPublishModule
+        uses: actions/checkout@v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs['powerforge-ref'] }}
+          path: .powerforge/pspublishmodule
+
+      - name: Run PowerForge housekeeping
+        id: housekeeping
+        uses: ./.powerforge/pspublishmodule/.github/actions/github-housekeeping
+        with:
+          config-path: ${{ inputs['config-path'] }}
+          apply: ${{ inputs.apply && 'true' || 'false' }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          report-path: ${{ inputs['report-path'] }}
+          summary-path: ${{ inputs['summary-path'] }}
+
+      - name: Upload housekeeping reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs['report-artifact-name'] }}
+          path: |
+            ${{ steps.housekeeping.outputs.report-path }}
+            ${{ steps.housekeeping.outputs.summary-path }}
+          if-no-files-found: ignore
