@@ -69,9 +69,12 @@ public static partial class WebApiDocsGenerator
 
         var files = ResolvePowerShellExampleScriptFiles(options.HelpPath, resolvedHelpPath, manifestPath, docsOptions, warnings);
         result.FileCount = files.Count;
+        result.ExecutionRequested = options.ExecuteMatchedExamples;
         if (files.Count == 0)
         {
             result.ValidationSucceeded = true;
+            if (options.ExecuteMatchedExamples)
+                result.ExecutionCompleted = true;
             result.Warnings = warnings
                 .Where(static warning => !string.IsNullOrWhiteSpace(warning))
                 .Select(NormalizeWarningCode)
@@ -138,13 +141,13 @@ public static partial class WebApiDocsGenerator
         result.MatchedFileCount = result.Files.Count(static file => file.MatchedCommands.Length > 0);
         result.UnmatchedFileCount = result.Files.Length - result.MatchedFileCount;
         result.ParseErrorCount = result.Files.Sum(static file => file.ParseErrorCount);
-        result.ExecutionRequested = options.ExecuteMatchedExamples;
 
         if (options.ExecuteMatchedExamples)
         {
             var executionResult = ExecuteMatchedPowerShellExamples(
                 result.Files,
                 manifestPath,
+                options.PowerShellExamplesPath,
                 TimeSpan.FromSeconds(Math.Clamp(options.ExecutionTimeoutSeconds, 5, 600)),
                 options.PreferPwsh,
                 runnerToUse,
@@ -176,11 +179,13 @@ public static partial class WebApiDocsGenerator
     /// <param name="outputPath">API docs output root.</param>
     /// <param name="configuredPath">Optional relative or absolute report path.</param>
     /// <param name="result">Validation result payload.</param>
+    /// <param name="options">Optional validation inputs used to normalize report paths.</param>
     /// <returns>Full path to the written report.</returns>
     public static string WritePowerShellExampleValidationReport(
         string outputPath,
         string? configuredPath,
-        WebApiDocsPowerShellExampleValidationResult result)
+        WebApiDocsPowerShellExampleValidationResult result,
+        WebApiDocsPowerShellExampleValidationOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new ArgumentException("Output path is required.", nameof(outputPath));
@@ -198,7 +203,8 @@ public static partial class WebApiDocsGenerator
             Directory.CreateDirectory(parent);
 
         WritePowerShellExampleExecutionArtifacts(reportPath, result);
-        var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+        var reportPayload = NormalizePowerShellExampleValidationResultForReport(reportPath, outputPath, result, options);
+        var json = JsonSerializer.Serialize(reportPayload, new JsonSerializerOptions
         {
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -263,7 +269,7 @@ public static partial class WebApiDocsGenerator
     private static string BuildPowerShellExampleExecutionArtifactContent(WebApiDocsPowerShellExampleFileValidationResult file)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"File: {file.FilePath}");
+        sb.AppendLine($"File: {Path.GetFileName(file.FilePath)}");
         sb.AppendLine($"ExecutionSucceeded: {file.ExecutionSucceeded}");
         if (file.ExecutionExitCode is not null)
             sb.AppendLine($"ExitCode: {file.ExecutionExitCode.Value}");
@@ -327,6 +333,20 @@ public static partial class WebApiDocsGenerator
                 $"API docs PowerShell coverage: {failedExecutionFiles.Length} example script(s) failed execution " +
                 $"(samples: {BuildPreviewList(failedExecutionFiles, 4)}).");
         }
+
+        var outsideConfiguredFiles = files
+            .Where(static file => string.Equals(file.ExecutionSkippedReason, "Outside configured PowerShell examples path.", StringComparison.OrdinalIgnoreCase))
+            .Select(static file => Path.GetFileName(file.FilePath))
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (outsideConfiguredFiles.Length > 0)
+        {
+            warnings.Add(
+                $"API docs PowerShell coverage: {outsideConfiguredFiles.Length} example script(s) were skipped during execution because they were outside the configured examples path " +
+                $"(samples: {BuildPreviewList(outsideConfiguredFiles, 4)}).");
+        }
     }
 
     private static string BuildPreviewList(IReadOnlyList<string> values, int previewCount)
@@ -343,6 +363,7 @@ public static partial class WebApiDocsGenerator
     private static PowerShellExampleExecutionProcessResult ExecuteMatchedPowerShellExamples(
         IReadOnlyList<WebApiDocsPowerShellExampleFileValidationResult> files,
         string? manifestPath,
+        string? configuredExamplesPath,
         TimeSpan timeout,
         bool preferPwsh,
         IPowerShellRunner runner,
@@ -365,6 +386,12 @@ public static partial class WebApiDocsGenerator
             if (file.MatchedCommands.Length == 0)
             {
                 file.ExecutionSkippedReason = "No documented commands matched.";
+                continue;
+            }
+
+            if (!IsWithinConfiguredPowerShellExamplesPath(file.FilePath, configuredExamplesPath))
+            {
+                file.ExecutionSkippedReason = "Outside configured PowerShell examples path.";
                 continue;
             }
 
@@ -399,6 +426,31 @@ public static partial class WebApiDocsGenerator
         }
 
         return result;
+    }
+
+    private static bool IsWithinConfiguredPowerShellExamplesPath(string? filePath, string? configuredExamplesPath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || string.IsNullOrWhiteSpace(configuredExamplesPath))
+            return true;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(filePath);
+            var configuredFullPath = Path.GetFullPath(configuredExamplesPath);
+
+            if (File.Exists(configuredFullPath))
+                return string.Equals(fullPath, configuredFullPath, StringComparison.OrdinalIgnoreCase);
+
+            var configuredDirectory = Directory.Exists(configuredFullPath)
+                ? configuredFullPath
+                : GetParentDirectory(configuredFullPath);
+            var relativePath = TryGetRelativePathWithinRoot(configuredDirectory, fullPath);
+            return !string.IsNullOrWhiteSpace(relativePath);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string BuildPowerShellExampleExecutionCommand(string filePath, string? manifestPath)
@@ -467,6 +519,190 @@ public static partial class WebApiDocsGenerator
             return normalized;
 
         return normalized[..maxLength] + "\n...[truncated]";
+    }
+
+    private static WebApiDocsPowerShellExampleValidationResult NormalizePowerShellExampleValidationResultForReport(
+        string reportPath,
+        string outputPath,
+        WebApiDocsPowerShellExampleValidationResult result,
+        WebApiDocsPowerShellExampleValidationOptions? options)
+    {
+        var reportDirectory = GetParentDirectory(reportPath);
+        var normalized = new WebApiDocsPowerShellExampleValidationResult
+        {
+            HelpPath = NormalizePowerShellValidationPath(result.HelpPath, outputPath, reportDirectory, options, result),
+            ManifestPath = NormalizePowerShellValidationPath(result.ManifestPath, outputPath, reportDirectory, options, result),
+            Executable = NormalizePowerShellExecutableValue(result.Executable),
+            ValidationSucceeded = result.ValidationSucceeded,
+            KnownCommandCount = result.KnownCommandCount,
+            KnownCommands = result.KnownCommands?.ToArray() ?? Array.Empty<string>(),
+            FileCount = result.FileCount,
+            ValidSyntaxFileCount = result.ValidSyntaxFileCount,
+            InvalidSyntaxFileCount = result.InvalidSyntaxFileCount,
+            MatchedFileCount = result.MatchedFileCount,
+            UnmatchedFileCount = result.UnmatchedFileCount,
+            ParseErrorCount = result.ParseErrorCount,
+            ExecutionRequested = result.ExecutionRequested,
+            ExecutionCompleted = result.ExecutionCompleted,
+            ExecutionExecutable = NormalizePowerShellExecutableValue(result.ExecutionExecutable),
+            ExecutedFileCount = result.ExecutedFileCount,
+            PassedExecutionFileCount = result.PassedExecutionFileCount,
+            FailedExecutionFileCount = result.FailedExecutionFileCount,
+            Files = result.Files?.Select(file => NormalizePowerShellExampleValidationFileForReport(file, outputPath, reportDirectory, options, result)).ToArray()
+                    ?? Array.Empty<WebApiDocsPowerShellExampleFileValidationResult>(),
+            Warnings = result.Warnings?.ToArray() ?? Array.Empty<string>()
+        };
+        return normalized;
+    }
+
+    private static WebApiDocsPowerShellExampleFileValidationResult NormalizePowerShellExampleValidationFileForReport(
+        WebApiDocsPowerShellExampleFileValidationResult file,
+        string outputPath,
+        string? reportDirectory,
+        WebApiDocsPowerShellExampleValidationOptions? options,
+        WebApiDocsPowerShellExampleValidationResult result)
+    {
+        return new WebApiDocsPowerShellExampleFileValidationResult
+        {
+            FilePath = NormalizePowerShellValidationPath(file.FilePath, outputPath, reportDirectory, options, result) ?? Path.GetFileName(file.FilePath),
+            ValidSyntax = file.ValidSyntax,
+            ParseErrorCount = file.ParseErrorCount,
+            ParseErrors = file.ParseErrors?.ToArray() ?? Array.Empty<string>(),
+            Commands = file.Commands?.ToArray() ?? Array.Empty<string>(),
+            MatchedCommands = file.MatchedCommands?.ToArray() ?? Array.Empty<string>(),
+            ExecutionAttempted = file.ExecutionAttempted,
+            ExecutionSucceeded = file.ExecutionSucceeded,
+            ExecutionExitCode = file.ExecutionExitCode,
+            ExecutionStdOut = file.ExecutionStdOut,
+            ExecutionStdErr = file.ExecutionStdErr,
+            ExecutionSkippedReason = file.ExecutionSkippedReason,
+            ExecutionArtifactPath = NormalizePowerShellValidationPath(file.ExecutionArtifactPath, outputPath, reportDirectory, options, result)
+        };
+    }
+
+    private static string? NormalizePowerShellValidationPath(
+        string? path,
+        string outputPath,
+        string? reportDirectory,
+        WebApiDocsPowerShellExampleValidationOptions? options,
+        WebApiDocsPowerShellExampleValidationResult? result)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            foreach (var root in EnumerateNonEmptyDirectories(
+                         reportDirectory,
+                         outputPath,
+                         GetValidationExamplesRoot(options?.PowerShellExamplesPath),
+                         GetParentDirectory(result?.HelpPath),
+                         GetParentDirectory(result?.ManifestPath),
+                         GetParentDirectory(options?.HelpPath),
+                         GetParentDirectory(options?.PowerShellModuleManifestPath)))
+            {
+                var relativePath = TryGetRelativePathWithinRoot(root, fullPath);
+                if (!string.IsNullOrWhiteSpace(relativePath))
+                    return relativePath;
+            }
+
+            return Path.GetFileName(fullPath);
+        }
+        catch
+        {
+            return Path.GetFileName(path);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateNonEmptyDirectories(params string?[] candidates)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            string? fullPath = null;
+            try
+            {
+                fullPath = Path.GetFullPath(candidate);
+            }
+            catch
+            {
+                // best effort only
+            }
+
+            if (!string.IsNullOrWhiteSpace(fullPath) && seen.Add(fullPath))
+                yield return fullPath;
+        }
+    }
+
+    private static string? TryGetRelativePathWithinRoot(string? root, string? fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(fullPath))
+            return null;
+
+        try
+        {
+            var relativePath = Path.GetRelativePath(root, fullPath);
+            if (relativePath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relativePath))
+                return null;
+
+            return relativePath.Replace('\\', '/');
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetParentDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            return Path.GetDirectoryName(Path.GetFullPath(path));
+        }
+        catch
+        {
+            return Path.GetDirectoryName(path);
+        }
+    }
+
+    private static string? GetValidationExamplesRoot(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (File.Exists(fullPath))
+                return Path.GetDirectoryName(fullPath);
+            return fullPath;
+        }
+        catch
+        {
+            return GetParentDirectory(path);
+        }
+    }
+
+    private static string? NormalizePowerShellExecutableValue(string? executable)
+    {
+        if (string.IsNullOrWhiteSpace(executable))
+            return null;
+
+        try
+        {
+            return Path.GetFileName(Path.GetFullPath(executable));
+        }
+        catch
+        {
+            return Path.GetFileName(executable);
+        }
     }
 
     private static PowerShellExampleSyntaxValidationProcessResult RunPowerShellExampleSyntaxValidation(

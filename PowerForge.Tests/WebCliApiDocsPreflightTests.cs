@@ -134,6 +134,40 @@ public class WebCliApiDocsPreflightTests
     }
 
     [Fact]
+    public void HandleSubCommand_ApiDocs_AllowsSourceRootParentWhenSourceUrlUsesPathNoRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-apidocs-preflight-pathnoroot-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "TestRepo"));
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var outPath = Path.Combine(root, "_site", "api");
+
+            var args = new[]
+            {
+                "--type", "CSharp",
+                "--xml", xmlPath,
+                "--out", outPath,
+                "--format", "json",
+                "--fail-on-warnings",
+                "--source-root", root,
+                "--source-url", "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}"
+            };
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(Path.Combine(outPath, "index.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void HandleSubCommand_ApiDocs_FailsWhenLegacyAliasModeIsInvalid()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-apidocs-legacy-mode-invalid-" + Guid.NewGuid().ToString("N"));
@@ -200,6 +234,97 @@ public class WebCliApiDocsPreflightTests
 
             var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
 
+            Assert.Equal(2, exitCode);
+            Assert.True(File.Exists(Path.Combine(outPath, "powershell-example-validation.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void HandleSubCommand_ApiDocs_FailOnPowerShellExampleValidationImpliesValidation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-apidocs-ps-validate-implicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "BrokenExample.ps1"), "Invoke-SampleFunction -Name (");
+
+            var outPath = Path.Combine(root, "_site", "api");
+            var args = new[]
+            {
+                "--type", "PowerShell",
+                "--help-path", helpPath,
+                "--out", outPath,
+                "--format", "json",
+                "--fail-on-ps-example-validation"
+            };
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
+            Assert.Equal(2, exitCode);
+            Assert.True(File.Exists(Path.Combine(outPath, "powershell-example-validation.json")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void HandleSubCommand_ApiDocs_FailOnPowerShellExampleExecutionImpliesExecution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-apidocs-ps-execute-implicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleFunction { param([string]$Name) "Executed $Name" }
+                """);
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.Fail.ps1"), "Invoke-SampleFunction -Name 'Beta'; throw 'boom'");
+
+            var outPath = Path.Combine(root, "_site", "api");
+            var args = new[]
+            {
+                "--type", "PowerShell",
+                "--help-path", helpPath,
+                "--out", outPath,
+                "--format", "json",
+                "--fail-on-ps-example-execution"
+            };
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
             Assert.Equal(2, exitCode);
             Assert.True(File.Exists(Path.Combine(outPath, "powershell-example-validation.json")));
         }
