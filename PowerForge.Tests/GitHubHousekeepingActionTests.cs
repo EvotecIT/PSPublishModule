@@ -27,7 +27,9 @@ public sealed class GitHubHousekeepingActionTests
         Assert.Contains("../../..", actionYaml, StringComparison.Ordinal);
         Assert.Contains("PowerForge GitHub Housekeeping", actionYaml, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH", actionYaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Invoke-GitHubHousekeeping.ps1", actionYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke-PowerForgeHousekeeping.ps1", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("$dotnetArgs", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("Housekeeping config not found", actionYaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

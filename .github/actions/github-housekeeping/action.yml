@@ -53,11 +53,24 @@ runs:
       id: housekeeping
       shell: pwsh
       run: |
+        $ErrorActionPreference = 'Stop'
         $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
         $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
-        $args = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $env:INPUT_CONFIG_PATH)
-        if ($env:INPUT_APPLY -eq 'true') { $args += '--apply' } else { $args += '--dry-run' }
-        & dotnet @args
+        $configPath = $env:INPUT_CONFIG_PATH
+        if ([string]::IsNullOrWhiteSpace($configPath)) {
+          throw "Housekeeping config path is required."
+        }
+
+        if (-not (Test-Path -LiteralPath $configPath)) {
+          throw "Housekeeping config not found: $configPath"
+        }
+
+        $dotnetArgs = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $configPath)
+        if ($env:INPUT_APPLY -eq 'true') { $dotnetArgs += '--apply' } else { $dotnetArgs += '--dry-run' }
+        & dotnet @dotnetArgs
+        if ($LASTEXITCODE -ne 0) {
+          exit $LASTEXITCODE
+        }
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1

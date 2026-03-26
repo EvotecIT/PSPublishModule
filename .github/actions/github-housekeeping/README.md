@@ -79,6 +79,7 @@ jobs:
 
 - Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
+- A dry-run can still report large cache or artifact totals with `0 eligible` deletes when current keep/latest and age rules retain everything; the Markdown summary explains that breakdown.
 - Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.
 - The public reusable workflow entrypoint is `powerforge-github-housekeeping.yml`.
 - The composite action exposes `report-path` and `summary-path` outputs for callers that want to publish the generated reports elsewhere.
