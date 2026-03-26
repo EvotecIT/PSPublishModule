@@ -14,6 +14,10 @@ inputs:
     description: Optional token override for remote GitHub cleanup.
     required: false
     default: ""
+  runner-min-free-gb:
+    description: Optional runner free-disk threshold override in GiB.
+    required: false
+    default: ""
   report-path:
     description: Optional JSON report output path relative to the workspace.
     required: false
@@ -67,6 +71,10 @@ runs:
 
         # Keep this framework in sync with the runnable TFM in PowerForge.Cli.csproj.
         $dotnetArgs = @('run', '--project', $project, '-c', 'Release', '--no-build', '--framework', 'net10.0', '--', 'github', 'housekeeping', '--config', $configPath)
+        if (-not [string]::IsNullOrWhiteSpace($env:INPUT_RUNNER_MIN_FREE_GB)) {
+          $dotnetArgs += '--runner-min-free-gb'
+          $dotnetArgs += $env:INPUT_RUNNER_MIN_FREE_GB
+        }
         if ($env:INPUT_APPLY -eq 'true') { $dotnetArgs += '--apply' } else { $dotnetArgs += '--dry-run' }
         & dotnet @dotnetArgs
         if ($LASTEXITCODE -ne 0) {
@@ -77,6 +85,7 @@ runs:
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
         INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
         INPUT_APPLY: ${{ inputs.apply }}
+        INPUT_RUNNER_MIN_FREE_GB: ${{ inputs['runner-min-free-gb'] }}
         GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}
         POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH: ${{ inputs['report-path'] }}
         POWERFORGE_GITHUB_HOUSEKEEPING_SUMMARY_PATH: ${{ inputs['summary-path'] }}

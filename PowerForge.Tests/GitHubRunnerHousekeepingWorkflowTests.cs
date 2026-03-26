@@ -16,7 +16,9 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Contains("fromJson(inputs['runner-labels'])", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("./.powerforge/pspublishmodule/.github/actions/github-housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains(".powerforge/runner-housekeeping.json", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner-min-free-gb", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("report-artifact-name", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("actions: write", workflowYaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

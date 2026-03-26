@@ -331,7 +331,7 @@ public sealed class GitHubHousekeepingReportService
         if (string.IsNullOrWhiteSpace(value))
             return "-";
 
-        var text = value;
+        var text = value!;
         return text.Replace("|", "\\|")
             .Replace("\r", " ")
             .Replace("\n", "<br/>");

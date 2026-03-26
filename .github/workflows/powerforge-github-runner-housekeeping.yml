@@ -13,6 +13,11 @@ on:
         required: false
         default: true
         type: boolean
+      runner-min-free-gb:
+        description: Optional runner free-disk threshold override in GiB.
+        required: false
+        default: ""
+        type: string
       powerforge-ref:
         description: PSPublishModule ref used to resolve the shared housekeeping action.
         required: false
@@ -44,6 +49,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   housekeeping:
@@ -66,6 +72,7 @@ jobs:
           config-path: ${{ inputs['config-path'] }}
           apply: ${{ inputs.apply && 'true' || 'false' }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          runner-min-free-gb: ${{ inputs['runner-min-free-gb'] }}
           report-path: ${{ inputs['report-path'] }}
           summary-path: ${{ inputs['summary-path'] }}
 
