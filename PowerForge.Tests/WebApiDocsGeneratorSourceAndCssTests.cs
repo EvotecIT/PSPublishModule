@@ -497,6 +497,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
                   <example>
                     <code>Sample.Run();</code>
                     <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
+                    <media kind="video" src="/videos/sample" title="Video playback" caption="Recorded video output." mimeType="video/mp4" />
                     <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
                   </example>
                 </member>
@@ -539,6 +540,8 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("href=\"/casts/sample.cast\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Recorded terminal output.", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-video\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<source src=\"/videos/sample\" type=\"video/mp4\" />", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);

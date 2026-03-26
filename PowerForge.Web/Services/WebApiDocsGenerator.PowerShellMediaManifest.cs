@@ -90,7 +90,7 @@ public static partial class WebApiDocsGenerator
             var fullPath = Path.GetFullPath(path);
             if (!string.IsNullOrWhiteSpace(options.PowerShellExamplesPath))
             {
-                var examplesRoot = Path.GetFullPath(options.PowerShellExamplesPath);
+                var examplesRoot = GetValidationExamplesRoot(options.PowerShellExamplesPath) ?? Path.GetFullPath(options.PowerShellExamplesPath);
                 var relativeToExamples = Path.GetRelativePath(examplesRoot, fullPath);
                 if (!relativeToExamples.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relativeToExamples))
                     return relativeToExamples.Replace('\\', '/');

@@ -112,22 +112,22 @@ public static partial class WebApiDocsGenerator
         if (type is null)
             return Array.Empty<string>();
 
-        AddFreshnessCandidate(files, type.Source?.Path);
+        AddFreshnessCandidate(files, type.Source?.Path, options.SourceRootPath);
         foreach (var originFile in type.OriginFiles)
-            AddFreshnessCandidate(files, originFile);
+            AddFreshnessCandidate(files, originFile, options.SourceRootPath);
 
         foreach (var member in type.Methods)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
         foreach (var member in type.Constructors)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
         foreach (var member in type.Properties)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
         foreach (var member in type.Fields)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
         foreach (var member in type.Events)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
         foreach (var member in type.ExtensionMethods)
-            AddFreshnessCandidate(files, member.Source?.Path);
+            AddFreshnessCandidate(files, member.Source?.Path, options.SourceRootPath);
 
         if (files.Count == 0)
         {
@@ -140,14 +140,18 @@ public static partial class WebApiDocsGenerator
         return files.OrderBy(static file => file, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static void AddFreshnessCandidate(ISet<string> files, string? path)
+    private static void AddFreshnessCandidate(ISet<string> files, string? path, string? sourceRootPath = null)
     {
         if (files is null || string.IsNullOrWhiteSpace(path))
             return;
 
         try
         {
-            var fullPath = Path.GetFullPath(path);
+            var fullPath = Path.IsPathRooted(path)
+                ? Path.GetFullPath(path)
+                : !string.IsNullOrWhiteSpace(sourceRootPath)
+                    ? Path.GetFullPath(Path.Combine(sourceRootPath, path))
+                    : Path.GetFullPath(path);
             if (File.Exists(fullPath))
                 files.Add(fullPath);
         }
@@ -157,7 +161,7 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static Dictionary<string, object?>? BuildFreshnessJson(ApiFreshnessModel? freshness)
+    private static Dictionary<string, object?>? BuildFreshnessJson(ApiFreshnessModel? freshness, WebApiDocsOptions options)
     {
         if (freshness is null)
             return null;
@@ -168,7 +172,44 @@ public static partial class WebApiDocsGenerator
             ["lastModifiedUtc"] = freshness.LastModifiedUtc.ToString("O"),
             ["commitSha"] = freshness.CommitSha,
             ["ageDays"] = freshness.AgeDays,
-            ["sourcePath"] = freshness.SourcePath
+            ["sourcePath"] = NormalizeFreshnessSourcePath(freshness.SourcePath, options)
         };
+    }
+
+    private static string? NormalizeFreshnessSourcePath(string? path, WebApiDocsOptions? options)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            foreach (var root in EnumerateFreshnessNormalizationRoots(options))
+            {
+                var relativePath = TryGetRelativePathWithinRoot(root, fullPath);
+                if (!string.IsNullOrWhiteSpace(relativePath))
+                    return relativePath;
+            }
+
+            return Path.GetFileName(fullPath);
+        }
+        catch
+        {
+            return Path.GetFileName(path);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateFreshnessNormalizationRoots(WebApiDocsOptions? options)
+    {
+        if (options is null)
+            yield break;
+
+        foreach (var root in EnumerateNonEmptyDirectories(
+                     options.SourceRootPath,
+                     GetParentDirectory(options.HelpPath),
+                     GetParentDirectory(options.XmlPath)))
+        {
+            yield return root;
+        }
     }
 }

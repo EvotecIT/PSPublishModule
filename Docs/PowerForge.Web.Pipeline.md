@@ -332,11 +332,13 @@ Notes:
     - `failOnPowerShellExampleExecution`: fail the step when matched examples fail execution or execution cannot complete cleanly
     - execution implicitly enables `validatePowerShellExamples`
     - report writing emits per-example transcript artifacts beside `powershell-example-validation.json`
+    - validation JSON keeps paths normalized when possible and includes captured stdout/stderr/skip reasons for each executed script
     - successful imported examples can reuse those transcript artifacts as terminal-style example media links in generated API docs
     - curated `.cast` / `.asciinema` sidecars beside imported `.ps1` examples are also staged automatically, with matching image sidecars used as poster art when present
     - asset-health warnings flag unsupported same-name sidecars, oversized playback assets, and stale captures/posters that are older than the current example script
     - coverage reports can distinguish imported playback media from plain imported code examples, including whether poster art is present for every playback embed
     - coverage can also track playback-sidecar health issues directly, so CI can fail on stale, oversized, or unsupported playback assets without depending on generic warning handling
+    - when imported terminal media exists, step summaries also include `ps-example-media: powershell-example-media-manifest.json` so CI logs expose the emitted media-manifest artifact directly
   - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:

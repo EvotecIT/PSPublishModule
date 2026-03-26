@@ -82,7 +82,11 @@ internal static partial class WebCliCommandHandlers
             60);
         var failOnPowerShellExampleExecution = HasOption(subArgs, "--fail-on-ps-example-execution") ||
                                                HasOption(subArgs, "--fail-on-powershell-example-execution");
+        if (failOnPowerShellExampleValidation)
+            validatePowerShellExamples = true;
         if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            executePowerShellExamples = true;
+        if (executePowerShellExamples)
             validatePowerShellExamples = true;
         var generateGitFreshness = HasOption(subArgs, "--git-freshness") || HasOption(subArgs, "--generate-git-freshness");
         if (HasOption(subArgs, "--no-git-freshness"))
@@ -238,7 +242,17 @@ internal static partial class WebCliCommandHandlers
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
                 powerShellExampleValidationReport,
-                powerShellExampleValidation);
+                powerShellExampleValidation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = helpPath ?? string.Empty,
+                    PowerShellModuleManifestPath = powerShellManifestPath,
+                    PowerShellExamplesPath = powerShellExamplesPath,
+                    TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                    PreferPwsh = true,
+                    ExecuteMatchedExamples = executePowerShellExamples,
+                    ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+                });
             options.PowerShellExampleValidationResult = powerShellExampleValidation;
         }
 
@@ -301,6 +315,7 @@ internal static partial class WebCliCommandHandlers
                     CoveragePath = result.CoveragePath,
                     XrefPath = result.XrefPath,
                     PowerShellExampleValidationPath = powerShellExampleValidationPath,
+                    PowerShellExampleMediaManifestPath = result.PowerShellExampleMediaManifestPath,
                     TypeCount = result.TypeCount,
                     UsedReflectionFallback = result.UsedReflectionFallback,
                     Warnings = filteredWarnings
@@ -323,6 +338,8 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Index: {result.IndexPath}");
         if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             logger.Info($"PowerShell example validation: {powerShellExampleValidationPath}");
+        if (!string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath))
+            logger.Info($"PowerShell example media manifest: {result.PowerShellExampleMediaManifestPath}");
         return 0;
     }
 

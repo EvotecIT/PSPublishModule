@@ -39,6 +39,7 @@ internal static partial class WebPipelineRunner
         var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
         var title = GetString(step, "title");
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? "/api";
+        var languageCode = GetString(step, "language") ?? GetString(step, "languageCode") ?? GetString(step, "language-code");
         var format = GetString(step, "format");
         var css = GetString(step, "css") ?? GetString(step, "cssHref") ?? GetString(step, "css-href");
         var criticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css"));
@@ -82,7 +83,11 @@ internal static partial class WebPipelineRunner
         var executePowerShellExamples = GetBool(step, "executePowerShellExamples") ?? GetBool(step, "execute-powershell-examples") ?? false;
         var powerShellExampleExecutionTimeoutSeconds = GetInt(step, "powerShellExampleExecutionTimeoutSeconds") ?? GetInt(step, "powershell-example-execution-timeout-seconds") ?? 60;
         var failOnPowerShellExampleExecution = GetBool(step, "failOnPowerShellExampleExecution") ?? GetBool(step, "fail-on-powershell-example-execution") ?? false;
+        if (failOnPowerShellExampleValidation)
+            validatePowerShellExamples = true;
         if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            executePowerShellExamples = true;
+        if (executePowerShellExamples)
             validatePowerShellExamples = true;
         var generateGitFreshness = GetBool(step, "generateGitFreshness") ?? GetBool(step, "generate-git-freshness") ?? false;
         var gitFreshnessNewDays = GetInt(step, "gitFreshnessNewDays") ?? GetInt(step, "git-freshness-new-days") ?? 14;
@@ -121,6 +126,7 @@ internal static partial class WebPipelineRunner
         var socialCardPath = GetString(step, "socialCardPath") ?? GetString(step, "social-card-path");
         var socialCardWidth = GetInt(step, "socialCardWidth") ?? GetInt(step, "social-card-width");
         var socialCardHeight = GetInt(step, "socialCardHeight") ?? GetInt(step, "social-card-height");
+        var siteBaseUrl = GetString(step, "siteBaseUrl") ?? GetString(step, "site-base-url");
         var brandUrl = GetString(step, "brandUrl") ?? GetString(step, "brand-url");
         var brandIcon = GetString(step, "brandIcon") ?? GetString(step, "brand-icon");
         var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings");
@@ -272,6 +278,7 @@ internal static partial class WebPipelineRunner
                     : generatedCardsPath.TrimEnd('/') + "/api";
                 socialCardWidth ??= spec.Social?.GeneratedCardWidth;
                 socialCardHeight ??= spec.Social?.GeneratedCardHeight;
+                siteBaseUrl ??= spec.BaseUrl;
             }
             catch
             {
@@ -290,6 +297,8 @@ internal static partial class WebPipelineRunner
             OutputPath = outPath,
             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
             BaseUrl = baseUrl,
+            SiteBaseUrl = siteBaseUrl,
+            LanguageCode = languageCode,
             Format = format,
             CssHref = css,
             CriticalCssHtml = injectedCriticalCssHtml,
@@ -419,7 +428,17 @@ internal static partial class WebPipelineRunner
             powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
                 outPath!,
                 powerShellExampleValidationReportPath,
-                powerShellExampleValidation);
+                powerShellExampleValidation,
+                new WebApiDocsPowerShellExampleValidationOptions
+                {
+                    HelpPath = help ?? string.Empty,
+                    PowerShellModuleManifestPath = powerShellManifestPath,
+                    PowerShellExamplesPath = powerShellExamplesPath,
+                    TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                    PreferPwsh = true,
+                    ExecuteMatchedExamples = executePowerShellExamples,
+                    ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+                });
             options.PowerShellExampleValidationResult = powerShellExampleValidation;
         }
 
@@ -521,6 +540,8 @@ internal static partial class WebPipelineRunner
         stepResult.Success = true;
         if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
             note += $" (ps-example-validation: {Path.GetFileName(powerShellExampleValidationPath)})";
+        if (!string.IsNullOrWhiteSpace(res.PowerShellExampleMediaManifestPath))
+            note += $" (ps-example-media: {Path.GetFileName(res.PowerShellExampleMediaManifestPath)})";
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
     }
 
@@ -636,6 +657,7 @@ internal static partial class WebPipelineRunner
         if (hasSourceRoot &&
             hasSourceUrl &&
             !hasMappings &&
+            sourceUrl!.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) < 0 &&
             sourceUrl!.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) < 0)
         {
             var fullSourceRoot = Path.GetFullPath(sourceRoot!);
@@ -828,6 +850,8 @@ internal static partial class WebPipelineRunner
 
         if (value.Value < 0)
             throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be greater than or equal to 0.");
+        if (formatAsPercent && value.Value > 100)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be less than or equal to 100.");
 
         thresholds.Add(new ApiDocsCoverageThreshold
         {
