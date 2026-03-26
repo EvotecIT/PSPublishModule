@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
+$repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
 $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
 
 function Format-GiB {
@@ -109,11 +109,13 @@ if (-not (Test-Path -LiteralPath $configPath)) {
 }
 
 $arguments = [System.Collections.Generic.List[string]]::new()
-$arguments.AddRange(@(
-    'run', '--project', $project, '-c', 'Release', '--no-build', '--',
+foreach ($argument in @(
+    'run', '--project', $project, '--framework', 'net10.0', '-c', 'Release', '--no-build', '--',
     'github', 'housekeeping',
     '--config', $configPath
-))
+)) {
+    $null = $arguments.Add([string]$argument)
+}
 
 if ($env:INPUT_APPLY -eq 'true') {
     $null = $arguments.Add('--apply')

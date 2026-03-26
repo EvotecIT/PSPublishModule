@@ -22,7 +22,36 @@ jobs:
     uses: EvotecIT/PSPublishModule/.github/workflows/reusable-github-housekeeping.yml@main
     with:
       config-path: ./.powerforge/github-housekeeping.json
+      powerforge-ref: main
     secrets: inherit
+```
+
+For immutable pinning, use the same PSPublishModule commit SHA for both the reusable workflow ref and `powerforge-ref`.
+
+Minimal config:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
+  "repository": "EvotecIT/YourRepo",
+  "tokenEnvName": "GITHUB_TOKEN",
+  "dryRun": false,
+  "artifacts": {
+    "enabled": true,
+    "keepLatestPerName": 10,
+    "maxAgeDays": 7,
+    "maxDelete": 200
+  },
+  "caches": {
+    "enabled": true,
+    "keepLatestPerKey": 2,
+    "maxAgeDays": 14,
+    "maxDelete": 200
+  },
+  "runner": {
+    "enabled": false
+  }
+}
 ```
 
 ## Direct action usage

@@ -21,7 +21,7 @@ runs:
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
-        global-json-file: ${{ github.action_path }}/../../global.json
+        global-json-file: ${{ github.action_path }}/../../../global.json
 
     - name: Build PowerForge CLI
       shell: pwsh
