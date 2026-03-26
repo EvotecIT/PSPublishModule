@@ -43,6 +43,11 @@ Overview identity and quick start:
   - `short` keeps short names only
   - `namespace-suffix` (default) disambiguates duplicates as `Type (Namespace.Part)`
   - `full` uses full type names
+- `generateGitFreshness` (pipeline) / `--git-freshness` (CLI) enables opt-in git freshness metadata:
+  - `gitFreshnessNewDays` / `--git-freshness-new-days` controls the `new` window (default `14`)
+  - `gitFreshnessUpdatedDays` / `--git-freshness-updated-days` controls the `updated` window (default `90`)
+  - emitted JSON adds `freshness.status`, `freshness.lastModifiedUtc`, `freshness.commitSha`, `freshness.ageDays`, and `freshness.sourcePath`
+  - HTML badges render only for `new` / `updated`; `stable` remains unbadged to avoid visual noise
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `/`)
@@ -150,6 +155,13 @@ Overview chips:
 - `.type-chip` – type chip link
 - `.type-chip.<kind>` – kind class (`class`, `struct`, `enum`, `interface`, `delegate`)
 - `.type-chip` includes `data-kind` and `data-namespace` for filtering
+- `.freshness-badge` – freshness badge shell
+- `.freshness-badge.new` – recent/new state
+- `.freshness-badge.updated` – recently updated state
+- `.type-freshness-badge` – type detail header placement
+- `.type-list-freshness` – sidebar row placement
+- `.quick-card-freshness` – quick-start card placement
+- `.type-chip-freshness` – namespace chip placement
 
 Member layout:
 - `.member-toolbar` – member filter toolbar
@@ -203,6 +215,11 @@ Member layout:
 - `.derived-list` – derived types list
 - `.type-parameters` – type parameter section
 - `.type-examples` – example section
+- `.example-media` – example media figure wrapper
+- `.example-media-frame` – media surface (image/video/link frame)
+- `.example-media-link` – terminal/download link for non-inline example media
+- `.example-media-caption` – media caption
+- `.example-media-meta` – capture recency / freshness metadata line
 - `.type-see-also` – see also section
 
 ## JavaScript expectations
@@ -260,6 +277,24 @@ in the pipeline or pass `--documented-only` to the CLI.
 
 `<see cref="...">` and `<seealso cref="...">` tags are converted into links when the
 referenced type exists in the generated API docs.
+
+XML-doc `<example>` blocks can also include optional media nodes for richer API examples:
+
+```xml
+<example>
+  <code>Sample.Run();</code>
+  <image src="/images/sample-output.png" alt="Rendered output" caption="Example screenshot." />
+  <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
+</example>
+```
+
+Supported media nodes:
+- `<image ... />` / `<img ... />` / `<screenshot ... />`
+- `<video ... />`
+- `<terminal ... />`
+- `<media kind="image|video|terminal|link" ... />`
+
+Generated JSON keeps those entries under `examples[]` with `kind: "media"` and a structured `media` object (`type`, `url`, `title`, `alt`, `caption`, `posterUrl`, `mimeType`, `width`, `height`, optional `capturedAtUtc`, optional `sourceUpdatedAtUtc`).
 
 ## PowerShell help
 
@@ -352,6 +387,7 @@ Notes:
 - Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
   - `sourceUrlMappings` prefixes that never match discovered source paths
   - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
+  - `sourceRoot` pointing one level above the GitHub repo while `sourceUrl` targets a single repo without `{root}`
   - source URL templates missing a path token (`{path}`, `{pathNoRoot}`, or `{pathNoPrefix}`)
   - unsupported source URL template tokens (anything outside `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
 - Display + member diagnostics:
@@ -360,4 +396,42 @@ Notes:
 - PowerShell syntax signatures append `[<CommonParameters>]` for command kinds that support common parameters,
   and docs pages render a dedicated `Common Parameters` section with an `about_CommonParameters` reference.
 - PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
+- When importing script-based fallback examples, command-specific files (for example `Invoke-Thing.ps1`) are preferred over generic demo scripts when multiple snippets match the same command.
+- When PowerShell help has no authored examples, generated fallback examples prefer the most user-friendly parameter sets and can emit multiple examples per command up to `powerShellFallbackExampleLimit`.
+- API docs now emit `[PFWEB.APIDOCS.POWERSHELL]` warnings when PowerShell commands rely only on generated fallback examples, so CI can distinguish “has some example” from “has authored examples”.
+- Optional PowerShell example validation can parse imported example scripts with the PowerShell parser before publish:
+  - CLI: `--validate-ps-examples`
+  - Pipeline: `validatePowerShellExamples: true`
+  - report path: `--ps-example-validation-report <file>` / `powerShellExampleValidationReport`
+  - timeout: `--ps-example-validation-timeout <seconds>` / `powerShellExampleValidationTimeoutSeconds`
+  - fail on invalid scripts: `--fail-on-ps-example-validation` / `failOnPowerShellExampleValidation: true`
+- Optional matched-example execution can run curated PowerShell example scripts after syntax validation:
+  - CLI: `--execute-ps-examples`
+  - Pipeline: `executePowerShellExamples: true`
+  - execution timeout: `--ps-example-execution-timeout <seconds>` / `powerShellExampleExecutionTimeoutSeconds`
+  - fail on execution failures: `--fail-on-ps-example-execution` / `failOnPowerShellExampleExecution: true`
+  - only scripts that both parse cleanly and reference documented commands are executed
+  - enabling execution implicitly enables validation
+- Validation reports default to `powershell-example-validation.json` under the API output root when validation is enabled.
+- When execution is enabled, report writing also emits reusable transcript artifacts under a sibling `powershell-example-validation-artifacts/` folder and records each path as `executionArtifactPath`.
+- When generated docs also receive that validation result, successful imported PowerShell examples can surface those transcript artifacts as terminal-style example media links in the rendered API reference.
+- Imported PowerShell example scripts can also ship richer playback sidecars next to the `.ps1` file: matching `.cast` / `.asciinema` files are staged into API output automatically, and matching `.png` / `.jpg` / `.jpeg` / `.webp` files are used as poster art when present.
+- When imported terminal media exists, PowerForge also writes `powershell-example-media-manifest.json` under the API output root so sites and CI jobs can diff capture history, health flags, and staged media linkage per command.
+- Generated PowerShell playback/transcript media also records `capturedAtUtc` and `sourceUpdatedAtUtc`, so rendered docs can show when a terminal asset was captured and when the backing example script last changed.
+- The generator also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when curated playback sidecars look unhealthy: unsupported same-name sidecars (for example `.gif` / `.mp4` / `.webm`), oversized casts/posters, or stale playback assets that are older than the `.ps1` script they document.
+- Validation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported example scripts fail syntax validation, when a script does not reference any documented command from the selected help file, or when a matched example script fails execution.
+- PowerShell `examples` entries in generated JSON now include an `origin` field when PowerForge can identify provenance:
+  - `AuthoredHelp` for examples from MAML help XML
+  - `ImportedScript` for examples imported from `psExamplesPath` / `Examples/`
+  - `GeneratedFallback` for auto-generated fallback examples
+- Docs-template HTML now surfaces that provenance with example badges, so readers can immediately tell whether a snippet was authored in help, imported from a curated script, or generated as fallback guidance.
+- Coverage reports now split PowerShell example coverage into `authoredHelpCodeExamples`, `importedScriptCodeExamples`, and `generatedFallbackCodeExamples`, alongside the existing `generatedFallbackOnlyExamples` guardrail.
+- Coverage reports also track richer imported playback quality via `importedScriptPlaybackMedia`, `importedScriptPlaybackMediaWithPoster`, and `importedScriptPlaybackMediaWithoutPoster`, plus command lists for playback media usage and posterless playback assets.
+- Coverage reports also track playback asset-health issues via `importedScriptPlaybackMediaUnsupportedSidecars`, `importedScriptPlaybackMediaOversizedAssets`, and `importedScriptPlaybackMediaStaleAssets`, with matching command lists so CI can flag rough media curation precisely.
+- API generation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported playback media exists without matching poster art, so teams can catch rough terminal embeds before publish.
+- API generation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings for unhealthy playback assets, but those issues are now measurable in coverage too instead of living only in console warnings.
+- Pipeline coverage thresholds can also gate provenance-specific example quality via `minPowerShellAuthoredHelpCodeExamplesPercent` and `minPowerShellImportedScriptCodeExamplesPercent`.
+- Pipeline coverage thresholds can also gate playback richness via `minPowerShellImportedScriptPlaybackMediaPercent`, `minPowerShellImportedScriptPlaybackMediaWithPosterPercent`, and `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount`.
+- Pipeline coverage thresholds can also gate playback asset health via `maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount`, `maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount`, and `maxPowerShellImportedScriptPlaybackMediaStaleAssetCount`.
+- Pipeline coverage thresholds can now gate generated-fallback-only quality via `maxPowerShellGeneratedFallbackOnlyExamplePercent` or `maxPowerShellGeneratedFallbackOnlyExampleCount`.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

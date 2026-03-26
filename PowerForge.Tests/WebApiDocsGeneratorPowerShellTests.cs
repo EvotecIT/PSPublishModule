@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using PowerForge.Web;
 
@@ -106,6 +107,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 ex => ex.GetProperty("kind").GetString() == "heading");
             Assert.Contains(examples.EnumerateArray(),
                 ex => ex.GetProperty("kind").GetString() == "code" &&
+                      ex.GetProperty("origin").GetString() == "AuthoredHelp" &&
                       ex.GetProperty("text").GetString()!.Contains("New-SampleCmdlet -Name \"Demo\"", StringComparison.Ordinal));
             Assert.True(rootElement.TryGetProperty("inputTypes", out _));
             Assert.True(rootElement.TryGetProperty("outputTypes", out _));
@@ -135,6 +137,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("setTimeout(run,delayMs)", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Authored help example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-authored", html, StringComparison.Ordinal);
 
             var bootstrapIndex = html.IndexOf("window.Prism=window.Prism||{};window.Prism.manual=true;", StringComparison.Ordinal);
             var coreIndex = html.IndexOf("prism-core.min.js", StringComparison.OrdinalIgnoreCase);
@@ -151,8 +155,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -200,7 +203,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 Prism = new PrismSpec { Mode = "off" }
             };
 
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
             var html = File.ReadAllText(Path.Combine(outputPath, "get-sampledata", "index.html"));
 
             Assert.Contains("language-powershell", html, StringComparison.OrdinalIgnoreCase);
@@ -211,8 +214,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -296,8 +298,7 @@ public class WebApiDocsGeneratorPowerShellTests
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
+            TryDeleteDirectory(root);
         }
     }
 
@@ -588,6 +589,113 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_EmitsGitFreshnessMetadataForCommandsAndAboutTopics()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-freshness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            var helpPath = Path.Combine(helpDirectory, "Sample.Module-help.xml");
+            var aboutPath = Path.Combine(root, "about_SampleTopic.help.txt");
+
+            RunGit(root, "init");
+            RunGit(root, "config", "user.email", "tests@example.invalid");
+            RunGit(root, "config", "user.name", "PowerForge Tests");
+
+            File.WriteAllText(aboutPath,
+                """
+                # about_SampleTopic
+
+                Describes sample topic behavior.
+                """);
+            RunGit(root, "add", "about_SampleTopic.help.txt");
+            var olderCommitDate = DateTimeOffset.UtcNow.AddDays(-40).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = olderCommitDate,
+                    ["GIT_COMMITTER_DATE"] = olderCommitDate
+                },
+                "commit", "-m", "Add about topic");
+
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>For more details, see about_SampleTopic.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+            RunGit(root, "add", "en-US/Sample.Module-help.xml");
+            var recentCommitDate = DateTimeOffset.UtcNow.AddDays(-3).ToString("yyyy-MM-ddTHH:mm:ssK");
+            RunGit(root,
+                new Dictionary<string, string>
+                {
+                    ["GIT_AUTHOR_DATE"] = recentCommitDate,
+                    ["GIT_COMMITTER_DATE"] = recentCommitDate
+                },
+                "commit", "-m", "Add help xml");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                GenerateGitFreshness = true,
+                GitFreshnessNewDays = 14,
+                GitFreshnessUpdatedDays = 90
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(2, result.TypeCount);
+
+            using var commandJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "get-samplecmdlet.json")));
+            using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-sampletopic.json")));
+
+            var commandFreshness = commandJson.RootElement.GetProperty("freshness");
+            var aboutFreshness = aboutJson.RootElement.GetProperty("freshness");
+
+            Assert.Equal("new", commandFreshness.GetProperty("status").GetString());
+            Assert.True(commandFreshness.GetProperty("ageDays").GetInt32() <= 14);
+            Assert.EndsWith(Path.Combine("en-US", "Sample.Module-help.xml"), commandFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            Assert.Equal("updated", aboutFreshness.GetProperty("status").GetString());
+            Assert.True(aboutFreshness.GetProperty("ageDays").GetInt32() >= 30);
+            Assert.EndsWith("about_SampleTopic.help.txt", aboutFreshness.GetProperty("sourcePath").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            var commandHtml = File.ReadAllText(Path.Combine(outputPath, "get-samplecmdlet", "index.html"));
+            var aboutHtml = File.ReadAllText(Path.Combine(outputPath, "about-sampletopic", "index.html"));
+            Assert.Contains("freshness-badge new", commandHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">new<", commandHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("freshness-badge updated", aboutHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">updated<", aboutHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_UsesDetachedCommandMetadataForFunctionsAndAliases()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-detached-metadata-" + Guid.NewGuid().ToString("N"));
@@ -721,7 +829,7 @@ public class WebApiDocsGeneratorPowerShellTests
                 Format = "both"
             };
 
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
             using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
             Assert.Equal("Function", functionJson.RootElement.GetProperty("kind").GetString());
         }
@@ -993,7 +1101,244 @@ public class WebApiDocsGeneratorPowerShellTests
             var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
             Assert.Contains(examples,
                 ex => ex.GetProperty("kind").GetString() == "code" &&
+                      ex.GetProperty("origin").GetString() == "ImportedScript" &&
                       ex.GetProperty("text").GetString()!.Contains("Invoke-SampleFunction -Name \"FromScript\"", StringComparison.Ordinal));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "invoke-samplefunction", "index.html"));
+            Assert.Contains("Imported script example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-imported", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_PrefersCommandSpecificExampleScriptsOverGenericOnes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-fallback-ranking-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Example.Generic.ps1"),
+                """
+                Invoke-SampleFunction -Name "FromGeneric"
+                """);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleFunction.ps1"),
+                """
+                Invoke-SampleFunction -Name "FromSpecific"
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                PowerShellFallbackExampleLimitPerCommand = 1
+            };
+
+            WebApiDocsGenerator.Generate(options);
+            using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
+            var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var codeExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "code")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+
+            Assert.Single(codeExamples);
+            Assert.Contains("FromSpecific", codeExamples[0], StringComparison.Ordinal);
+            Assert.DoesNotContain("FromGeneric", codeExamples[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_GeneratesFallbackExamplesFromBestParameterSets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-generated-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                      <command:syntaxItem parameterSetName="ById">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Id</maml:name>
+                          <command:parameterValue required="true">int</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                      <command:syntaxItem parameterSetName="ByInputObject">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>InputObject</maml:name>
+                          <command:parameterValue required="true">Sample.Module.Item</command:parameterValue>
+                        </command:parameter>
+                        <command:parameter required="false">
+                          <maml:name>Credential</maml:name>
+                          <command:parameterValue required="false">pscredential</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="true">
+                        <maml:name>Id</maml:name>
+                        <maml:description><maml:para>Identifier.</maml:para></maml:description>
+                        <command:parameterValue required="true">int</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="true">
+                        <maml:name>InputObject</maml:name>
+                        <maml:description><maml:para>Pipeline object.</maml:para></maml:description>
+                        <command:parameterValue required="true">Sample.Module.Item</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="false">
+                        <maml:name>Credential</maml:name>
+                        <maml:description><maml:para>Credential.</maml:para></maml:description>
+                        <command:parameterValue required="false">pscredential</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name, [int]$Id, $InputObject, [pscredential]$Credential) }");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                PowerShellFallbackExampleLimitPerCommand = 2
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
+            var examples = functionJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var codeExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "code")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+            var textExamples = examples
+                .Where(ex => ex.GetProperty("kind").GetString() == "text")
+                .Select(ex => ex.GetProperty("text").GetString())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+
+            Assert.Equal(2, codeExamples.Length);
+            Assert.Contains(codeExamples, example => example!.Contains("Invoke-SampleFunction -Name 'Name'", StringComparison.Ordinal));
+            Assert.Contains(codeExamples, example => example!.Contains("Invoke-SampleFunction -Id 1", StringComparison.Ordinal));
+            Assert.DoesNotContain(codeExamples, example => example!.Contains("-InputObject", StringComparison.Ordinal));
+            Assert.Contains(textExamples, example => example!.Contains("parameter set 'ByName'", StringComparison.Ordinal));
+            Assert.Contains(textExamples, example => example!.Contains("parameter set 'ById'", StringComparison.Ordinal));
+            Assert.All(
+                examples.Where(ex =>
+                {
+                    var kind = ex.GetProperty("kind").GetString();
+                    return string.Equals(kind, "code", StringComparison.Ordinal) ||
+                           string.Equals(kind, "text", StringComparison.Ordinal);
+                }),
+                ex => Assert.Equal("GeneratedFallback", ex.GetProperty("origin").GetString()));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "invoke-samplefunction", "index.html"));
+            Assert.Contains("Generated fallback example", html, StringComparison.Ordinal);
+            Assert.Contains("example-origin-badge example-origin-generated", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -1049,6 +1394,1000 @@ public class WebApiDocsGeneratorPowerShellTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_CoverageDistinguishesAuthoredImportedAndGeneratedExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-example-origins-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-AuthoredExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets authored example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Get-AuthoredExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                    <command:examples>
+                      <command:example>
+                        <maml:title>----------  Example 1: Authored.  ----------</maml:title>
+                        <dev:code>Get-AuthoredExample -Name "Alpha"</dev:code>
+                      </command:example>
+                    </command:examples>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-ImportedExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets imported example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-ImportedExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Set-GeneratedExample</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Gets generated example content.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Set-GeneratedExample</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Get-AuthoredExample', 'Invoke-ImportedExample', 'Set-GeneratedExample')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Get-AuthoredExample { param([string]$Name) }
+                function Invoke-ImportedExample { param([string]$Name) }
+                function Set-GeneratedExample { param([string]$Name) }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-ImportedExample.ps1"),
+                """
+                Invoke-ImportedExample -Name "FromScript"
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Format = "json",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var powershell = coverage.RootElement.GetProperty("powershell");
+
+            Assert.Equal(3, powershell.GetProperty("commandCount").GetInt32());
+            Assert.Equal(3, powershell.GetProperty("codeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("authoredHelpCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("generatedFallbackCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("generatedFallbackOnlyExamples").GetProperty("covered").GetInt32());
+
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingAuthoredHelpCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Get-AuthoredExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-ImportedExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingGeneratedFallbackCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Set-GeneratedExample", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingGeneratedFallbackOnlyExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Set-GeneratedExample", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_WarnsWhenCommandsRelyOnlyOnGeneratedFallbackExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-generated-warning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Invoke-SampleFunction</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleFunction { param([string]$Name) }");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Format = "json",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("rely only on generated fallback examples", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleFunction", StringComparison.OrdinalIgnoreCase));
+
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var generatedFallbackOnly = coverage.RootElement
+                .GetProperty("powershell")
+                .GetProperty("generatedFallbackOnlyExamples");
+            Assert.Equal(1, generatedFallbackOnly.GetProperty("covered").GetInt32());
+            var generatedFallback = coverage.RootElement
+                .GetProperty("powershell")
+                .GetProperty("generatedFallbackCodeExamples");
+            Assert.Equal(1, generatedFallback.GetProperty("covered").GetInt32());
+            Assert.Equal(0, coverage.RootElement.GetProperty("powershell").GetProperty("authoredHelpCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Equal(0, coverage.RootElement.GetProperty("powershell").GetProperty("importedScriptCodeExamples").GetProperty("covered").GetInt32());
+            Assert.Contains(
+                coverage.RootElement.GetProperty("powershell").GetProperty("commandsUsingGeneratedFallbackOnlyExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleFunction", StringComparison.Ordinal));
+            Assert.Contains(
+                coverage.RootElement.GetProperty("powershell").GetProperty("commandsUsingGeneratedFallbackCodeExamples").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleFunction", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ValidatePowerShellExamples_FindsInvalidAndUnmatchedScripts_AndWritesReport()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-validate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) }
+                function Invoke-SampleTwo { param([string]$Name) }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "BrokenExample.ps1"), "Invoke-SampleTwo -Name (");
+            File.WriteAllText(Path.Combine(examplesDir, "GenericDemo.ps1"), "Get-UnrelatedThing -Name 'Other'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60
+            });
+
+            Assert.True(validation.ValidationSucceeded);
+            Assert.Equal(3, validation.FileCount);
+            Assert.Equal(2, validation.ValidSyntaxFileCount);
+            Assert.Equal(1, validation.InvalidSyntaxFileCount);
+            Assert.Equal(2, validation.MatchedFileCount);
+            Assert.Equal(1, validation.UnmatchedFileCount);
+            Assert.Equal(2, validation.KnownCommandCount);
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("failed syntax validation", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("BrokenExample.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("did not reference any documented commands", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("GenericDemo.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var broken = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "BrokenExample.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.False(broken.ValidSyntax);
+            Assert.Contains("Invoke-SampleTwo", broken.MatchedCommands, StringComparer.OrdinalIgnoreCase);
+            Assert.NotEmpty(broken.ParseErrors);
+
+            var generic = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "GenericDemo.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(generic.ValidSyntax);
+            Assert.Empty(generic.MatchedCommands);
+            Assert.Contains("Get-UnrelatedThing", generic.Commands, StringComparer.OrdinalIgnoreCase);
+
+            var reportRoot = Path.Combine(root, "_site", "api");
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            Assert.True(File.Exists(reportPath));
+
+            using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.Equal(1, report.RootElement.GetProperty("invalidSyntaxFileCount").GetInt32());
+            Assert.Equal(1, report.RootElement.GetProperty("unmatchedFileCount").GetInt32());
+            Assert.Equal(3, report.RootElement.GetProperty("fileCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ValidatePowerShellExamples_ExecutesMatchedScripts_AndCapturesFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-execute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleTwo.Fail.ps1"), "Invoke-SampleTwo -Name 'Beta'; throw 'boom'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60,
+                ExecuteMatchedExamples = true,
+                ExecutionTimeoutSeconds = 60
+            });
+
+            Assert.True(validation.ValidationSucceeded);
+            Assert.True(validation.ExecutionRequested);
+            Assert.True(validation.ExecutionCompleted);
+            Assert.Equal(2, validation.ExecutedFileCount);
+            Assert.Equal(1, validation.PassedExecutionFileCount);
+            Assert.Equal(1, validation.FailedExecutionFileCount);
+            Assert.Contains(validation.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("failed execution", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var passing = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(passing.ExecutionAttempted);
+            Assert.True(passing.ExecutionSucceeded);
+            Assert.Equal(0, passing.ExecutionExitCode);
+            Assert.Contains("Ran one for Alpha", passing.ExecutionStdOut, StringComparison.Ordinal);
+
+            var failing = Assert.Single(
+                validation.Files,
+                file => string.Equals(Path.GetFileName(file.FilePath), "Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.True(failing.ExecutionAttempted);
+            Assert.False(failing.ExecutionSucceeded);
+            Assert.NotEqual(0, failing.ExecutionExitCode);
+            Assert.Contains("boom", failing.ExecutionStdErr ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            var reportRoot = Path.Combine(root, "_site", "api");
+            var reportPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(reportRoot, null, validation);
+            using var report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.True(report.RootElement.GetProperty("executionRequested").GetBoolean());
+            Assert.Equal(2, report.RootElement.GetProperty("executedFileCount").GetInt32());
+            Assert.Equal(1, report.RootElement.GetProperty("failedExecutionFileCount").GetInt32());
+
+            var reportedFiles = report.RootElement.GetProperty("files").EnumerateArray().ToArray();
+            var passingReport = Assert.Single(reportedFiles, file =>
+                string.Equals(Path.GetFileName(file.GetProperty("filePath").GetString()), "Invoke-SampleOne.ps1", StringComparison.OrdinalIgnoreCase));
+            var failingReport = Assert.Single(reportedFiles, file =>
+                string.Equals(Path.GetFileName(file.GetProperty("filePath").GetString()), "Invoke-SampleTwo.Fail.ps1", StringComparison.OrdinalIgnoreCase));
+
+            var passingArtifactPath = passingReport.GetProperty("executionArtifactPath").GetString();
+            var failingArtifactPath = failingReport.GetProperty("executionArtifactPath").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(passingArtifactPath));
+            Assert.False(string.IsNullOrWhiteSpace(failingArtifactPath));
+            Assert.True(File.Exists(passingArtifactPath));
+            Assert.True(File.Exists(failingArtifactPath));
+            Assert.Contains("Ran one for Alpha", File.ReadAllText(passingArtifactPath!), StringComparison.Ordinal);
+            Assert.Contains("boom", File.ReadAllText(failingArtifactPath!), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_AttachesExecutionTranscriptMedia_ForSuccessfulImportedExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-execute-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleTwo.Fail.ps1"), "Invoke-SampleTwo -Name 'Beta'; throw 'boom'");
+
+            var validation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                TimeoutSeconds = 60,
+                ExecuteMatchedExamples = true,
+                ExecutionTimeoutSeconds = 60
+            });
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            WebApiDocsGenerator.WritePowerShellExampleValidationReport(outputPath, null, validation);
+
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                PowerShellExampleValidationResult = validation,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var sampleOneExamples = sampleOneJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var transcriptMedia = Assert.Single(sampleOneExamples, example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase) &&
+                example.TryGetProperty("media", out var media) &&
+                string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
+            var mediaUrl = transcriptMedia.GetProperty("media").GetProperty("url").GetString();
+            Assert.Contains("/api/powershell/powershell-example-validation-artifacts/", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(transcriptMedia.GetProperty("media").GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(transcriptMedia.GetProperty("media").GetProperty("sourceUpdatedAtUtc").GetString()));
+            Assert.Contains("Open execution transcript", transcriptMedia.GetProperty("media").GetProperty("title").GetString(), StringComparison.Ordinal);
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Contains("example-media example-media-terminal", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Open execution transcript", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("Captured terminal transcript from executing Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("Captured ", sampleOneHtml, StringComparison.Ordinal);
+
+            using var sampleTwoJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampletwo.json")));
+            var sampleTwoExamples = sampleTwoJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            Assert.DoesNotContain(sampleTwoExamples, example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase) &&
+                example.TryGetProperty("media", out var media) &&
+                string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_PrefersPlaybackSidecars_ForImportedExamples()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.cast"), "dummy cast");
+            File.WriteAllBytes(Path.Combine(examplesDir, "Invoke-SampleOne.png"), new byte[] { 1, 2, 3, 4 });
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var sampleOneExamples = sampleOneJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            var playbackMedia = Assert.Single(sampleOneExamples, example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase) &&
+                example.TryGetProperty("media", out var media) &&
+                string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
+            var media = playbackMedia.GetProperty("media");
+            var mediaUrl = media.GetProperty("url").GetString();
+            var posterUrl = media.GetProperty("posterUrl").GetString();
+            Assert.Contains("/api/powershell/powershell-example-media/", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(".cast", mediaUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/api/powershell/powershell-example-media/", posterUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(".png", posterUrl, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("application/x-asciicast", media.GetProperty("mimeType").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(media.GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(media.GetProperty("sourceUpdatedAtUtc").GetString()));
+            Assert.Contains("Open terminal playback", media.GetProperty("title").GetString(), StringComparison.Ordinal);
+
+            var castFileName = Path.GetFileName(new Uri("https://example.test" + mediaUrl).LocalPath);
+            var posterFileName = Path.GetFileName(new Uri("https://example.test" + posterUrl).LocalPath);
+            Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", castFileName)));
+            Assert.True(File.Exists(Path.Combine(outputPath, "powershell-example-media", posterFileName)));
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
+            Assert.True(File.Exists(result.PowerShellExampleMediaManifestPath!));
+
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            Assert.Equal(1, mediaManifest.RootElement.GetProperty("entryCount").GetInt32());
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("Invoke-SampleOne", manifestEntry.GetProperty("commandName").GetString());
+            Assert.Equal("Invoke-SampleOne.ps1", manifestEntry.GetProperty("sourcePath").GetString());
+            Assert.Equal("Invoke-SampleOne.cast", manifestEntry.GetProperty("assetPath").GetString());
+            Assert.Equal("Invoke-SampleOne.png", manifestEntry.GetProperty("posterAssetPath").GetString());
+            Assert.True(manifestEntry.GetProperty("hasPoster").GetBoolean());
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Contains("Open terminal playback", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("Captured terminal playback for Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
+            Assert.Contains("example-media-poster", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Captured ", sampleOneHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_WarnsWhenPlaybackAssetsAreOversizedStaleOrUnsupported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-health-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+
+            var examplePath = Path.Combine(examplesDir, "Invoke-SampleOne.ps1");
+            var castPath = Path.Combine(examplesDir, "Invoke-SampleOne.cast");
+            var posterPath = Path.Combine(examplesDir, "Invoke-SampleOne.png");
+            var unsupportedPath = Path.Combine(examplesDir, "Invoke-SampleOne.gif");
+
+            File.WriteAllText(examplePath, "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllBytes(castPath, new byte[(2 * 1024 * 1024) + 128]);
+            File.WriteAllBytes(posterPath, new byte[(1024 * 1024) + 128]);
+            File.WriteAllBytes(unsupportedPath, new byte[] { 1, 2, 3, 4 });
+
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(castPath, now.AddMinutes(-20));
+            File.SetLastWriteTimeUtc(posterPath, now.AddMinutes(-30));
+            File.SetLastWriteTimeUtc(examplePath, now.AddMinutes(-5));
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("unsupported playback sidecar", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.gif", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("playback sidecar", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("recommended 2 MiB", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.cast", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("playback poster", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("recommended 1 MiB", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.cast", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("looks stale", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleOne.png", StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var staleMedia = Assert.Single(sampleOneJson.RootElement.GetProperty("examples").EnumerateArray(), example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.IsNullOrWhiteSpace(staleMedia.GetProperty("media").GetProperty("capturedAtUtc").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(staleMedia.GetProperty("media").GetProperty("sourceUpdatedAtUtc").GetString()));
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Contains("Script changed after this capture", sampleOneHtml, StringComparison.Ordinal);
+
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.True(manifestEntry.GetProperty("hasUnsupportedSidecars").GetBoolean());
+            Assert.True(manifestEntry.GetProperty("hasOversizedAssets").GetBoolean());
+            Assert.True(manifestEntry.GetProperty("hasStaleAssets").GetBoolean());
+
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var powershell = coverage.RootElement.GetProperty("powershell");
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMedia").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaUnsupportedSidecars").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaOversizedAssets").GetProperty("covered").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaStaleAssets").GetProperty("covered").GetInt32());
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaOversizedAssets").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaStaleAssets").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_ReportsPlaybackCoverage_AndWarnsWhenPosterIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-coverage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleOne</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Runs the first sample.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-SampleOne</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleTwo</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Runs the second sample.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-SampleTwo</command:name>
+                        <command:parameter required="true">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name value.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne', 'Invoke-SampleTwo')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                function Invoke-SampleTwo { param([string]$Name) "Ran two for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"), "Invoke-SampleOne -Name 'Alpha'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.cast"), "dummy cast one");
+            File.WriteAllBytes(Path.Combine(examplesDir, "Invoke-SampleOne.png"), new byte[] { 1, 2, 3, 4 });
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleTwo.ps1"), "Invoke-SampleTwo -Name 'Beta'");
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleTwo.cast"), "dummy cast two");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("[PFWEB.APIDOCS.POWERSHELL]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("without poster art", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("Invoke-SampleTwo", StringComparison.OrdinalIgnoreCase));
+
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var powershell = coverage.RootElement.GetProperty("powershell");
+            Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMedia").GetProperty("covered").GetInt32());
+            Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMedia").GetProperty("total").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaWithPoster").GetProperty("covered").GetInt32());
+            Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMediaWithPoster").GetProperty("total").GetInt32());
+            Assert.Equal(1, powershell.GetProperty("importedScriptPlaybackMediaWithoutPoster").GetProperty("covered").GetInt32());
+            Assert.Equal(2, powershell.GetProperty("importedScriptPlaybackMediaWithoutPoster").GetProperty("total").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaUnsupportedSidecars").GetProperty("covered").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaOversizedAssets").GetProperty("covered").GetInt32());
+            Assert.Equal(0, powershell.GetProperty("importedScriptPlaybackMediaStaleAssets").GetProperty("covered").GetInt32());
+
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMedia").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleOne", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMedia").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleTwo", StringComparison.Ordinal));
+            Assert.Contains(
+                powershell.GetProperty("commandsUsingImportedScriptPlaybackMediaWithoutPoster").EnumerateArray().Select(x => x.GetString()),
+                value => string.Equals(value, "Invoke-SampleTwo", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static string BuildMinimalPowerShellHelpForValidation()
+    {
+        return
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+              <command:command>
+                <command:details>
+                  <command:name>Invoke-SampleOne</command:name>
+                  <command:commandType>Function</command:commandType>
+                  <maml:description><maml:para>Runs the first sample.</maml:para></maml:description>
+                </command:details>
+                <command:syntax>
+                  <command:syntaxItem>
+                    <command:name>Invoke-SampleOne</command:name>
+                    <command:parameter required="true">
+                      <maml:name>Name</maml:name>
+                      <command:parameterValue required="true">string</command:parameterValue>
+                    </command:parameter>
+                  </command:syntaxItem>
+                </command:syntax>
+                <command:parameters>
+                  <command:parameter required="true">
+                    <maml:name>Name</maml:name>
+                    <maml:description><maml:para>Name value.</maml:para></maml:description>
+                    <command:parameterValue required="true">string</command:parameterValue>
+                  </command:parameter>
+                </command:parameters>
+              </command:command>
+              <command:command>
+                <command:details>
+                  <command:name>Invoke-SampleTwo</command:name>
+                  <command:commandType>Function</command:commandType>
+                  <maml:description><maml:para>Runs the second sample.</maml:para></maml:description>
+                </command:details>
+                <command:syntax>
+                  <command:syntaxItem>
+                    <command:name>Invoke-SampleTwo</command:name>
+                    <command:parameter required="true">
+                      <maml:name>Name</maml:name>
+                      <command:parameterValue required="true">string</command:parameterValue>
+                    </command:parameter>
+                  </command:syntaxItem>
+                </command:syntax>
+                <command:parameters>
+                  <command:parameter required="true">
+                    <maml:name>Name</maml:name>
+                    <maml:description><maml:para>Name value.</maml:para></maml:description>
+                    <command:parameterValue required="true">string</command:parameterValue>
+                  </command:parameter>
+                </command:parameters>
+              </command:command>
+            </helpItems>
+            """;
+    }
+
+    private static bool IsGitAvailable()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("--version");
+            using var process = Process.Start(psi);
+            if (process is null)
+                return false;
+
+            process.WaitForExit(2000);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void RunGit(string workingDirectory, params string[] args)
+    {
+        RunGit(workingDirectory, null, args);
+    }
+
+    private static void RunGit(string workingDirectory, IReadOnlyDictionary<string, string>? environment, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
+        if (environment is not null)
+        {
+            foreach (var pair in environment)
+                psi.Environment[pair.Key] = pair.Value;
+        }
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            throw new InvalidOperationException("Failed to start git.");
+
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(10000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(" ", args)} failed: {stderr}{Environment.NewLine}{stdout}");
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, true);
+        }
+        catch
+        {
+            // best-effort cleanup for git temp repos on Windows
         }
     }
 }

@@ -217,6 +217,14 @@ public static partial class WebApiDocsGenerator
                         if (!string.IsNullOrWhiteSpace(code))
                             results.Add(new ApiExampleModel { Kind = "code", Text = code });
                     }
+                    else if (TryParseExampleMedia(el, out var media))
+                    {
+                        results.Add(new ApiExampleModel
+                        {
+                            Kind = "media",
+                            Media = media
+                        });
+                    }
                     else
                     {
                         var textBlock = NormalizeXmlText(el);
@@ -235,6 +243,88 @@ public static partial class WebApiDocsGenerator
         }
 
         return results;
+    }
+
+    private static bool TryParseExampleMedia(XElement element, out ApiExampleMediaModel? media)
+    {
+        media = null;
+        if (element is null)
+            return false;
+
+        var type = NormalizeExampleMediaType(element.Name.LocalName, element.Attribute("kind")?.Value, element.Attribute("type")?.Value, element.Attribute("provider")?.Value);
+        if (string.IsNullOrWhiteSpace(type))
+            return false;
+
+        var url = NormalizeInlineHref(
+            element.Attribute("src")?.Value ??
+            element.Attribute("url")?.Value ??
+            element.Attribute("href")?.Value ??
+            element.Attribute("file")?.Value);
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        media = new ApiExampleMediaModel
+        {
+            Type = type,
+            Url = url,
+            Title = Normalize(element.Attribute("title")?.Value ?? element.Attribute("label")?.Value ?? string.Empty),
+            Alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty),
+            Caption = Normalize(
+                element.Attribute("caption")?.Value ??
+                element.Attribute("description")?.Value ??
+                NormalizeXmlText(element) ??
+                string.Empty),
+            PosterUrl = NormalizeInlineHref(
+                element.Attribute("poster")?.Value ??
+                element.Attribute("thumbnail")?.Value ??
+                element.Attribute("thumb")?.Value),
+            MimeType = Normalize(
+                element.Attribute("mimeType")?.Value ??
+                element.Attribute("mime-type")?.Value ??
+                element.Attribute("contentType")?.Value ??
+                element.Attribute("content-type")?.Value ??
+                string.Empty),
+            Width = ParseNullableInt(element.Attribute("width")?.Value),
+            Height = ParseNullableInt(element.Attribute("height")?.Value)
+        };
+
+        return true;
+    }
+
+    private static string NormalizeExampleMediaType(string? elementName, params string?[] explicitCandidates)
+    {
+        foreach (var candidate in explicitCandidates)
+        {
+            var normalized = NormalizeExampleMediaTypeCandidate(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                return normalized;
+        }
+
+        return NormalizeExampleMediaTypeCandidate(elementName);
+    }
+
+    private static string NormalizeExampleMediaTypeCandidate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "img" or "image" or "screenshot" => "image",
+            "video" => "video",
+            "terminal" or "terminalcast" or "asciinema" => "terminal",
+            "media" => "link",
+            "link" or "download" or "asset" => "link",
+            _ => string.Empty
+        };
+    }
+
+    private static int? ParseNullableInt(string? value)
+    {
+        return int.TryParse(value, out var parsed) && parsed > 0
+            ? parsed
+            : null;
     }
 
     private static List<string> GetSeeAlso(

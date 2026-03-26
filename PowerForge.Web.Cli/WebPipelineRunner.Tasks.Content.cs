@@ -75,6 +75,18 @@ internal static partial class WebPipelineRunner
         var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
         var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
         var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
+        var validatePowerShellExamples = GetBool(step, "validatePowerShellExamples") ?? GetBool(step, "validate-powershell-examples") ?? false;
+        var powerShellExampleValidationReportPath = ResolvePath(baseDir, GetString(step, "powerShellExampleValidationReport") ?? GetString(step, "powershell-example-validation-report") ?? GetString(step, "powerShellExampleValidationReportPath") ?? GetString(step, "powershell-example-validation-report-path"));
+        var powerShellExampleValidationTimeoutSeconds = GetInt(step, "powerShellExampleValidationTimeoutSeconds") ?? GetInt(step, "powershell-example-validation-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleValidation = GetBool(step, "failOnPowerShellExampleValidation") ?? GetBool(step, "fail-on-powershell-example-validation") ?? false;
+        var executePowerShellExamples = GetBool(step, "executePowerShellExamples") ?? GetBool(step, "execute-powershell-examples") ?? false;
+        var powerShellExampleExecutionTimeoutSeconds = GetInt(step, "powerShellExampleExecutionTimeoutSeconds") ?? GetInt(step, "powershell-example-execution-timeout-seconds") ?? 60;
+        var failOnPowerShellExampleExecution = GetBool(step, "failOnPowerShellExampleExecution") ?? GetBool(step, "fail-on-powershell-example-execution") ?? false;
+        if (executePowerShellExamples || failOnPowerShellExampleExecution)
+            validatePowerShellExamples = true;
+        var generateGitFreshness = GetBool(step, "generateGitFreshness") ?? GetBool(step, "generate-git-freshness") ?? false;
+        var gitFreshnessNewDays = GetInt(step, "gitFreshnessNewDays") ?? GetInt(step, "git-freshness-new-days") ?? 14;
+        var gitFreshnessUpdatedDays = GetInt(step, "gitFreshnessUpdatedDays") ?? GetInt(step, "git-freshness-updated-days") ?? 90;
         var sourceUrlMappings = GetApiDocsSourceUrlMappings(
             step,
             "sourceUrlMappings",
@@ -312,6 +324,9 @@ internal static partial class WebPipelineRunner
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
             PowerShellExamplesPath = powerShellExamplesPath,
             PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
+            GenerateGitFreshness = generateGitFreshness,
+            GitFreshnessNewDays = gitFreshnessNewDays,
+            GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = nav,
             // Default to root context for profile selection to avoid accidental "API header has different nav"
@@ -388,11 +403,59 @@ internal static partial class WebPipelineRunner
         if (memberXrefKindList.Count > 0)
             options.MemberXrefKinds.AddRange(memberXrefKindList);
 
+        WebApiDocsPowerShellExampleValidationResult? powerShellExampleValidation = null;
+        string? powerShellExampleValidationPath = null;
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples)
+        {
+            powerShellExampleValidation = WebApiDocsGenerator.ValidatePowerShellExamples(new WebApiDocsPowerShellExampleValidationOptions
+            {
+                HelpPath = help ?? string.Empty,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                TimeoutSeconds = powerShellExampleValidationTimeoutSeconds,
+                ExecuteMatchedExamples = executePowerShellExamples,
+                ExecutionTimeoutSeconds = powerShellExampleExecutionTimeoutSeconds
+            });
+            powerShellExampleValidationPath = WebApiDocsGenerator.WritePowerShellExampleValidationReport(
+                outPath!,
+                powerShellExampleValidationReportPath,
+                powerShellExampleValidation);
+            options.PowerShellExampleValidationResult = powerShellExampleValidation;
+        }
+
         var res = WebApiDocsGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            res.PowerShellExampleValidationPath = powerShellExampleValidationPath;
+
+        if (apiType == ApiDocsType.PowerShell && validatePowerShellExamples && powerShellExampleValidation is not null)
+        {
+            if (failOnPowerShellExampleValidation &&
+                (!powerShellExampleValidation.ValidationSucceeded || powerShellExampleValidation.InvalidSyntaxFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ValidationSucceeded
+                    ? "PowerShell example validation did not complete successfully."
+                    : $"PowerShell example validation found {powerShellExampleValidation.InvalidSyntaxFileCount} invalid script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+            if (failOnPowerShellExampleExecution &&
+                (!powerShellExampleValidation.ExecutionCompleted || powerShellExampleValidation.FailedExecutionFileCount > 0))
+            {
+                var reason = !powerShellExampleValidation.ExecutionCompleted
+                    ? "PowerShell example execution did not complete successfully."
+                    : $"PowerShell example execution failed for {powerShellExampleValidation.FailedExecutionFileCount} script(s).";
+                throw new InvalidOperationException($"{reason} Report: {powerShellExampleValidationPath}");
+            }
+        }
         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
         var filteredWarnings = suppressWarnings is { Length: > 0 }
-            ? WebVerifyPolicy.FilterWarnings(res.Warnings, suppressWarnings)
-            : res.Warnings;
+            ? WebVerifyPolicy.FilterWarnings(
+                res.Warnings
+                    .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                    .ToArray(),
+                suppressWarnings)
+            : res.Warnings
+                .Concat(powerShellExampleValidation?.Warnings ?? Array.Empty<string>())
+                .ToArray();
 
         if (filteredWarnings.Length > 0)
         {
@@ -456,6 +519,8 @@ internal static partial class WebPipelineRunner
         }
 
         stepResult.Success = true;
+        if (!string.IsNullOrWhiteSpace(powerShellExampleValidationPath))
+            note += $" (ps-example-validation: {Path.GetFileName(powerShellExampleValidationPath)})";
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
     }
 
@@ -568,6 +633,28 @@ internal static partial class WebPipelineRunner
             warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrl does not include a path token ({path}, {pathNoRoot}, or {pathNoPrefix}).");
         }
 
+        if (hasSourceRoot &&
+            hasSourceUrl &&
+            !hasMappings &&
+            sourceUrl!.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (Directory.Exists(fullSourceRoot) &&
+                TryExtractGitHubRepoName(sourceUrl, out var repoName) &&
+                !string.IsNullOrWhiteSpace(repoName))
+            {
+                var sourceRootName = new DirectoryInfo(fullSourceRoot).Name;
+                var nestedRepoRoot = Path.Combine(fullSourceRoot, repoName);
+                if (!string.Equals(sourceRootName, repoName, StringComparison.OrdinalIgnoreCase) &&
+                    Directory.Exists(nestedRepoRoot))
+                {
+                    warnings.Add(
+                        $"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot '{fullSourceRoot}' looks one level above repo '{repoName}'. " +
+                        "Use the repo folder as sourceRoot, or switch sourceUrl to {root}/sourceUrlMappings for mixed-repo layouts.");
+                }
+            }
+        }
+
         if (hasMappings)
         {
             var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -633,6 +720,31 @@ internal static partial class WebPipelineRunner
                value.IndexOf("{pathNoPrefix}", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private static bool TryExtractGitHubRepoName(string pattern, out string repoName)
+    {
+        repoName = string.Empty;
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var candidate = pattern
+            .Replace("{path}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoRoot}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoPrefix}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{root}", "SampleRepo", StringComparison.OrdinalIgnoreCase)
+            .Replace("{line}", "1", StringComparison.OrdinalIgnoreCase);
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+            return false;
+        if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length < 2)
+            return false;
+
+        repoName = segments[1];
+        return !string.IsNullOrWhiteSpace(repoName);
+    }
+
     private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
     {
         var thresholds = new List<ApiDocsCoverageThreshold>();
@@ -644,6 +756,10 @@ internal static partial class WebPipelineRunner
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellAuthoredHelpCodeExamplesPercent", "min-powershell-authored-help-code-examples-percent", "powershell.authoredHelpCodeExamples.percent", "PowerShell authored-help code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptCodeExamplesPercent", "min-powershell-imported-script-code-examples-percent", "powershell.importedScriptCodeExamples.percent", "PowerShell imported-script code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptPlaybackMediaPercent", "min-powershell-imported-script-playback-media-percent", "powershell.importedScriptPlaybackMedia.percent", "PowerShell imported-script playback media coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellImportedScriptPlaybackMediaWithPosterPercent", "min-powershell-imported-script-playback-media-with-poster-percent", "powershell.importedScriptPlaybackMediaWithPoster.percent", "PowerShell imported-script playback media poster coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourcePathPercent", "min-type-source-path-percent", "source.types.path.percent", "Type source path coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourceUrlPercent", "min-type-source-url-percent", "source.types.url.percent", "Type source URL coverage");
@@ -651,6 +767,12 @@ internal static partial class WebPipelineRunner
         AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourceUrlPercent", "min-member-source-url-percent", "source.members.url.percent", "Member source URL coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourcePathPercent", "min-powershell-source-path-percent", "source.powershell.path.percent", "PowerShell command source path coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourceUrlPercent", "min-powershell-source-url-percent", "source.powershell.url.percent", "PowerShell command source URL coverage", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExamplePercent", "max-powershell-generated-fallback-only-example-percent", "powershell.generatedFallbackOnlyExamples.percent", "PowerShell generated-only fallback example percent", powerShellCommandMetric: true, formatAsPercent: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellGeneratedFallbackOnlyExampleCount", "max-powershell-generated-fallback-only-example-count", "powershell.generatedFallbackOnlyExamples.covered", "PowerShell generated-only fallback example count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount", "max-powershell-imported-script-playback-media-without-poster-count", "powershell.importedScriptPlaybackMediaWithoutPoster.covered", "PowerShell imported-script playback media without poster count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount", "max-powershell-imported-script-playback-media-unsupported-sidecar-count", "powershell.importedScriptPlaybackMediaUnsupportedSidecars.covered", "PowerShell imported-script playback media with unsupported sidecars count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount", "max-powershell-imported-script-playback-media-oversized-asset-count", "powershell.importedScriptPlaybackMediaOversizedAssets.covered", "PowerShell imported-script playback media with oversized assets count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaStaleAssetCount", "max-powershell-imported-script-playback-media-stale-asset-count", "powershell.importedScriptPlaybackMediaStaleAssets.covered", "PowerShell imported-script playback media with stale assets count", powerShellCommandMetric: true);
         AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
@@ -697,7 +819,8 @@ internal static partial class WebPipelineRunner
         string aliasName,
         string metricPath,
         string label,
-        bool powerShellCommandMetric = false)
+        bool powerShellCommandMetric = false,
+        bool formatAsPercent = false)
     {
         var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
         if (!value.HasValue)
@@ -712,7 +835,7 @@ internal static partial class WebPipelineRunner
             MetricPath = metricPath,
             TargetValue = value.Value,
             Comparison = ApiDocsCoverageComparison.Maximum,
-            FormatAsPercent = false,
+            FormatAsPercent = formatAsPercent,
             SkipWhenNoPowerShellCommands = powerShellCommandMetric
         });
     }

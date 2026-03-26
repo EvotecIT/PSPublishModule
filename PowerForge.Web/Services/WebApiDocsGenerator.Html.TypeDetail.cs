@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -46,6 +47,7 @@ public static partial class WebApiDocsGenerator
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         sb.AppendLine("        <div class=\"type-title-row\">");
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
+        AppendFreshnessBadge(sb, type.Freshness, "type-freshness-badge");
         sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
         sb.AppendLine("        </div>");
         AppendAliasInlineMeta(sb, type, "type-header-meta", "type-header-aliases");
@@ -119,6 +121,13 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"type-meta-row type-meta-source\">");
             sb.AppendLine("          <span class=\"type-meta-label\">Source</span>");
             sb.AppendLine($"          {RenderSourceLink(type.Source)}");
+            sb.AppendLine("        </div>");
+        }
+        if (type.Freshness is not null)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-freshness\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Updated</span>");
+            sb.AppendLine($"          <span>{RenderFreshnessText(type.Freshness)}</span>");
             sb.AppendLine("        </div>");
         }
         if (!string.IsNullOrWhiteSpace(type.BaseType))
@@ -566,8 +575,15 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage)
     {
+        string? lastOrigin = null;
         foreach (var example in examples)
         {
+            AppendExampleOriginBadge(sb, example, ref lastOrigin);
+            if (string.Equals(example.Kind, "media", StringComparison.OrdinalIgnoreCase) && example.Media is not null)
+            {
+                AppendExampleMedia(sb, example.Media, baseUrl, slugMap);
+                continue;
+            }
             if (string.IsNullOrWhiteSpace(example.Text)) continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
@@ -588,6 +604,140 @@ public static partial class WebApiDocsGenerator
                 }
             }
         }
+    }
+
+    private static void AppendExampleOriginBadge(
+        StringBuilder sb,
+        ApiExampleModel example,
+        ref string? lastOrigin)
+    {
+        if (sb is null || example is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(example.Origin))
+        {
+            lastOrigin = null;
+            return;
+        }
+
+        if (string.Equals(lastOrigin, example.Origin, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var (label, description, className) = GetExampleOriginPresentation(example.Origin);
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            lastOrigin = example.Origin;
+            return;
+        }
+
+        var encodedOrigin = System.Web.HttpUtility.HtmlEncode(example.Origin);
+        var encodedClass = System.Web.HttpUtility.HtmlEncode(className);
+        var encodedLabel = System.Web.HttpUtility.HtmlEncode(label);
+        var encodedDescription = System.Web.HttpUtility.HtmlEncode(description);
+
+        sb.AppendLine($"        <div class=\"example-origin\" data-example-origin=\"{encodedOrigin}\">");
+        sb.AppendLine($"          <span class=\"param-meta-chip example-origin-badge {encodedClass}\" title=\"{encodedDescription}\">{encodedLabel}</span>");
+        sb.AppendLine("        </div>");
+        lastOrigin = example.Origin;
+    }
+
+    private static (string Label, string Description, string ClassName) GetExampleOriginPresentation(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            return (string.Empty, string.Empty, string.Empty);
+
+        if (string.Equals(origin, ApiExampleOrigins.AuthoredHelp, StringComparison.OrdinalIgnoreCase))
+            return ("Authored help example", "Example authored directly in source help.", "example-origin-authored");
+        if (string.Equals(origin, ApiExampleOrigins.ImportedScript, StringComparison.OrdinalIgnoreCase))
+            return ("Imported script example", "Example imported from a curated PowerShell script.", "example-origin-imported");
+        if (string.Equals(origin, ApiExampleOrigins.GeneratedFallback, StringComparison.OrdinalIgnoreCase))
+            return ("Generated fallback example", "Example generated from documented parameter sets.", "example-origin-generated");
+
+        return (origin.Trim(), $"Example origin: {origin.Trim()}.", "example-origin-other");
+    }
+
+    private static void AppendExampleMedia(
+        StringBuilder sb,
+        ApiExampleMediaModel media,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (media is null || string.IsNullOrWhiteSpace(media.Url))
+            return;
+
+        var mediaType = string.IsNullOrWhiteSpace(media.Type) ? "link" : media.Type.Trim().ToLowerInvariant();
+        var safeType = System.Web.HttpUtility.HtmlEncode(mediaType);
+        var safeUrl = System.Web.HttpUtility.HtmlEncode(media.Url);
+        var caption = string.IsNullOrWhiteSpace(media.Caption) ? string.Empty : media.Caption.Trim();
+        var title = string.IsNullOrWhiteSpace(media.Title) ? string.Empty : media.Title.Trim();
+        var alt = string.IsNullOrWhiteSpace(media.Alt)
+            ? (!string.IsNullOrWhiteSpace(title) ? title : "Example media")
+            : media.Alt.Trim();
+        var safeAlt = System.Web.HttpUtility.HtmlEncode(alt);
+        var safeTitle = System.Web.HttpUtility.HtmlEncode(title);
+        var safePoster = string.IsNullOrWhiteSpace(media.PosterUrl) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.PosterUrl);
+        var widthAttr = media.Width is > 0 ? $" width=\"{media.Width.Value}\"" : string.Empty;
+        var heightAttr = media.Height is > 0 ? $" height=\"{media.Height.Value}\"" : string.Empty;
+
+        sb.AppendLine($"        <figure class=\"example-media example-media-{safeType}\" data-example-media-type=\"{safeType}\">");
+        switch (mediaType)
+        {
+            case "image":
+                sb.AppendLine("          <div class=\"example-media-frame\">");
+                sb.AppendLine($"            <img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
+                sb.AppendLine("          </div>");
+                break;
+            case "video":
+                sb.AppendLine("          <div class=\"example-media-frame\">");
+                sb.Append($"            <video controls preload=\"metadata\"");
+                if (!string.IsNullOrWhiteSpace(safePoster))
+                    sb.Append($" poster=\"{safePoster}\"");
+                if (!string.IsNullOrWhiteSpace(safeTitle))
+                    sb.Append($" title=\"{safeTitle}\"");
+                sb.AppendLine($"{widthAttr}{heightAttr}>");
+                sb.AppendLine($"              <source src=\"{safeUrl}\" />");
+                sb.AppendLine("            </video>");
+                sb.AppendLine("          </div>");
+                break;
+            case "terminal":
+                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-terminal\">");
+                if (!string.IsNullOrWhiteSpace(safePoster))
+                    sb.AppendLine($"            <img src=\"{safePoster}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\" class=\"example-media-poster\"{widthAttr}{heightAttr} />");
+                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? "Open terminal recording" : title)}</a>");
+                sb.AppendLine("          </div>");
+                break;
+            default:
+                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-link\">");
+                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? media.Url : title)}</a>");
+                sb.AppendLine("          </div>");
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(caption))
+            sb.AppendLine($"          <figcaption class=\"example-media-caption\">{RenderLinkedText(caption, baseUrl, slugMap)}</figcaption>");
+        var mediaMeta = BuildExampleMediaMeta(media);
+        if (!string.IsNullOrWhiteSpace(mediaMeta))
+            sb.AppendLine($"          <p class=\"example-media-meta\">{System.Web.HttpUtility.HtmlEncode(mediaMeta)}</p>");
+
+        sb.AppendLine("        </figure>");
+    }
+
+    private static string BuildExampleMediaMeta(ApiExampleMediaModel media)
+    {
+        if (media is null)
+            return string.Empty;
+
+        var parts = new List<string>();
+        if (media.CapturedAtUtc is not null)
+            parts.Add("Captured " + media.CapturedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture));
+        if (media.HasStaleAssets)
+            parts.Add("Script changed after this capture");
+        else if (media.SourceUpdatedAtUtc is not null &&
+                 media.CapturedAtUtc is not null &&
+                 media.SourceUpdatedAtUtc.Value > media.CapturedAtUtc.Value)
+            parts.Add("Script changed after this capture");
+
+        return string.Join(" | ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
     }
 
     private static IEnumerable<string> SplitExampleParagraphs(string text)
@@ -753,5 +903,34 @@ public static partial class WebApiDocsGenerator
         }
 
         return candidate;
+    }
+
+    private static void AppendFreshnessBadge(StringBuilder sb, ApiFreshnessModel? freshness, string cssClass)
+    {
+        if (sb is null || freshness is null)
+            return;
+
+        var status = (freshness.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (!status.Equals("new", StringComparison.Ordinal) &&
+            !status.Equals("updated", StringComparison.Ordinal))
+            return;
+
+        var label = status.Equals("new", StringComparison.Ordinal) ? "New" : "Updated";
+        var title = RenderFreshnessText(freshness);
+        sb.AppendLine($"          <span class=\"freshness-badge {System.Web.HttpUtility.HtmlEncode(status)} {System.Web.HttpUtility.HtmlEncode(cssClass)}\" title=\"{System.Web.HttpUtility.HtmlAttributeEncode(title)}\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+    }
+
+    private static string RenderFreshnessText(ApiFreshnessModel freshness)
+    {
+        if (freshness is null)
+            return string.Empty;
+
+        var lastModified = freshness.LastModifiedUtc == default
+            ? string.Empty
+            : freshness.LastModifiedUtc.ToString("yyyy-MM-dd");
+        var ageText = freshness.AgeDays <= 0 ? "today" : $"{freshness.AgeDays} day{(freshness.AgeDays == 1 ? string.Empty : "s")} ago";
+        return string.IsNullOrWhiteSpace(lastModified)
+            ? ageText
+            : $"{lastModified} ({ageText})";
     }
 }

@@ -163,6 +163,59 @@ public class WebApiDocsGeneratorSourceAndCssTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_OmitsOverviewWorkspaceRail_WhenUsingDocsTemplate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-overview-layout-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        File.WriteAllText(cssPath, ".api-layout { outline: 0; }");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.DoesNotContain("Workspace Stats", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Browse smarter", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Jump To", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_SourceUrlMappings_UseMostSpecificPrefix_AndHonorStripPathPrefix()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-specific-" + Guid.NewGuid().ToString("N"));
@@ -331,7 +384,9 @@ public class WebApiDocsGeneratorSourceAndCssTests
             var result = WebApiDocsGenerator.Generate(options);
             Assert.True(result.TypeCount > 0);
             Assert.Contains(result.Warnings, w =>
-                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase));
+                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Example URLs:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("https://github.com/example/PowerForge.Web/blob/main/PowerForge.Web/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -414,6 +469,81 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains(result.Warnings, w =>
                 w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
                 w.Contains("unsupported token(s): {branch}", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("[PFWEB.APIDOCS.SOURCE]", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("generated source URLs still contain unresolved template tokens", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("{branch}", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RendersXmlExampleMedia_InJsonAndHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-example-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <code>Sample.Run();</code>
+                    <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
+                    <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var typeJsonFiles = Directory.GetFiles(Path.Combine(outputPath, "types"), "*.json", SearchOption.TopDirectoryOnly);
+            Assert.Single(typeJsonFiles);
+            var jsonPath = typeJsonFiles[0];
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"kind\": \"media\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"type\": \"terminal\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"url\": \"/casts/sample.cast\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"posterUrl\": \"/images/sample-terminal.png\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"capturedAtUtc\":", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"type\": \"image\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"width\": 1280", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"height\": 720", json, StringComparison.OrdinalIgnoreCase);
+
+            var htmlPath = Path.Combine(outputPath, Path.GetFileNameWithoutExtension(jsonPath), "index.html");
+            Assert.True(File.Exists(htmlPath));
+            var html = File.ReadAllText(htmlPath);
+            Assert.Contains("class=\"example-media example-media-terminal\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/casts/sample.cast\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Recorded terminal output.", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"1280\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"720\"", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

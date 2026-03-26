@@ -36,6 +36,90 @@ public static partial class WebApiDocsGenerator
         }
     }
 
+    private static void AppendSourceCoverageWarnings(
+        IReadOnlyList<ApiTypeModel> types,
+        List<string> warnings)
+    {
+        if (types is null || warnings is null)
+            return;
+
+        var allMembers = types
+            .SelectMany(static t => t.Methods
+                .Concat(t.Constructors)
+                .Concat(t.Properties)
+                .Concat(t.Fields)
+                .Concat(t.Events)
+                .Concat(t.ExtensionMethods))
+            .ToArray();
+        var commandTypes = types.Where(IsPowerShellCommandType).ToArray();
+
+        var groups = new[]
+        {
+            new SourceCoverageGroup("types", AnalyzeSourceCoverage(types.Select(static t => t.Source))),
+            new SourceCoverageGroup("members", AnalyzeSourceCoverage(allMembers.Select(static m => m.Source))),
+            new SourceCoverageGroup("powershell", AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source)))
+        };
+
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.UnresolvedTemplateTokenCount,
+            static group => group.Stats.UnresolvedTemplateSamples,
+            "generated source URLs still contain unresolved template tokens",
+            warnings);
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.InvalidUrlCount,
+            static group => group.Stats.InvalidUrlSamples,
+            "generated source URLs are not valid http/https URLs",
+            warnings);
+        AppendSourceCoverageWarning(
+            groups,
+            static group => group.Stats.RepoMismatchHintCount,
+            static group => group.Stats.RepoMismatchUrlSamples,
+            "generated GitHub source URLs look mismatched to the inferred repo and may 404",
+            warnings);
+    }
+
+    private static void AppendPowerShellExampleQualityWarnings(
+        IReadOnlyList<ApiTypeModel> types,
+        List<string> warnings)
+    {
+        if (types is null || warnings is null)
+            return;
+
+        var commands = types.Where(IsPowerShellCommandType).ToArray();
+        if (commands.Length == 0)
+            return;
+
+        var generatedOnly = commands
+            .Where(HasOnlyGeneratedPowerShellFallbackExamples)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (generatedOnly.Length > 0)
+        {
+            var preview = string.Join(", ", generatedOnly.Take(4));
+            var more = generatedOnly.Length > 4 ? $" (+{generatedOnly.Length - 4} more)" : string.Empty;
+            warnings.Add(
+                $"API docs PowerShell coverage: {generatedOnly.Length} command(s) rely only on generated fallback examples. " +
+                $"Add authored examples or example scripts for better docs quality (samples: {preview}{more}).");
+        }
+
+        var playbackWithoutPoster = commands
+            .Where(HasImportedPlaybackMediaWithoutPoster)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (playbackWithoutPoster.Length == 0)
+            return;
+
+        var posterPreview = string.Join(", ", playbackWithoutPoster.Take(4));
+        var posterMore = playbackWithoutPoster.Length > 4 ? $" (+{playbackWithoutPoster.Length - 4} more)" : string.Empty;
+        warnings.Add(
+            $"API docs PowerShell coverage: {playbackWithoutPoster.Length} command(s) expose imported playback media without poster art. " +
+            $"Add matching .png/.jpg/.jpeg/.webp sidecars for better docs quality (samples: {posterPreview}{posterMore}).");
+    }
+
     private static Dictionary<string, object?> BuildCoveragePayload(
         IReadOnlyList<ApiTypeModel> types,
         string? assemblyName,
@@ -74,15 +158,75 @@ public static partial class WebApiDocsGenerator
         var commandCount = commandTypes.Length;
         var commandsWithSummary = commandTypes.Count(static c => !string.IsNullOrWhiteSpace(c.Summary));
         var commandsWithRemarks = commandTypes.Count(static c => !string.IsNullOrWhiteSpace(c.Remarks));
-        var commandsWithCodeExamples = commandTypes.Count(static c => c.Examples.Any(static ex =>
-            ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(ex.Text)));
+        var commandsWithCodeExamples = commandTypes.Count(HasCodeExamples);
+        var commandsWithAuthoredHelpCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.AuthoredHelp));
+        var commandsWithImportedScriptCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.ImportedScript));
+        var commandsWithGeneratedFallbackCodeExamples = commandTypes.Count(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.GeneratedFallback));
+        var commandsWithGeneratedFallbackOnlyExamples = commandTypes.Count(HasOnlyGeneratedPowerShellFallbackExamples);
+        var commandsWithImportedScriptPlaybackMedia = commandTypes.Count(HasImportedPlaybackMedia);
+        var commandsWithImportedScriptPlaybackMediaWithPoster = commandTypes.Count(HasImportedPlaybackMediaWithPoster);
+        var commandsWithImportedScriptPlaybackMediaWithoutPoster = commandTypes.Count(HasImportedPlaybackMediaWithoutPoster);
+        var commandsWithImportedScriptPlaybackMediaUnsupportedSidecars = commandTypes.Count(HasImportedPlaybackMediaWithUnsupportedSidecars);
+        var commandsWithImportedScriptPlaybackMediaOversizedAssets = commandTypes.Count(HasImportedPlaybackMediaWithOversizedAssets);
+        var commandsWithImportedScriptPlaybackMediaStaleAssets = commandTypes.Count(HasImportedPlaybackMediaWithStaleAssets);
         var commandSourceCoverage = AnalyzeSourceCoverage(commandTypes.Select(static c => c.Source));
 
         var commandsMissingExamples = commandTypes
-            .Where(static c => !c.Examples.Any(static ex =>
-                ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(ex.Text)))
+            .Where(static c => !HasCodeExamples(c))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingGeneratedFallbackOnlyExamples = commandTypes
+            .Where(HasOnlyGeneratedPowerShellFallbackExamples)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingAuthoredHelpCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.AuthoredHelp))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.ImportedScript))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingGeneratedFallbackCodeExamples = commandTypes
+            .Where(static c => HasCodeExamplesFromOrigin(c, ApiExampleOrigins.GeneratedFallback))
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMedia = commandTypes
+            .Where(HasImportedPlaybackMedia)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaWithoutPoster = commandTypes
+            .Where(HasImportedPlaybackMediaWithoutPoster)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars = commandTypes
+            .Where(HasImportedPlaybackMediaWithUnsupportedSidecars)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaOversizedAssets = commandTypes
+            .Where(HasImportedPlaybackMediaWithOversizedAssets)
+            .Select(static c => c.FullName)
+            .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
+        var commandsUsingImportedScriptPlaybackMediaStaleAssets = commandTypes
+            .Where(HasImportedPlaybackMediaWithStaleAssets)
             .Select(static c => c.FullName)
             .OrderBy(static c => c, StringComparer.OrdinalIgnoreCase)
             .Take(100)
@@ -142,10 +286,148 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = MakeCoverage(commandCount, commandsWithSummary),
                 ["remarks"] = MakeCoverage(commandCount, commandsWithRemarks),
                 ["codeExamples"] = MakeCoverage(commandCount, commandsWithCodeExamples),
+                ["authoredHelpCodeExamples"] = MakeCoverage(commandCount, commandsWithAuthoredHelpCodeExamples),
+                ["importedScriptCodeExamples"] = MakeCoverage(commandCount, commandsWithImportedScriptCodeExamples),
+                ["generatedFallbackCodeExamples"] = MakeCoverage(commandCount, commandsWithGeneratedFallbackCodeExamples),
+                ["generatedFallbackOnlyExamples"] = MakeCoverage(commandCount, commandsWithGeneratedFallbackOnlyExamples),
+                ["importedScriptPlaybackMedia"] = MakeCoverage(commandCount, commandsWithImportedScriptPlaybackMedia),
+                ["importedScriptPlaybackMediaWithPoster"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaWithPoster),
+                ["importedScriptPlaybackMediaWithoutPoster"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaWithoutPoster),
+                ["importedScriptPlaybackMediaUnsupportedSidecars"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaUnsupportedSidecars),
+                ["importedScriptPlaybackMediaOversizedAssets"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaOversizedAssets),
+                ["importedScriptPlaybackMediaStaleAssets"] = MakeCoverage(commandsWithImportedScriptPlaybackMedia, commandsWithImportedScriptPlaybackMediaStaleAssets),
                 ["parameters"] = MakeCoverage(commandParameterCount, commandParametersWithSummary),
-                ["commandsMissingCodeExamples"] = commandsMissingExamples
+                ["commandsMissingCodeExamples"] = commandsMissingExamples,
+                ["commandsUsingAuthoredHelpCodeExamples"] = commandsUsingAuthoredHelpCodeExamples,
+                ["commandsUsingImportedScriptCodeExamples"] = commandsUsingImportedScriptCodeExamples,
+                ["commandsUsingGeneratedFallbackCodeExamples"] = commandsUsingGeneratedFallbackCodeExamples,
+                ["commandsUsingGeneratedFallbackOnlyExamples"] = commandsUsingGeneratedFallbackOnlyExamples,
+                ["commandsUsingImportedScriptPlaybackMedia"] = commandsUsingImportedScriptPlaybackMedia,
+                ["commandsUsingImportedScriptPlaybackMediaWithoutPoster"] = commandsUsingImportedScriptPlaybackMediaWithoutPoster,
+                ["commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars"] = commandsUsingImportedScriptPlaybackMediaUnsupportedSidecars,
+                ["commandsUsingImportedScriptPlaybackMediaOversizedAssets"] = commandsUsingImportedScriptPlaybackMediaOversizedAssets,
+                ["commandsUsingImportedScriptPlaybackMediaStaleAssets"] = commandsUsingImportedScriptPlaybackMediaStaleAssets
             }
         };
+    }
+
+    private static void AppendSourceCoverageWarning(
+        IReadOnlyList<SourceCoverageGroup> groups,
+        Func<SourceCoverageGroup, int> countSelector,
+        Func<SourceCoverageGroup, IReadOnlyList<string>> sampleSelector,
+        string message,
+        List<string> warnings)
+    {
+        if (groups is null || groups.Count == 0 || string.IsNullOrWhiteSpace(message) || warnings is null)
+            return;
+
+        var active = groups
+            .Select(group => new
+            {
+                Group = group,
+                Count = Math.Max(0, countSelector(group)),
+                Samples = (sampleSelector(group) ?? Array.Empty<string>())
+                    .Where(static sample => !string.IsNullOrWhiteSpace(sample))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            })
+            .Where(static entry => entry.Count > 0)
+            .ToArray();
+        if (active.Length == 0)
+            return;
+
+        var breakdown = string.Join(", ", active.Select(static entry => $"{entry.Group.Label} {entry.Count}"));
+        var samples = active
+            .SelectMany(static entry => entry.Samples)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+        var sampleText = samples.Length == 0
+            ? string.Empty
+            : $" (samples: {string.Join(" | ", samples)})";
+        warnings.Add($"API docs source coverage: {message} ({breakdown}){sampleText}.");
+    }
+
+    private static bool HasOnlyGeneratedPowerShellFallbackExamples(ApiTypeModel type)
+    {
+        if (type is null || type.Examples.Count == 0)
+            return false;
+
+        var codeExamples = type.Examples.Where(IsCodeExample).ToArray();
+        return codeExamples.Length > 0 &&
+               codeExamples.All(static example =>
+                   string.Equals(example.Origin, ApiExampleOrigins.GeneratedFallback, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasCodeExamples(ApiTypeModel type)
+    {
+        return type is not null && type.Examples.Any(IsCodeExample);
+    }
+
+    private static bool HasCodeExamplesFromOrigin(ApiTypeModel type, string origin)
+    {
+        return type is not null &&
+               !string.IsNullOrWhiteSpace(origin) &&
+               type.Examples.Any(example =>
+                   IsCodeExample(example) &&
+                   string.Equals(example.Origin, origin, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasImportedPlaybackMedia(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type).Any();
+    }
+
+    private static bool HasImportedPlaybackMediaWithPoster(ApiTypeModel type)
+    {
+        var examples = GetImportedPlaybackMediaExamples(type).ToArray();
+        return examples.Length > 0 &&
+               examples.All(static example => !string.IsNullOrWhiteSpace(example.Media?.PosterUrl));
+    }
+
+    private static bool HasImportedPlaybackMediaWithoutPoster(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => string.IsNullOrWhiteSpace(example.Media?.PosterUrl));
+    }
+
+    private static bool HasImportedPlaybackMediaWithUnsupportedSidecars(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasUnsupportedSidecars == true);
+    }
+
+    private static bool HasImportedPlaybackMediaWithOversizedAssets(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasOversizedAssets == true);
+    }
+
+    private static bool HasImportedPlaybackMediaWithStaleAssets(ApiTypeModel type)
+    {
+        return GetImportedPlaybackMediaExamples(type)
+            .Any(static example => example.Media?.HasStaleAssets == true);
+    }
+
+    private static IEnumerable<ApiExampleModel> GetImportedPlaybackMediaExamples(ApiTypeModel? type)
+    {
+        if (type?.Examples is null || type.Examples.Count == 0)
+            return Enumerable.Empty<ApiExampleModel>();
+
+        return type.Examples.Where(static example =>
+            example is not null &&
+            example.Kind.Equals("media", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(example.Origin, ApiExampleOrigins.ImportedScript, StringComparison.OrdinalIgnoreCase) &&
+            example.Media is not null &&
+            example.Media.Type.Equals("terminal", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(example.Media.MimeType, "application/x-asciicast", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsCodeExample(ApiExampleModel example)
+    {
+        return example is not null &&
+               example.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(example.Text);
     }
 
     private static Dictionary<string, object?> BuildSourceCoveragePayload(int total, SourceCoverageStats coverage)
@@ -221,6 +503,16 @@ public static partial class WebApiDocsGenerator
                     stats.RepoMismatchHintCount++;
                     if (mismatchSamples.Count < sampleLimit && !string.IsNullOrWhiteSpace(mismatchHint))
                         mismatchSamples.Add(mismatchHint);
+                    if (stats.RepoMismatchUrlSamples.Length < sampleLimit)
+                    {
+                        var urlSample = url.Trim();
+                        if (!string.IsNullOrWhiteSpace(urlSample))
+                            stats.RepoMismatchUrlSamples = stats.RepoMismatchUrlSamples
+                                .Append(urlSample)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .Take(sampleLimit)
+                                .ToArray();
+                    }
                 }
             }
             else
@@ -294,5 +586,18 @@ public static partial class WebApiDocsGenerator
         public string[] InvalidUrlSamples { get; set; } = Array.Empty<string>();
         public string[] UnresolvedTemplateSamples { get; set; } = Array.Empty<string>();
         public string[] RepoMismatchSamples { get; set; } = Array.Empty<string>();
+        public string[] RepoMismatchUrlSamples { get; set; } = Array.Empty<string>();
+    }
+
+    private sealed class SourceCoverageGroup
+    {
+        public SourceCoverageGroup(string label, SourceCoverageStats stats)
+        {
+            Label = label;
+            Stats = stats;
+        }
+
+        public string Label { get; }
+        public SourceCoverageStats Stats { get; }
     }
 }

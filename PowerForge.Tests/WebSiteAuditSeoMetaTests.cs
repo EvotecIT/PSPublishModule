@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -116,6 +117,50 @@ public class WebSiteAuditSeoMetaTests
                 """);
 
             var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+            Assert.DoesNotContain(result.Issues, issue => issue.Category == "seo");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_SkipsSeoMetaChecks_WhenNoIndexPageUsesUtf8Bom()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-noindex-bom-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Hidden</title>
+                  <meta name="robots" content="noindex,follow" />
+                  <link rel="canonical" href="https://example.test/hidden/" />
+                  <meta property="og:title" content="Hidden" />
+                  <meta property="og:description" content="Hidden page" />
+                  <meta property="og:url" content="https://example.test/hidden/" />
+                  <meta property="og:image" content="https://example.test/assets/hidden.png" />
+                  <meta name="twitter:card" content="summary" />
+                  <meta name="twitter:title" content="Hidden" />
+                  <meta name="twitter:description" content="Hidden page" />
+                  <meta name="twitter:url" content="https://example.test/hidden/" />
+                  <meta name="twitter:image" content="https://example.test/assets/hidden.png" />
+                </head>
+                <body>Hidden page</body>
+                </html>
+                """,
+                Encoding.UTF8);
+
+            var options = CreateSeoOnlyOptions(root);
+            options.CheckUtf8 = true;
+
+            var result = WebSiteAuditor.Audit(options);
             Assert.DoesNotContain(result.Issues, issue => issue.Category == "seo");
         }
         finally

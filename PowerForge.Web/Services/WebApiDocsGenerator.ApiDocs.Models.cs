@@ -41,15 +41,26 @@ public static partial class WebApiDocsGenerator
         public List<string> SeeAlso { get; } = new();
         public string Kind { get; set; } = "Class";
         public string Slug { get; set; } = string.Empty;
+        public ApiFreshnessModel? Freshness { get; set; }
         public bool IsStatic { get; set; }
         public bool IsAbstract { get; set; }
         public bool IsSealed { get; set; }
+        public List<string> OriginFiles { get; } = new();
         public List<ApiMemberModel> Methods { get; } = new();
         public List<ApiMemberModel> Constructors { get; } = new();
         public List<ApiMemberModel> Properties { get; } = new();
         public List<ApiMemberModel> Fields { get; } = new();
         public List<ApiMemberModel> Events { get; } = new();
         public List<ApiMemberModel> ExtensionMethods { get; } = new();
+    }
+
+    private sealed class ApiFreshnessModel
+    {
+        public string Status { get; set; } = "stable";
+        public DateTimeOffset LastModifiedUtc { get; set; }
+        public string? CommitSha { get; set; }
+        public int AgeDays { get; set; }
+        public string? SourcePath { get; set; }
     }
 
     private sealed class ApiMemberModel
@@ -104,6 +115,36 @@ public static partial class WebApiDocsGenerator
     {
         public string Kind { get; set; } = "text";
         public string Text { get; set; } = string.Empty;
+        public string? Origin { get; set; }
+        public ApiExampleMediaModel? Media { get; set; }
+    }
+
+    private sealed class ApiExampleMediaModel
+    {
+        public string Type { get; set; } = "link";
+        public string Url { get; set; } = string.Empty;
+        public string? Title { get; set; }
+        public string? Alt { get; set; }
+        public string? Caption { get; set; }
+        public string? PosterUrl { get; set; }
+        public string? MimeType { get; set; }
+        public int? Width { get; set; }
+        public int? Height { get; set; }
+        public string? SourcePath { get; set; }
+        public string? AssetPath { get; set; }
+        public string? PosterAssetPath { get; set; }
+        public DateTimeOffset? CapturedAtUtc { get; set; }
+        public DateTimeOffset? SourceUpdatedAtUtc { get; set; }
+        public bool HasUnsupportedSidecars { get; set; }
+        public bool HasOversizedAssets { get; set; }
+        public bool HasStaleAssets { get; set; }
+    }
+
+    private static class ApiExampleOrigins
+    {
+        public const string AuthoredHelp = "AuthoredHelp";
+        public const string ImportedScript = "ImportedScript";
+        public const string GeneratedFallback = "GeneratedFallback";
     }
 
     private sealed class ApiSourceLink

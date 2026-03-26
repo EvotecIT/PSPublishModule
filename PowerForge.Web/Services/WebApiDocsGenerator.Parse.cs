@@ -157,6 +157,7 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            type.OriginFiles.Add(resolved);
             foreach (var alias in commandAliases)
                 type.Aliases.Add(alias);
             foreach (var inputType in inputTypes)
@@ -240,7 +241,14 @@ public static partial class WebApiDocsGenerator
             apiDoc.Types[type.FullName] = type;
         }
 
-        AppendPowerShellFallbackExamples(apiDoc, helpPath, resolved, manifestPath, options, warnings);
+        AppendPowerShellFallbackExamples(
+            apiDoc,
+            helpPath,
+            resolved,
+            manifestPath,
+            options,
+            options.PowerShellExampleValidationResult,
+            warnings);
         AppendPowerShellAboutTopics(apiDoc, helpPath, resolved, moduleName ?? string.Empty, manifestPath, warnings);
         return apiDoc;
     }
@@ -865,7 +873,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "heading",
-                    Text = title
+                    Text = title,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -874,7 +883,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = introduction
+                    Text = introduction,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -888,7 +898,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "code",
-                    Text = code
+                    Text = code,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -897,7 +908,8 @@ public static partial class WebApiDocsGenerator
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
-                    Text = remark
+                    Text = remark,
+                    Origin = ApiExampleOrigins.AuthoredHelp
                 });
             }
 
@@ -908,7 +920,8 @@ public static partial class WebApiDocsGenerator
                     type.Examples.Add(new ApiExampleModel
                     {
                         Kind = "text",
-                        Text = remark
+                        Text = remark,
+                        Origin = ApiExampleOrigins.AuthoredHelp
                     });
                 }
             }
@@ -1019,6 +1032,7 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            type.OriginFiles.Add(file);
 
             apiDoc.Types[type.FullName] = type;
             existing.Add(type.FullName);

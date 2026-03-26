@@ -55,6 +55,10 @@ public sealed class WebApiDocsResult
     public string? CoveragePath { get; set; }
     /// <summary>Path to the xref map JSON file, when generated.</summary>
     public string? XrefPath { get; set; }
+    /// <summary>Path to the PowerShell example validation report JSON file, when generated.</summary>
+    public string? PowerShellExampleValidationPath { get; set; }
+    /// <summary>Path to the PowerShell example media manifest JSON file, when generated.</summary>
+    public string? PowerShellExampleMediaManifestPath { get; set; }
     /// <summary>Number of types documented.</summary>
     public int TypeCount { get; set; }
     /// <summary>True when reflection was used to populate types.</summary>

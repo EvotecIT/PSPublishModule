@@ -24,6 +24,12 @@ public sealed class WebApiDocsOptions
     public string? PowerShellModuleManifestPath { get; set; }
     /// <summary>Optional path to exported PowerShell command metadata (kind + aliases).</summary>
     public string? PowerShellCommandMetadataPath { get; set; }
+    /// <summary>When true, compute git-based freshness metadata for API pages.</summary>
+    public bool GenerateGitFreshness { get; set; }
+    /// <summary>Max age in days for a page to be marked as <c>new</c>.</summary>
+    public int GitFreshnessNewDays { get; set; } = 14;
+    /// <summary>Max age in days for a page to be marked as <c>updated</c> before falling back to <c>stable</c>.</summary>
+    public int GitFreshnessUpdatedDays { get; set; } = 90;
     /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
     /// <summary>Output directory for generated docs.</summary>
@@ -206,6 +212,10 @@ public sealed class WebApiDocsOptions
     /// </summary>
     public string? PowerShellExamplesPath { get; set; }
     /// <summary>
+    /// Optional PowerShell example validation result used to enrich imported examples with execution media.
+    /// </summary>
+    public WebApiDocsPowerShellExampleValidationResult? PowerShellExampleValidationResult { get; set; }
+    /// <summary>
     /// Maximum number of fallback code examples imported per PowerShell command.
     /// </summary>
     public int PowerShellFallbackExampleLimitPerCommand { get; set; } = 2;
@@ -258,18 +268,32 @@ public static partial class WebApiDocsGenerator
         ".api-sidebar",
         ".api-content",
         ".api-overview",
-        ".api-overview-grid",
+        ".namespace-group-header",
+        ".namespace-group-actions",
+        ".overview-group-toggle",
         ".type-chips",
         ".type-chip",
         ".chip-icon",
         ".sidebar-count",
         ".sidebar-toggle",
+        ".pf-combobox",
+        ".pf-combobox-trigger",
+        ".pf-combobox-list",
+        ".pf-combobox-option",
+        ".pf-enhanced-native",
         ".type-item",
         ".type-detail-shell",
         ".type-detail-rail",
+        ".type-toc",
+        ".type-toc-header",
+        ".type-toc-toggle",
         ".filter-button",
         ".member-card",
         ".member-signature",
+        ".example-origin",
+        ".example-origin-badge",
+        ".example-media-meta",
+        ".member-toggle input",
         ".member-header pre.member-signature",
         ".member-card pre::-webkit-scrollbar",
         ".member-card pre::-webkit-scrollbar-track",
@@ -364,6 +388,7 @@ public static partial class WebApiDocsGenerator
         ValidateSourceUrlPatternConsistency(options, types, warnings);
         ValidateConfiguredQuickStartTypes(types, options, warnings);
         ValidateDuplicateMemberSignatures(types, warnings);
+        AppendGitFreshnessMetadata(types, options);
 
         var index = new Dictionary<string, object?>
         {
@@ -387,6 +412,7 @@ public static partial class WebApiDocsGenerator
                     ["fullName"] = t.FullName,
                     ["namespace"] = t.Namespace,
                     ["kind"] = t.Kind,
+                    ["freshness"] = BuildFreshnessJson(t.Freshness),
                     ["slug"] = t.Slug,
                     ["summary"] = t.Summary,
                     ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
@@ -413,6 +439,7 @@ public static partial class WebApiDocsGenerator
                 ["summary"] = t.Summary ?? string.Empty,
                 ["kind"] = t.Kind,
                 ["namespace"] = t.Namespace,
+                ["freshness"] = BuildFreshnessJson(t.Freshness),
                 ["slug"] = t.Slug,
                 ["url"] = $"{options.BaseUrl.TrimEnd('/')}/types/{t.Slug}.json"
             };
@@ -439,6 +466,7 @@ public static partial class WebApiDocsGenerator
                 ["outputTypes"] = type.OutputTypes,
                 ["assembly"] = type.Assembly,
                 ["source"] = BuildSourceJson(type.Source),
+                ["freshness"] = BuildFreshnessJson(type.Freshness),
                 ["baseType"] = type.BaseType,
                 ["interfaces"] = type.Interfaces,
                 ["attributes"] = type.Attributes,
@@ -454,11 +482,7 @@ public static partial class WebApiDocsGenerator
                     ["name"] = tp.Name,
                     ["summary"] = tp.Summary
                 }).ToList(),
-                ["examples"] = type.Examples.Select(ex => new Dictionary<string, object?>
-                {
-                    ["kind"] = ex.Kind,
-                    ["text"] = ex.Text
-                }).ToList(),
+                ["examples"] = SerializeExamples(type.Examples),
                 ["seeAlso"] = type.SeeAlso,
                 ["methods"] = type.Methods.Select(m => new Dictionary<string, object?>
                 {
@@ -487,11 +511,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -535,11 +555,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -574,11 +590,7 @@ public static partial class WebApiDocsGenerator
                     ["access"] = p.Access,
                     ["modifiers"] = p.Modifiers,
                     ["valueSummary"] = p.ValueSummary,
-                    ["examples"] = p.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(p.Examples),
                     ["exceptions"] = p.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -602,11 +614,7 @@ public static partial class WebApiDocsGenerator
                     ["modifiers"] = f.Modifiers,
                     ["value"] = f.Value,
                     ["valueSummary"] = f.ValueSummary,
-                    ["examples"] = f.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(f.Examples),
                     ["exceptions"] = f.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -628,11 +636,7 @@ public static partial class WebApiDocsGenerator
                     ["isStatic"] = e.IsStatic,
                     ["access"] = e.Access,
                     ["modifiers"] = e.Modifiers,
-                    ["examples"] = e.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(e.Examples),
                     ["exceptions"] = e.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -665,11 +669,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
-                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
-                    {
-                        ["kind"] = ex.Kind,
-                        ["text"] = ex.Text
-                    }).ToList(),
+                    ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
                         ["type"] = ex.Type,
@@ -702,8 +702,11 @@ public static partial class WebApiDocsGenerator
             ValidateCssContract(outputPath, options, warnings);
         }
 
+        AppendSourceCoverageWarnings(types, warnings);
+        AppendPowerShellExampleQualityWarnings(types, warnings);
         var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+        var powerShellExampleMediaManifestPath = WritePowerShellExampleMediaManifest(outputPath, options, types, warnings);
 
         var normalizedWarnings = warnings
             .Where(static w => !string.IsNullOrWhiteSpace(w))
@@ -718,10 +721,56 @@ public static partial class WebApiDocsGenerator
             TypesPath = typesDir,
             CoveragePath = coveragePath,
             XrefPath = xrefPath,
+            PowerShellExampleMediaManifestPath = powerShellExampleMediaManifestPath,
             TypeCount = types.Count,
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
         };
+    }
+
+    private static List<Dictionary<string, object?>> SerializeExamples(IEnumerable<ApiExampleModel> examples)
+    {
+        if (examples is null)
+            return new List<Dictionary<string, object?>>();
+
+        var items = new List<Dictionary<string, object?>>();
+        foreach (var example in examples)
+        {
+            if (example is null)
+                continue;
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["kind"] = example.Kind,
+                ["text"] = example.Text
+            };
+
+            if (!string.IsNullOrWhiteSpace(example.Origin))
+                payload["origin"] = example.Origin;
+            if (example.Media is not null)
+            {
+                payload["media"] = new Dictionary<string, object?>
+                {
+                    ["type"] = example.Media.Type,
+                    ["url"] = example.Media.Url,
+                    ["title"] = example.Media.Title,
+                    ["alt"] = example.Media.Alt,
+                    ["caption"] = example.Media.Caption,
+                    ["posterUrl"] = example.Media.PosterUrl,
+                    ["mimeType"] = example.Media.MimeType,
+                    ["width"] = example.Media.Width,
+                    ["height"] = example.Media.Height
+                };
+                if (example.Media.CapturedAtUtc is not null)
+                    ((Dictionary<string, object?>)payload["media"]!)["capturedAtUtc"] = example.Media.CapturedAtUtc.Value.ToString("O");
+                if (example.Media.SourceUpdatedAtUtc is not null)
+                    ((Dictionary<string, object?>)payload["media"]!)["sourceUpdatedAtUtc"] = example.Media.SourceUpdatedAtUtc.Value.ToString("O");
+            }
+
+            items.Add(payload);
+        }
+
+        return items;
     }
 
     private static string NormalizeWarningCode(string warning)
@@ -777,8 +826,12 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs source coverage:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("API docs source:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs PowerShell coverage:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.POWERSHELL] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("Multiple PowerShell help files found", StringComparison.OrdinalIgnoreCase))

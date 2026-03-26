@@ -252,6 +252,10 @@ Notes:
   - `noindex` (default): keep compatibility alias pages, mark them `noindex,follow`
   - `redirect`: emit lightweight alias redirect pages to canonical `/api/<slug>/`
   - `omit`: do not emit flat alias pages
+- `generateGitFreshness` (`generate-git-freshness`) opt-in enables git-aware API freshness metadata/badges
+  - `gitFreshnessNewDays` / `git-freshness-new-days`: max age for `new` badges (default `14`)
+  - `gitFreshnessUpdatedDays` / `git-freshness-updated-days`: max age for `updated` badges (default `90`)
+  - best-effort only: if git metadata is unavailable, generation continues without freshness fields
 - `templateRoot` lets you override built-in templates/assets by placing files like
   `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
   `search.js`, or `fallback.css` in that folder
@@ -286,11 +290,12 @@ Notes:
 - Full warning code catalog: `Docs/PowerForge.Web.WarningCodes.md`.
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
 - Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
+- Preflight also warns when `sourceRoot` appears to be one level above the targeted GitHub repo and `sourceUrl` does not use `{root}`. This usually means links will render as `<Repo>/<Repo>/...` and 404.
 - Source URL templates are validated preflight:
   - require at least one path token (`{path}`, `{pathNoRoot}`, `{pathNoPrefix}`)
   - warn on unsupported tokens (supported: `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
 - Additional `apidocs` preflight checks emit warning codes before generation starts:
-  - `[PFWEB.APIDOCS.SOURCE]` for source-link config issues (for example `sourceUrlMappings` configured without `sourceRoot`/`sourceUrl`, missing `sourceRoot` directory, duplicate mapping prefixes)
+  - `[PFWEB.APIDOCS.SOURCE]` for source-link config issues (for example `sourceUrlMappings` configured without `sourceRoot`/`sourceUrl`, missing `sourceRoot` directory, duplicate mapping prefixes, or `sourceRoot` aimed above the repo root)
   - `[PFWEB.APIDOCS.NAV]` for nav config issues (for example `navSurface` configured without `nav`)
   - `[PFWEB.APIDOCS.POWERSHELL]` for missing PowerShell examples paths when `psExamplesPath` is set
 - `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
@@ -309,12 +314,30 @@ Notes:
   - `generateMemberXrefs`: include member/parameter xref entries in the map (default: `true`)
   - `memberXrefKinds`: optional member-kind filter (`constructors,methods,properties,fields,events,extensions,parameters`)
   - `memberXrefMaxPerType`: optional cap for member xref entries per type/command (`0` = unlimited)
-  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
+  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellAuthoredHelpCodeExamplesPercent`, `minPowerShellImportedScriptCodeExamplesPercent`, `minPowerShellImportedScriptPlaybackMediaPercent`, `minPowerShellImportedScriptPlaybackMediaWithPosterPercent`, `minPowerShellParameterSummaryPercent`
   - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
+  - PowerShell example quality thresholds: `maxPowerShellGeneratedFallbackOnlyExamplePercent` (0-100), `maxPowerShellGeneratedFallbackOnlyExampleCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount` (>=0), `maxPowerShellImportedScriptPlaybackMediaStaleAssetCount` (>=0)
   - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
   - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`
+  - optional PowerShell example validation:
+    - `validatePowerShellExamples`: enable parser-based validation for imported example scripts
+    - `powerShellExampleValidationReport`: custom report path (default: `powershell-example-validation.json` under apidocs output)
+    - `powerShellExampleValidationTimeoutSeconds`: parser timeout (default: `60`)
+    - `failOnPowerShellExampleValidation`: fail the step when validation cannot run cleanly or when imported scripts contain syntax errors
+  - optional matched example execution:
+    - `executePowerShellExamples`: run matched PowerShell example scripts after syntax validation
+    - `powerShellExampleExecutionTimeoutSeconds`: per-example execution timeout (default: `60`)
+    - `failOnPowerShellExampleExecution`: fail the step when matched examples fail execution or execution cannot complete cleanly
+    - execution implicitly enables `validatePowerShellExamples`
+    - report writing emits per-example transcript artifacts beside `powershell-example-validation.json`
+    - successful imported examples can reuse those transcript artifacts as terminal-style example media links in generated API docs
+    - curated `.cast` / `.asciinema` sidecars beside imported `.ps1` examples are also staged automatically, with matching image sidecars used as poster art when present
+    - asset-health warnings flag unsupported same-name sidecars, oversized playback assets, and stale captures/posters that are older than the current example script
+    - coverage reports can distinguish imported playback media from plain imported code examples, including whether poster art is present for every playback embed
+    - coverage can also track playback-sidecar health issues directly, so CI can fail on stale, oversized, or unsupported playback assets without depending on generic warning handling
+  - validation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when an imported example script fails syntax validation, does not reference any documented command from the selected help input, or fails execution after matching
 
 Multi-library batch example:
 ```json
