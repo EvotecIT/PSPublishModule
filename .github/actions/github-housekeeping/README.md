@@ -50,7 +50,6 @@ Minimal config:
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
   "repository": "EvotecIT/YourRepo",
   "tokenEnvName": "GITHUB_TOKEN",
-  "dryRun": false,
   "artifacts": {
     "enabled": true,
     "keepLatestPerName": 10,
@@ -91,6 +90,7 @@ jobs:
 
 - Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
+- Prefer letting the workflow decide apply vs dry-run; omit `dryRun` from checked-in repo config unless you have a non-workflow caller that truly needs a local default.
 - A dry-run can still report large cache or artifact totals with `0 eligible` deletes when current keep/latest and age rules retain everything; the Markdown summary explains that breakdown.
 - Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.
 - The public reusable workflow entrypoint is `powerforge-github-housekeeping.yml`.
