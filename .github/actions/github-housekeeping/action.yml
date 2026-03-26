@@ -26,7 +26,7 @@ runs:
     - name: Build PowerForge CLI
       shell: pwsh
       run: |
-        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../..")).Path
+        $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
         $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
         dotnet build $project -c Release
       env:
