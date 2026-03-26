@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PowerForge.Web;
 
 namespace PowerForge.Tests;
@@ -2259,6 +2260,81 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("Captured terminal playback for Invoke-SampleOne.ps1.", sampleOneHtml, StringComparison.Ordinal);
             Assert.Contains("example-media-poster", sampleOneHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Captured ", sampleOneHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_DeduplicatesPlaybackMediaPerImportedScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-playback-dedupe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath, BuildMinimalPowerShellHelpForValidation());
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleOne')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleOne { param([string]$Name) "Ran one for $Name" }
+                """);
+
+            var examplesDir = Path.Combine(root, "Examples");
+            Directory.CreateDirectory(examplesDir);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.ps1"),
+                """
+                Invoke-SampleOne -Name 'Alpha'
+                Invoke-SampleOne -Name 'Beta'
+                """);
+            File.WriteAllText(Path.Combine(examplesDir, "Invoke-SampleOne.cast"), "dummy cast");
+            File.WriteAllBytes(Path.Combine(examplesDir, "Invoke-SampleOne.png"), new byte[] { 1, 2, 3, 4 });
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                PowerShellExamplesPath = examplesDir,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+
+            using var sampleOneJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-sampleone.json")));
+            var sampleOneExamples = sampleOneJson.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            Assert.Equal(2, sampleOneExamples.Count(example =>
+                string.Equals(example.GetProperty("kind").GetString(), "code", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(example.GetProperty("origin").GetString(), "ImportedScript", StringComparison.OrdinalIgnoreCase)));
+            Assert.Single(sampleOneExamples, example =>
+                string.Equals(example.GetProperty("kind").GetString(), "media", StringComparison.OrdinalIgnoreCase) &&
+                example.TryGetProperty("media", out var media) &&
+                string.Equals(media.GetProperty("type").GetString(), "terminal", StringComparison.OrdinalIgnoreCase));
+
+            Assert.False(string.IsNullOrWhiteSpace(result.PowerShellExampleMediaManifestPath));
+            using var mediaManifest = JsonDocument.Parse(File.ReadAllText(result.PowerShellExampleMediaManifestPath!));
+            Assert.Equal(1, mediaManifest.RootElement.GetProperty("entryCount").GetInt32());
+            var manifestEntry = Assert.Single(mediaManifest.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("Invoke-SampleOne", manifestEntry.GetProperty("commandName").GetString());
+            Assert.Equal("Invoke-SampleOne.cast", manifestEntry.GetProperty("assetPath").GetString());
+
+            var sampleOneHtml = File.ReadAllText(Path.Combine(outputPath, "invoke-sampleone", "index.html"));
+            Assert.Single(Regex.Matches(sampleOneHtml, "Open terminal playback", RegexOptions.IgnoreCase).Cast<Match>());
         }
         finally
         {

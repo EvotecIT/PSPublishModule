@@ -102,6 +102,7 @@ public static partial class WebApiDocsGenerator
         {
             if (snippetsByCommand.TryGetValue(type.Name, out var snippets) && snippets.Count > 0)
             {
+                var stagedAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var emittedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var snippet in snippets.Take(limit))
                 {
@@ -117,6 +118,7 @@ public static partial class WebApiDocsGenerator
                         options,
                         validationByFile,
                         inspectedPlaybackMediaFiles,
+                        stagedAssetPaths,
                         emittedArtifactPaths,
                         warnings);
                     if (mediaExample is not null)
@@ -358,6 +360,7 @@ public static partial class WebApiDocsGenerator
         WebApiDocsOptions options,
         IReadOnlyDictionary<string, WebApiDocsPowerShellExampleFileValidationResult> validationByFile,
         ISet<string>? inspectedPlaybackMediaFiles,
+        ISet<string>? stagedAssetPaths,
         ISet<string> emittedArtifactPaths,
         List<string>? warnings)
     {
@@ -374,6 +377,7 @@ public static partial class WebApiDocsGenerator
             normalizedExamplePath,
             options,
             playbackAssetHealth,
+            stagedAssetPaths,
             emittedArtifactPaths,
             warnings);
         if (playbackMedia is not null)
@@ -396,7 +400,7 @@ public static partial class WebApiDocsGenerator
             options.OutputPath,
             options.BaseUrl,
             artifactPath,
-            emittedAssetPaths: null,
+            stagedAssetPaths,
             warnings);
         if (string.IsNullOrWhiteSpace(stagedArtifactUrl))
             return null;
@@ -472,7 +476,8 @@ public static partial class WebApiDocsGenerator
         string exampleFilePath,
         WebApiDocsOptions options,
         PowerShellPlaybackAssetHealth playbackAssetHealth,
-        ISet<string>? emittedAssetPaths,
+        ISet<string>? stagedAssetPaths,
+        ISet<string>? emittedArtifactPaths,
         List<string>? warnings)
     {
         if (string.IsNullOrWhiteSpace(exampleFilePath) || options is null || string.IsNullOrWhiteSpace(options.OutputPath))
@@ -482,14 +487,18 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(castPath))
             return null;
 
-        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, emittedAssetPaths, warnings);
+        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, stagedAssetPaths, warnings);
         if (string.IsNullOrWhiteSpace(castUrl))
+            return null;
+
+        var stagedArtifactPath = TryResolveApiOutputPath(options.OutputPath, castUrl, options.BaseUrl) ?? Path.GetFullPath(castPath);
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(stagedArtifactPath))
             return null;
 
         var posterPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, SupportedPowerShellPlaybackPosterExtensions);
         var posterUrl = string.IsNullOrWhiteSpace(posterPath)
             ? null
-            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, emittedAssetPaths, warnings);
+            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, stagedAssetPaths, warnings);
         DateTimeOffset? capturedAtUtc = null;
         DateTimeOffset? sourceUpdatedAtUtc = null;
         TryReadFileTimestampUtc(castPath, out capturedAtUtc);
