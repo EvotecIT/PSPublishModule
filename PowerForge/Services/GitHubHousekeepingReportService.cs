@@ -20,7 +20,8 @@ public sealed class GitHubHousekeepingReportService
     /// <returns>Portable housekeeping report payload.</returns>
     public GitHubHousekeepingReport CreateSuccessReport(GitHubHousekeepingResult result)
     {
-        ArgumentNullException.ThrowIfNull(result);
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
 
         return new GitHubHousekeepingReport
         {
@@ -53,7 +54,8 @@ public sealed class GitHubHousekeepingReportService
     /// <returns>Indented JSON report.</returns>
     public string BuildJson(GitHubHousekeepingReport report)
     {
-        ArgumentNullException.ThrowIfNull(report);
+        if (report is null)
+            throw new ArgumentNullException(nameof(report));
         return JsonSerializer.Serialize(report, ReportJsonOptions);
     }
 
@@ -64,7 +66,8 @@ public sealed class GitHubHousekeepingReportService
     /// <returns>Markdown representation of the report.</returns>
     public string BuildMarkdown(GitHubHousekeepingReport report)
     {
-        ArgumentNullException.ThrowIfNull(report);
+        if (report is null)
+            throw new ArgumentNullException(nameof(report));
 
         var markdown = new StringBuilder();
         markdown.AppendLine("# PowerForge GitHub Housekeeping Report");
@@ -270,9 +273,10 @@ public sealed class GitHubHousekeepingReportService
         if (string.IsNullOrWhiteSpace(value))
             return "-";
 
-        return value.Replace("|", "\\|", StringComparison.Ordinal)
-            .Replace("\r", " ", StringComparison.Ordinal)
-            .Replace("\n", "<br/>", StringComparison.Ordinal);
+        var text = value ?? string.Empty;
+        return text.Replace("|", "\\|")
+            .Replace("\r", " ")
+            .Replace("\n", "<br/>");
     }
 
     private static string FormatGiB(long bytes)
