@@ -12,21 +12,36 @@ Schema
 
 Unified release entrypoint
 - Schema: `Schemas/powerforge.release.schema.json`
+- Scaffolder: `New-PowerForgeReleaseConfig -ProjectRoot . -PassThru`
+- PowerShell cmdlet: `Invoke-PowerForgeRelease -ConfigPath .\Build\release.json`
 - Wrapper: `Build/Build-Project.ps1`
+- Transitional top-level wrapper: `Build/Build-Release.ps1`
 - CLI: `powerforge release --config .\Build\release.json`
 - Packages continue to use `project.build.json` / `Invoke-ProjectBuild`.
 - Tools/apps can now use either legacy `Tools.Targets` or the richer `Tools.DotNetPublish` / `Tools.DotNetPublishConfigPath`
   path backed by `Schemas/powerforge.dotnetpublish.schema.json`.
+- Module release can now be declared directly in `release.json` through the top-level `Module` section.
+  In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
+- `Build/Build-Release.ps1` still supports bridge mode for repos that have not adopted a native `Module` section yet,
+  but it automatically defers to `release.json` when `Module` is present.
+- When native `Module` mode is active, the same day-to-day overrides from `Build/Build-Release.ps1` can still flow into
+  the module script:
+  - `-NoDotnetBuild`
+  - `-ModuleVersion <version>`
+  - `-PreReleaseTag <tag>`
+  - `-NoSign`
+  - `-SignModule`
 - Unified release can also declare a reusable workspace preflight via `WorkspaceValidation`
   backed by `workspace.validation.json` and `powerforge workspace validate`.
 - Common release-time overrides:
   - `--configuration Debug|Release`
+  - `--module-no-dotnet-build`, `--module-version`, `--module-prerelease-tag`, `--module-no-sign`, `--module-sign`
   - `--skip-workspace-validation`, `--workspace-config`, `--workspace-profile`
   - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-testimox-root`
   - `--target`, `--rid`, `--framework`, `--style`
   - `--skip-restore` and `--skip-build` for DotNetPublish-backed tool/app flows
   - `--output-root <path>` to remap DotNetPublish tool/app artefacts, manifests, bundle outputs, and installer staging under a different root
-  - `--stage-root <path>` to copy unified release assets into a categorized release folder (`nuget`, `portable`, `installer`, `tools`, `metadata`) and write `release-manifest.json` / `SHA256SUMS.txt` there by default
+  - `--stage-root <path>` to copy unified release assets into a categorized release folder (`modules`, `nuget`, `portable`, `installer`, `tools`, `metadata`) and write `release-manifest.json` / `SHA256SUMS.txt` there by default
   - `Outputs.Staging` in `release.json` for default folder names when you want the same categorized layout without repeating CLI switches
   - `--keep-symbols` for symbol-preserving tool/app outputs
   - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`
@@ -35,6 +50,30 @@ Unified release entrypoint
   - `--package-sign-thumbprint`, `--package-sign-store`, and `--package-sign-timestamp-url` for package-signing overrides without editing `release.json`
   - signing now emits a heuristic interaction hint when PowerForge can infer the certificate provider:
     likely hardware-token/smart-card vs likely local software-backed certificate
+
+Starter flow
+- Generate a unified release config from existing repo configs:
+
+```powershell
+New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
+```
+
+- The generated `release.json` now includes:
+  - a native `Module` section pointing at `Module/Build/Build-Module.ps1`
+  - default module artefact roots for `Packed`, `PackedWithModules`, and `Unpacked`
+  - the existing package/tool sections when matching source configs are present
+- The `Module` section can optionally carry module-specific defaults too:
+  - `NoDotnetBuild`
+  - `ModuleVersion`
+  - `PreReleaseTag`
+  - `NoSign`
+  - `SignModule`
+
+- Plan a release with the generated config:
+
+```powershell
+Invoke-PowerForgeRelease -ConfigPath .\Build\release.json -Plan
+```
 
 Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,

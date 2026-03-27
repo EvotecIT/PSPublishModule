@@ -1,6 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json",
   "SchemaVersion": 1,
+  "Module": {
+    "RepositoryRoot": "..",
+    "ScriptPath": "Module/Build/Build-Module.ps1",
+    "ArtifactPaths": [
+      "Module/Artefacts/Packed",
+      "Module/Artefacts/PackedWithModules",
+      "Module/Artefacts/Unpacked"
+    ]
+  },
   "Packages": {
     "RootPath": "..",
     "ExpectedVersionMap": {

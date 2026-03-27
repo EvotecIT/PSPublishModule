@@ -121,18 +121,19 @@ internal sealed class PowerForgeReleaseService
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var runModule = !request.PackagesOnly && !request.ToolsOnly && spec.Module is not null;
         var runPackages = !request.ToolsOnly && spec.Packages is not null;
         var runTools = !request.PackagesOnly && spec.Tools is not null;
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
 
-        if (!runPackages && !runTools && !runWorkspaceValidation)
+        if (!runModule && !runPackages && !runTools && !runWorkspaceValidation)
         {
             return new PowerForgeReleaseResult
             {
                 Success = false,
                 ConfigPath = configPath,
-                ErrorMessage = "Release config does not enable any selected WorkspaceValidation, Packages, or Tools sections."
+                ErrorMessage = "Release config does not enable any selected WorkspaceValidation, Module, Packages, or Tools sections."
             };
         }
 
@@ -155,6 +156,25 @@ internal sealed class PowerForgeReleaseService
                 {
                     result.Success = false;
                     result.ErrorMessage = workspaceResult.ErrorMessage ?? "Workspace validation failed.";
+                    return result;
+                }
+            }
+        }
+
+        if (runModule)
+        {
+            var module = PrepareModuleRelease(spec.Module!, configPath, request, configurationOverride);
+            result.ModulePlan = module.Plan;
+            result.ModuleAssets = module.ArtifactPaths;
+
+            if (!request.PlanOnly && !request.ValidateOnly)
+            {
+                var moduleResult = new ModuleBuildHostService().ExecuteBuildAsync(module.Request).GetAwaiter().GetResult();
+                result.Module = moduleResult;
+                if (!moduleResult.Succeeded)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
                     return result;
                 }
             }
@@ -280,6 +300,66 @@ internal sealed class PowerForgeReleaseService
         return (service, spec, workspaceConfigPath, workspaceRequest, plan);
     }
 
+    private static (ModuleBuildHostBuildRequest Request, PowerForgeModuleReleasePlanSummary Plan, string[] ArtifactPaths) PrepareModuleRelease(
+        PowerForgeModuleReleaseOptions options,
+        string releaseConfigPath,
+        PowerForgeReleaseRequest request,
+        string? configurationOverride)
+    {
+        var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
+            ? options.RepositoryRoot!
+            : Path.Combine(configDirectory, string.IsNullOrWhiteSpace(options.RepositoryRoot) ? "." : options.RepositoryRoot!));
+        var scriptPath = Path.GetFullPath(Path.IsPathRooted(options.ScriptPath)
+            ? options.ScriptPath!
+            : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
+        var modulePath = string.IsNullOrWhiteSpace(options.ModulePath)
+            ? "PSPublishModule"
+            : Path.IsPathRooted(options.ModulePath)
+                ? options.ModulePath!
+                : Path.Combine(repositoryRoot, options.ModulePath!);
+
+        if (!File.Exists(scriptPath))
+            throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
+
+        var artifactPaths = (options.ArtifactPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(repositoryRoot, path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var buildRequest = new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = repositoryRoot,
+            ScriptPath = scriptPath,
+            ModulePath = modulePath,
+            Configuration = configurationOverride,
+            NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
+            ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
+            PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
+            NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
+            SignModule = request.ModuleSignModule ?? options.SignModule ?? false
+        };
+
+        var plan = new PowerForgeModuleReleasePlanSummary
+        {
+            RepositoryRoot = repositoryRoot,
+            ScriptPath = scriptPath,
+            ModulePath = modulePath,
+            Configuration = buildRequest.Configuration,
+            NoDotnetBuild = buildRequest.NoDotnetBuild,
+            ModuleVersion = buildRequest.ModuleVersion,
+            PreReleaseTag = buildRequest.PreReleaseTag,
+            NoSign = buildRequest.NoSign,
+            SignModule = buildRequest.SignModule,
+            ArtifactPaths = artifactPaths
+        };
+
+        return (buildRequest, plan, artifactPaths);
+    }
+
     private static (WorkspaceValidationSpec Spec, string ConfigPath) LoadWorkspaceValidationSpec(
         PowerForgeWorkspaceValidationOptions options,
         string releaseConfigPath,
@@ -393,6 +473,7 @@ internal sealed class PowerForgeReleaseService
                     entry.RelativeStagePath,
                     entry.StagedPath
                 }).ToArray(),
+                module = BuildModuleManifestSection(result.ModulePlan, result.Module, result.ModuleAssets),
                 packages = BuildPackageManifestSection(result.Packages),
                 legacyTools = BuildLegacyToolsManifestSection(result.Tools),
                 dotNetTools = BuildDotNetToolsManifestSection(result.DotNetTools),
@@ -1096,6 +1177,10 @@ internal sealed class PowerForgeReleaseService
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
         assets.AddRange(
+            (result.ModuleAssets ?? Array.Empty<string>())
+            .SelectMany(CreateModuleAssetEntries));
+
+        assets.AddRange(
             (result.Packages?.Result.Release?.Projects ?? new List<DotNetRepositoryProjectResult>())
             .SelectMany(project => CreatePackageAssetEntries(project)));
 
@@ -1228,6 +1313,22 @@ internal sealed class PowerForgeReleaseService
         }
     }
 
+    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            yield break;
+
+        if (!File.Exists(path) && !Directory.Exists(path))
+            yield break;
+
+        yield return new PowerForgeReleaseAssetEntry
+        {
+            Path = path,
+            Category = PowerForgeReleaseAssetCategory.Module,
+            Source = "Module"
+        };
+    }
+
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
         IEnumerable<PowerForgeReleaseAssetEntry> assetEntries,
         string stageRoot,
@@ -1239,11 +1340,16 @@ internal sealed class PowerForgeReleaseService
         foreach (var entry in assetEntries)
         {
             var sourcePath = entry.Path;
-            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            if (string.IsNullOrWhiteSpace(sourcePath))
+                continue;
+
+            var sourceIsFile = File.Exists(sourcePath);
+            var sourceIsDirectory = !sourceIsFile && Directory.Exists(sourcePath);
+            if (!sourceIsFile && !sourceIsDirectory)
                 continue;
 
             var categoryDirectory = ResolveStageDirectory(options, entry.Category);
-            var relativeStagePath = Path.Combine(categoryDirectory, Path.GetFileName(sourcePath));
+            var relativeStagePath = Path.Combine(categoryDirectory, GetStageEntryName(sourcePath, sourceIsDirectory));
             var destinationPath = Path.Combine(stageRoot, relativeStagePath);
             var sourceFullPath = Path.GetFullPath(sourcePath);
             var destinationFullPath = Path.GetFullPath(destinationPath);
@@ -1255,7 +1361,16 @@ internal sealed class PowerForgeReleaseService
                 continue;
 
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFullPath)!);
-            File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+            if (sourceIsFile)
+            {
+                File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+            }
+            else
+            {
+                if (Directory.Exists(destinationFullPath))
+                    Directory.Delete(destinationFullPath, recursive: true);
+                CopyDirectory(sourceFullPath, destinationFullPath);
+            }
         }
 
         return assetEntries;
@@ -1265,6 +1380,7 @@ internal sealed class PowerForgeReleaseService
     {
         return category switch
         {
+            PowerForgeReleaseAssetCategory.Module => NormalizeStageSegment(options.ModulesPath, "modules"),
             PowerForgeReleaseAssetCategory.Package => NormalizeStageSegment(options.PackagesPath, "nuget"),
             PowerForgeReleaseAssetCategory.Portable => NormalizeStageSegment(options.PortablePath, "portable"),
             PowerForgeReleaseAssetCategory.Installer => NormalizeStageSegment(options.InstallerPath, "installer"),
@@ -1329,6 +1445,57 @@ internal sealed class PowerForgeReleaseService
             tools.MsiBuilds,
             tools.StorePackages
         };
+    }
+
+    private static object? BuildModuleManifestSection(
+        PowerForgeModuleReleasePlanSummary? modulePlan,
+        ModuleBuildHostExecutionResult? module,
+        string[]? moduleAssets)
+    {
+        var assets = (moduleAssets ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+
+        if (modulePlan is null && module is null && assets.Length == 0)
+            return null;
+
+        return new
+        {
+            plan = modulePlan,
+            module?.Succeeded,
+            module?.ExitCode,
+            duration = module?.Duration,
+            module?.Executable,
+            Assets = assets
+        };
+    }
+
+    private static string GetStageEntryName(string sourcePath, bool isDirectory)
+    {
+        if (!isDirectory)
+            return Path.GetFileName(sourcePath);
+
+        var trimmed = sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return Path.GetFileName(trimmed);
+    }
+
+    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+    {
+        Directory.CreateDirectory(destinationDirectory);
+
+        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, file);
+            var destinationPath = Path.Combine(destinationDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(file, destinationPath, overwrite: true);
+        }
     }
 
     private static string ResolveOutputPath(string configDirectory, string path)
@@ -1503,5 +1670,21 @@ internal sealed class PowerForgeReleaseService
         }
 
         return fullPath + Path.DirectorySeparatorChar;
+    }
+
+    private static string BuildModuleFailureMessage(string scriptPath, ModuleBuildHostExecutionResult result)
+    {
+        var message = string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                result.StandardError,
+                result.StandardOutput
+            }.Where(text => !string.IsNullOrWhiteSpace(text)));
+
+        if (string.IsNullOrWhiteSpace(message))
+            return $"Module release workflow failed while executing '{scriptPath}'.";
+
+        return $"Module release workflow failed while executing '{scriptPath}'.{Environment.NewLine}{message}";
     }
 }
