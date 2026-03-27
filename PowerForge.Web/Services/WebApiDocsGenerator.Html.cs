@@ -24,6 +24,7 @@ public static partial class WebApiDocsGenerator
             return;
         }
 
+        var head = LoadOptionalHtml(options.HeadHtmlPath);
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
@@ -52,6 +53,7 @@ public static partial class WebApiDocsGenerator
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", indexRoute),
+            ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -90,6 +92,7 @@ public static partial class WebApiDocsGenerator
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {type.FullName} in {options.Title}."),
                 ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, $"API reference for {type.FullName} in {options.Title}.", typeRoute),
+                ["HEAD_HTML"] = head,
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -110,6 +113,7 @@ public static partial class WebApiDocsGenerator
 
     private static void GenerateDocsHtml(string outputPath, WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, List<string> warnings)
     {
+        var head = LoadOptionalHtml(options.HeadHtmlPath);
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
@@ -143,6 +147,7 @@ public static partial class WebApiDocsGenerator
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", NormalizeApiRoute(baseUrl)),
+            ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -169,6 +174,7 @@ public static partial class WebApiDocsGenerator
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {displayName} in {options.Title}."),
                 ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, $"API reference for {displayName} in {options.Title}.", typeRoute),
+                ["HEAD_HTML"] = head,
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -386,10 +392,18 @@ $@"<!doctype html>
             : social.TwitterCard;
         var twitterSite = NormalizeTwitterHandle(social.TwitterSite);
         var twitterCreator = NormalizeTwitterHandle(social.TwitterCreator);
+        var languageCode = NormalizeApiLanguageCode(options.LanguageCode);
 
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(url))
+        {
             sb.AppendLine($"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+            if (!string.IsNullOrWhiteSpace(languageCode))
+            {
+                sb.AppendLine($"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(languageCode)}\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+                sb.AppendLine($"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+            }
+        }
         sb.AppendLine("<!-- Open Graph -->");
         sb.AppendLine($"<meta property=\"og:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
         if (!string.IsNullOrWhiteSpace(desc))
@@ -428,11 +442,19 @@ $@"<!doctype html>
         return sb.ToString().TrimEnd();
     }
 
+    private static string NormalizeApiLanguageCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
     private static ApiSocialProfile ResolveApiSocialProfile(WebApiDocsOptions options)
     {
         var nav = LoadNavConfig(options);
         var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, options.Title);
-        var siteBaseUrl = FirstNonEmpty(nav?.SiteBaseUrl);
+        var siteBaseUrl = FirstNonEmpty(options.SiteBaseUrl, nav?.SiteBaseUrl);
         var image = FirstNonEmpty(options.SocialImage, nav?.SocialImage, nav?.BrandIcon);
         var imageWidth = options.SocialImageWidth ?? nav?.SocialImageWidth;
         var imageHeight = options.SocialImageHeight ?? nav?.SocialImageHeight;

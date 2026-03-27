@@ -44,6 +44,7 @@ internal static partial class WebPipelineRunner
         var css = GetString(step, "css") ?? GetString(step, "cssHref") ?? GetString(step, "css-href");
         var criticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css"));
         var injectCriticalCss = GetBool(step, "injectCriticalCss") ?? GetBool(step, "inject-critical-css") ?? false;
+        var head = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html"));
         var header = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
         var footer = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
         var template = GetString(step, "template");
@@ -209,6 +210,11 @@ internal static partial class WebPipelineRunner
 
         // If the user configured header/footer paths but they don't exist, treat them as unset so
         // we can fall back to theme fragments (or embedded fragments) deterministically.
+        if (!string.IsNullOrWhiteSpace(head) && !File.Exists(Path.GetFullPath(head)))
+        {
+            logger?.Warn($"{label}: apidocs headHtml not found: {head}");
+            head = null;
+        }
         if (!string.IsNullOrWhiteSpace(header) && !File.Exists(Path.GetFullPath(header)))
         {
             logger?.Warn($"{label}: apidocs headerHtml not found: {header}");
@@ -241,7 +247,7 @@ internal static partial class WebPipelineRunner
                 }
             }
 
-            TryResolveApiFragmentsFromTheme(configPath, ref header, ref footer);
+            TryResolveApiFragmentsFromTheme(configPath, ref head, ref header, ref footer);
 
             if (injectCriticalCss)
             {
@@ -303,6 +309,7 @@ internal static partial class WebPipelineRunner
             CssHref = css,
             CriticalCssHtml = injectedCriticalCssHtml,
             CriticalCssPath = criticalCssPath,
+            HeadHtmlPath = head,
             HeaderHtmlPath = header,
             FooterHtmlPath = footer,
             Template = template,

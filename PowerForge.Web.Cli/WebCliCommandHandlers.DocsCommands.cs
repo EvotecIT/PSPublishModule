@@ -24,6 +24,7 @@ internal static partial class WebCliCommandHandlers
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ?? "/api";
         var format = TryGetOptionValue(subArgs, "--format");
         var cssHref = TryGetOptionValue(subArgs, "--css");
+        var headHtml = TryGetOptionValue(subArgs, "--head-html");
         var headerHtml = TryGetOptionValue(subArgs, "--header-html");
         var footerHtml = TryGetOptionValue(subArgs, "--footer-html");
         var template = TryGetOptionValue(subArgs, "--template");
@@ -147,6 +148,7 @@ internal static partial class WebCliCommandHandlers
             BaseUrl = baseUrl,
             Format = format,
             CssHref = cssHref,
+            HeadHtmlPath = headHtml,
             HeaderHtmlPath = headerHtml,
             FooterHtmlPath = footerHtml,
             Template = template,

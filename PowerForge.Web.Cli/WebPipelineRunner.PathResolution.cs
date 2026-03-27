@@ -138,7 +138,7 @@ internal static partial class WebPipelineRunner
         return Enum.TryParse<WebApiDetailLevel>(value, true, out var parsed) ? parsed : WebApiDetailLevel.None;
     }
 
-    private static void TryResolveApiFragmentsFromTheme(string siteConfigPath, ref string? header, ref string? footer)
+    private static void TryResolveApiFragmentsFromTheme(string siteConfigPath, ref string? head, ref string? header, ref string? footer)
     {
         if (string.IsNullOrWhiteSpace(siteConfigPath))
             return;
@@ -161,6 +161,13 @@ internal static partial class WebPipelineRunner
             var manifest = loader.Load(themeRoot, themesRoot);
             if (manifest is null)
                 return;
+
+            if (string.IsNullOrWhiteSpace(head))
+            {
+                var candidate = loader.ResolvePartialPath(themeRoot, manifest, "api-head");
+                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                    head = candidate;
+            }
 
             if (string.IsNullOrWhiteSpace(header))
             {
