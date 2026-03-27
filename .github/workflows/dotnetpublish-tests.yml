@@ -40,6 +40,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Restore focused test graph
+        shell: pwsh
+        run: dotnet restore ./PowerForge.Tests/PowerForge.Tests.csproj --force-evaluate
+
       - name: Run DotNetPublish focused tests
         shell: pwsh
-        run: dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj -c Release --filter 'FullyQualifiedName~DotNetPublish'
+        run: dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~DotNetPublish'

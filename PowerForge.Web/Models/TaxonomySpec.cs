@@ -15,6 +15,18 @@ public sealed class TaxonomySpec
     /// <summary>Layout for taxonomy term pages.</summary>
     public string? TermLayout { get; set; }
 
+    /// <summary>Optional feed title override for the taxonomy list page.</summary>
+    public string? FeedTitle { get; set; }
+
+    /// <summary>Optional feed description override for the taxonomy list page.</summary>
+    public string? FeedDescription { get; set; }
+
+    /// <summary>Optional feed title template for taxonomy term feeds. Supports {term}, {taxonomy}, and {site} tokens.</summary>
+    public string? TermFeedTitleTemplate { get; set; }
+
+    /// <summary>Optional feed description template for taxonomy term feeds. Supports {term}, {taxonomy}, and {site} tokens.</summary>
+    public string? TermFeedDescriptionTemplate { get; set; }
+
     /// <summary>Optional output formats for taxonomy list/term pages.</summary>
     public string[] Outputs { get; set; } = Array.Empty<string>();
     /// <summary>Optional page size for taxonomy and term listing pages.</summary>
