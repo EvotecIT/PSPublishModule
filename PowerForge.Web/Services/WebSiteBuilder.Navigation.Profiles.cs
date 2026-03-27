@@ -178,6 +178,7 @@ public static partial class WebSiteBuilder
     }
 
     private static NavigationRegion[] BuildRegions(
+        SiteSpec spec,
         NavigationRegionSpec[] regions,
         NavigationMenu[] menus,
         NavigationItem[] actions,
@@ -207,7 +208,7 @@ public static partial class WebSiteBuilder
             if (region.IncludeActions && actions.Length > 0)
                 items.AddRange(actions);
 
-            var custom = BuildMenuItems(region.Items, context, linkRules);
+            var custom = BuildMenuItems(spec, region.Items, context, linkRules);
             if (custom.Length > 0)
                 items.AddRange(custom);
 
@@ -226,6 +227,7 @@ public static partial class WebSiteBuilder
     }
 
     private static NavigationFooter? BuildFooter(
+        SiteSpec spec,
         NavigationFooterSpec? footer,
         NavigationMenu[] menus,
         NavRenderContext context,
@@ -240,7 +242,7 @@ public static partial class WebSiteBuilder
         {
             if (column is null)
                 continue;
-            var items = BuildMenuItems(column.Items, context, linkRules);
+            var items = BuildMenuItems(spec, column.Items, context, linkRules);
             columns.Add(new NavigationFooterColumn
             {
                 Name = column.Name,
@@ -276,7 +278,7 @@ public static partial class WebSiteBuilder
             CssClass = footer.CssClass,
             Meta = CloneMeta(footer.Meta),
             Columns = columns.ToArray(),
-            Legal = BuildMenuItems(footer.Legal, context, linkRules)
+            Legal = BuildMenuItems(spec, footer.Legal, context, linkRules)
         };
     }
 
@@ -361,4 +363,3 @@ public static partial class WebSiteBuilder
         public TocItem[]? Items { get; set; }
     }
 }
-

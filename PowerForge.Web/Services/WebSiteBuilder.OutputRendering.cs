@@ -12,6 +12,8 @@ namespace PowerForge.Web;
 /// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    private static readonly ConcurrentDictionary<string, System.Text.RegularExpressions.Regex> HtmlAttributeRewriteRegexCache = new(StringComparer.OrdinalIgnoreCase);
+
     private static void WriteContentItem(
         string outputRoot,
         SiteSpec spec,
@@ -163,6 +165,7 @@ public static partial class WebSiteBuilder
                     var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
                     return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
                 });
+                html = RebaseSelectedLanguageRootHtml(spec, html);
                 ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
                 return html;
             }
@@ -194,8 +197,61 @@ public static partial class WebSiteBuilder
   {extraScripts}
 </body>
 </html>";
+        fallbackHtml = RebaseSelectedLanguageRootHtml(spec, fallbackHtml);
         ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
         return fallbackHtml;
+    }
+
+    private static string RebaseSelectedLanguageRootHtml(SiteSpec spec, string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        var buildContext = BuildLanguageContextScope.Value;
+        if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
+            return html;
+
+        var localization = ResolveLocalizationConfig(spec);
+        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
+        if (!ShouldRenderLanguageAtRoot(localization, selectedLanguage))
+            return html;
+
+        return RewriteQuotedHtmlAttribute(
+            RewriteQuotedHtmlAttribute(
+                RewriteQuotedHtmlAttribute(
+                    RewriteQuotedHtmlAttribute(
+                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
+            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value));
+    }
+
+    private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
+            return html;
+
+        var regex = HtmlAttributeRewriteRegexCache.GetOrAdd(
+            attributeName,
+            static name => new System.Text.RegularExpressions.Regex(
+                $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*=\s*)(?:""(?<doubleValue>[^""]*)""|'(?<singleValue>[^']*)')",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                RegexTimeout));
+        return regex.Replace(
+            html,
+            match =>
+            {
+                var quote = match.Groups["doubleValue"].Success ? "\"" : "'";
+                var value = match.Groups["doubleValue"].Success
+                    ? match.Groups["doubleValue"].Value
+                    : match.Groups["singleValue"].Value;
+                var rewritten = rewrite(value);
+                if (string.Equals(value, rewritten, StringComparison.Ordinal))
+                    return match.Value;
+
+                return match.Groups["prefix"].Value + quote + rewritten + quote;
+            });
     }
 
     private static void ReportSlowRenderTiming(

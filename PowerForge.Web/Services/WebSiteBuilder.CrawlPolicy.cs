@@ -40,6 +40,24 @@ public static partial class WebSiteBuilder
         return lines.Count == 0 ? string.Empty : string.Join(Environment.NewLine, lines);
     }
 
+    private static bool IsLocalizedFallbackCopy(ContentItem? item)
+    {
+        if (item?.Meta is null || item.Meta.Count == 0)
+            return false;
+
+        if (!TryGetMetaValue(item.Meta, "i18n.fallback_copy", out var value) || value is null)
+            return false;
+
+        return value switch
+        {
+            bool booleanValue => booleanValue,
+            string text => bool.TryParse(text, out var parsed) && parsed,
+            JsonElement json when json.ValueKind == JsonValueKind.True => true,
+            JsonElement json when json.ValueKind == JsonValueKind.String && bool.TryParse(json.GetString(), out var parsed) => parsed,
+            _ => false
+        };
+    }
+
     private static void WriteCrawlPolicyReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
     {
         if (spec?.Seo?.CrawlPolicy?.Enabled != true || items is null || string.IsNullOrWhiteSpace(metaDir))

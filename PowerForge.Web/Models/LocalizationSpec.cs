@@ -47,6 +47,12 @@ public sealed class LanguageSpec
     /// <summary>Optional absolute base URL override for this language (for example https://evotec.pl).</summary>
     public string? BaseUrl { get; set; }
 
+    /// <summary>
+    /// When true, public URLs for this language are emitted at the site root of its BaseUrl
+    /// instead of under the configured language prefix (for example https://evotec.pl/docs/ instead of https://evotec.pl/pl/docs/).
+    /// </summary>
+    public bool RenderAtRoot { get; set; }
+
     /// <summary>Marks language as default.</summary>
     public bool Default { get; set; }
 

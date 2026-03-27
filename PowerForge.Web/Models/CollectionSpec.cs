@@ -34,6 +34,18 @@ public sealed class CollectionSpec
     /// warnings in <c>verify</c>. When omitted, all configured site languages are expected.
     /// </summary>
     public string[] ExpectedTranslationLanguages { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Optional subset of site languages that should be treated as real localized variants for this collection.
+    /// These languages participate in hreflang output and translation completeness checks. When omitted,
+    /// all configured site languages are considered localized. When this is omitted, routing falls back to
+    /// <see cref="ExpectedTranslationLanguages"/> before considering the full site language set.
+    /// </summary>
+    public string[] LocalizedLanguages { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Optional subset of site languages that may materialize fallback pages for this collection.
+    /// When omitted, all configured site languages may receive fallback copies.
+    /// </summary>
+    public string[] FallbackLanguages { get; set; } = Array.Empty<string>();
     /// <summary>Collection-level SEO configuration (overrides site-level templates).</summary>
     public SeoSpec? Seo { get; set; }
     /// <summary>Optional page size for generated section pagination.</summary>

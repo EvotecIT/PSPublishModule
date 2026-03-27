@@ -28,6 +28,9 @@ public sealed class LocalizationLanguageRuntime
     /// <summary>Optional absolute base URL for this language.</summary>
     public string? BaseUrl { get; set; }
 
+    /// <summary>True when public URLs for this language should be emitted at the domain root.</summary>
+    public bool RenderAtRoot { get; set; }
+
     /// <summary>True when this language is the default language.</summary>
     public bool IsDefault { get; set; }
 
