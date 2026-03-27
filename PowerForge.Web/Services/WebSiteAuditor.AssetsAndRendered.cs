@@ -391,14 +391,23 @@ public static partial class WebSiteAuditor
         var bytes = File.ReadAllBytes(filePath);
         try
         {
-            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+            var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+            return TrimLeadingByteOrderMark(text);
         }
         catch (DecoderFallbackException ex)
         {
             var offset = ex.Index >= 0 ? $" at byte offset {ex.Index}" : string.Empty;
             addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence{offset} ({ex.Message}).", "utf8-invalid");
-            return Encoding.UTF8.GetString(bytes);
+            return TrimLeadingByteOrderMark(Encoding.UTF8.GetString(bytes));
         }
+    }
+
+    private static string TrimLeadingByteOrderMark(string value)
+    {
+        if (!string.IsNullOrEmpty(value) && value[0] == '\uFEFF')
+            return value[1..];
+
+        return value;
     }
 
     private static bool HasUtf8Meta(AngleSharp.Dom.IDocument doc)

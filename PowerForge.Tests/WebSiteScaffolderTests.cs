@@ -79,20 +79,23 @@ public class WebSiteScaffolderTests
 
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
-            Assert.Contains("Resolve PowerForge engine lock", workflow, StringComparison.Ordinal);
-            Assert.Contains("steps.powerforge-lock.outputs.repository", workflow, StringComparison.Ordinal);
-            Assert.Contains("steps.powerforge-lock.outputs.ref", workflow, StringComparison.Ordinal);
-            Assert.Contains("immutable commit SHA", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main", workflow, StringComparison.Ordinal);
+            Assert.Contains("website_root: .", workflow, StringComparison.Ordinal);
+            Assert.Contains("pipeline_config: pipeline.json", workflow, StringComparison.Ordinal);
+            Assert.Contains("powerforge_lock_path: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
+            Assert.Contains("powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}", workflow, StringComparison.Ordinal);
+            Assert.Contains("powerforge_ref_override: ${{ vars.POWERFORGE_REF }}", workflow, StringComparison.Ordinal);
+            Assert.Contains("secrets: inherit", workflow, StringComparison.Ordinal);
             Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
-            Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
-            Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
-            Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
 
             var maintenanceWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-maintenance.yml"));
             Assert.Contains("name: Website Maintenance", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("schedule:", maintenanceWorkflow, StringComparison.Ordinal);
             Assert.Contains("actions: write", maintenanceWorkflow, StringComparison.Ordinal);
-            Assert.Contains("--config ./pipeline.maintenance.json --mode ci", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml@main", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("pipeline_config: pipeline.maintenance.json", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("powerforge_lock_path: ./.powerforge/engine-lock.json", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("cancel-in-progress: false", maintenanceWorkflow, StringComparison.Ordinal);
 
             using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();

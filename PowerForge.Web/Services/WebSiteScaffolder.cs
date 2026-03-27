@@ -630,83 +630,14 @@ env:
 
 jobs:
   verify-site:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout website
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Resolve PowerForge engine lock
-        id: powerforge-lock
-        shell: pwsh
-        run: |
-          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
-          if (-not (Test-Path -LiteralPath $lockPath)) {
-            throw "Missing engine lock file: $lockPath"
-          }
-
-          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-          if ($null -eq $lock) {
-            throw "Invalid engine lock JSON: $lockPath"
-          }
-
-          $lockedRepository = [string]$lock.repository
-          $lockedRef = [string]$lock.ref
-
-          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
-            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
-          }
-
-          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
-          $refOverride = "${{ vars.POWERFORGE_REF }}"
-
-          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
-          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
-
-          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
-            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
-          }
-
-          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
-            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
-          }
-
-          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Checkout PowerForge engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.powerforge-lock.outputs.repository }}
-          ref: ${{ steps.powerforge-lock.outputs.ref }}
-          path: ./.powerforge-engine
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Run pipeline (ci mode)
-        shell: pwsh
-        run: |
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci
-
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: powerforge-reports
-          path: |
-            ./_reports/**
-            ./_site/_reports/**
-          if-no-files-found: ignore
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main
+    with:
+      website_root: .
+      pipeline_config: pipeline.json
+      powerforge_lock_path: ./.powerforge/engine-lock.json
+      powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}
+      powerforge_ref_override: ${{ vars.POWERFORGE_REF }}
+    secrets: inherit
 """;
         created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowTemplate);
 
@@ -720,93 +651,27 @@ on:
 
 permissions:
   contents: read
+  # Required for maintenance tasks such as GitHub artifact pruning.
   actions: write
 
 concurrency:
   group: website-maintenance-${{ github.ref }}
-  cancel-in-progress: true
+  # Let scheduled/manual maintenance finish once started.
+  cancel-in-progress: false
 
 env:
   POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json
 
 jobs:
   maintenance:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout website
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Resolve PowerForge engine lock
-        id: powerforge-lock
-        shell: pwsh
-        run: |
-          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
-          if (-not (Test-Path -LiteralPath $lockPath)) {
-            throw "Missing engine lock file: $lockPath"
-          }
-
-          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-          if ($null -eq $lock) {
-            throw "Invalid engine lock JSON: $lockPath"
-          }
-
-          $lockedRepository = [string]$lock.repository
-          $lockedRef = [string]$lock.ref
-
-          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
-            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
-          }
-
-          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
-          $refOverride = "${{ vars.POWERFORGE_REF }}"
-
-          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
-          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
-
-          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
-            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
-          }
-
-          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
-            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
-          }
-
-          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Checkout PowerForge engine
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.powerforge-lock.outputs.repository }}
-          ref: ${{ steps.powerforge-lock.outputs.ref }}
-          path: ./.powerforge-engine
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Run maintenance pipeline
-        shell: pwsh
-        run: |
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.maintenance.json --mode ci
-
-      - name: Upload maintenance reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: powerforge-maintenance-reports
-          path: |
-            ./_reports/**
-          if-no-files-found: ignore
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml@main
+    with:
+      website_root: .
+      pipeline_config: pipeline.maintenance.json
+      powerforge_lock_path: ./.powerforge/engine-lock.json
+      powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}
+      powerforge_ref_override: ${{ vars.POWERFORGE_REF }}
+    secrets: inherit
 """;
         created += WriteFile(Path.Combine(workflowsRoot, "website-maintenance.yml"), maintenanceWorkflowTemplate);
 

@@ -68,7 +68,9 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
    - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)
-   - default scaffolder workflow resolves engine checkout from `POWERFORGE_LOCK_PATH`
+   - default scaffolder workflow is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml`
+   - default scaffolder maintenance workflow is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml`
+   - reusable workflow resolves engine checkout from `POWERFORGE_LOCK_PATH` or explicit repo/ref inputs
    - scaffolded workflow fails early when lock/override `ref` is not a full commit SHA (40/64 hex)
    - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
