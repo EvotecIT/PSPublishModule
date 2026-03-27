@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -89,7 +90,6 @@ public sealed class ModuleScaffoldService
     {
         var content = File.ReadAllText(filePath);
         content = ReplaceTemplateToken(content, "GUID", guid);
-        content = ReplaceTemplateToken(content, "Guid", guid);
         content = ReplaceTemplateToken(content, "ModuleName", moduleName);
         File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
@@ -99,9 +99,8 @@ public sealed class ModuleScaffoldService
         if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(tokenName))
             return content;
 
-        return content
-            .Replace("`$" + tokenName, value)
-            .Replace("$" + tokenName, value);
+        var pattern = $@"`?\${Regex.Escape(tokenName)}(?![A-Za-z0-9_])";
+        return Regex.Replace(content, pattern, value, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private void EnsureAboutTopicSeed(string projectRoot, string moduleName)
