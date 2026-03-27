@@ -34,19 +34,19 @@ Redirect output or use -Verbose to force plain, line-by-line output (useful for 
 
 ### EXAMPLE 1
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
 New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }
 ```
 
 ### EXAMPLE 2
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
 ```
 
 ### EXAMPLE 3
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
 New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
 New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }
@@ -54,14 +54,14 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
 
 ### EXAMPLE 4
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
 -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
 -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 ```
 
 ### EXAMPLE 5
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
 -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
 -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
 ```
@@ -600,7 +600,7 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Path to the folder where the project exists or should be created. When omitted, uses the parent of the calling script directory.
+Path to the parent folder where the project exists or should be created. The module project resolves to Path\ModuleName. When omitted, uses the parent of the calling script directory.
 
 ```yaml
 Type: String

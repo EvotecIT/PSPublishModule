@@ -299,4 +299,87 @@ public sealed partial class ArtefactBuilder
         return Path.GetFullPath(full);
     }
 
+    private static string ResolveRequiredModulesRootForPacked(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string packedRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        return ResolvePackedLayoutRoot(
+            cfg.RequiredModules.Path,
+            outputRoot,
+            packedRoot,
+            packedRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+    }
+
+    private static string ResolveModulesRootForPacked(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string packedRoot,
+        string requiredModulesRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        return ResolvePackedLayoutRoot(
+            cfg.RequiredModules.ModulesPath,
+            outputRoot,
+            packedRoot,
+            requiredModulesRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+    }
+
+    private static string ResolvePackedLayoutRoot(
+        string? configuredPath,
+        string outputRoot,
+        string packedRoot,
+        string defaultRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        var raw = BuildServices.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(raw))
+            return defaultRoot;
+
+        if (!Path.IsPathRooted(raw))
+            return Path.GetFullPath(Path.Combine(packedRoot, raw));
+
+        var resolved = Path.GetFullPath(raw);
+        var resolvedOutputRoot = Path.GetFullPath(outputRoot);
+        if (!IsSameOrChildPath(resolvedOutputRoot, resolved))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact module paths must resolve under artefact output '{resolvedOutputRoot}', but got '{resolved}'.");
+        }
+
+        var relative = ComputeRelativePath(resolvedOutputRoot, resolved);
+        if (string.IsNullOrWhiteSpace(relative) || relative == ".")
+            return packedRoot;
+
+        return Path.GetFullPath(Path.Combine(packedRoot, relative));
+    }
+
+    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    {
+        var root = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var rootWithSeparator = root + Path.DirectorySeparatorChar;
+        var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
+        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

@@ -155,7 +155,10 @@ public sealed partial class ArtefactBuilder
 
         try
         {
-            var mainModuleDest = Path.Combine(tempRoot, moduleName);
+            var requiredRoot = ResolveRequiredModulesRootForPacked(cfg, outputRoot, tempRoot, moduleName, moduleVersion, preRelease);
+            var modulesRoot = ResolveModulesRootForPacked(cfg, outputRoot, tempRoot, requiredRoot, moduleName, moduleVersion, preRelease);
+
+            var mainModuleDest = Path.Combine(modulesRoot, moduleName);
             _logger.Info($"Staging packed artefact '{zipPath}'");
             CopyModulePackage(stagingPath, mainModuleDest, include);
             modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: mainModuleDest));
@@ -168,7 +171,7 @@ public sealed partial class ArtefactBuilder
                 {
                     var depEntry = SaveRequiredModuleToFolder(
                         rm,
-                        tempRoot,
+                        requiredRoot,
                         cfg.RequiredModules.Repository,
                         cfg.RequiredModules.Credential,
                         tool,

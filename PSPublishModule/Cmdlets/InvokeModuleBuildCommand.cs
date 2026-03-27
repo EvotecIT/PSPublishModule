@@ -29,7 +29,7 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Build a module (DSL) and keep docs in sync</summary>
 /// <code>
-/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
 ///     New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 /// }
 /// </code>
@@ -37,13 +37,13 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Generate a PowerForge JSON pipeline without running the build</summary>
 /// <code>
-/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
 /// </code>
 /// </example>
 /// <example>
 /// <summary>Enforce consistency and compatibility during build (fail CI on issues)</summary>
 /// <code>
-/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
 ///     New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
 ///     New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 /// }
@@ -52,7 +52,7 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Publish a .NET project into the module as part of the build</summary>
 /// <code>
-/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
 ///     -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
 ///     -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 /// </code>
@@ -60,7 +60,7 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Fail CI only on new diagnostics compared to a committed baseline</summary>
 /// <code>
-/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
 ///     -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
 ///     -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
 /// </code>
@@ -79,7 +79,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public ScriptBlock? Settings { get; set; }
 
     /// <summary>
-    /// Path to the folder where the project exists or should be created. When omitted, uses the parent of the calling script directory.
+    /// Path to the parent folder where the project exists or should be created. The module project resolves to Path\ModuleName. When omitted, uses the parent of the calling script directory.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string? Path { get; set; }
