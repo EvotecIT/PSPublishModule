@@ -46,7 +46,7 @@ Overview identity and quick start:
 - `generateGitFreshness` (pipeline) / `--git-freshness` (CLI) enables opt-in git freshness metadata:
   - `gitFreshnessNewDays` / `--git-freshness-new-days` controls the `new` window (default `14`)
   - `gitFreshnessUpdatedDays` / `--git-freshness-updated-days` controls the `updated` window (default `90`)
-  - emitted JSON adds `freshness.status`, `freshness.lastModifiedUtc`, `freshness.commitSha`, `freshness.ageDays`, and `freshness.sourcePath`
+  - emitted JSON adds `freshness.status`, `freshness.lastModifiedUtc`, `freshness.commitSha`, `freshness.ageDays`, and a normalized `freshness.sourcePath` (relative when possible; file-name fallback otherwise)
   - HTML badges render only for `new` / `updated`; `stable` remains unbadged to avoid visual noise
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
@@ -413,6 +413,7 @@ Notes:
   - only scripts that both parse cleanly and reference documented commands are executed
   - enabling execution implicitly enables validation
 - Validation reports default to `powershell-example-validation.json` under the API output root when validation is enabled.
+- Validation JSON normalizes help/example/artifact paths when possible, so reports do not leak build-agent absolute paths. Execution entries also include captured `executionStdOut`, `executionStdErr`, and `executionSkippedReason` when available.
 - When execution is enabled, report writing also emits reusable transcript artifacts under a sibling `powershell-example-validation-artifacts/` folder and records each path as `executionArtifactPath`.
 - When generated docs also receive that validation result, successful imported PowerShell examples can surface those transcript artifacts as terminal-style example media links in the rendered API reference.
 - Imported PowerShell example scripts can also ship richer playback sidecars next to the `.ps1` file: matching `.cast` / `.asciinema` files are staged into API output automatically, and matching `.png` / `.jpg` / `.jpeg` / `.webp` files are used as poster art when present.

@@ -9,11 +9,57 @@ public static partial class WebApiDocsGenerator
     private sealed record GeneratedPowerShellExample(string Label, string Code);
     private sealed record ImportedPowerShellExampleCandidate(string Command, string Snippet, string FilePath, int Score, int LineNumber);
     private sealed record PowerShellPlaybackAssetHealth(bool HasUnsupportedSidecars, bool HasOversizedAssets, bool HasStaleAssets);
+    private const int GeneratedExampleNoRequiredParameterBonus = 14;
+    private const int GeneratedExampleSingleRequiredTargetScore = 36;
+    private const int GeneratedExampleRequiredCountPenalty = 10;
+    private const int GeneratedExampleSimpleRequiredSetBonus = 8;
+    private const int GeneratedExampleLargeRequiredSetPenalty = 8;
+    private const int GeneratedExampleFriendlyParameterBonus = 12;
+    private const int GeneratedExampleUnfriendlyParameterPenalty = 16;
+    private const int GeneratedExampleSpecialParameterValueBonus = 8;
+    private const int GeneratedExampleSwitchPenalty = 6;
+    private const int GeneratedExamplePreferredNameBonus = 30;
+    private const int GeneratedExamplePreferredSuffixBonus = 22;
+    private const int GeneratedExampleAdvancedObjectPenalty = 28;
+    private const int GeneratedExampleCommonParameterPenalty = 40;
     private const long RecommendedPowerShellPlaybackAssetMaxBytes = 2 * 1024 * 1024;
     private const long RecommendedPowerShellPlaybackPosterMaxBytes = 1024 * 1024;
     private static readonly string[] SupportedPowerShellPlaybackExtensions = [".cast", ".asciinema"];
     private static readonly string[] SupportedPowerShellPlaybackPosterExtensions = [".png", ".jpg", ".jpeg", ".webp"];
     private static readonly string[] UnsupportedPowerShellPlaybackSidecarExtensions = [".gif", ".mp4", ".webm", ".mov", ".avi", ".mkv", ".bmp", ".tif", ".tiff", ".svg"];
+    private static readonly HashSet<string> FriendlyPowerShellExampleTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "String",
+        "Int32",
+        "int",
+        "Int64",
+        "long",
+        "UInt32",
+        "uint",
+        "UInt64",
+        "ulong",
+        "Int16",
+        "short",
+        "UInt16",
+        "ushort",
+        "Byte",
+        "SByte",
+        "Double",
+        "double",
+        "Single",
+        "float",
+        "Decimal",
+        "decimal",
+        "Boolean",
+        "Bool",
+        "Guid",
+        "Uri",
+        "DateTime",
+        "Hashtable",
+        "IDictionary",
+        "ScriptBlock",
+        "SwitchParameter"
+    };
 
     private static readonly Regex PowerShellCommandTokenRegex = new(
         @"\b[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][A-Za-z0-9_.-]*\b",
@@ -56,6 +102,7 @@ public static partial class WebApiDocsGenerator
         {
             if (snippetsByCommand.TryGetValue(type.Name, out var snippets) && snippets.Count > 0)
             {
+                var stagedAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var emittedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var snippet in snippets.Take(limit))
                 {
@@ -71,6 +118,7 @@ public static partial class WebApiDocsGenerator
                         options,
                         validationByFile,
                         inspectedPlaybackMediaFiles,
+                        stagedAssetPaths,
                         emittedArtifactPaths,
                         warnings);
                     if (mediaExample is not null)
@@ -207,9 +255,10 @@ public static partial class WebApiDocsGenerator
         int maxPerCommand,
         List<string> warnings)
     {
-        var results = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
         var dedupe = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var candidates = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
+        var limitPerCommand = Math.Max(1, maxPerCommand);
+        var results = new Dictionary<string, List<ImportedPowerShellExampleCandidate>>(StringComparer.OrdinalIgnoreCase);
         if (files.Count == 0 || commandNames.Count == 0)
             return results;
 
@@ -233,9 +282,6 @@ public static partial class WebApiDocsGenerator
                 foreach (var command in EnumeratePowerShellCommandTokensFromLine(line))
                 {
                     if (!commands.Contains(command))
-                        continue;
-
-                    if (results.TryGetValue(command, out var existing) && existing.Count >= maxPerCommand)
                         continue;
 
                     var snippet = CapturePowerShellExampleSnippet(lines, i);
@@ -263,6 +309,17 @@ public static partial class WebApiDocsGenerator
                         file,
                         GetImportedPowerShellExampleScore(command, file, snippet, i),
                         i));
+
+                    if (commandCandidates.Count > limitPerCommand * 3)
+                    {
+                        commandCandidates = commandCandidates
+                            .OrderByDescending(static candidate => candidate.Score)
+                            .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(static candidate => candidate.LineNumber)
+                            .Take(limitPerCommand)
+                            .ToList();
+                        candidates[command] = commandCandidates;
+                    }
                 }
             }
         }
@@ -273,7 +330,7 @@ public static partial class WebApiDocsGenerator
                 .OrderByDescending(static candidate => candidate.Score)
                 .ThenBy(static candidate => candidate.FilePath, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static candidate => candidate.LineNumber)
-                .Take(Math.Max(1, maxPerCommand))
+                .Take(limitPerCommand)
                 .ToList();
         }
 
@@ -303,6 +360,7 @@ public static partial class WebApiDocsGenerator
         WebApiDocsOptions options,
         IReadOnlyDictionary<string, WebApiDocsPowerShellExampleFileValidationResult> validationByFile,
         ISet<string>? inspectedPlaybackMediaFiles,
+        ISet<string>? stagedAssetPaths,
         ISet<string> emittedArtifactPaths,
         List<string>? warnings)
     {
@@ -319,6 +377,7 @@ public static partial class WebApiDocsGenerator
             normalizedExamplePath,
             options,
             playbackAssetHealth,
+            stagedAssetPaths,
             emittedArtifactPaths,
             warnings);
         if (playbackMedia is not null)
@@ -337,16 +396,24 @@ public static partial class WebApiDocsGenerator
         var artifactPath = Path.GetFullPath(validationFile.ExecutionArtifactPath);
         if (!File.Exists(artifactPath))
             return null;
-        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(artifactPath))
+        var stagedArtifactUrl = TryStageApiExampleAsset(
+            options.OutputPath,
+            options.BaseUrl,
+            artifactPath,
+            stagedAssetPaths,
+            warnings);
+        if (string.IsNullOrWhiteSpace(stagedArtifactUrl))
             return null;
 
-        var artifactUrl = TryConvertApiOutputPathToRoute(options.OutputPath, options.BaseUrl, artifactPath);
-        if (string.IsNullOrWhiteSpace(artifactUrl))
+        var stagedArtifactPath = TryResolveApiOutputPath(options.OutputPath, stagedArtifactUrl, options.BaseUrl) ?? artifactPath;
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(stagedArtifactPath))
             return null;
+
+        var artifactUrl = stagedArtifactUrl;
 
         DateTimeOffset? capturedAtUtc = null;
         DateTimeOffset? sourceUpdatedAtUtc = null;
-        TryReadFileTimestampUtc(artifactPath, out capturedAtUtc);
+        TryReadFileTimestampUtc(stagedArtifactPath, out capturedAtUtc);
         TryReadFileTimestampUtc(normalizedExamplePath, out sourceUpdatedAtUtc);
 
         return new ApiExampleModel
@@ -362,7 +429,7 @@ public static partial class WebApiDocsGenerator
                 Alt = "Execution transcript",
                 MimeType = "text/plain",
                 SourcePath = normalizedExamplePath,
-                AssetPath = artifactPath,
+                AssetPath = stagedArtifactPath,
                 CapturedAtUtc = capturedAtUtc,
                 SourceUpdatedAtUtc = sourceUpdatedAtUtc
             }
@@ -388,11 +455,29 @@ public static partial class WebApiDocsGenerator
         return normalizedBase + "/" + relative.Replace('\\', '/');
     }
 
+    private static string? TryResolveApiOutputPath(string outputPath, string route, string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) || string.IsNullOrWhiteSpace(route))
+            return null;
+
+        var normalizedBase = NormalizeApiRoute(baseUrl ?? "/api").TrimEnd('/');
+        var normalizedRoute = route.Trim();
+        if (!normalizedRoute.StartsWith(normalizedBase + "/", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var relative = normalizedRoute.Substring(normalizedBase.Length + 1).Replace('/', Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(relative))
+            return null;
+
+        return Path.Combine(Path.GetFullPath(outputPath), relative);
+    }
+
     private static ApiExampleModel? TryBuildPowerShellImportedPlaybackMedia(
         string exampleFilePath,
         WebApiDocsOptions options,
         PowerShellPlaybackAssetHealth playbackAssetHealth,
-        ISet<string>? emittedAssetPaths,
+        ISet<string>? stagedAssetPaths,
+        ISet<string>? emittedArtifactPaths,
         List<string>? warnings)
     {
         if (string.IsNullOrWhiteSpace(exampleFilePath) || options is null || string.IsNullOrWhiteSpace(options.OutputPath))
@@ -402,14 +487,18 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(castPath))
             return null;
 
-        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, emittedAssetPaths, warnings);
+        var castUrl = TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, castPath, stagedAssetPaths, warnings);
         if (string.IsNullOrWhiteSpace(castUrl))
+            return null;
+
+        var stagedArtifactPath = TryResolveApiOutputPath(options.OutputPath, castUrl, options.BaseUrl) ?? Path.GetFullPath(castPath);
+        if (emittedArtifactPaths is not null && !emittedArtifactPaths.Add(stagedArtifactPath))
             return null;
 
         var posterPath = ResolvePowerShellExamplePlaybackSidecar(exampleFilePath, SupportedPowerShellPlaybackPosterExtensions);
         var posterUrl = string.IsNullOrWhiteSpace(posterPath)
             ? null
-            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, emittedAssetPaths, warnings);
+            : TryStageApiExampleAsset(options.OutputPath, options.BaseUrl, posterPath, stagedAssetPaths, warnings);
         DateTimeOffset? capturedAtUtc = null;
         DateTimeOffset? sourceUpdatedAtUtc = null;
         TryReadFileTimestampUtc(castPath, out capturedAtUtc);
@@ -646,7 +735,7 @@ public static partial class WebApiDocsGenerator
             var destinationPath = Path.Combine(stagedDirectory, fileName);
 
             if (!File.Exists(destinationPath) ||
-                File.GetLastWriteTimeUtc(sourceFullPath) > File.GetLastWriteTimeUtc(destinationPath))
+                File.GetLastWriteTimeUtc(sourceFullPath) != File.GetLastWriteTimeUtc(destinationPath))
             {
                 File.Copy(sourceFullPath, destinationPath, overwrite: true);
             }
@@ -829,6 +918,16 @@ public static partial class WebApiDocsGenerator
             .ThenBy(static method => method.ParameterSetName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        if (methods.Count == 0)
+        {
+            return
+            [
+                new GeneratedPowerShellExample(
+                    "Generated fallback example from command name.",
+                    type.Name.Trim())
+            ];
+        }
+
         foreach (var method in methods)
         {
             var code = BuildGeneratedPowerShellExample(type.Name, method);
@@ -892,23 +991,29 @@ public static partial class WebApiDocsGenerator
         if (method is null)
             return int.MinValue;
 
-        var required = method.Parameters.Where(static p => !p.IsOptional).ToList();
-        var optional = method.Parameters.Where(static p => p.IsOptional).ToList();
+        var parameters = method.Parameters
+            .Where(static parameter => parameter is not null)
+            .ToList();
+        var required = parameters.Where(static p => !p.IsOptional).ToList();
+        var optional = parameters.Where(static p => p.IsOptional).ToList();
         var score = 0;
 
+        // Prefer parameter sets that read like a quick-start invocation: one clear required value,
+        // a small required surface area, and human-friendly parameter types.
         if (required.Count == 0)
         {
-            score += 14;
+            score += GeneratedExampleNoRequiredParameterBonus;
         }
         else
         {
-            score += Math.Max(0, 36 - Math.Abs(required.Count - 1) * 10);
+            score += Math.Max(0, GeneratedExampleSingleRequiredTargetScore - Math.Abs(required.Count - 1) * GeneratedExampleRequiredCountPenalty);
         }
 
         if (required.Count <= 3)
-            score += 8;
+            score += GeneratedExampleSimpleRequiredSetBonus;
+        // Four required parameters is intentionally neutral; beyond that we start penalizing complexity.
         if (required.Count > 4)
-            score -= (required.Count - 4) * 8;
+            score -= (required.Count - 4) * GeneratedExampleLargeRequiredSetPenalty;
 
         score += required.Sum(GetGeneratedPowerShellExampleParameterScore);
         score += optional
@@ -936,12 +1041,12 @@ public static partial class WebApiDocsGenerator
                 name.Equals("Id", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Mode", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Uri", StringComparison.OrdinalIgnoreCase))
-                score += 30;
+                score += GeneratedExamplePreferredNameBonus;
             else if (name.EndsWith("Name", StringComparison.OrdinalIgnoreCase) ||
                      name.EndsWith("Path", StringComparison.OrdinalIgnoreCase) ||
                      name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
                      name.EndsWith("Uri", StringComparison.OrdinalIgnoreCase))
-                score += 22;
+                score += GeneratedExamplePreferredSuffixBonus;
 
             if (name.Equals("InputObject", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Credential", StringComparison.OrdinalIgnoreCase) ||
@@ -949,7 +1054,7 @@ public static partial class WebApiDocsGenerator
                 name.Equals("CimSession", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("PSSession", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase))
-                score -= 28;
+                score -= GeneratedExampleAdvancedObjectPenalty;
 
             if (name.Equals("WhatIf", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Confirm", StringComparison.OrdinalIgnoreCase) ||
@@ -962,18 +1067,20 @@ public static partial class WebApiDocsGenerator
                 name.Equals("OutVariable", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("OutBuffer", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("PipelineVariable", StringComparison.OrdinalIgnoreCase))
-                score -= 40;
+                score -= GeneratedExampleCommonParameterPenalty;
         }
 
         if (IsPowerShellFriendlyExampleType(type))
-            score += 12;
+            score += GeneratedExampleFriendlyParameterBonus;
         else if (!string.IsNullOrWhiteSpace(type))
-            score -= 16;
+            score -= GeneratedExampleUnfriendlyParameterPenalty;
 
         if (parameter.PossibleValues.Count > 0)
-            score += 8;
+            score += GeneratedExampleSpecialParameterValueBonus;
+        // ScriptBlock is syntactically valid but usually too complex for a friendly default example,
+        // so a parameter literally named ScriptBlock is still scored down even though the type is "friendly".
         if (IsPowerShellSwitchParameter(type))
-            score -= 6;
+            score -= GeneratedExampleSwitchPenalty;
 
         return score;
     }
@@ -987,44 +1094,8 @@ public static partial class WebApiDocsGenerator
         if (type.EndsWith("[]", StringComparison.Ordinal))
             return IsPowerShellFriendlyExampleType(type[..^2]);
 
-        return type.Equals("String", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("string", StringComparison.OrdinalIgnoreCase) ||
+        return FriendlyPowerShellExampleTypes.Contains(type) ||
                type.EndsWith(".String", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Int32", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("int", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Int64", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("long", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("UInt32", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("uint", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("UInt64", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("ulong", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Int16", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("short", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("UInt16", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("ushort", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Byte", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("byte", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("SByte", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("sbyte", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Double", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("double", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Single", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("float", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Decimal", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("decimal", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Boolean", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Bool", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("bool", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Guid", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("guid", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Uri", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("uri", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("DateTime", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("datetime", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("Hashtable", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("IDictionary", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase) ||
-               type.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
                type.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase);
     }
 
