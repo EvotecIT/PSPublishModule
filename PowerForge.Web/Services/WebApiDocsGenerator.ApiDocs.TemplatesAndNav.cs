@@ -576,6 +576,8 @@ public static partial class WebApiDocsGenerator
         var children = new List<NavItem>();
         if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
             children = ParseAnyNavItems(childItems);
+        if (TryGetProperty(item, "Sections", out var sectionsProp) && sectionsProp.ValueKind == JsonValueKind.Array)
+            children.AddRange(ParseSectionNavItems(sectionsProp));
 
         if (string.IsNullOrWhiteSpace(text))
             return null;
@@ -592,6 +594,34 @@ public static partial class WebApiDocsGenerator
             external |= IsExternal(href);
 
         return new NavItem(href, text, external, target, rel, children);
+    }
+
+    private static List<NavItem> ParseSectionNavItems(JsonElement sectionsProp)
+    {
+        var list = new List<NavItem>();
+        foreach (var section in sectionsProp.EnumerateArray())
+        {
+            if (section.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var title = ReadString(section, "Title", "title", "Text", "text");
+            if (!TryGetProperty(section, "Items", out var itemsProp) || itemsProp.ValueKind != JsonValueKind.Array)
+                continue;
+
+            var children = ParseAnyNavItems(itemsProp);
+            if (children.Count == 0)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                list.AddRange(children);
+                continue;
+            }
+
+            list.Add(new NavItem(null, title, external: false, items: children));
+        }
+
+        return list;
     }
 
     private static Dictionary<string, List<NavItem>> MergeMenus(

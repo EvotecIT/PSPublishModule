@@ -73,6 +73,8 @@ public sealed class WebApiDocsOptions
     /// If <see cref="CriticalCssHtml"/> is set, it takes precedence.
     /// </summary>
     public string? CriticalCssPath { get; set; }
+    /// <summary>Optional path to additional HTML injected into the &lt;head&gt; of generated API pages.</summary>
+    public string? HeadHtmlPath { get; set; }
     /// <summary>Optional path to header HTML fragment.</summary>
     public string? HeaderHtmlPath { get; set; }
     /// <summary>Optional path to footer HTML fragment.</summary>
