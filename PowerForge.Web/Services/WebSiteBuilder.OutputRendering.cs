@@ -524,9 +524,9 @@ public static partial class WebSiteBuilder
         var includeCategories = feedSpec?.IncludeCategories != false;
         var localization = ResolveLocalizationConfig(spec);
         var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
-        var channelTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
+        var channelTitle = ResolveFeedChannelTitle(spec, item);
         var channelLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
-        var channelDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+        var channelDescription = ResolveFeedChannelDescription(spec, item);
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "rss", Suffix = "xml" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
 
@@ -587,8 +587,8 @@ public static partial class WebSiteBuilder
         var includeCategories = feedSpec?.IncludeCategories != false;
         var localization = ResolveLocalizationConfig(spec);
         var baseUrl = (ResolveLanguageBaseUrl(spec, localization, item.Language) ?? string.Empty).TrimEnd('/');
-        var feedTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
-        var feedDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+        var feedTitle = ResolveFeedChannelTitle(spec, item);
+        var feedDescription = ResolveFeedChannelDescription(spec, item);
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "atom", Suffix = "atom.xml" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
         var siteLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
@@ -664,10 +664,10 @@ public static partial class WebSiteBuilder
         var payload = new Dictionary<string, object?>
         {
             ["version"] = "https://jsonfeed.org/version/1.1",
-            ["title"] = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title,
+            ["title"] = ResolveFeedChannelTitle(spec, item),
             ["home_page_url"] = homePageUrl,
             ["feed_url"] = feedSelfLink,
-            ["description"] = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description,
+            ["description"] = ResolveFeedChannelDescription(spec, item),
             ["items"] = orderedItems.Select(entry =>
             {
                 var entryUrl = string.IsNullOrWhiteSpace(baseUrl) ? entry.OutputPath : baseUrl + entry.OutputPath;
@@ -868,6 +868,61 @@ public static partial class WebSiteBuilder
     {
         var term = GetMetaString(item.Meta, "term");
         return string.IsNullOrWhiteSpace(term) ? null : term;
+    }
+
+    private static string ResolveFeedChannelTitle(SiteSpec spec, ContentItem item)
+    {
+        var taxonomy = ResolveTaxonomy(spec, item);
+        var term = ResolveTerm(item);
+
+        if (taxonomy is not null)
+        {
+            if (item.Kind == PageKind.Taxonomy && !string.IsNullOrWhiteSpace(taxonomy.FeedTitle))
+                return taxonomy.FeedTitle.Trim();
+
+            if (item.Kind == PageKind.Term)
+            {
+                var resolved = ExpandTaxonomyFeedTemplate(taxonomy.TermFeedTitleTemplate, spec, taxonomy, term);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    return resolved;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
+    }
+
+    private static string ResolveFeedChannelDescription(SiteSpec spec, ContentItem item)
+    {
+        var taxonomy = ResolveTaxonomy(spec, item);
+        var term = ResolveTerm(item);
+
+        if (taxonomy is not null)
+        {
+            if (item.Kind == PageKind.Taxonomy && !string.IsNullOrWhiteSpace(taxonomy.FeedDescription))
+                return taxonomy.FeedDescription.Trim();
+
+            if (item.Kind == PageKind.Term)
+            {
+                var resolved = ExpandTaxonomyFeedTemplate(taxonomy.TermFeedDescriptionTemplate, spec, taxonomy, term);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    return resolved;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+    }
+
+    private static string? ExpandTaxonomyFeedTemplate(string? template, SiteSpec spec, TaxonomySpec taxonomy, string? term)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return null;
+
+        var taxonomyDisplay = string.IsNullOrWhiteSpace(taxonomy.Name) ? string.Empty : HumanizeSegment(taxonomy.Name);
+        return template
+            .Replace("{term}", term ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("{taxonomy}", taxonomyDisplay, StringComparison.OrdinalIgnoreCase)
+            .Replace("{site}", spec.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim();
     }
 }
 
