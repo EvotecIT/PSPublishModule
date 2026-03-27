@@ -88,8 +88,20 @@ public sealed class ModuleScaffoldService
     private static void PatchInitialModuleTemplate(string filePath, string moduleName, string guid)
     {
         var content = File.ReadAllText(filePath);
-        content = content.Replace("`$GUID", guid).Replace("`$ModuleName", moduleName);
+        content = ReplaceTemplateToken(content, "GUID", guid);
+        content = ReplaceTemplateToken(content, "Guid", guid);
+        content = ReplaceTemplateToken(content, "ModuleName", moduleName);
         File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static string ReplaceTemplateToken(string content, string tokenName, string value)
+    {
+        if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(tokenName))
+            return content;
+
+        return content
+            .Replace("`$" + tokenName, value)
+            .Replace("$" + tokenName, value);
     }
 
     private void EnsureAboutTopicSeed(string projectRoot, string moduleName)
