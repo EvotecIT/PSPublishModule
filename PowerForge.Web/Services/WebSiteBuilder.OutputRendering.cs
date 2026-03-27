@@ -12,6 +12,8 @@ namespace PowerForge.Web;
 /// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    private static readonly ConcurrentDictionary<string, System.Text.RegularExpressions.Regex> HtmlAttributeRewriteRegexCache = new(StringComparer.OrdinalIgnoreCase);
+
     private static void WriteContentItem(
         string outputRoot,
         SiteSpec spec,
@@ -127,7 +129,6 @@ public static partial class WebSiteBuilder
             Outputs = outputs.ToArray(),
             FeedUrl = ResolvePreferredFeedUrl(outputs),
             Breadcrumbs = breadcrumbs,
-            RootPath = rootPath,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
             JsHtml = jsHtml,
@@ -135,10 +136,9 @@ public static partial class WebSiteBuilder
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
             DescriptionMetaHtml = descriptionMeta,
-            HeadHtml = string.Join(
-                Environment.NewLine,
-                new[] { crawlMeta, headHtml, alternateHeadLinksHtml }
-                    .Where(v => !string.IsNullOrWhiteSpace(v))),
+            HeadHtml = string.IsNullOrWhiteSpace(alternateHeadLinksHtml)
+                ? headHtml
+                : string.Join(Environment.NewLine, new[] { headHtml, alternateHeadLinksHtml }.Where(v => !string.IsNullOrWhiteSpace(v))),
             OpenGraphHtml = openGraph,
             StructuredDataHtml = structuredData,
             ExtraCssHtml = extraCss,
@@ -232,10 +232,14 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
             return html;
 
-        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?:""(?<doubleValue>[^""]*)""|'(?<singleValue>[^']*)')";
-        return System.Text.RegularExpressions.Regex.Replace(
+        var regex = HtmlAttributeRewriteRegexCache.GetOrAdd(
+            attributeName,
+            static name => new System.Text.RegularExpressions.Regex(
+                $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*=\s*)(?:""(?<doubleValue>[^""]*)""|'(?<singleValue>[^']*)')",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                RegexTimeout));
+        return regex.Replace(
             html,
-            pattern,
             match =>
             {
                 var quote = match.Groups["doubleValue"].Success ? "\"" : "'";
@@ -247,9 +251,7 @@ public static partial class WebSiteBuilder
                     return match.Value;
 
                 return match.Groups["prefix"].Value + quote + rewritten + quote;
-            },
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-            RegexTimeout);
+            });
     }
 
     private static void ReportSlowRenderTiming(

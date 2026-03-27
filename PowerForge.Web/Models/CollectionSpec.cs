@@ -37,7 +37,8 @@ public sealed class CollectionSpec
     /// <summary>
     /// Optional subset of site languages that should be treated as real localized variants for this collection.
     /// These languages participate in hreflang output and translation completeness checks. When omitted,
-    /// all configured site languages are considered localized.
+    /// all configured site languages are considered localized. When this is omitted, routing falls back to
+    /// <see cref="ExpectedTranslationLanguages"/> before considering the full site language set.
     /// </summary>
     public string[] LocalizedLanguages { get; set; } = Array.Empty<string>();
     /// <summary>

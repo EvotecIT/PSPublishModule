@@ -193,7 +193,6 @@
       "additionalProperties": false,
       "properties": {
         "AutoImageHints": { "type": "boolean", "default": true },
-        "AutoImageDimensions": { "type": "boolean", "default": true },
         "DefaultImageLoading": { "type": "string", "default": "lazy" },
         "DefaultImageDecoding": { "type": "string", "default": "async" }
       }

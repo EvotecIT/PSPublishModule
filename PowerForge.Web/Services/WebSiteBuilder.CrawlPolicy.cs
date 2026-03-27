@@ -17,20 +17,15 @@ public static partial class WebSiteBuilder
 
     private static string BuildCrawlMetaHtml(SiteSpec spec, ContentItem item)
     {
-        var forceFallbackNoIndex = IsLocalizedFallbackCopy(item) && !HasExplicitRobotsOverride(item);
         var resolved = ResolveCrawlPolicy(spec, item);
-        if (!resolved.Enabled && !forceFallbackNoIndex)
+        if (!resolved.Enabled)
             return string.Empty;
 
         var lines = new List<string>();
-        var robots = forceFallbackNoIndex && string.IsNullOrWhiteSpace(resolved.Robots)
-            ? "noindex,follow"
-            : resolved.Robots;
-
-        if (!string.IsNullOrWhiteSpace(robots))
+        if (!string.IsNullOrWhiteSpace(resolved.Robots))
         {
             lines.Add(
-                $"<meta name=\"robots\" content=\"{System.Web.HttpUtility.HtmlEncode(robots)}\" />");
+                $"<meta name=\"robots\" content=\"{System.Web.HttpUtility.HtmlEncode(resolved.Robots)}\" />");
         }
 
         foreach (var bot in resolved.Bots.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -50,12 +45,8 @@ public static partial class WebSiteBuilder
         if (item?.Meta is null || item.Meta.Count == 0)
             return false;
 
-        object? value = null;
-        if (!item.Meta.TryGetValue("i18n.fallback_copy", out value) || value is null)
-        {
-            if (!TryGetMetaValue(item.Meta, "i18n.fallback_copy", out value) || value is null)
-                return false;
-        }
+        if (!TryGetMetaValue(item.Meta, "i18n.fallback_copy", out var value) || value is null)
+            return false;
 
         return value switch
         {
@@ -65,23 +56,6 @@ public static partial class WebSiteBuilder
             JsonElement json when json.ValueKind == JsonValueKind.String && bool.TryParse(json.GetString(), out var parsed) => parsed,
             _ => false
         };
-    }
-
-    private static bool HasExplicitRobotsOverride(ContentItem? item)
-    {
-        if (item?.Meta is null || item.Meta.Count == 0)
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(GetMetaString(item.Meta, "robots")))
-            return true;
-
-        foreach (var botName in DefaultCrawlerMetaNames)
-        {
-            if (!string.IsNullOrWhiteSpace(GetPageBotDirective(item, botName)))
-                return true;
-        }
-
-        return false;
     }
 
     private static void WriteCrawlPolicyReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
