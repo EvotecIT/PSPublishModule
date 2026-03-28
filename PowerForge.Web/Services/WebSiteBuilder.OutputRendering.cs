@@ -12,8 +12,6 @@ namespace PowerForge.Web;
 /// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
 public static partial class WebSiteBuilder
 {
-    private static readonly ConcurrentDictionary<string, System.Text.RegularExpressions.Regex> HtmlAttributeRewriteRegexCache = new(StringComparer.OrdinalIgnoreCase);
-
     private static void WriteContentItem(
         string outputRoot,
         SiteSpec spec,
@@ -129,6 +127,7 @@ public static partial class WebSiteBuilder
             Outputs = outputs.ToArray(),
             FeedUrl = ResolvePreferredFeedUrl(outputs),
             Breadcrumbs = breadcrumbs,
+            RootPath = rootPath,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
             JsHtml = jsHtml,
@@ -136,9 +135,10 @@ public static partial class WebSiteBuilder
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
             DescriptionMetaHtml = descriptionMeta,
-            HeadHtml = string.IsNullOrWhiteSpace(alternateHeadLinksHtml)
-                ? headHtml
-                : string.Join(Environment.NewLine, new[] { headHtml, alternateHeadLinksHtml }.Where(v => !string.IsNullOrWhiteSpace(v))),
+            HeadHtml = string.Join(
+                Environment.NewLine,
+                new[] { crawlMeta, headHtml, alternateHeadLinksHtml }
+                    .Where(v => !string.IsNullOrWhiteSpace(v))),
             OpenGraphHtml = openGraph,
             StructuredDataHtml = structuredData,
             ExtraCssHtml = extraCss,
@@ -211,20 +211,15 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return html;
 
-        var localization = ResolveLocalizationConfig(spec);
-        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
-        if (!ShouldRenderLanguageAtRoot(localization, selectedLanguage))
-            return html;
-
         return RewriteQuotedHtmlAttribute(
             RewriteQuotedHtmlAttribute(
                 RewriteQuotedHtmlAttribute(
                     RewriteQuotedHtmlAttribute(
-                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
-                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
-                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
-                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value)),
-            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, value));
+                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
+            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
     }
 
     private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
@@ -232,26 +227,21 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
             return html;
 
-        var regex = HtmlAttributeRewriteRegexCache.GetOrAdd(
-            attributeName,
-            static name => new System.Text.RegularExpressions.Regex(
-                $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*=\s*)(?:""(?<doubleValue>[^""]*)""|'(?<singleValue>[^']*)')",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-                RegexTimeout));
-        return regex.Replace(
+        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
+        return System.Text.RegularExpressions.Regex.Replace(
             html,
+            pattern,
             match =>
             {
-                var quote = match.Groups["doubleValue"].Success ? "\"" : "'";
-                var value = match.Groups["doubleValue"].Success
-                    ? match.Groups["doubleValue"].Value
-                    : match.Groups["singleValue"].Value;
+                var value = match.Groups["value"].Value;
                 var rewritten = rewrite(value);
                 if (string.Equals(value, rewritten, StringComparison.Ordinal))
                     return match.Value;
 
-                return match.Groups["prefix"].Value + quote + rewritten + quote;
-            });
+                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
+            },
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            RegexTimeout);
     }
 
     private static void ReportSlowRenderTiming(

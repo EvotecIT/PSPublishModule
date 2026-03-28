@@ -261,14 +261,21 @@ internal sealed class ScribanThemeHelpers
             var imagePosition = NormalizeObjectPosition(imagePositionRaw);
             var imageStyle = BuildCardImageStyle(imageFitRaw, imageFit, imagePositionRaw, imagePosition);
 
-            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, resolvedCardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, resolvedCardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\" aria-label=\"").Append(Html(BuildEditorialCardAriaLabel(title))).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
             {
+                var imageDimensions = WebImageDimensions.TryResolve(image, sourcePath: null, _context.RootPath, out var resolvedDimensions)
+                    ? resolvedDimensions
+                    : default;
                 sb.Append("<span class=\"pf-editorial-card-media\"");
                 if (!string.IsNullOrWhiteSpace(normalizedAspect))
                     sb.Append(" style=\"aspect-ratio: ").Append(Html(normalizedAspect)).Append(";\"");
                 sb.Append(">");
                 sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"").Append(Html(imageAlt)).Append("\"");
+                if (imageDimensions.Width > 0)
+                    sb.Append(" width=\"").Append(imageDimensions.Width).Append("\"");
+                if (imageDimensions.Height > 0)
+                    sb.Append(" height=\"").Append(imageDimensions.Height).Append("\"");
                 if (!string.IsNullOrWhiteSpace(imageStyle))
                     sb.Append(" style=\"").Append(Html(imageStyle)).Append("\"");
                 sb.Append(" loading=\"lazy\" decoding=\"async\" />");
@@ -287,7 +294,7 @@ internal sealed class ScribanThemeHelpers
                 sb.Append("</p>");
             }
 
-            sb.Append("<h3>").Append(Html(title)).Append("</h3>");
+            sb.Append("<h2>").Append(Html(title)).Append("</h2>");
             if (!string.IsNullOrWhiteSpace(summary))
                 sb.Append("<p class=\"pf-editorial-summary\">").Append(Html(summary)).Append("</p>");
 
@@ -458,6 +465,8 @@ internal sealed class ScribanThemeHelpers
                 var relatedTextValue = string.IsNullOrWhiteSpace(candidate.Title) ? candidate.OutputPath : candidate.Title;
                 sb.Append("<li><a href=\"")
                   .Append(Html(candidate.OutputPath))
+                  .Append("\" aria-label=\"")
+                  .Append(Html(BuildRelatedPostAriaLabel(relatedTextValue)))
                   .Append("\">")
                   .Append(Html(relatedTextValue))
                   .Append("</a></li>");
@@ -734,9 +743,40 @@ internal sealed class ScribanThemeHelpers
             return;
         }
 
-        sb.Append("<a class=\"").Append(Html(cssClass)).Append("\" href=\"").Append(Html(href)).Append("\">")
+        sb.Append("<a class=\"").Append(Html(cssClass)).Append("\" href=\"").Append(Html(href)).Append("\"")
+          .Append(" aria-label=\"").Append(Html(BuildTaxonomyChipAriaLabel(taxonomyName, text))).Append("\">")
           .Append(Html(text))
           .Append("</a>");
+    }
+
+    private string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
+    {
+        var label = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(label))
+            return string.Empty;
+
+        var languageCode = ResolveEffectiveLanguageCode(_context.Page?.Language);
+        var normalizedTaxonomy = taxonomyName?.Trim() ?? string.Empty;
+        var prefix = normalizedTaxonomy.Equals("categories", StringComparison.OrdinalIgnoreCase)
+            ? languageCode switch
+            {
+                "pl" => "Kategoria",
+                "fr" => "Categorie",
+                "de" => "Kategorie",
+                "es" => "Categoria",
+                _ => "Category"
+            }
+            : normalizedTaxonomy.Equals("tags", StringComparison.OrdinalIgnoreCase)
+                ? languageCode switch
+                {
+                    "es" => "Etiqueta",
+                    _ => "Tag"
+                }
+                : string.IsNullOrWhiteSpace(normalizedTaxonomy)
+                    ? "Topic"
+                    : CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalizedTaxonomy.ToLowerInvariant());
+
+        return prefix + ": " + label;
     }
 
     private IEnumerable<string> ResolveTaxonomyValues(ContentItem item, string taxonomyName)
@@ -1370,6 +1410,32 @@ internal sealed class ScribanThemeHelpers
         else if (item.IsAncestor)
             cls.Add("is-ancestor");
         return cls.Count == 0 ? string.Empty : string.Join(" ", cls);
+    }
+
+    private string BuildEditorialCardAriaLabel(string title)
+    {
+        var label = string.IsNullOrWhiteSpace(title) ? "Entry" : title.Trim();
+        return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
+        {
+            "pl" => "Otworz artykul: " + label,
+            "fr" => "Ouvrir l article: " + label,
+            "de" => "Artikel offnen: " + label,
+            "es" => "Abrir articulo: " + label,
+            _ => "Open article: " + label
+        };
+    }
+
+    private string BuildRelatedPostAriaLabel(string title)
+    {
+        var label = string.IsNullOrWhiteSpace(title) ? "Post" : title.Trim();
+        return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
+        {
+            "pl" => "Powiazany artykul: " + label,
+            "fr" => "Article associe: " + label,
+            "de" => "Zugehoriger Beitrag: " + label,
+            "es" => "Articulo relacionado: " + label,
+            _ => "Related post: " + label
+        };
     }
 
     private static string Html(string value) => System.Web.HttpUtility.HtmlEncode(value ?? string.Empty);

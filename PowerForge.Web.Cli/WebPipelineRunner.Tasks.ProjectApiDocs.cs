@@ -559,6 +559,7 @@ internal static partial class WebPipelineRunner
             ["title"] = $"{name} API Reference",
             ["out"] = outputPath,
             ["baseUrl"] = apiBaseUrl,
+            ["language"] = "en",
             ["docsHome"] = hubPath,
             ["navContextPath"] = "/",
             ["navContextProject"] = slug,
@@ -615,6 +616,8 @@ internal static partial class WebPipelineRunner
 
         var docsVisible = (TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false);
         var examplesVisible = (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false);
+        var safeDocsUrl = docsVisible ? docsUrl : overviewUrl;
+        var safeExamplesUrl = examplesVisible ? examplesUrl : overviewUrl;
         var description = NormalizeOptionalString(project.Description);
         var stars = FormatProjectMetric(project.Metrics?.GitHub?.Stars);
         var forks = FormatProjectMetric(project.Metrics?.GitHub?.Forks);
@@ -664,10 +667,10 @@ internal static partial class WebPipelineRunner
             ["PROJECT_MANIFEST_COMMIT"] = EncodeToken(manifestCommit),
             ["PROJECT_MANIFEST_COMMIT_HIDDEN"] = BuildHiddenAttribute(manifestCommit),
             ["PROJECT_OVERVIEW_URL"] = EncodeHrefToken(overviewUrl),
-            ["PROJECT_DOCS_URL"] = EncodeHrefToken(docsUrl),
+            ["PROJECT_DOCS_URL"] = EncodeHrefToken(safeDocsUrl),
             ["PROJECT_DOCS_HIDDEN"] = docsVisible ? string.Empty : " hidden",
             ["PROJECT_API_URL"] = EncodeHrefToken(apiUrl),
-            ["PROJECT_EXAMPLES_URL"] = EncodeHrefToken(examplesUrl),
+            ["PROJECT_EXAMPLES_URL"] = EncodeHrefToken(safeExamplesUrl),
             ["PROJECT_EXAMPLES_HIDDEN"] = examplesVisible ? string.Empty : " hidden"
         };
     }

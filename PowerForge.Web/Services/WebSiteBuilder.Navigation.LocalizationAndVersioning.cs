@@ -546,7 +546,9 @@ public static partial class WebSiteBuilder
             IsNonRouteReference(route))
             return route;
 
-        var normalizedRoute = route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route.TrimStart('/');
+        var normalizedRoute = string.IsNullOrWhiteSpace(route)
+            ? "/"
+            : route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route.TrimStart('/');
 
         if (!ShouldRenderLanguageAtRoot(localization, languageCode))
             return EnsureTrailingSlash(normalizedRoute, spec.TrailingSlash);
@@ -566,20 +568,11 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return route;
 
-        var localization = ResolveLocalizationConfig(spec);
-        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
-        return RebaseRouteForSelectedLanguageRootBuild(spec, localization, selectedLanguage, route);
-    }
-
-    private static string RebaseRouteForSelectedLanguageRootBuild(
-        SiteSpec spec,
-        ResolvedLocalizationConfig localization,
-        string selectedLanguage,
-        string route)
-    {
-        if (string.IsNullOrWhiteSpace(route))
+        if (route.StartsWith("//", StringComparison.Ordinal))
             return route;
 
+        var localization = ResolveLocalizationConfig(spec);
+        var selectedLanguage = ResolveEffectiveLanguageCode(localization, buildContext.Language);
         if (!ShouldRenderLanguageAtRoot(localization, selectedLanguage))
             return route;
 

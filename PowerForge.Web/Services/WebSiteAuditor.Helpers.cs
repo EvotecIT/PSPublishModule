@@ -13,8 +13,12 @@ public static partial class WebSiteAuditor
         "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex EscapedMediaTagPattern = new(
-        "&lt;\\s*(img|iframe|video|source|picture)\\b",
+        "&lt;\\s*(img|iframe|video|source|picture)\\b(?=[^&]*?=)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex HtmlAttributePattern = new(
+        "(?<name>[a-zA-Z_:][-a-zA-Z0-9_:.]*)\\s*=\\s*(?<quote>[\"'])(?<value>.*?)\\k<quote>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+    private const int LinkPurposeRedirectDepthLimit = 8;
 
     private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, bool useDefaultExcludes, out bool truncated)
     {
@@ -361,20 +365,17 @@ public static partial class WebSiteAuditor
 
     private static void ValidateSeoMetadata(
         AngleSharp.Dom.IDocument doc,
+        string rawHtml,
         string relativePath,
         Action<string, string, string?, string, string?> addIssue)
     {
         if (doc.Head is null)
             return;
 
-        if (HasNoIndexRobots(doc))
+        if (HasNoIndexRobots(doc, rawHtml))
             return;
 
-        var canonicalLinks = doc.Head.QuerySelectorAll("link[rel][href]")
-            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "canonical"))
-            .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
-            .Where(href => !string.IsNullOrWhiteSpace(href))
-            .ToArray();
+        var canonicalLinks = GetHeadLinkValues(doc, "canonical", rawHtml);
         if (canonicalLinks.Length == 0)
         {
             addIssue("warning", "seo", relativePath,
@@ -394,19 +395,19 @@ public static partial class WebSiteAuditor
                 "seo-canonical-absolute");
         }
 
-        var ogTitle = GetMetaPropertyValues(doc, "og:title");
+        var ogTitle = GetMetaPropertyValues(doc, "og:title", rawHtml);
         if (ogTitle.Length == 0)
             addIssue("warning", "seo", relativePath, "missing og:title meta tag.", "seo-missing-og-title");
         if (ogTitle.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate og:title tags detected ({ogTitle.Length}).", "seo-duplicate-og-title");
 
-        var ogDescription = GetMetaPropertyValues(doc, "og:description");
+        var ogDescription = GetMetaPropertyValues(doc, "og:description", rawHtml);
         if (ogDescription.Length == 0)
             addIssue("warning", "seo", relativePath, "missing og:description meta tag.", "seo-missing-og-description");
         if (ogDescription.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate og:description tags detected ({ogDescription.Length}).", "seo-duplicate-og-description");
 
-        var ogUrl = GetMetaPropertyValues(doc, "og:url");
+        var ogUrl = GetMetaPropertyValues(doc, "og:url", rawHtml);
         if (ogUrl.Length == 0)
             addIssue("warning", "seo", relativePath, "missing og:url meta tag.", "seo-missing-og-url");
         if (ogUrl.Length > 1)
@@ -418,7 +419,7 @@ public static partial class WebSiteAuditor
                 "seo-og-url-absolute");
         }
 
-        var ogImage = GetMetaPropertyValues(doc, "og:image");
+        var ogImage = GetMetaPropertyValues(doc, "og:image", rawHtml);
         if (ogImage.Length == 0)
         {
             addIssue("warning", "seo", relativePath, "missing og:image meta tag.", "seo-missing-og-image");
@@ -435,25 +436,25 @@ public static partial class WebSiteAuditor
             }
         }
 
-        var twitterCard = GetMetaNameValues(doc, "twitter:card");
+        var twitterCard = GetMetaNameValues(doc, "twitter:card", rawHtml);
         if (twitterCard.Length == 0)
             addIssue("warning", "seo", relativePath, "missing twitter:card meta tag.", "seo-missing-twitter-card");
         if (twitterCard.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:card tags detected ({twitterCard.Length}).", "seo-duplicate-twitter-card");
 
-        var twitterTitle = GetMetaNameValues(doc, "twitter:title");
+        var twitterTitle = GetMetaNameValues(doc, "twitter:title", rawHtml);
         if (twitterTitle.Length == 0)
             addIssue("warning", "seo", relativePath, "missing twitter:title meta tag.", "seo-missing-twitter-title");
         if (twitterTitle.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:title tags detected ({twitterTitle.Length}).", "seo-duplicate-twitter-title");
 
-        var twitterDescription = GetMetaNameValues(doc, "twitter:description");
+        var twitterDescription = GetMetaNameValues(doc, "twitter:description", rawHtml);
         if (twitterDescription.Length == 0)
             addIssue("warning", "seo", relativePath, "missing twitter:description meta tag.", "seo-missing-twitter-description");
         if (twitterDescription.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:description tags detected ({twitterDescription.Length}).", "seo-duplicate-twitter-description");
 
-        var twitterUrl = GetMetaNameValues(doc, "twitter:url");
+        var twitterUrl = GetMetaNameValues(doc, "twitter:url", rawHtml);
         if (twitterUrl.Length == 0)
             addIssue("warning", "seo", relativePath, "missing twitter:url meta tag.", "seo-missing-twitter-url");
         if (twitterUrl.Length > 1)
@@ -465,7 +466,7 @@ public static partial class WebSiteAuditor
                 "seo-twitter-url-absolute");
         }
 
-        var twitterImage = GetMetaNameValues(doc, "twitter:image");
+        var twitterImage = GetMetaNameValues(doc, "twitter:image", rawHtml);
         if (twitterImage.Length == 0)
             addIssue("warning", "seo", relativePath, "missing twitter:image meta tag.", "seo-missing-twitter-image");
         if (twitterImage.Length > 1)
@@ -693,32 +694,62 @@ public static partial class WebSiteAuditor
         }
     }
 
-    private static string[] GetMetaPropertyValues(AngleSharp.Dom.IDocument doc, string propertyName)
+    private static string[] GetMetaPropertyValues(AngleSharp.Dom.IDocument doc, string propertyName, string? rawHtml = null)
     {
-        return doc.Head?
+        var values = doc.Head?
             .QuerySelectorAll("meta[property]")
             .Where(meta => string.Equals(meta.GetAttribute("property"), propertyName, StringComparison.OrdinalIgnoreCase))
             .Select(meta => (meta.GetAttribute("content") ?? string.Empty).Trim())
             .Where(content => !string.IsNullOrWhiteSpace(content))
             .ToArray()
             ?? Array.Empty<string>();
+
+        if (values.Length > 0 || string.IsNullOrWhiteSpace(rawHtml))
+            return values;
+
+        return GetTagAttributeValuesFromHtml(rawHtml, "meta", "property", propertyName, "content");
     }
 
-    private static string[] GetMetaNameValues(AngleSharp.Dom.IDocument doc, string name)
+    private static string[] GetMetaNameValues(AngleSharp.Dom.IDocument doc, string name, string? rawHtml = null)
     {
-        return doc.Head?
+        var values = doc.Head?
             .QuerySelectorAll("meta[name]")
             .Where(meta => string.Equals(meta.GetAttribute("name"), name, StringComparison.OrdinalIgnoreCase))
             .Select(meta => (meta.GetAttribute("content") ?? string.Empty).Trim())
             .Where(content => !string.IsNullOrWhiteSpace(content))
             .ToArray()
             ?? Array.Empty<string>();
+
+        if (values.Length > 0 || string.IsNullOrWhiteSpace(rawHtml))
+            return values;
+
+        return GetTagAttributeValuesFromHtml(rawHtml, "meta", "name", name, "content");
     }
 
-    private static bool HasNoIndexRobots(AngleSharp.Dom.IDocument doc)
+    private static string[] GetHeadLinkValues(AngleSharp.Dom.IDocument doc, string relToken, string? rawHtml = null)
+    {
+        var values = doc.Head?
+            .QuerySelectorAll("link[rel][href]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), relToken))
+            .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
+            .Where(href => !string.IsNullOrWhiteSpace(href))
+            .ToArray()
+            ?? Array.Empty<string>();
+
+        if (values.Length > 0 || string.IsNullOrWhiteSpace(rawHtml))
+            return values;
+
+        return GetLinkHrefValuesFromHtml(rawHtml, relToken);
+    }
+
+    private static bool HasNoIndexRobots(AngleSharp.Dom.IDocument doc, string? rawHtml = null)
     {
         if (doc.Head is null)
+        {
+            if (!string.IsNullOrWhiteSpace(rawHtml))
+                return HasNoIndexRobotsRaw(rawHtml);
             return false;
+        }
 
         foreach (var meta in doc.Head.QuerySelectorAll("meta[name]"))
         {
@@ -734,7 +765,91 @@ public static partial class WebSiteAuditor
                 return true;
         }
 
+        return !string.IsNullOrWhiteSpace(rawHtml) && HasNoIndexRobotsRaw(rawHtml);
+    }
+
+    private static bool HasNoIndexRobotsRaw(string rawHtml)
+    {
+        var names = new[] { "robots", "googlebot", "bingbot" };
+        foreach (var name in names)
+        {
+            foreach (var content in GetTagAttributeValuesFromHtml(rawHtml, "meta", "name", name, "content"))
+            {
+                if (content.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+        }
+
         return false;
+    }
+
+    private static string[] GetLinkHrefValuesFromHtml(string rawHtml, string relToken)
+    {
+        if (string.IsNullOrWhiteSpace(rawHtml) || string.IsNullOrWhiteSpace(relToken))
+            return Array.Empty<string>();
+
+        var values = new List<string>();
+        foreach (Match match in Regex.Matches(rawHtml, "<link\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline))
+        {
+            var attributes = ExtractTagAttributes(match.Value);
+            if (!attributes.TryGetValue("rel", out var relValue) || !ContainsRelToken(relValue, relToken))
+                continue;
+            if (!attributes.TryGetValue("href", out var hrefValue) || string.IsNullOrWhiteSpace(hrefValue))
+                continue;
+
+            values.Add(hrefValue.Trim());
+        }
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+    }
+
+    private static string[] GetTagAttributeValuesFromHtml(string rawHtml, string tagName, string matchAttribute, string matchValue, string targetAttribute)
+    {
+        if (string.IsNullOrWhiteSpace(rawHtml) ||
+            string.IsNullOrWhiteSpace(tagName) ||
+            string.IsNullOrWhiteSpace(matchAttribute) ||
+            string.IsNullOrWhiteSpace(matchValue) ||
+            string.IsNullOrWhiteSpace(targetAttribute))
+            return Array.Empty<string>();
+
+        var values = new List<string>();
+        var pattern = $"<{Regex.Escape(tagName)}\\b[^>]*>";
+        foreach (Match match in Regex.Matches(rawHtml, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline))
+        {
+            var attributes = ExtractTagAttributes(match.Value);
+            if (!attributes.TryGetValue(matchAttribute, out var attributeValue) ||
+                !string.Equals(attributeValue, matchValue, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!attributes.TryGetValue(targetAttribute, out var targetValue) || string.IsNullOrWhiteSpace(targetValue))
+                continue;
+
+            values.Add(targetValue.Trim());
+        }
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+    }
+
+    private static Dictionary<string, string> ExtractTagAttributes(string tagHtml)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(tagHtml))
+            return values;
+
+        foreach (Match match in HtmlAttributePattern.Matches(tagHtml))
+        {
+            var name = match.Groups["name"].Value;
+            var value = match.Groups["value"].Value;
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            values[name] = value;
+        }
+
+        return values;
     }
 
     private static bool IsAbsoluteHttpUrl(string value)
@@ -800,10 +915,12 @@ public static partial class WebSiteAuditor
     private static void ValidateLinkPurposeConsistency(
         AngleSharp.Dom.IDocument doc,
         string relativePath,
+        IReadOnlyDictionary<string, string[]> redirectMap,
         Action<string, string, string?, string, string?> addIssue)
     {
         var labelTargets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var labelDisplay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var languagePrefix = ResolveAuditLanguagePrefix(relativePath);
 
         foreach (var anchor in doc.QuerySelectorAll("a[href]"))
         {
@@ -815,7 +932,7 @@ public static partial class WebSiteAuditor
             if (string.IsNullOrWhiteSpace(label))
                 continue;
 
-            var destination = NormalizeLinkPurposeDestination(href);
+            var destination = NormalizeLinkPurposeDestination(href, redirectMap, languagePrefix);
             if (string.IsNullOrWhiteSpace(destination))
                 continue;
 
@@ -899,7 +1016,7 @@ public static partial class WebSiteAuditor
         return string.Empty;
     }
 
-    private static string NormalizeLinkPurposeDestination(string href)
+    private static string NormalizeLinkPurposeDestination(string href, IReadOnlyDictionary<string, string[]> redirectMap, string languagePrefix)
     {
         var normalized = StripQueryAndFragment(href).Trim();
         if (string.IsNullOrWhiteSpace(normalized))
@@ -915,10 +1032,171 @@ public static partial class WebSiteAuditor
             var path = string.IsNullOrWhiteSpace(absolute.AbsolutePath) ? "/" : absolute.AbsolutePath;
             if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
                 path = path.TrimEnd('/');
+            var normalizedPath = NormalizeNavHref(path);
+            var redirectedPath = ResolveRedirectTarget(path, redirectMap, languagePrefix);
+            if (!string.IsNullOrWhiteSpace(redirectedPath) &&
+                !string.Equals(redirectedPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return redirectedPath;
+            }
             return $"{absolute.Scheme}://{absolute.Host}{(absolute.IsDefaultPort ? string.Empty : ":" + absolute.Port)}{path}";
         }
 
-        return NormalizeNavHref(normalized);
+        return ResolveRedirectTarget(normalized, redirectMap, languagePrefix);
+    }
+
+    private static IReadOnlyDictionary<string, string[]> LoadAuditRedirectMap(string siteRoot)
+    {
+        if (string.IsNullOrWhiteSpace(siteRoot))
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        var redirectMetadataPath = Path.Combine(siteRoot, "_powerforge", "redirects.json");
+        if (!File.Exists(redirectMetadataPath))
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(redirectMetadataPath));
+            var redirectMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            if (document.RootElement.TryGetProperty("routeOverrides", out var routeOverrides) &&
+                routeOverrides.ValueKind == JsonValueKind.Array)
+            {
+                AddRedirectEntries(routeOverrides, redirectMap);
+            }
+
+            if (document.RootElement.TryGetProperty("redirects", out var redirects) &&
+                redirects.ValueKind == JsonValueKind.Array)
+            {
+                AddRedirectEntries(redirects, redirectMap);
+            }
+
+            return redirectMap.ToDictionary(
+                static pair => pair.Key,
+                static pair => pair.Value
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static void AddRedirectEntries(JsonElement redirects, Dictionary<string, List<string>> redirectMap)
+    {
+        foreach (var entry in redirects.EnumerateArray())
+        {
+            if (!entry.TryGetProperty("from", out var fromProperty) ||
+                !entry.TryGetProperty("to", out var toProperty))
+            {
+                continue;
+            }
+
+            var from = NormalizeNavHref(fromProperty.GetString());
+            var to = NormalizeNavHref(toProperty.GetString());
+            if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+                continue;
+
+            if (!redirectMap.TryGetValue(from, out var targets))
+            {
+                targets = new List<string>();
+                redirectMap[from] = targets;
+            }
+
+            if (!targets.Contains(to, StringComparer.OrdinalIgnoreCase))
+                targets.Add(to);
+        }
+    }
+
+    private static string ResolveRedirectTarget(string href, IReadOnlyDictionary<string, string[]> redirectMap, string languagePrefix)
+    {
+        var normalized = NormalizeNavHref(href);
+        if (string.IsNullOrWhiteSpace(normalized) || redirectMap.Count == 0)
+            return normalized;
+
+        var current = normalized;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var depth = 0; depth < LinkPurposeRedirectDepthLimit; depth++)
+        {
+            if (!visited.Add(current))
+                break;
+
+            if (!redirectMap.TryGetValue(current, out var targets) || targets.Length == 0)
+                break;
+
+            current = SelectRedirectTargetForLanguage(targets, languagePrefix);
+            if (string.IsNullOrWhiteSpace(current))
+                return normalized;
+        }
+
+        return current;
+    }
+
+    private static string SelectRedirectTargetForLanguage(string[] targets, string languagePrefix)
+    {
+        if (targets is null || targets.Length == 0)
+            return string.Empty;
+
+        var normalizedLanguagePrefix = NormalizeNavHref(languagePrefix);
+        if (string.IsNullOrWhiteSpace(normalizedLanguagePrefix) || normalizedLanguagePrefix.Equals("/", StringComparison.Ordinal))
+        {
+            var rootTarget = targets.FirstOrDefault(static target => !HasExplicitLanguagePrefix(target));
+            if (!string.IsNullOrWhiteSpace(rootTarget))
+                return NormalizeNavHref(rootTarget);
+        }
+        else
+        {
+            var prefixedTarget = targets.FirstOrDefault(target => TargetMatchesLanguagePrefix(target, normalizedLanguagePrefix));
+            if (!string.IsNullOrWhiteSpace(prefixedTarget))
+                return NormalizeNavHref(prefixedTarget);
+        }
+
+        return NormalizeNavHref(targets[0]);
+    }
+
+    private static string ResolveAuditLanguagePrefix(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return string.Empty;
+
+        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        var slashIndex = normalized.IndexOf('/');
+        var firstSegment = slashIndex >= 0 ? normalized.Substring(0, slashIndex) : normalized;
+        if (firstSegment.Length is < 2 or > 5)
+            return string.Empty;
+
+        if (!Regex.IsMatch(firstSegment, "^[a-z]{2}(?:-[a-z0-9]{2,8})?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            return string.Empty;
+
+        return "/" + firstSegment.ToLowerInvariant();
+    }
+
+    private static bool TargetMatchesLanguagePrefix(string target, string languagePrefix)
+    {
+        var normalizedTarget = NormalizeNavHref(target);
+        if (string.IsNullOrWhiteSpace(normalizedTarget) || string.IsNullOrWhiteSpace(languagePrefix))
+            return false;
+
+        return normalizedTarget.Equals(languagePrefix, StringComparison.OrdinalIgnoreCase) ||
+               normalizedTarget.StartsWith(languagePrefix + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasExplicitLanguagePrefix(string target)
+    {
+        var normalized = NormalizeNavHref(target).TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        var slashIndex = normalized.IndexOf('/');
+        var firstSegment = slashIndex >= 0 ? normalized.Substring(0, slashIndex) : normalized;
+        return Regex.IsMatch(firstSegment, "^[a-z]{2}(?:-[a-z0-9]{2,8})?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static void ValidateNetworkHints(

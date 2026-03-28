@@ -836,10 +836,13 @@ public static partial class WebSiteVerifier
         CollectionSpec collection,
         string[] defaultExpectedLanguages)
     {
-        if (collection.ExpectedTranslationLanguages is not { Length: > 0 })
+        var configuredSource = collection.LocalizedLanguages is { Length: > 0 }
+            ? collection.LocalizedLanguages
+            : collection.ExpectedTranslationLanguages;
+        if (configuredSource is not { Length: > 0 })
             return defaultExpectedLanguages;
 
-        var configuredLanguages = collection.ExpectedTranslationLanguages
+        var configuredLanguages = configuredSource
             .Select(NormalizeLanguageToken)
             .Where(static language => !string.IsNullOrWhiteSpace(language))
             .Where(language => localization.ByCode.ContainsKey(language))

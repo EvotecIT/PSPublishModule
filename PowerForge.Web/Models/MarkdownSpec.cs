@@ -8,6 +8,11 @@ public sealed class MarkdownSpec
     /// </summary>
     public bool AutoImageHints { get; set; } = true;
 
+    /// <summary>
+    /// When true, inject width/height attributes for locally resolvable rendered images when missing.
+    /// </summary>
+    public bool AutoImageDimensions { get; set; } = true;
+
     /// <summary>Default value for img loading attribute when missing.</summary>
     public string DefaultImageLoading { get; set; } = "lazy";
 

@@ -1,6 +1,6 @@
 # PowerForge.Web Agent Handoff (Websites Engine)
 
-Last updated: 2026-03-03
+Last updated: 2026-03-26
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX Website**, **IntelligenceX Website**.
@@ -105,6 +105,48 @@ Start here:
   - Per-language legacy aliases are supported for redirects:
     - `i18n.aliases.<lang>`, `aliases.<lang>`, `translations.<lang>.aliases`
     - plus shared aliases `i18n.aliases.default|all`, `aliases.default|all`.
+
+## Recent Changes (2026-03-25)
+
+- Markdown rendering now has first-class local image dimension enrichment:
+  - `MarkdownSpec.AutoImageDimensions` defaults to `true`.
+  - rendered `<img>` tags keep existing lazy/async hint behavior and now also add `width`/`height` when the image can be resolved from the markdown source path or site root.
+  - rooted site assets such as `/wp-content/uploads/...` are resolved against `static/` automatically during build.
+  - filename hints like `*-1024x804.png` are used as a fallback when dimensions are encoded in the asset name.
+- Cached markdown rendering no longer hides image-hint improvements:
+  - cached HTML is re-enriched on read so new image dimension logic applies without requiring a cache wipe.
+- Image dimension lookup is now shared across markdown and theme helpers:
+  - new engine helper: `PowerForge.Web/Services/WebImageDimensions.cs`
+  - `ThemeRenderContext` now carries `RootPath` so Scriban/theme helpers can resolve local site assets too.
+  - `pf.editorial_cards` now emits `width`/`height` on card images when the underlying local asset can be resolved.
+- Audit impact on the Evotec website:
+  - full CI remained green after the change.
+  - audit warnings dropped from `17144` to `15749`.
+  - the large local `media-img-dimensions` warning bucket on imported blog posts is effectively gone; the visible remaining sample is now external GitHub-camo imagery, not local WordPress uploads.
+- Follow-up audit impact after extending the same logic to editorial cards:
+  - full website CI remained green again.
+  - audit warnings dropped further from `15749` to `12581`.
+  - `media` warnings dropped from `3241` to `73`, so repeated list/taxonomy card-image warnings are no longer a primary quality bucket.
+  - remaining dominant buckets are `nav` (baseline mismatch noise) and a still-open `seo` cluster that needs targeted investigation with full-audit options.
+
+## Recent Changes (2026-03-26)
+
+- Localization now supports explicit per-language root-serving intent:
+  - `localization.languages[].renderAtRoot` is now a first-class engine/site-schema option.
+  - this is intended for split-domain deployments where a non-default language also serves at domain root (for example `evotec.xyz` for EN and `evotec.pl` for PL).
+- Public localization URLs now respect per-language root-serving:
+  - hreflang alternates, language switch links, and sitemap alternates now resolve against the public route for the target language instead of assuming a prefixed path like `/pl/...`.
+- Root-language deploy builds now rebase rendered internal links safely:
+  - menu items and rendered HTML attributes (`href`, `src`, `action`, `formaction`, `data-local-href`) are rebased for the selected `languageAsRoot` build.
+  - same-domain absolute URLs are now rebased without being mangled into invalid values like `"/https://..."`.
+  - external/special references (`http(s)` on other origins, `//`, `mailto:`, `tel:`, `javascript:`, `data:`, `blob:`, `#`, `?`) are preserved.
+- Regression coverage was added for root-served localization:
+  - `Build_LocalizedPages_RebaseInternalLinks_ForRootLanguageBuild`
+  - `Build_LocalizedPages_EmitAlternateHeadLinks_ForRootServedLanguage`
+  - `Sitemap_Generate_EmitsLocalizedAlternates_WithRootServedLanguageBaseUrls`
+- Evotec deploy verification now confirms the split-domain shape:
+  - `.\Build.ps1 -CI -PipelineConfig .\pipeline.deploy.json -SkipSourcesSync -ExpectedOutputPath ''` passed after the change.
+  - generated `_site-en` / `_site-pl` output no longer leaks `https://evotec.pl/pl/...` or malformed `"/https://..."` links.
 
 ## Current Capabilities (What Exists)
 
@@ -256,3 +298,129 @@ Regression coverage in `PowerForge.Tests/ScribanPfNavigationHelpersTests.cs`:
 Verification:
 - `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~ScribanPfNavigationHelpersTests"`
 - Result: Passed (`7` tests).
+
+## Latest Update (2026-03-26): Localization SEO + Audit Fallbacks
+
+Engine changes:
+- `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`
+  - hreflang head links now always emit one `x-default` when alternates exist, even if the page does not have a default-language translation.
+  - localized alternate resolution now keeps self hreflang on materialized fallback pages instead of dropping the current-language route.
+- `PowerForge.Web/Services/WebSiteAuditor.cs`
+  - SEO audit now passes the raw HTML through to metadata validation.
+- `PowerForge.Web/Services/WebSiteAuditor.Helpers.cs`
+  - SEO/meta detection now falls back to raw tag parsing when the DOM query misses canonical / OG / Twitter tags that are still present in HTML.
+  - noindex detection now also has a raw-HTML fallback, which matters for API-doc legacy alias pages.
+
+Regression coverage:
+- `PowerForge.Tests/WebSiteLocalizationFeaturesTests.cs`
+  - added coverage for pages that only have a current-language alternate and still need `x-default`.
+- `PowerForge.Tests/WebSiteAuditSeoMetaTests.cs`
+  - added API-doc-style HTML regression coverage for canonical / OG / Twitter tags plus noindex alias behavior.
+
+Verification:
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~WebSiteAuditSeoMetaTests|FullyQualifiedName~WebSiteLocalizationFeaturesTests"`
+- Result: Passed (`18` tests).
+
+Impact on the Evotec website:
+- fixed the large API-doc SEO false-positive bucket in website audit
+- helped reduce website CI audit warnings from `6756` to `1223` in combination with the site-level nav contract cleanup
+
+## Latest Update (2026-03-26): Link-Purpose Normalization + Editorial Accessibility Labels
+
+Engine changes:
+- `PowerForge.Web/Services/ScribanThemeHelpers.cs`
+  - taxonomy link chips emitted by `pf.editorial_cards(... link_taxonomy=true)` now include localized `aria-label` values such as `Category: ...` / `Kategoria: ...`.
+- `PowerForge.Web/Services/WebSiteAuditor.cs`
+  - audit now loads generated redirect metadata from `_powerforge/redirects.json` before link-purpose checks run.
+- `PowerForge.Web/Services/WebSiteAuditor.Helpers.cs`
+  - link-purpose normalization now collapses legacy WordPress routes onto their final routed destinations using the generated redirect map.
+  - redirect resolution is language-aware, so ambiguous legacy slugs prefer the current page language (`/blog/...`, `/de/blog/...`, `/pl/blog/...`) instead of arbitrarily picking another locale.
+
+Regression coverage:
+- `PowerForge.Tests/ScribanPfNavigationHelpersTests.cs`
+  - editorial taxonomy links now have explicit accessibility-label assertions.
+- `PowerForge.Tests/WebSiteAuditOptimizeBuildTests.Part3.cs`
+  - added redirect-aware link-purpose regression coverage.
+  - added language-aware redirect target selection coverage.
+
+Verification:
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~Audit_LinkPurpose|FullyQualifiedName~ScribanPfNavigationHelpersTests"`
+- Result: Passed (`10` tests).
+
+Impact on the Evotec website:
+- theme-level accessible-name collisions were reduced by disambiguating shared header/footer/resource/project/taxonomy links.
+- audit warnings dropped again from `1223` to `495`.
+- current audit mix is now:
+  - `link-purpose`: `319`
+  - `heading-order`: `86`
+  - `media`: `73`
+  - `duplicate-id`: `9`
+  - `render-blocking`: `8`
+
+## Latest Update (2026-03-26): Markdown Link Aria Labels + Heading-Order Cleanup
+
+Engine changes:
+- `PowerForge.Web/Services/MarkdownRenderer.cs`
+  - markdown HTML post-processing now adds destination-aware `aria-label` values for ambiguous legacy anchor labels such as `GitHub`, `PowerShellGallery`, `YouTube video`, `Microsoft Technet`, `blog post`, `Read More`, `here`, and `MIT license`.
+  - GitHub URLs are differentiated as repository / issues / releases / file / folder links.
+  - PowerShell Gallery package/profile links now expose package-aware labels.
+  - MIT license links now use repository-aware labels for GitHub dependency/license pages instead of a generic `LICENSE` label.
+- `PowerForge.Tests/WebMarkdownRendererGfmTests.cs`
+  - added regression coverage for GitHub/issues/package link labels.
+  - added regression coverage for generic reference links (`here`, YouTube).
+  - added regression coverage for MIT-license GitHub links.
+
+Verification:
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~WebMarkdownRendererGfmTests|FullyQualifiedName~Audit_LinkPurpose"`
+- Result: Passed (`17` tests).
+
+Impact on the Evotec website:
+- the markdown-rendered legacy blog corpus now emits better accessible names without rewriting each imported article by hand.
+- combined with a targeted website content cleanup of first-body heading levels on repeated legacy pages, the CI audit warning count dropped again from `495` to `193`.
+- current audit mix is now:
+  - `link-purpose`: `102`
+  - `media`: `73`
+  - `duplicate-id`: `9`
+  - `render-blocking`: `8`
+  - `heading-order`: `1`
+
+## Latest Update (2026-03-26): Markdown Image Dimension Titles For Remote Images
+
+Engine changes:
+- `PowerForge.Web/Services/MarkdownRenderer.cs`
+  - markdown image rendering now recognizes synthetic title hints in the form `WIDTHxHEIGHT`, for example:
+    - `![alt](https://example/image.png "429x274")`
+  - when that shape is present, the renderer emits `width` / `height` attributes and suppresses the synthetic title so it does not become a tooltip.
+  - raw HTML `<img>` preservation still keeps explicit `width` / `height` attributes when legacy content already contains them.
+- `PowerForge.Tests/WebMarkdownRendererGfmTests.cs`
+  - added regression coverage for markdown image syntax with dimension-title hints.
+  - kept regression coverage for multiline and single-line raw HTML image tags with explicit dimensions.
+
+Verification:
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~Build_MarkdownImageSyntax_WithDimensionTitle_AddsDimensions_AndRemovesSyntheticTitle|FullyQualifiedName~Build_MultilineHtmlImageTag_IsPreservedWithAttributes|FullyQualifiedName~Build_SingleLineHtmlImageTag_IsPreserved"`
+- Result: Passed (`3` tests).
+
+Impact on the Evotec website:
+- this closed the last stubborn external-image layout-shift warnings on localized imported blog posts without requiring HTML-only source content.
+- full CI-shaped website build now passes with audit at `0` warnings / `0` errors.
+
+## Latest Update (2026-03-26): Empty Audit Baselines Are Now Valid
+
+Engine changes:
+- `PowerForge.Web/Services/WebSiteAuditor.AssetsAndRendered.cs`
+  - baseline loading now treats a file that explicitly declares `issueCount: 0` with an empty `issueKeyHashes` array as a valid clean baseline instead of a malformed one.
+  - the old `baseline-empty` warning is now reserved for malformed baseline files, not intentional zero-state baselines.
+- `PowerForge.Web/Services/WebSiteAuditor.cs`
+  - `fail-on-new` no longer errors when the baseline exists and is explicitly empty.
+  - `fail-on-new` still fails clearly for missing or unreadable baselines.
+- `PowerForge.Tests/WebSiteAuditOptimizeBuildTests.Part3b.cs`
+  - added regression coverage for an explicitly empty baseline on a clean site.
+  - kept the missing-baseline regression so the gate still fails when it should.
+
+Verification:
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~Audit_FailOnNewIssues_WithMissingBaseline_FailsClearly|FullyQualifiedName~Audit_FailOnNewIssues_WithExplicitlyEmptyBaseline_AllowsCleanSite|FullyQualifiedName~Build_MarkdownImageSyntax_WithDimensionTitle_AddsDimensions_AndRemovesSyntheticTitle"`
+- Result: Passed (`3` tests).
+
+Impact on the Evotec website:
+- `.powerforge/audit-baseline.json` can now stay at a real zero-issue state.
+- `powerforge-web pipeline --config C:\Support\GitHub\Website\pipeline.json --mode ci --only audit` now passes with the refreshed zero baseline.

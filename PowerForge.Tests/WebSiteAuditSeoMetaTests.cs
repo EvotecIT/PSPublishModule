@@ -1,5 +1,4 @@
 using PowerForge.Web;
-using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -127,40 +126,64 @@ public class WebSiteAuditSeoMetaTests
     }
 
     [Fact]
-    public void Audit_SkipsSeoMetaChecks_WhenNoIndexPageUsesUtf8Bom()
+    public void Audit_DetectsApiDocsSeoMeta_WhenTagsArePresent()
     {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-noindex-bom-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-apidocs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "api"));
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "index.html"),
+            File.WriteAllText(Path.Combine(root, "api", "index.html"),
                 """
                 <!doctype html>
-                <html>
+                <html lang="en">
                 <head>
-                  <title>Hidden</title>
-                  <meta name="robots" content="noindex,follow" />
-                  <link rel="canonical" href="https://example.test/hidden/" />
-                  <meta property="og:title" content="Hidden" />
-                  <meta property="og:description" content="Hidden page" />
-                  <meta property="og:url" content="https://example.test/hidden/" />
-                  <meta property="og:image" content="https://example.test/assets/hidden.png" />
-                  <meta name="twitter:card" content="summary" />
-                  <meta name="twitter:title" content="Hidden" />
-                  <meta name="twitter:description" content="Hidden page" />
-                  <meta name="twitter:url" content="https://example.test/hidden/" />
-                  <meta name="twitter:image" content="https://example.test/assets/hidden.png" />
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>Add-GPOPermission - GPOZaurr API Reference</title>
+                  <meta name="description" content="API reference for Add-GPOPermission in GPOZaurr API Reference." />
+                  <link rel="canonical" href="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                  <!-- Open Graph -->
+                  <meta property="og:title" content="Add-GPOPermission - GPOZaurr API Reference" />
+                  <meta property="og:description" content="API reference for Add-GPOPermission in GPOZaurr API Reference." />
+                  <meta property="og:type" content="website" />
+                  <meta property="og:url" content="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                  <meta property="og:image" content="https://evotec.xyz/wp-content/uploads/2015/05/Logo-evotec-012.png" />
+                  <meta property="og:image:alt" content="Add-GPOPermission - GPOZaurr API Reference" />
+                  <meta property="og:site_name" content="Evotec" />
+
+                  <!-- Twitter Card -->
+                  <meta name="twitter:card" content="summary_large_image" />
+                  <meta name="twitter:title" content="Add-GPOPermission - GPOZaurr API Reference" />
+                  <meta name="twitter:site" content="@PrzemyslawKlys" />
+                  <meta name="twitter:creator" content="@PrzemyslawKlys" />
+                  <meta name="twitter:description" content="API reference for Add-GPOPermission in GPOZaurr API Reference." />
+                  <meta name="twitter:url" content="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                  <meta name="twitter:image" content="https://evotec.xyz/wp-content/uploads/2015/05/Logo-evotec-012.png" />
+                  <meta name="twitter:image:alt" content="Add-GPOPermission - GPOZaurr API Reference" />
                 </head>
-                <body>Hidden page</body>
+                <body>API docs</body>
                 </html>
-                """,
-                Encoding.UTF8);
+                """);
 
-            var options = CreateSeoOnlyOptions(root);
-            options.CheckUtf8 = true;
+            File.WriteAllText(Path.Combine(root, "api", "alias.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta name="robots" content="noindex,follow" data-pf="api-docs-legacy-alias" />
+                  <meta charset="utf-8" />
+                  <title>Alias</title>
+                  <link rel="canonical" href="https://evotec.xyz/projects/gpozaurr/api/add-gpopermission/" />
+                </head>
+                <body>Alias</body>
+                </html>
+                """);
 
-            var result = WebSiteAuditor.Audit(options);
+            var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+
             Assert.DoesNotContain(result.Issues, issue => issue.Category == "seo");
         }
         finally
