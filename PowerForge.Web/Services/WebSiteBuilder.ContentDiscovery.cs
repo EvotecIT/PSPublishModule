@@ -290,6 +290,8 @@ public static partial class WebSiteBuilder
                     continue;
 
                 var targetLanguage = ResolveEffectiveLanguageCode(localization, language.Code);
+                if (!CollectionSupportsFallbackLanguage(spec, localization, source.Collection, targetLanguage))
+                    continue;
                 if (!string.IsNullOrWhiteSpace(source.TranslationKey))
                 {
                     var translationKey = BuildTranslationLanguageKey(source.TranslationKey!, targetLanguage);

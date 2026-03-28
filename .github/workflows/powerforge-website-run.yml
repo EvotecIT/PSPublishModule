@@ -163,7 +163,7 @@ jobs:
             Write-Host 'Maintenance uses the same strict CI mode; the selected pipeline config controls which tasks run.'
           }
 
-          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config "./$pipelineConfig" --mode $pipelineMode
+          dotnet run --framework net10.0 --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config "./$pipelineConfig" --mode $pipelineMode
 
       - name: Upload website reports
         if: always()

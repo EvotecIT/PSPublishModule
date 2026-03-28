@@ -219,6 +219,60 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_FailOnNewIssues_WithExplicitlyEmptyBaseline_AllowsCleanSite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-fail-on-new-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body></body>
+                </html>
+                """);
+
+            var baselinePath = Path.Combine(root, "audit-baseline.json");
+            File.WriteAllText(baselinePath,
+                """
+                {
+                  "version": 1,
+                  "issueCount": 0,
+                  "keyFormat": "sha256-12-b64url",
+                  "issueKeyHashes": []
+                }
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                BaselinePath = baselinePath,
+                FailOnNewIssues = true,
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckNavConsistency = false,
+                NavRequired = false,
+                CheckTitles = false,
+                CheckHtmlStructure = false,
+                CheckUtf8 = false,
+                CheckMetaCharset = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(0, result.NewIssueCount);
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("does not contain issue keys", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_BaselinePathOutsideRoot_IsAllowedWhenAbsolute()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-path-" + Guid.NewGuid().ToString("N"));

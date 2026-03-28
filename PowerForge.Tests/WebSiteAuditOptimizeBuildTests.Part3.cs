@@ -650,6 +650,46 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_DoesNotWarnForEscapedMediaTagNamesWithoutAttributes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-escaped-tagname-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <p>Creates an &lt;img&gt; tag.</p>
+                    <p>Explains how the &lt;iframe&gt; element behaves.</p>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>()
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint.Equals("media-escaped-html-tag", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_MediaEmbedChecksCanBeDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-disabled-" + Guid.NewGuid().ToString("N"));
@@ -1015,6 +1055,132 @@ public partial class WebSiteAuditOptimizeBuildTests
                 CheckLinks = false,
                 CheckAssets = false,
                 CheckLinkPurposeConsistency = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("link-purpose", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_LinkPurposeTreatsRedirectedInternalUrlsAsSameDestination()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <a href="/blog/finding-gpos/">Learn more</a>
+                    <a href="https://evotec.xyz/finding-gpos/">Learn more</a>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "_powerforge", "redirects.json"),
+                """
+                {
+                  "routeOverrides": [],
+                  "redirects": [
+                    {
+                      "from": "/finding-gpos",
+                      "to": "/blog/finding-gpos",
+                      "status": 301,
+                      "matchType": "exact",
+                      "preserveQuery": true
+                    },
+                    {
+                      "from": "/finding-gpos/",
+                      "to": "/blog/finding-gpos",
+                      "status": 301,
+                      "matchType": "exact",
+                      "preserveQuery": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("link-purpose", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_LinkPurposePrefersCurrentLanguageRedirectTarget()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-language-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "blog"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "blog", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <a href="/blog/finding-gpos/">Learn more</a>
+                    <a href="https://evotec.xyz/finding-gpos/">Learn more</a>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "_powerforge", "redirects.json"),
+                """
+                {
+                  "routeOverrides": [],
+                  "redirects": [
+                    {
+                      "from": "/finding-gpos",
+                      "to": "/blog/finding-gpos",
+                      "status": 301,
+                      "matchType": "exact",
+                      "preserveQuery": true
+                    },
+                    {
+                      "from": "/finding-gpos",
+                      "to": "/pl/blog/finding-gpos",
+                      "status": 301,
+                      "matchType": "exact",
+                      "preserveQuery": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
             });
 
             Assert.True(result.Success);

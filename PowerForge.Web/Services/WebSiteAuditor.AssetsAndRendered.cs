@@ -285,10 +285,12 @@ public static partial class WebSiteAuditor
     private static HashSet<string> LoadBaselineIssueKeys(
         string baselinePath,
         Action<string, string, string?, string, string?> addIssue,
-        out bool keysAreHashed)
+        out bool keysAreHashed,
+        out bool explicitlyEmptyBaseline)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         keysAreHashed = false;
+        explicitlyEmptyBaseline = false;
         if (!File.Exists(baselinePath))
         {
             addIssue("warning", "baseline", null, $"Baseline file not found: {baselinePath}.", "baseline-missing");
@@ -307,6 +309,10 @@ public static partial class WebSiteAuditor
             using var stream = File.OpenRead(baselinePath);
             using var doc = JsonDocument.Parse(stream);
             var root = doc.RootElement;
+            var declaresZeroIssues = TryGetPropertyIgnoreCase(root, "issueCount", out var issueCountElement) &&
+                issueCountElement.ValueKind == JsonValueKind.Number &&
+                issueCountElement.TryGetInt32(out var issueCountValue) &&
+                issueCountValue == 0;
 
             if (TryGetPropertyIgnoreCase(root, "issueKeyHashes", out var issueKeyHashes) && issueKeyHashes.ValueKind == JsonValueKind.Array)
             {
@@ -320,7 +326,11 @@ public static partial class WebSiteAuditor
                 }
 
                 if (keys.Count == 0)
-                    addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+                {
+                    explicitlyEmptyBaseline = declaresZeroIssues;
+                    if (!explicitlyEmptyBaseline)
+                        addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+                }
 
                 return keys;
             }
@@ -349,7 +359,11 @@ public static partial class WebSiteAuditor
             }
 
             if (keys.Count == 0)
-                addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+            {
+                explicitlyEmptyBaseline = declaresZeroIssues;
+                if (!explicitlyEmptyBaseline)
+                    addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+            }
         }
         catch (Exception ex)
         {
@@ -391,23 +405,14 @@ public static partial class WebSiteAuditor
         var bytes = File.ReadAllBytes(filePath);
         try
         {
-            var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
-            return TrimLeadingByteOrderMark(text);
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
         }
         catch (DecoderFallbackException ex)
         {
             var offset = ex.Index >= 0 ? $" at byte offset {ex.Index}" : string.Empty;
             addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence{offset} ({ex.Message}).", "utf8-invalid");
-            return TrimLeadingByteOrderMark(Encoding.UTF8.GetString(bytes));
+            return Encoding.UTF8.GetString(bytes);
         }
-    }
-
-    private static string TrimLeadingByteOrderMark(string value)
-    {
-        if (!string.IsNullOrEmpty(value) && value[0] == '\uFEFF')
-            return value[1..];
-
-        return value;
     }
 
     private static bool HasUtf8Meta(AngleSharp.Dom.IDocument doc)

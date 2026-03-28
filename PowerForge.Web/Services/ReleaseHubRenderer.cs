@@ -1,11 +1,21 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 internal static class ReleaseHubRenderer
 {
     private const string DefaultDataPath = "release_hub";
+    private static readonly Regex HeadingWithIdRegex = new(
+        "<h(?<level>[1-6])(?<attrs>[^>]*)>(?<text>.*?)</h\\1>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex IdAttributeRegex = new(
+        "\\sid\\s*=\\s*([\"'])(?<id>[^\"']+)\\1",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex FragmentLinkRegex = new(
+        "(?<prefix><a\\b[^>]*\\bhref\\s*=\\s*)(?<quote>[\"'])#(?<target>[^\"'#]+)(\\k<quote>)(?<suffix>[^>]*>)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static string RenderReleaseButton(
         IReadOnlyDictionary<string, object?> data,
@@ -384,7 +394,7 @@ internal static class ReleaseHubRenderer
                 if (!string.IsNullOrWhiteSpace(bodyMarkdown))
                     bodyHtml = MarkdownRenderer.RenderToHtml(bodyMarkdown, markdown);
             }
-            release.BodyHtml = bodyHtml ?? string.Empty;
+            release.BodyHtml = NamespaceReleaseBodyHtml(bodyHtml ?? string.Empty, release.Tag);
 
             if (TryReadList(releaseMap, "assets", out var assetValues))
             {
@@ -516,6 +526,71 @@ internal static class ReleaseHubRenderer
         }
 
         return matches;
+    }
+
+    private static string NamespaceReleaseBodyHtml(string html, string? releaseTag)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var prefix = Slugify(releaseTag);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return html;
+
+        var namespaced = HeadingWithIdRegex.Replace(html, match =>
+        {
+            var level = match.Groups["level"].Value;
+            var attrs = match.Groups["attrs"].Value;
+            var text = match.Groups["text"].Value;
+
+            var idMatch = IdAttributeRegex.Match(attrs);
+            var baseId = idMatch.Success
+                ? idMatch.Groups["id"].Value
+                : Slugify(Regex.Replace(text, "<.*?>", string.Empty));
+            if (string.IsNullOrWhiteSpace(baseId))
+                return match.Value;
+
+            var namespacedId = NamespaceFragment(prefix, baseId);
+            var attrsWithId = idMatch.Success
+                ? IdAttributeRegex.Replace(attrs, $" id=\"{namespacedId}\"", 1)
+                : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{namespacedId}\"" : $"{attrs} id=\"{namespacedId}\"");
+            return $"<h{level}{attrsWithId}>{text}</h{level}>";
+        });
+
+        return FragmentLinkRegex.Replace(namespaced, match =>
+        {
+            var target = match.Groups["target"].Value;
+            if (string.IsNullOrWhiteSpace(target))
+                return match.Value;
+
+            var namespacedTarget = NamespaceFragment(prefix, target);
+            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}#{namespacedTarget}{match.Groups["quote"].Value}{match.Groups["suffix"].Value}";
+        });
+    }
+
+    private static string NamespaceFragment(string prefix, string fragment)
+    {
+        var normalizedPrefix = Slugify(prefix);
+        var normalizedFragment = Slugify(fragment);
+        if (string.IsNullOrWhiteSpace(normalizedPrefix))
+            return normalizedFragment;
+        if (string.IsNullOrWhiteSpace(normalizedFragment))
+            return normalizedPrefix;
+        if (normalizedFragment.StartsWith(normalizedPrefix + "-", StringComparison.Ordinal))
+            return normalizedFragment;
+        return $"{normalizedPrefix}-{normalizedFragment}";
+    }
+
+    private static string Slugify(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var slug = value.Trim().ToLowerInvariant();
+        slug = Regex.Replace(slug, "[^a-z0-9\\s-]", "-");
+        slug = Regex.Replace(slug, "\\s+", "-");
+        slug = Regex.Replace(slug, "-{2,}", "-");
+        return slug.Trim('-');
     }
 
     private static ReleaseButtonsGrouping NormalizeGrouping(string? value)

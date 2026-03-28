@@ -136,6 +136,7 @@ public static partial class WebSiteAuditor
             .ToArray();
         var navProfiles = NormalizeNavProfiles(options.NavProfiles);
         var mediaProfiles = NormalizeMediaProfiles(options.MediaProfiles);
+        var redirectMap = LoadAuditRedirectMap(siteRoot);
         var canonicalNavLinks = Array.Empty<string>();
 
         if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
@@ -229,15 +230,16 @@ public static partial class WebSiteAuditor
 
         HashSet<string>? baselineIssueKeys = null;
         var baselineKeysAreHashed = false;
+        var baselineExplicitlyEmpty = false;
         string? baselinePath = null;
         if (!string.IsNullOrWhiteSpace(options.BaselinePath))
         {
             baselinePath = ResolveBaselinePath(siteRoot, options.BaselineRoot, options.BaselinePath);
-            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue, out baselineKeysAreHashed);
+            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue, out baselineKeysAreHashed, out baselineExplicitlyEmpty);
 
             // Best practice: fail-on-new requires a usable baseline. If it's missing/empty, fail clearly
             // rather than treating every issue as "new" (which makes the failure noisy and harder to diagnose).
-            if (options.FailOnNewIssues && baselineIssueKeys.Count == 0)
+            if (options.FailOnNewIssues && baselineIssueKeys.Count == 0 && !baselineExplicitlyEmpty)
             {
                 AddIssue("error", "gate", null,
                     $"Audit gate failed: fail-on-new is enabled but the baseline is missing/empty: {ToRelative(siteRoot, baselinePath)}.",
@@ -294,7 +296,7 @@ public static partial class WebSiteAuditor
                 AddIssue("warning", "utf8", relativePath, "contains replacement characters (�).", "replacement-char");
 
             var routePath = ToRoutePath(relativePath);
-            if (HasNoIndexRobots(doc))
+            if (HasNoIndexRobots(doc, html))
             {
                 foreach (var candidate in BuildRouteCandidatesForSeoChecks(relativePath, routePath, doc))
                 {
@@ -361,10 +363,10 @@ public static partial class WebSiteAuditor
                 ValidateHeadingOrder(doc, relativePath, AddIssue);
 
             if (options.CheckSeoMeta)
-                ValidateSeoMetadata(doc, relativePath, AddIssue);
+                ValidateSeoMetadata(doc, html, relativePath, AddIssue);
 
             if (options.CheckLinkPurposeConsistency)
-                ValidateLinkPurposeConsistency(doc, relativePath, AddIssue);
+                ValidateLinkPurposeConsistency(doc, relativePath, redirectMap, AddIssue);
 
             var navProfile = ResolveNavProfile(relativePath, navProfiles);
             var navSelector = !string.IsNullOrWhiteSpace(navProfile?.Selector)

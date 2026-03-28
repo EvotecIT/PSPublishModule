@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using ImageMagick;
 using Xunit;
 using PowerForge.Web;
 
@@ -196,6 +198,13 @@ public class ScribanPfNavigationHelpersTests
                 # Second
                 """);
 
+            var staticImagesRoot = Path.Combine(root, "static", "images");
+            Directory.CreateDirectory(staticImagesRoot);
+            using (var firstImage = new MagickImage(MagickColors.SteelBlue, 640, 360))
+                firstImage.Write(Path.Combine(staticImagesRoot, "first-post.png"));
+            using (var fallbackImage = new MagickImage(MagickColors.DarkSlateBlue, 320, 200))
+                fallbackImage.Write(Path.Combine(staticImagesRoot, "fallback.png"));
+
             var themeRoot = Path.Combine(root, "themes", "t");
             Directory.CreateDirectory(themeRoot);
             Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
@@ -281,12 +290,16 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("custom-card", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-editorial-card-image", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/images/first-post.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"640\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"360\"", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("aspect-ratio: 4 / 3;", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<time datetime=\"2026-01-05\">2026-01-05</time>", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<span class=\"pf-chip pf-chip--tag\">release</span>", blogHtml, StringComparison.OrdinalIgnoreCase);
 
             var blogPage2Html = File.ReadAllText(Path.Combine(outDir, "blog", "page", "2", "index.html"));
             Assert.Contains("/images/fallback.png", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"320\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"200\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(">Newer<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/blog/\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(">Older<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
@@ -599,6 +612,9 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("href=\"/sections/product-updates/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-chip--tag", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-chip--category", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Open article: Release Notes\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Category: Product Updates\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Tag: release\"", blogHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -744,7 +760,7 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("Newer post: First post", postHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Older post: Third post", postHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<h2>Related posts</h2>", postHtml, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<a href=\"/blog/first-post/\">First post</a>", postHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/blog/first-post/\" aria-label=\"Related post: First post\">First post</a>", postHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -901,11 +917,15 @@ public class ScribanPfNavigationHelpersTests
             WebSiteBuilder.Build(spec, plan, outDir);
 
             var polishBlogHtml = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "index.html"));
+            var decodedPolishBlogHtml = WebUtility.HtmlDecode(polishBlogHtml);
             Assert.Contains("href=\"/pl/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/pl/topics/notes/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/pl/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Otwórz artykuł: Notatki wydania\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Kategoria: Product Updates\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Tag: release\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1102,11 +1122,12 @@ public class ScribanPfNavigationHelpersTests
             WebSiteBuilder.Build(spec, plan, outDir);
 
             var polishSecondPost = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "second-post", "index.html"));
+            var decodedPolishSecondPost = WebUtility.HtmlDecode(polishSecondPost);
             Assert.Contains("href=\"/pl/blog/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Newer post: Pierwszy wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Older post: Trzeci wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<a href=\"/pl/blog/first-post/\">Pierwszy wpis</a>", polishSecondPost, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<a href=\"/pl/blog/third-post/\">Trzeci wpis</a>", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/first-post/\" aria-label=\"Powiązany artykuł: Pierwszy wpis\">Pierwszy wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/third-post/\" aria-label=\"Powiązany artykuł: Trzeci wpis\">Trzeci wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/blog/first-post/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("First post EN", polishSecondPost, StringComparison.OrdinalIgnoreCase);
         }

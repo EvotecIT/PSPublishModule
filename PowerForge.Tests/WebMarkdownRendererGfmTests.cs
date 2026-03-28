@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using ImageMagick;
 
 namespace PowerForge.Tests;
 
@@ -89,6 +90,8 @@ public class WebMarkdownRendererGfmTests
 
         Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -105,6 +108,8 @@ public class WebMarkdownRendererGfmTests
 
         Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -124,6 +129,23 @@ public class WebMarkdownRendererGfmTests
         Assert.Contains("alt=\"Issue Ops board\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownImageSyntax_WithDimensionTitle_AddsDimensions_AndRemovesSyntheticTitle()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg "1600x900")
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"1600\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"900\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("title=\"1600x900\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -159,6 +181,54 @@ public class WebMarkdownRendererGfmTests
         Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("loading=", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("decoding=", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownRootedLocalImage_AddsDimensions_WhenStaticFileExists()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Legacy screenshot](/wp-content/uploads/test/legacy-screenshot.png)
+            """,
+            configureRoot: root =>
+            {
+                var imagePath = Path.Combine(root, "static", "wp-content", "uploads", "test", "legacy-screenshot.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+                using var image = new MagickImage(MagickColors.SteelBlue, 640, 360);
+                image.Write(imagePath);
+            });
+
+        Assert.Contains("src=\"/wp-content/uploads/test/legacy-screenshot.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("width=\"640\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("height=\"360\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownRootedLocalImage_DoesNotAddDimensions_WhenDisabled()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Legacy screenshot](/wp-content/uploads/test/legacy-screenshot.png)
+            """,
+            markdownOptions: new MarkdownSpec
+            {
+                AutoImageDimensions = false
+            },
+            configureRoot: root =>
+            {
+                var imagePath = Path.Combine(root, "static", "wp-content", "uploads", "test", "legacy-screenshot.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+                using var image = new MagickImage(MagickColors.SteelBlue, 640, 360);
+                image.Write(imagePath);
+            });
+
+        Assert.Contains("src=\"/wp-content/uploads/test/legacy-screenshot.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("width=\"640\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("height=\"360\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -209,7 +279,53 @@ public class WebMarkdownRendererGfmTests
         Assert.DoesNotContain("&lt;source", html, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildSinglePageSite(string markdown, MarkdownSpec? markdownOptions = null)
+    [Fact]
+    public void Build_GenericGitHubLinks_AddDestinationAwareAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Resources
+
+            - [GitHub](https://github.com/EvotecIT/PSWriteHTML)
+            - [GitHub](https://github.com/EvotecIT/PSWriteHTML/issues)
+            - [PowerShellGallery](https://www.powershellgallery.com/packages/PSWriteHTML)
+            """);
+
+        Assert.Contains("aria-label=\"GitHub repository PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"GitHub issues for PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"PowerShell Gallery package PSWriteHTML\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_GenericReferenceLinks_AddContextualAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # References
+
+            See details [here](https://technet.microsoft.com/en-us/library/bb125187.aspx) and watch this [YouTube video](https://www.youtube.com/watch?v=abc123xyz).
+            """);
+
+        Assert.Contains("aria-label=\"Open reference: bb125187\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"YouTube video abc123xyz\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MitLicenseLinks_UseRepositoryAwareAriaLabels()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Licenses
+
+            - [MIT license](https://github.com/fullcalendar/fullcalendar/blob/master/LICENSE.txt)
+            - [MIT license](https://github.com/jquery/jquery/blob/main/LICENSE.txt)
+            """);
+
+        Assert.Contains("aria-label=\"MIT license for fullcalendar\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria-label=\"MIT license for jquery\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildSinglePageSite(string markdown, MarkdownSpec? markdownOptions = null, Action<string>? configureRoot = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -246,6 +362,7 @@ public class WebMarkdownRendererGfmTests
                   "defaultLayout": "home"
                 }
                 """);
+            configureRoot?.Invoke(root);
 
             var spec = new SiteSpec
             {

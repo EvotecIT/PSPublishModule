@@ -14,6 +14,7 @@ internal sealed class ThemeRenderContext
     public OutputRuntime[] Outputs { get; init; } = Array.Empty<OutputRuntime>();
     public string? FeedUrl { get; init; }
     public BreadcrumbItem[] Breadcrumbs { get; init; } = Array.Empty<BreadcrumbItem>();
+    public string RootPath { get; init; } = string.Empty;
     public string CurrentPath { get; init; } = string.Empty;
     public ShortcodeContext? Shortcode { get; init; }
     public TaxonomySpec? Taxonomy { get; init; }

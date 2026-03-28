@@ -29,6 +29,7 @@ public static partial class WebSiteBuilder
     private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly AsyncLocal<BuildLanguageContext?> BuildLanguageContextScope = new();
     private static readonly AsyncLocal<BuildRenderCache?> BuildRenderCacheScope = new();
+    private static readonly AsyncLocal<string?> BuildRootPathScope = new();
     private static readonly AsyncLocal<Action<string>?> BuildProgressSink = new();
     private static readonly AsyncLocal<Dictionary<string, IReadOnlyDictionary<string, object?>>?> BuildProjectDataCacheScope = new();
     /// <summary>Builds the site output.</summary>
@@ -93,6 +94,7 @@ public static partial class WebSiteBuilder
         var prevSink = UpdatedSink.Value;
         var prevBuildLanguageContext = BuildLanguageContextScope.Value;
         var prevBuildRenderCache = BuildRenderCacheScope.Value;
+        var prevBuildRootPath = BuildRootPathScope.Value;
         var prevBuildProgressSink = BuildProgressSink.Value;
         var prevBuildProjectDataCache = BuildProjectDataCacheScope.Value;
         UpdatedSink.Value = MarkUpdated;
@@ -102,6 +104,7 @@ public static partial class WebSiteBuilder
             LanguageAsRoot = languageAsRoot
         };
         BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
+        BuildRootPathScope.Value = plan.RootPath;
         BuildProgressSink.Value = ReportProgress;
         BuildProjectDataCacheScope.Value = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
         try
@@ -235,6 +238,7 @@ public static partial class WebSiteBuilder
             UpdatedSink.Value = prevSink;
             BuildLanguageContextScope.Value = prevBuildLanguageContext;
             BuildRenderCacheScope.Value = prevBuildRenderCache;
+            BuildRootPathScope.Value = prevBuildRootPath;
             BuildProgressSink.Value = prevBuildProgressSink;
             BuildProjectDataCacheScope.Value = prevBuildProjectDataCache;
         }

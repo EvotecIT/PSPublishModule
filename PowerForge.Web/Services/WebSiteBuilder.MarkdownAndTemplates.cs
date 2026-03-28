@@ -13,15 +13,16 @@ public static partial class WebSiteBuilder
 {
     private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot, MarkdownSpec? markdown)
     {
+        var rootPath = BuildRootPathScope.Value;
         if (cache?.Enabled != true || string.IsNullOrWhiteSpace(cacheRoot))
-            return MarkdownRenderer.RenderToHtml(content, markdown);
+            return MarkdownRenderer.RenderToHtml(content, markdown, sourcePath, rootPath);
 
         var key = ComputeCacheKey(content, sourcePath, cache);
         var cacheFile = Path.Combine(cacheRoot, key + ".html");
         if (File.Exists(cacheFile))
-            return File.ReadAllText(cacheFile);
+            return MarkdownRenderer.ApplyImageHints(File.ReadAllText(cacheFile), markdown, sourcePath, rootPath);
 
-        var html = MarkdownRenderer.RenderToHtml(content, markdown);
+        var html = MarkdownRenderer.RenderToHtml(content, markdown, sourcePath, rootPath);
         File.WriteAllText(cacheFile, html);
         return html;
     }
