@@ -53,6 +53,7 @@
         "RefreshPSD1Only": { "type": ["boolean", "null"] },
         "UseWildcardForFunctions": { "type": ["boolean", "null"] },
         "LocalVersion": { "type": ["boolean", "null"] },
+        "SyncNETProjectVersion": { "type": ["boolean", "null"] },
         "VersionedInstallStrategy": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" }, { "type": "null" }] },
         "VersionedInstallKeep": { "type": ["integer", "null"], "minimum": 1 },
         "InstallMissingModules": { "type": ["boolean", "null"] },

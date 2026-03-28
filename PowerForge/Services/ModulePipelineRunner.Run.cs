@@ -75,6 +75,7 @@ public sealed partial class ModulePipelineRunner
         try
         {
             var dependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+            SyncSourceProjectVersionIfRequested(plan);
 
             ModuleBuildPipeline.StagingResult staged;
             SafeStart(reporter, startedKeys, stageStep);

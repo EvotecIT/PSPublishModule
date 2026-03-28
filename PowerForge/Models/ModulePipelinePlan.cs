@@ -43,6 +43,16 @@ public sealed class ModulePipelinePlan
     public ModuleBuildSpec BuildSpec { get; }
 
     /// <summary>
+    /// Resolved source .csproj path for the module's .NET project, even when build execution skips binary publish.
+    /// </summary>
+    public string? ResolvedCsprojPath { get; }
+
+    /// <summary>
+    /// When true, the pipeline updates the source .csproj version to the resolved module version before staging.
+    /// </summary>
+    public bool SyncNETProjectVersion { get; }
+
+    /// <summary>
     /// Compatible PowerShell editions requested by configuration (used for manifest patching and install root derivation).
     /// </summary>
     public string[] CompatiblePSEditions { get; }
@@ -248,6 +258,8 @@ public sealed class ModulePipelinePlan
         string? preRelease,
         ManifestConfiguration? manifest,
         ModuleBuildSpec buildSpec,
+        string? resolvedCsprojPath,
+        bool syncNETProjectVersion,
         string[] compatiblePSEditions,
         RequiredModuleReference[] requiredModules,
         string[] externalModuleDependencies,
@@ -295,6 +307,8 @@ public sealed class ModulePipelinePlan
         PreRelease = preRelease;
         Manifest = manifest;
         BuildSpec = buildSpec;
+        ResolvedCsprojPath = resolvedCsprojPath;
+        SyncNETProjectVersion = syncNETProjectVersion;
         CompatiblePSEditions = compatiblePSEditions;
         RequiredModules = requiredModules;
         ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>();

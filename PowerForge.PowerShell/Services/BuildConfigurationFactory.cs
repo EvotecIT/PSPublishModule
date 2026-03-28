@@ -46,6 +46,7 @@ internal sealed class BuildConfigurationFactory
         if (request.RefreshPSD1OnlySpecified) { EnsureBuildModule(); buildModule!.RefreshPSD1Only = request.RefreshPSD1Only; }
         if (request.UseWildcardForFunctionsSpecified) { EnsureBuildModule(); buildModule!.UseWildcardForFunctions = request.UseWildcardForFunctions; }
         if (request.LocalVersioningSpecified) { EnsureBuildModule(); buildModule!.LocalVersion = request.LocalVersioning; }
+        if (request.SyncNETProjectVersionSpecified) { EnsureBuildModule(); buildModule!.SyncNETProjectVersion = request.SyncNETProjectVersion; }
         if (request.VersionedInstallStrategySpecified) { EnsureBuildModule(); buildModule!.VersionedInstallStrategy = request.VersionedInstallStrategy; }
         if (request.VersionedInstallKeepSpecified) { EnsureBuildModule(); buildModule!.VersionedInstallKeep = request.VersionedInstallKeep; }
         if (request.VersionedInstallLegacyFlatHandlingSpecified) { EnsureBuildModule(); buildModule!.LegacyFlatHandling = request.VersionedInstallLegacyFlatHandling; }

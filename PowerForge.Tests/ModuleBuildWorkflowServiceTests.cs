@@ -120,6 +120,8 @@ public sealed class ModuleBuildWorkflowServiceTests
                 SourcePath = @"C:\repo\SampleModule",
                 Version = "1.0.0"
             },
+            resolvedCsprojPath: null,
+            syncNETProjectVersion: false,
             compatiblePSEditions: Array.Empty<string>(),
             requiredModules: Array.Empty<RequiredModuleReference>(),
             externalModuleDependencies: Array.Empty<string>(),

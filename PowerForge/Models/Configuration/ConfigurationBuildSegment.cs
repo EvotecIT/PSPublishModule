@@ -52,6 +52,11 @@ public sealed class BuildModuleConfiguration
     /// <summary>Use local versioning (legacy key: LocalVersion).</summary>
     public bool? LocalVersion { get; set; }
 
+    /// <summary>
+    /// When true, synchronizes the source .NET project version with the resolved module version before staging.
+    /// </summary>
+    public bool? SyncNETProjectVersion { get; set; }
+
     /// <summary>Installation strategy for versioned installs.</summary>
     public InstallationStrategy? VersionedInstallStrategy { get; set; }
 

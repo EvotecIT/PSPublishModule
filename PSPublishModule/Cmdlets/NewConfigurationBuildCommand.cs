@@ -79,6 +79,12 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Use local versioning (bump PSD1 version on each build without querying PSGallery).</summary>
     [Parameter] public SwitchParameter LocalVersioning { get; set; }
 
+    /// <summary>
+    /// Synchronize the source .NET project version with the resolved module/manifest version before staging.
+    /// This is opt-in and updates the source <c>.csproj</c> file when a project path can be resolved.
+    /// </summary>
+    [Parameter] public SwitchParameter SyncNETProjectVersion { get; set; }
+
     /// <summary>Controls how the module is installed into user Module roots after build.</summary>
     [Parameter]
     public InstallationStrategy? VersionedInstallStrategy { get; set; }
@@ -245,6 +251,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             UseWildcardForFunctions = UseWildcardForFunctions.IsPresent,
             LocalVersioningSpecified = bound.ContainsKey(nameof(LocalVersioning)),
             LocalVersioning = LocalVersioning.IsPresent,
+            SyncNETProjectVersionSpecified = bound.ContainsKey(nameof(SyncNETProjectVersion)),
+            SyncNETProjectVersion = SyncNETProjectVersion.IsPresent,
             VersionedInstallStrategySpecified = bound.ContainsKey(nameof(VersionedInstallStrategy)),
             VersionedInstallStrategy = VersionedInstallStrategy,
             VersionedInstallKeepSpecified = bound.ContainsKey(nameof(VersionedInstallKeep)),
