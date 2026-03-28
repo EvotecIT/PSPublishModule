@@ -39,8 +39,8 @@
       "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
       "GenerateReleaseNotes": true,
       "IsPreRelease": true,
-      "TagTemplate": "{Target}-v{Version}-preview-{UtcTimestamp}",
-      "ReleaseNameTemplate": "{Target} {Version} Preview {UtcDateTime}"
+      "TagTemplate": "{Target}-v{Version}-preview",
+      "ReleaseNameTemplate": "{Target} {Version} Preview"
     }
   }
 }

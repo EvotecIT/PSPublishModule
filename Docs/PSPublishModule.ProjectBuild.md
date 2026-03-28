@@ -27,7 +27,7 @@ Unified release entrypoint
   - limits release scope to tools only
   - stages into `Artifacts/Preview`
   - marks GitHub releases as prerelease
-  - uses preview-specific timestamped tags so preview publishes cannot collide with eventual stable tags
+  - uses stable `-preview` tags per tool/version so reruns can reuse the same release and resume missing asset uploads
   - keeps the existing local `TokenFilePath` pattern from `Build/release.json`; replace that path if you run the preview flow from another machine or CI environment
 - Module release can now be declared directly in `release.json` through the top-level `Module` section.
   In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
@@ -97,6 +97,11 @@ Invoke-PowerForgeRelease -ConfigPath .\Build\release.json -Plan
 ```powershell
 .\Build\Build-ToolsPreview.ps1 -PublishGitHub
 ```
+
+- Preview publish reruns are intentionally idempotent for the same tool version:
+  - tags use the `-preview` suffix instead of a timestamp
+  - GitHub release publish reuses the existing tag/release and skips assets that were already uploaded
+  - `Build-ToolsPreview.ps1 -PublishGitHub` enables verbose output automatically so long multi-runtime uploads are visible
 
 Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,

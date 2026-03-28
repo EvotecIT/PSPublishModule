@@ -1039,6 +1039,147 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PublishesDotNetPublishPreviewAssetsToStablePreviewTag()
+    {
+        var root = CreateSandbox();
+        var zip = Path.GetTempFileName();
+        try
+        {
+            var projectPath = Path.Combine(root, "PowerForge.Web.Cli.csproj");
+            File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>1.2.3</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (
+                    new DotNetPublishSpec
+                    {
+                        Targets = new[]
+                        {
+                            new DotNetPublishTarget
+                            {
+                                Name = "PowerForgeWeb",
+                                ProjectPath = projectPath,
+                                Publish = new DotNetPublishPublishOptions
+                                {
+                                    Framework = "net10.0",
+                                    Runtimes = new[] { "win-x64" },
+                                    Style = DotNetPublishStyle.PortableCompat,
+                                    Zip = true
+                                }
+                            }
+                        }
+                    },
+                    configPath),
+                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = Path.GetTempPath(),
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "PowerForgeWeb",
+                            ProjectPath = projectPath,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Target = "PowerForgeWeb",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = Path.GetTempPath(),
+                            ZipPath = zip
+                        }
+                    }
+                },
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult
+                    {
+                        Succeeded = true,
+                        HtmlUrl = "https://example.test/release",
+                        ReusedExistingRelease = true
+                    };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec(),
+                        GitHub = new PowerForgeToolReleaseGitHubOptions
+                        {
+                            Publish = true,
+                            Owner = "EvotecIT",
+                            Repository = "PSPublishModule",
+                            Token = "token",
+                            TagTemplate = "{Target}-v{Version}-preview",
+                            ReleaseNameTemplate = "{Target} {Version} Preview"
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                    ToolsOnly = true
+                });
+
+            Assert.True(result.Success);
+
+            var publish = Assert.Single(publishCalls);
+            Assert.Equal("PowerForgeWeb-v1.2.3-preview", publish.TagName);
+            Assert.Equal("PowerForgeWeb 1.2.3 Preview", publish.ReleaseName);
+            Assert.Single(publish.AssetFilePaths);
+
+            var release = Assert.Single(result.ToolGitHubReleases);
+            Assert.Equal("PowerForgeWeb-v1.2.3-preview", release.TagName);
+            Assert.Equal("PowerForgeWeb 1.2.3 Preview", release.ReleaseName);
+            Assert.True(release.ReusedExistingRelease);
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(zip);
+        }
+    }
+
+    [Fact]
     public void Execute_WritesUnifiedReleaseManifestAndChecksums()
     {
         var root = CreateSandbox();
