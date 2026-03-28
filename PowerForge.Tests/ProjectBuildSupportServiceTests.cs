@@ -33,6 +33,41 @@ public sealed class ProjectBuildSupportServiceTests
     }
 
     [Fact]
+    public void LoadConfig_deserializes_version_tracks()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-tracks-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "project.build.json");
+            File.WriteAllText(configPath, """
+{
+  "VersionTracks": {
+    "PowerForge": {
+      "ExpectedVersion": "1.0.X",
+      "AnchorProject": "PowerForge",
+      "Projects": [ "PowerForge.Cli", "PowerForge.Web.Cli" ]
+    }
+  }
+}
+""");
+
+            var service = new ProjectBuildSupportService(new NullLogger());
+            var config = service.LoadConfig(configPath);
+
+            Assert.NotNull(config.VersionTracks);
+            Assert.True(config.VersionTracks!.ContainsKey("PowerForge"));
+            Assert.Equal("1.0.X", config.VersionTracks["PowerForge"].ExpectedVersion);
+            Assert.Equal("PowerForge", config.VersionTracks["PowerForge"].AnchorProject);
+            Assert.Equal(new[] { "PowerForge.Cli", "PowerForge.Web.Cli" }, config.VersionTracks["PowerForge"].Projects);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ResolveSecret_prefers_file_then_environment_then_inline()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-secret-" + Guid.NewGuid().ToString("N")));

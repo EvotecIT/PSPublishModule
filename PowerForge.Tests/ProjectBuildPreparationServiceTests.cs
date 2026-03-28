@@ -137,4 +137,47 @@ public sealed class ProjectBuildPreparationServiceTests
         Assert.False(context.Spec.Pack);
         Assert.False(context.Spec.Publish);
     }
+
+    [Fact]
+    public void Prepare_resolves_version_tracks_from_anchor_package_version()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-trackresolve-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var feed = root.CreateSubdirectory("feed");
+            File.WriteAllText(Path.Combine(feed.FullName, "PowerForge.1.0.4.nupkg"), string.Empty);
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                NugetSource = new[] { feed.FullName },
+                ExpectedVersionMapAsInclude = true,
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.0.X",
+                        AnchorProject = "PowerForge",
+                        Projects = new[] { "PowerForge.Cli", "PowerForge.Web.Cli" }
+                    }
+                }
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.NotNull(context.Spec.ExpectedVersionsByProject);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject!["PowerForge"]);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Cli"]);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Web.Cli"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

@@ -110,11 +110,16 @@ Example configuration
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/project.build.schema.json",
   "RootPath": "..",
-  "ExpectedVersionMap": {
-    "OfficeIMO.CSV": "0.1.X",
-    "OfficeIMO.Excel": "0.6.X",
-    "OfficeIMO.Markdown": "0.5.X",
-    "OfficeIMO.Word": "1.0.X"
+  "VersionTracks": {
+    "OfficeIMO": {
+      "ExpectedVersion": "1.0.X",
+      "AnchorProject": "OfficeIMO.Word",
+      "Projects": [
+        "OfficeIMO.CSV",
+        "OfficeIMO.Excel",
+        "OfficeIMO.Markdown"
+      ]
+    }
   },
   "ExpectedVersionMapAsInclude": true,
   "ExpectedVersionMapUseWildcards": false,
@@ -155,7 +160,12 @@ Discovery and selection
 Versioning
 - `ExpectedVersion`: global version or X-pattern (e.g. `1.2.X`).
 - `ExpectedVersionMap`: per-project overrides (`ProjectName` -> version/X-pattern).
+- `VersionTracks`: anchor-driven version trains. Each track resolves one version from an anchor package/project and applies it to every project in the track.
+- `VersionTracks.<Name>.AnchorProject`: project whose package identity is used as the default version source for the track.
+- `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
+- `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When no expected version is provided for a project, the existing csproj version is used.
+- When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
 - Version source resolution can use `NugetSource` (v3 index URL or local folder) with optional credentials.
 

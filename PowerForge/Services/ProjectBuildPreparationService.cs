@@ -5,6 +5,18 @@ namespace PowerForge;
 /// </summary>
 internal sealed class ProjectBuildPreparationService
 {
+    private readonly ILogger _logger;
+
+    public ProjectBuildPreparationService()
+        : this(new NullLogger())
+    {
+    }
+
+    public ProjectBuildPreparationService(ILogger logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
     /// <summary>
     /// Builds the prepared execution context for the project build workflow.
     /// </summary>
@@ -72,6 +84,7 @@ internal sealed class ProjectBuildPreparationService
                 Secret = nugetCredentialSecret
             }
             : null;
+        var expectedVersionMap = new ProjectBuildVersionTrackService(_logger).ResolveExpectedVersionMap(config, nugetCredential);
 
         context.PublishApiKey = ProjectBuildSupportService.ResolveSecret(
             config.PublishApiKey,
@@ -88,7 +101,7 @@ internal sealed class ProjectBuildPreparationService
         {
             RootPath = context.RootPath,
             ExpectedVersion = config.ExpectedVersion,
-            ExpectedVersionsByProject = config.ExpectedVersionMap,
+            ExpectedVersionsByProject = expectedVersionMap,
             ExpectedVersionMapAsInclude = config.ExpectedVersionMapAsInclude,
             ExpectedVersionMapUseWildcards = config.ExpectedVersionMapUseWildcards,
             IncludeProjects = config.IncludeProjects,
