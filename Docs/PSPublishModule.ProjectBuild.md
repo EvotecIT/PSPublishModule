@@ -16,10 +16,18 @@ Unified release entrypoint
 - PowerShell cmdlet: `Invoke-PowerForgeRelease -ConfigPath .\Build\release.json`
 - Wrapper: `Build/Build-Project.ps1`
 - Transitional top-level wrapper: `Build/Build-Release.ps1`
+- Preview tool wrapper: `Build/Build-ToolsPreview.ps1`
 - CLI: `powerforge release --config .\Build\release.json`
 - Packages continue to use `project.build.json` / `Invoke-ProjectBuild`.
 - Tools/apps can now use either legacy `Tools.Targets` or the richer `Tools.DotNetPublish` / `Tools.DotNetPublishConfigPath`
   path backed by `Schemas/powerforge.dotnetpublish.schema.json`.
+- This repo now also includes a focused preview-binary config in `Build/release.tools-preview.json`.
+  Use it when you want to publish `PowerForge` / `PowerForgeWeb` executables without also touching module/package release flow.
+  The preview config intentionally:
+  - limits release scope to tools only
+  - stages into `Artifacts/Preview`
+  - marks GitHub releases as prerelease
+  - uses preview-specific timestamped tags so preview publishes cannot collide with eventual stable tags
 - Module release can now be declared directly in `release.json` through the top-level `Module` section.
   In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
 - `Build/Build-Release.ps1` still supports bridge mode for repos that have not adopted a native `Module` section yet,
@@ -73,6 +81,20 @@ New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
 
 ```powershell
 Invoke-PowerForgeRelease -ConfigPath .\Build\release.json -Plan
+```
+
+- Plan or build preview executables only:
+
+```powershell
+.\Build\Build-ToolsPreview.ps1 -Plan
+.\Build\Build-ToolsPreview.ps1 -Runtime win-x64
+.\Build\Build-ToolsPreview.ps1 -Runtime win-x64,linux-x64
+```
+
+- Publish preview executable releases to GitHub:
+
+```powershell
+.\Build\Build-ToolsPreview.ps1 -PublishGitHub
 ```
 
 Overview
