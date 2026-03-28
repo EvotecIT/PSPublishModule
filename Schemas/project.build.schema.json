@@ -25,6 +25,15 @@
         "type": "string"
       }
     },
+    "VersionTracks": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/definitions/versionTrack"
+      }
+    },
     "ExpectedVersionMapAsInclude": {
       "type": "boolean"
     },
@@ -266,6 +275,47 @@
         "null"
       ],
       "description": "Template for GitHub release display name. Supports the same tokens as GitHubTagTemplate."
+    }
+  },
+  "definitions": {
+    "versionTrack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ExpectedVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "AnchorProject": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "AnchorPackageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "NugetSource": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "IncludePrerelease": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

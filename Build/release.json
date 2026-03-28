@@ -12,13 +12,18 @@
   },
   "Packages": {
     "RootPath": "..",
-    "ExpectedVersionMap": {
-      "PowerForge": "1.0.X",
-      "PowerForge.PowerShell": "1.0.X",
-      "PowerForge.Cli": "1.0.X",
-      "PowerForge.Blazor": "1.0.X",
-      "PowerForge.Web": "1.0.X",
-      "PowerForge.Web.Cli": "1.0.X"
+    "VersionTracks": {
+      "PowerForge": {
+        "ExpectedVersion": "1.0.X",
+        "AnchorProject": "PowerForge",
+        "Projects": [
+          "PowerForge.PowerShell",
+          "PowerForge.Cli",
+          "PowerForge.Blazor",
+          "PowerForge.Web",
+          "PowerForge.Web.Cli"
+        ]
+      }
     },
     "ExpectedVersionMapAsInclude": true,
     "ExpectedVersionMapUseWildcards": false,
