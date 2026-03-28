@@ -57,6 +57,53 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
+    public void Plan_RefreshPSD1Only_PreservesResolvedCsprojPath_ForVersionSync()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var csprojPath = Path.Combine(root.FullName, "Sources", moduleName, moduleName + ".csproj");
+            WriteMinimalCsproj(csprojPath, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    CsprojPath = csprojPath
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true,
+                            SyncNETProjectVersion = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.True(plan.BuildSpec.RefreshManifestOnly);
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Equal(csprojPath, plan.ResolvedCsprojPath);
+            Assert.True(plan.SyncNETProjectVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_RefreshPSD1Only_SkipsInstallAndPublishing()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -100,6 +147,55 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Empty(result.PublishResults);
             Assert.Empty(result.ArtefactResults);
             Assert.Null(result.SigningResult);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RefreshPSD1Only_SyncsSourceCsprojVersion_WhenEnabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var csprojPath = Path.Combine(root.FullName, "Sources", moduleName, moduleName + ".csproj");
+            WriteMinimalCsproj(csprojPath, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true,
+                    CsprojPath = csprojPath
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true,
+                            SyncNETProjectVersion = true
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.NotNull(result.BuildResult);
+            Assert.True(CsprojVersionEditor.TryGetVersion(csprojPath, out var syncedVersion));
+            Assert.Equal("2.0.0", syncedVersion);
         }
         finally
         {
@@ -337,5 +433,21 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             "    VariablesToExport = @('*')" + Environment.NewLine +
             "    AliasesToExport = @('*')" + Environment.NewLine +
             "}");
+    }
+
+    private static void WriteMinimalCsproj(string csprojPath, string version)
+    {
+        var directory = Path.GetDirectoryName(csprojPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllText(
+            csprojPath,
+            "<Project Sdk=\"Microsoft.NET.Sdk\">" + Environment.NewLine +
+            "  <PropertyGroup>" + Environment.NewLine +
+            "    <TargetFramework>net8.0</TargetFramework>" + Environment.NewLine +
+            "    <VersionPrefix>" + version + "</VersionPrefix>" + Environment.NewLine +
+            "  </PropertyGroup>" + Environment.NewLine +
+            "</Project>");
     }
 }

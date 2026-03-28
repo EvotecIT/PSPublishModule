@@ -17,6 +17,8 @@ public sealed class BuildConfigurationFactoryTests
             MergeModuleOnBuild = true,
             SignModuleSpecified = true,
             SignModule = true,
+            SyncNETProjectVersionSpecified = true,
+            SyncNETProjectVersion = true,
             SignIncludeInternalsSpecified = true,
             SignIncludeInternals = true,
             CertificateThumbprintSpecified = true,
@@ -35,6 +37,7 @@ public sealed class BuildConfigurationFactoryTests
         Assert.True(build.BuildModule.Enable);
         Assert.True(build.BuildModule.Merge);
         Assert.True(build.BuildModule.SignMerged);
+        Assert.True(build.BuildModule.SyncNETProjectVersion);
 
         var options = Assert.IsType<ConfigurationOptionsSegment>(segments[1]);
         var signing = Assert.IsType<SigningOptionsConfiguration>(options.Options.Signing);

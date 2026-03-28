@@ -24,6 +24,8 @@ internal sealed class BuildConfigurationRequest
     public bool UseWildcardForFunctions { get; set; }
     public bool LocalVersioningSpecified { get; set; }
     public bool LocalVersioning { get; set; }
+    public bool SyncNETProjectVersionSpecified { get; set; }
+    public bool SyncNETProjectVersion { get; set; }
     public bool VersionedInstallStrategySpecified { get; set; }
     public InstallationStrategy? VersionedInstallStrategy { get; set; }
     public bool VersionedInstallKeepSpecified { get; set; }
