@@ -180,4 +180,129 @@ public sealed class ProjectBuildPreparationServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Prepare_resolves_version_tracks_from_explicit_anchor_package_id()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-track-packageid-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var feed = root.CreateSubdirectory("feed");
+            File.WriteAllText(Path.Combine(feed.FullName, "PowerForge.Anchor.1.0.4.nupkg"), string.Empty);
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                NugetSource = new[] { feed.FullName },
+                ExpectedVersionMapAsInclude = true,
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.0.X",
+                        AnchorProject = "PowerForge",
+                        AnchorPackageId = "PowerForge.Anchor",
+                        Projects = new[] { "PowerForge.Cli", "PowerForge.Web.Cli" }
+                    }
+                }
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.NotNull(context.Spec.ExpectedVersionsByProject);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject!["PowerForge"]);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Cli"]);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject["PowerForge.Web.Cli"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_expected_version_map_overrides_track_entries()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-track-override-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var feed = root.CreateSubdirectory("feed");
+            File.WriteAllText(Path.Combine(feed.FullName, "PowerForge.1.0.4.nupkg"), string.Empty);
+
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                NugetSource = new[] { feed.FullName },
+                ExpectedVersionMapAsInclude = true,
+                ExpectedVersionMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge.Web.Cli"] = "1.0.9"
+                },
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.0.X",
+                        AnchorProject = "PowerForge",
+                        Projects = new[] { "PowerForge.Web.Cli" }
+                    }
+                }
+            };
+
+            var context = service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            Assert.NotNull(context.Spec.ExpectedVersionsByProject);
+            Assert.Equal("1.0.5", context.Spec.ExpectedVersionsByProject!["PowerForge"]);
+            Assert.Equal("1.0.9", context.Spec.ExpectedVersionsByProject["PowerForge.Web.Cli"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_requires_anchor_project_when_anchor_package_id_is_used_with_explicit_projects()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-track-anchorvalidation-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var service = new ProjectBuildPreparationService();
+            var config = new ProjectBuildConfiguration
+            {
+                VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PowerForge"] = new()
+                    {
+                        ExpectedVersion = "1.0.X",
+                        AnchorPackageId = "PowerForge.Anchor",
+                        Projects = new[] { "PowerForge.Cli" }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<ArgumentException>(() => service.Prepare(
+                config,
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions()));
+
+            Assert.Contains("AnchorProject", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

@@ -29,12 +29,16 @@ internal sealed class ProjectBuildVersionTrackService
         foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, config.NugetSource, credential, config.IncludePrerelease))
             resolved[entry.Key] = entry.Value;
 
-        foreach (var entry in config.ExpectedVersionMap ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+        var explicitMap = config.ExpectedVersionMap;
+        if (explicitMap is not null)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key) || string.IsNullOrWhiteSpace(entry.Value))
-                continue;
+            foreach (var entry in explicitMap)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key) || string.IsNullOrWhiteSpace(entry.Value))
+                    continue;
 
-            resolved[entry.Key.Trim()] = entry.Value.Trim();
+                resolved[entry.Key.Trim()] = entry.Value.Trim();
+            }
         }
 
         return resolved.Count == 0 ? null : resolved;
@@ -76,7 +80,7 @@ internal sealed class ProjectBuildVersionTrackService
             return exact.ToString();
 
         var anchorPackageId = NormalizeNullable(track.AnchorPackageId) ?? NormalizeNullable(track.AnchorProject);
-        if (string.IsNullOrWhiteSpace(anchorPackageId))
+        if (anchorPackageId is null)
             throw new ArgumentException($"VersionTracks['{trackName}'] uses pattern version '{expectedVersion}' but does not define AnchorProject or AnchorPackageId.");
 
         var sources = (track.NugetSource ?? defaultSources ?? Array.Empty<string>())
@@ -96,20 +100,28 @@ internal sealed class ProjectBuildVersionTrackService
     private static IReadOnlyList<string> ResolveProjects(string trackName, ProjectBuildVersionTrack track)
     {
         var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var anchorProject = NormalizeNullable(track.AnchorProject);
+        var hasExplicitAnchorPackageId = NormalizeNullable(track.AnchorPackageId) is not null;
 
         if (track.Projects is not null)
         {
             foreach (var project in track.Projects)
             {
                 var normalized = NormalizeNullable(project);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                    projects.Add(normalized!);
+                if (normalized is not null)
+                    projects.Add(normalized);
             }
         }
 
-        var anchorProject = NormalizeNullable(track.AnchorProject);
-        if (!string.IsNullOrWhiteSpace(anchorProject))
-            projects.Add(anchorProject!);
+        if (anchorProject is not null)
+            projects.Add(anchorProject);
+
+        if (hasExplicitAnchorPackageId && anchorProject is null && projects.Count > 0)
+        {
+            throw new ArgumentException(
+                $"VersionTracks['{trackName}'] defines AnchorPackageId but not AnchorProject. " +
+                "Specify AnchorProject so the anchor project can be stamped automatically, or move the anchor project into Projects explicitly.");
+        }
 
         if (projects.Count == 0)
             throw new ArgumentException($"VersionTracks['{trackName}'] must define at least one project in Projects or AnchorProject.");
@@ -118,5 +130,12 @@ internal sealed class ProjectBuildVersionTrackService
     }
 
     private static string? NormalizeNullable(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    {
+        var candidate = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+            return null;
+
+        var trimmed = candidate.Trim();
+        return trimmed.Length == 0 ? null : trimmed;
+    }
 }

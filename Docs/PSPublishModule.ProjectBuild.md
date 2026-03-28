@@ -164,6 +164,7 @@ Versioning
 - `VersionTracks.<Name>.AnchorProject`: project whose package identity is used as the default version source for the track.
 - `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
+- When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
 - When no expected version is provided for a project, the existing csproj version is used.
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
