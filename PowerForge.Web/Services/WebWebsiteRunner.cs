@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Formats.Tar;
+using System.Security.Cryptography;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -81,19 +82,23 @@ public static class WebWebsiteRunner
         RunProcess(
             "git",
             null,
-            new[] { "clone", "--filter=blob:none", "--no-checkout", "--quiet", GetGitCloneUrl(finalRepository, options.GitHubToken), extractRoot },
+            new[] { "clone", "--filter=blob:none", "--no-checkout", "--quiet", GetGitCloneUrl(finalRepository), extractRoot },
+            CreateGitHubGitEnvironment(options.GitHubToken),
             standardOutput,
-            standardError);
+            standardError,
+            $"git clone --filter=blob:none --no-checkout --quiet https://github.com/{finalRepository}.git {extractRoot}");
         RunProcess(
             "git",
             null,
             new[] { "-C", extractRoot, "fetch", "--depth", "1", "origin", finalRef },
+            CreateGitHubGitEnvironment(options.GitHubToken),
             standardOutput,
             standardError);
         RunProcess(
             "git",
             null,
             new[] { "-C", extractRoot, "-c", "advice.detachedHead=false", "checkout", "--force", "FETCH_HEAD" },
+            null,
             standardOutput,
             standardError);
 
@@ -107,6 +112,7 @@ public static class WebWebsiteRunner
                 "run", "--framework", "net10.0", "--project", projectPath, "--",
                 "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(options.PipelineMode, "ci")
             },
+            null,
             standardOutput,
             standardError);
 
@@ -144,6 +150,7 @@ public static class WebWebsiteRunner
 
         var assetPath = Path.Combine(sessionRoot, toolLock.Asset);
         DownloadFile(assetDownloadUrl, assetPath, options.GitHubToken);
+        VerifySha256IfPresent(assetPath, toolLock.Sha256);
 
         var extractRoot = Path.Combine(sessionRoot, "tool");
         ExtractArchive(assetPath, extractRoot);
@@ -154,6 +161,7 @@ public static class WebWebsiteRunner
             executablePath,
             null,
             new[] { "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(options.PipelineMode, "ci") },
+            null,
             standardOutput,
             standardError);
 
@@ -221,12 +229,9 @@ public static class WebWebsiteRunner
         return client;
     }
 
-    private static string GetGitCloneUrl(string repository, string? token)
+    private static string GetGitCloneUrl(string repository)
     {
-        if (string.IsNullOrWhiteSpace(token))
-            return $"https://github.com/{repository}.git";
-
-        return $"https://x-access-token:{token.Trim()}@github.com/{repository}.git";
+        return $"https://github.com/{repository}.git";
     }
 
     private static void ExtractArchive(string archivePath, string destinationPath)
@@ -264,9 +269,10 @@ public static class WebWebsiteRunner
             {
                 var fileName = Path.GetFileName(path);
                 var baseName = Path.GetFileNameWithoutExtension(path);
+                var extension = Path.GetExtension(path);
                 return fileName.Equals(target, StringComparison.OrdinalIgnoreCase) ||
                        fileName.Equals(target + ".exe", StringComparison.OrdinalIgnoreCase) ||
-                       baseName.Equals(target, StringComparison.OrdinalIgnoreCase);
+                       (string.IsNullOrEmpty(extension) && baseName.Equals(target, StringComparison.OrdinalIgnoreCase));
             })
             .ToArray();
 
@@ -296,8 +302,10 @@ public static class WebWebsiteRunner
         string fileName,
         string? workingDirectory,
         IEnumerable<string> arguments,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
         Action<string>? standardOutput,
-        Action<string>? standardError)
+        Action<string>? standardError,
+        string? displayCommand = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -311,6 +319,11 @@ public static class WebWebsiteRunner
 
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
+        if (environmentVariables is not null)
+        {
+            foreach (var pair in environmentVariables)
+                startInfo.Environment[pair.Key] = pair.Value ?? string.Empty;
+        }
 
         using var process = new Process { StartInfo = startInfo };
         var outputBuffer = new List<string>();
@@ -328,7 +341,10 @@ public static class WebWebsiteRunner
         var tail = errorBuffer.Count > 0
             ? string.Join(Environment.NewLine, errorBuffer.TakeLast(10))
             : string.Join(Environment.NewLine, outputBuffer.TakeLast(10));
-        throw new InvalidOperationException($"Command failed ({process.ExitCode}): {fileName} {string.Join(" ", arguments)}{(string.IsNullOrWhiteSpace(tail) ? string.Empty : Environment.NewLine + tail)}");
+        var commandText = string.IsNullOrWhiteSpace(displayCommand)
+            ? $"{fileName} {string.Join(" ", arguments)}"
+            : displayCommand;
+        throw new InvalidOperationException($"Command failed ({process.ExitCode}): {commandText}{(string.IsNullOrWhiteSpace(tail) ? string.Empty : Environment.NewLine + tail)}");
     }
 
     private static void ReadLines(StreamReader reader, List<string> buffer, Action<string>? callback)
@@ -416,6 +432,34 @@ public static class WebWebsiteRunner
         var sessionRoot = Path.Combine(fullRoot, "powerforge-website-runner-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(sessionRoot);
         return sessionRoot;
+    }
+
+    private static IReadOnlyDictionary<string, string?>? CreateGitHubGitEnvironment(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        return new Dictionary<string, string?>
+        {
+            ["GIT_CONFIG_COUNT"] = "1",
+            ["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader",
+            ["GIT_CONFIG_VALUE_0"] = $"AUTHORIZATION: bearer {token.Trim()}"
+        };
+    }
+
+    private static void VerifySha256IfPresent(string assetPath, string? expectedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+
+        var normalizedExpected = expectedSha256.Trim().ToLowerInvariant();
+        if (normalizedExpected.Length != 64 || normalizedExpected.Any(ch => !Uri.IsHexDigit(ch)))
+            throw new InvalidOperationException($"tool lock sha256 must be 64 hex characters: '{expectedSha256}'.");
+
+        using var stream = File.OpenRead(assetPath);
+        var actual = Convert.ToHexStringLower(SHA256.HashData(stream));
+        if (!actual.Equals(normalizedExpected, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Downloaded asset SHA-256 mismatch for '{Path.GetFileName(assetPath)}'. Expected {normalizedExpected} but got {actual}.");
     }
 
     private static void TryDeleteDirectory(string path)

@@ -52,13 +52,15 @@ For binary mode, commit `.powerforge/tool-lock.json` and pin an exact release ta
   "target": "PowerForgeWeb",
   "tag": "PowerForgeWeb-v1.0.0-preview-20260328151156",
   "asset": "PowerForgeWeb-1.0.0-net10.0-linux-x64-SingleContained.tar.gz",
-  "binaryPath": "PowerForgeWeb"
+  "binaryPath": "PowerForgeWeb",
+  "sha256": "<optional sha256>"
 }
 ```
 
 Guidelines:
 - use exact `tag` + exact `asset`
 - use the published asset format for the runner OS: `.zip` on Windows, `.tar.gz` on Linux/macOS
+- add `sha256` when you want the workflow to verify the downloaded asset before execution
 - do not use "latest"
 - default production repos to stable tags
 - opt into preview tags only in repos that intentionally test preview builds

@@ -23,4 +23,7 @@ public sealed class WebToolLockSpec
 
     /// <summary>Optional relative path to the executable inside the extracted asset.</summary>
     public string BinaryPath { get; set; } = string.Empty;
+
+    /// <summary>Optional SHA-256 hash of the release asset for integrity verification.</summary>
+    public string Sha256 { get; set; } = string.Empty;
 }

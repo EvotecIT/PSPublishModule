@@ -44,6 +44,8 @@ public sealed class WebToolLockFileTests
             Assert.Equal(WebToolLockFile.DefaultTarget, parsed.Target);
             Assert.Equal("PowerForgeWeb-v1.0.0-preview", parsed.Tag);
             Assert.Equal("PowerForgeWeb-1.0.0-net10.0-win-x64-SingleContained.zip", parsed.Asset);
+            Assert.Equal(string.Empty, parsed.BinaryPath);
+            Assert.Equal(string.Empty, parsed.Sha256);
         }
         finally
         {

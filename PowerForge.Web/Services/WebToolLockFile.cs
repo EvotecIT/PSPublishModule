@@ -58,7 +58,8 @@ public static class WebToolLockFile
             Target = spec.Target,
             Tag = spec.Tag,
             Asset = spec.Asset,
-            BinaryPath = spec.BinaryPath
+            BinaryPath = spec.BinaryPath,
+            Sha256 = spec.Sha256
         };
 
         if (string.IsNullOrWhiteSpace(normalized.Schema))
@@ -68,6 +69,7 @@ public static class WebToolLockFile
         normalized.Tag = NormalizeValue(normalized.Tag, string.Empty);
         normalized.Asset = NormalizeValue(normalized.Asset, string.Empty);
         normalized.BinaryPath = NormalizeValue(normalized.BinaryPath, string.Empty);
+        normalized.Sha256 = NormalizeValue(normalized.Sha256, string.Empty).ToLowerInvariant();
         return normalized;
     }
 

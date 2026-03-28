@@ -29,4 +29,30 @@ public sealed class WebWebsiteRunnerTests
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void Run_ReportsMissingWebsiteRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-website-runner-test-" + Guid.NewGuid().ToString("N"));
+        var pipelineConfig = Path.Combine(Path.GetTempPath(), "powerforge-website-runner-pipeline-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(pipelineConfig, "{}");
+
+        try
+        {
+            var ex = Assert.Throws<DirectoryNotFoundException>(() => WebWebsiteRunner.Run(
+                new WebWebsiteRunnerOptions
+                {
+                    WebsiteRoot = root,
+                    PipelineConfig = pipelineConfig,
+                    EngineMode = "source"
+                }));
+
+            Assert.Contains("Website root not found", ex.Message);
+        }
+        finally
+        {
+            if (File.Exists(pipelineConfig))
+                File.Delete(pipelineConfig);
+        }
+    }
 }
