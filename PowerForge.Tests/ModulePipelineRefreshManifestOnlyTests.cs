@@ -204,6 +204,101 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
+    public void Run_RefreshPSD1Only_WithSyncEnabledAndNoCsproj_Throws()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true,
+                            SyncNETProjectVersion = true
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+            Assert.Contains("SyncNETProjectVersion", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RefreshPSD1Only_SyncEnabled_DoesNotRewriteCsprojWhenAlreadyInSync()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var csprojPath = Path.Combine(root.FullName, "Sources", moduleName, moduleName + ".csproj");
+            WriteMinimalCsproj(csprojPath, "2.0.0");
+            var expectedTimestamp = new DateTime(2024, 06, 01, 12, 0, 0, DateTimeKind.Utc);
+            File.SetLastWriteTimeUtc(csprojPath, expectedTimestamp);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true,
+                    CsprojPath = csprojPath
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true,
+                            SyncNETProjectVersion = true
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.NotNull(result.BuildResult);
+            Assert.Equal(expectedTimestamp, File.GetLastWriteTimeUtc(csprojPath));
+            Assert.True(CsprojVersionEditor.TryGetVersion(csprojPath, out var syncedVersion));
+            Assert.Equal("2.0.0", syncedVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_RefreshPSD1Only_UpdatesProjectRootManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

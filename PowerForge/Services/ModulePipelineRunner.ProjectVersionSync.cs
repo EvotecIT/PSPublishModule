@@ -4,11 +4,11 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    internal string? SyncSourceProjectVersionIfRequested(ModulePipelinePlan plan)
+    internal void SyncSourceProjectVersionIfRequested(ModulePipelinePlan plan)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (!plan.SyncNETProjectVersion)
-            return null;
+            return;
 
         var csprojPath = plan.ResolvedCsprojPath?.Trim();
         if (string.IsNullOrWhiteSpace(csprojPath))
@@ -25,15 +25,12 @@ public sealed partial class ModulePipelineRunner
         var updated = CsprojVersionEditor.UpdateVersionText(content, plan.ResolvedVersion, out var hadVersionTag);
         if (string.Equals(content, updated, StringComparison.Ordinal))
         {
-            var unchangedMessage = $"Build: source project version already matches resolved module version '{plan.ResolvedVersion}' ({fullPath}).";
-            _logger.Info(unchangedMessage);
-            return unchangedMessage;
+            _logger.Info($"Build: source project version already matches resolved module version '{plan.ResolvedVersion}' ({fullPath}).");
+            return;
         }
 
         File.WriteAllText(fullPath, updated);
         var action = hadVersionTag ? "synchronized" : "inserted VersionPrefix for";
-        var message = $"Build: {action} source project version '{plan.ResolvedVersion}' in '{fullPath}'.";
-        _logger.Info(message);
-        return message;
+        _logger.Info($"Build: {action} source project version '{plan.ResolvedVersion}' in '{fullPath}'.");
     }
 }
