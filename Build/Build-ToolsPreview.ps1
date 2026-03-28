@@ -3,7 +3,7 @@
     [string[]] $Tool = @('All'),
     [ValidateSet('Release', 'Debug')]
     [string] $Configuration = 'Release',
-    [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'linux-musl-x64', 'linux-musl-arm64', 'osx-x64', 'osx-arm64')]
+    [ValidateSet('win-x64', 'linux-x64', 'linux-arm64', 'osx-x64', 'osx-arm64')]
     [string[]] $Runtime,
     [ValidateSet('net10.0', 'net8.0')]
     [string[]] $Framework = @('net10.0'),
@@ -23,6 +23,7 @@ if ($Tool -contains 'All') {
     $Tool = @('PowerForge', 'PowerForgeWeb')
 }
 
+# Intentionally leave Runtime unset by default so the preview config controls the publish matrix.
 $buildProjectParams = @{
     ConfigPath = $ConfigPath
     Configuration = $Configuration

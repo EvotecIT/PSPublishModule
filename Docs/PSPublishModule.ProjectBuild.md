@@ -28,6 +28,7 @@ Unified release entrypoint
   - stages into `Artifacts/Preview`
   - marks GitHub releases as prerelease
   - uses preview-specific timestamped tags so preview publishes cannot collide with eventual stable tags
+  - keeps the existing local `TokenFilePath` pattern from `Build/release.json`; replace that path if you run the preview flow from another machine or CI environment
 - Module release can now be declared directly in `release.json` through the top-level `Module` section.
   In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
 - `Build/Build-Release.ps1` still supports bridge mode for repos that have not adopted a native `Module` section yet,
