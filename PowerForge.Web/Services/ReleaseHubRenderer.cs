@@ -537,6 +537,7 @@ internal static class ReleaseHubRenderer
         if (string.IsNullOrWhiteSpace(prefix))
             return html;
 
+        var remappedHeadingIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var namespaced = HeadingWithIdRegex.Replace(html, match =>
         {
             var level = match.Groups["level"].Value;
@@ -551,11 +552,15 @@ internal static class ReleaseHubRenderer
                 return match.Value;
 
             var namespacedId = NamespaceFragment(prefix, baseId);
+            remappedHeadingIds[baseId] = namespacedId;
             var attrsWithId = idMatch.Success
                 ? IdAttributeRegex.Replace(attrs, $" id=\"{namespacedId}\"", 1)
                 : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{namespacedId}\"" : $"{attrs} id=\"{namespacedId}\"");
             return $"<h{level}{attrsWithId}>{text}</h{level}>";
         });
+
+        if (remappedHeadingIds.Count == 0)
+            return namespaced;
 
         return FragmentLinkRegex.Replace(namespaced, match =>
         {
@@ -563,7 +568,9 @@ internal static class ReleaseHubRenderer
             if (string.IsNullOrWhiteSpace(target))
                 return match.Value;
 
-            var namespacedTarget = NamespaceFragment(prefix, target);
+            if (!remappedHeadingIds.TryGetValue(target, out var namespacedTarget))
+                return match.Value;
+
             return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}#{namespacedTarget}{match.Groups["quote"].Value}{match.Groups["suffix"].Value}";
         });
     }

@@ -89,6 +89,24 @@ public class WebReleaseHubRenderingTests
     }
 
     [Fact]
+    public void Build_ReleaseChangelog_PreservesNonHeadingFragmentLinks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< release-changelog product="intelligencex.chat" limit="5" includePreview="true" >}}
+            """,
+            setup: WriteReleaseHubDataWithCustomAnchor,
+            useScribanTheme: false,
+            scribanLayoutBody: null);
+
+        Assert.Contains("id=\"v1-2-0-whats-changed\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"#v1-2-0-whats-changed\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("id=\"custom-anchor\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"#custom-anchor\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("href=\"#v1-2-0-custom-anchor\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_RendersReleaseButtons_ForAllProducts_WithWildcardFilter()
     {
         var html = BuildSinglePageSite(
@@ -470,6 +488,44 @@ public class WebReleaseHubRenderingTests
                       "arch": "x64",
                       "kind": "zip",
                       "size": 5400000
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+    }
+
+    private static void WriteReleaseHubDataWithCustomAnchor(string root)
+    {
+        var dataDir = Path.Combine(root, "data");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "release-hub.json"),
+            """
+            {
+              "title": "IntelligenceX Releases",
+              "products": [
+                { "id": "intelligencex.chat", "name": "IX Chat", "order": 10 }
+              ],
+              "releases": [
+                {
+                  "tag": "v1.2.0",
+                  "title": "IntelligenceX 1.2.0",
+                  "url": "https://github.com/EvotecIT/IntelligenceX/releases/tag/v1.2.0",
+                  "publishedAt": "2026-02-25T10:00:00Z",
+                  "isPrerelease": false,
+                  "isLatestStable": true,
+                  "body_html": "<h2 id=\"whats-changed\">What's Changed</h2><ul><li>Stable improvements</li></ul><p><a href=\"#whats-changed\">Jump heading</a> <a id=\"custom-anchor\"></a><a href=\"#custom-anchor\">Jump anchor</a></p>",
+                  "assets": [
+                    {
+                      "name": "IntelligenceX.Chat-win-x64-v1.2.0.zip",
+                      "downloadUrl": "https://example.test/downloads/ix-chat-win-x64-v1.2.0.zip",
+                      "product": "intelligencex.chat",
+                      "channel": "stable",
+                      "platform": "windows",
+                      "arch": "x64",
+                      "kind": "zip",
+                      "size": 5242880
                     }
                   ]
                 }
