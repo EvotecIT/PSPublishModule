@@ -23,6 +23,8 @@ if ($Tool -contains 'All') {
     $Tool = @('PowerForge', 'PowerForgeWeb')
 }
 
+$restoreVerbosePreference = $null
+
 # Intentionally leave Runtime unset by default so the preview config controls the publish matrix.
 $buildProjectParams = @{
     ConfigPath = $ConfigPath
@@ -36,7 +38,21 @@ $buildProjectParams = @{
 if ($Runtime) { $buildProjectParams.Runtime = $Runtime }
 if ($Plan) { $buildProjectParams.Plan = $true }
 if ($Validate) { $buildProjectParams.Validate = $true }
-if ($PublishGitHub) { $buildProjectParams.PublishToolGitHub = $true }
+if ($PublishGitHub) {
+    $buildProjectParams.PublishToolGitHub = $true
 
-& (Join-Path $PSScriptRoot 'Build-Project.ps1') @buildProjectParams
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # Publish runs can take a while for multi-runtime uploads, so default to verbose output here.
+    if (-not $PSBoundParameters.ContainsKey('Verbose') -and $VerbosePreference -eq 'SilentlyContinue') {
+        $restoreVerbosePreference = $VerbosePreference
+        $VerbosePreference = 'Continue'
+    }
+}
+
+try {
+    & (Join-Path $PSScriptRoot 'Build-Project.ps1') @buildProjectParams
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+    if ($null -ne $restoreVerbosePreference) {
+        $VerbosePreference = $restoreVerbosePreference
+    }
+}
