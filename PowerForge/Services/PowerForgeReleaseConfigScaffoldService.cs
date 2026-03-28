@@ -76,9 +76,11 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             Path.Combine("Module", "Build", "Build-Module.ps1"),
             Path.Combine("Build", "Build-Module.ps1"));
 
-        if (string.IsNullOrWhiteSpace(packageConfigPath) && string.IsNullOrWhiteSpace(dotNetPublishConfigPath))
+        if (string.IsNullOrWhiteSpace(packageConfigPath) &&
+            string.IsNullOrWhiteSpace(dotNetPublishConfigPath) &&
+            string.IsNullOrWhiteSpace(moduleScriptPath))
             throw new InvalidOperationException(
-                "Could not find package or DotNet publish configs to scaffold from. Provide -PackagesConfigPath and/or -DotNetPublishConfigPath, or create Build/project.build.json / Build/powerforge.dotnetpublish.json first.");
+                "Could not find package, module, or DotNet publish inputs to scaffold from. Provide -PackagesConfigPath and/or -DotNetPublishConfigPath, or create Module/Build/Build-Module.ps1, Build/project.build.json, or Build/powerforge.dotnetpublish.json first.");
 
         var packages = string.IsNullOrWhiteSpace(packageConfigPath)
             ? null
@@ -172,7 +174,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
 
     private static void EnsurePathWithinRoot(string projectRoot, string path, string label)
     {
-        var relative = Path.GetRelativePath(projectRoot, path);
+        var relative = GetRelativePathCompat(projectRoot, path);
         if (relative.StartsWith("..", StringComparison.OrdinalIgnoreCase) || Path.IsPathRooted(relative))
             throw new InvalidOperationException($"{label} must stay within project root '{projectRoot}'.");
     }
@@ -197,7 +199,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             return null;
 
         var outputDirectory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
-        var relativeDotNetPublishPath = Path.GetRelativePath(outputDirectory, dotNetPublishConfigPath!)
+        var relativeDotNetPublishPath = GetRelativePathCompat(outputDirectory, dotNetPublishConfigPath!)
             .Replace('\\', '/');
 
         var toolGitHub = new PowerForgeToolReleaseGitHubOptions
@@ -228,26 +230,35 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             return null;
 
         var outputDirectory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
-        var relativeRepositoryRoot = Path.GetRelativePath(outputDirectory, projectRoot)
+        var relativeRepositoryRoot = GetRelativePathCompat(outputDirectory, projectRoot)
             .Replace('\\', '/');
-        var relativeScriptPath = Path.GetRelativePath(projectRoot, moduleScriptPath!)
+        var relativeScriptPath = GetRelativePathCompat(projectRoot, moduleScriptPath!)
             .Replace('\\', '/');
+        var moduleBuildDirectory = Path.GetDirectoryName(moduleScriptPath!) ?? projectRoot;
+        var moduleRoot = Directory.GetParent(moduleBuildDirectory)?.FullName ?? projectRoot;
+        var artifactRoot = Path.Combine(moduleRoot, "Artefacts");
+        var artifactPaths = new[]
+        {
+            Path.Combine(artifactRoot, "Packed"),
+            Path.Combine(artifactRoot, "PackedWithModules"),
+            Path.Combine(artifactRoot, "Unpacked")
+        }
+        .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
+        .ToArray();
 
         return new PowerForgeModuleReleaseOptions
         {
             RepositoryRoot = string.IsNullOrWhiteSpace(relativeRepositoryRoot) ? "." : relativeRepositoryRoot,
             ScriptPath = relativeScriptPath,
-            ArtifactPaths = new[]
-            {
-                "Module/Artefacts/Packed",
-                "Module/Artefacts/PackedWithModules",
-                "Module/Artefacts/Unpacked"
-            }
+            ArtifactPaths = artifactPaths
         };
     }
 
     private static string? NormalizeNullable(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private static string GetRelativePathCompat(string relativeTo, string path)
+        => FrameworkCompatibility.GetRelativePath(relativeTo, path);
 
     private static JsonSerializerOptions CreateDeserializeOptions()
     {

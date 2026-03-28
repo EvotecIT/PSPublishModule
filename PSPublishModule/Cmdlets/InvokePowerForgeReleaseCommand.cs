@@ -57,6 +57,12 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     public SwitchParameter PackagesOnly { get; set; }
 
     /// <summary>
+    /// Executes only the module portion of the release.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter ModuleOnly { get; set; }
+
+    /// <summary>
     /// Executes only the tool/app portion of the release.
     /// </summary>
     [Parameter]
@@ -340,8 +346,9 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 
         try
         {
-            if (PackagesOnly.IsPresent && ToolsOnly.IsPresent)
-                throw new PSArgumentException("Use either -PackagesOnly or -ToolsOnly, not both.");
+            var scopedCount = (PackagesOnly.IsPresent ? 1 : 0) + (ModuleOnly.IsPresent ? 1 : 0) + (ToolsOnly.IsPresent ? 1 : 0);
+            if (scopedCount > 1)
+                throw new PSArgumentException("Use at most one of -PackagesOnly, -ModuleOnly, or -ToolsOnly.");
 
             var configFullPath = ResolveConfigPath(ConfigPath);
             var spec = LoadConfig(configFullPath);
@@ -360,6 +367,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
                 PlanOnly = Plan.IsPresent,
                 ValidateOnly = Validate.IsPresent,
                 PackagesOnly = PackagesOnly.IsPresent,
+                ModuleOnly = ModuleOnly.IsPresent,
                 ToolsOnly = ToolsOnly.IsPresent,
                 PublishNuget = ResolveRequestedFlag(boundParameters, nameof(PublishNuget)),
                 PublishProjectGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishProjectGitHub)),
@@ -430,7 +438,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
         var currentDirectory = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory;
         var found = FindDefaultConfigPath(currentDirectory);
         if (!string.IsNullOrWhiteSpace(found))
-            return found;
+            return found!;
 
         throw new PSArgumentException(
             "ConfigPath is required when no default release config could be found. Searched: powerforge.release.json, .powerforge/release.json, Build/release.json, release.json.");
@@ -506,7 +514,17 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     }
 
     private static bool? ResolveRequestedFlag(IDictionary<string, object>? boundParameters, string parameterName)
-        => boundParameters?.ContainsKey(parameterName) == true ? true : null;
+    {
+        if (boundParameters?.TryGetValue(parameterName, out var value) != true)
+            return null;
+
+        return value switch
+        {
+            SwitchParameter switchParameter => switchParameter.IsPresent,
+            bool boolValue => boolValue,
+            _ => true
+        };
+    }
 
     private static string[] NormalizeStrings(string[]? values)
     {
@@ -521,7 +539,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     }
 
     private static string? NormalizeNullable(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
     private static PowerForgeToolReleaseFlavor[] ParseFlavors(string[]? values)
     {

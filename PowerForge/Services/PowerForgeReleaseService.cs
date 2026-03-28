@@ -121,9 +121,9 @@ internal sealed class PowerForgeReleaseService
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
-        var runModule = !request.PackagesOnly && !request.ToolsOnly && spec.Module is not null;
-        var runPackages = !request.ToolsOnly && spec.Packages is not null;
-        var runTools = !request.PackagesOnly && spec.Tools is not null;
+        var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
+        var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
+        var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
 
@@ -1485,13 +1485,13 @@ internal sealed class PowerForgeReleaseService
 
         foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
         {
-            var relativePath = Path.GetRelativePath(sourceDirectory, directory);
+            var relativePath = GetRelativePathCompat(sourceDirectory, directory);
             Directory.CreateDirectory(Path.Combine(destinationDirectory, relativePath));
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
         {
-            var relativePath = Path.GetRelativePath(sourceDirectory, file);
+            var relativePath = GetRelativePathCompat(sourceDirectory, file);
             var destinationPath = Path.Combine(destinationDirectory, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             File.Copy(file, destinationPath, overwrite: true);

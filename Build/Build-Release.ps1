@@ -11,6 +11,7 @@
     [switch] $Plan,
     [switch] $Validate,
     [switch] $PackagesOnly,
+    [switch] $ModuleOnly,
     [switch] $ToolsOnly,
     [switch] $PublishNuget,
     [switch] $PublishGitHub,
@@ -51,6 +52,10 @@ if ($shouldRunModule) {
 
     & $moduleScript @moduleParams
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    if ($ModuleOnly -and -not $configDeclaresNativeModule) {
+        return
+    }
 } elseif (-not $SkipModule) {
     if ($configDeclaresNativeModule) {
         Write-Verbose 'Skipping standalone module stage because release.json declares native Module support.'
@@ -72,6 +77,7 @@ if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $releaseParams.ModulePreR
 if ($PSBoundParameters.ContainsKey('NoSign')) { $releaseParams.ModuleNoSign = $NoSign.IsPresent }
 if ($PSBoundParameters.ContainsKey('SignModule')) { $releaseParams.ModuleSignModule = $SignModule.IsPresent }
 if ($PackagesOnly) { $releaseParams.PackagesOnly = $true }
+if ($ModuleOnly) { $releaseParams.ModuleOnly = $true }
 if ($ToolsOnly) { $releaseParams.ToolsOnly = $true }
 if ($PublishNuget) { $releaseParams.PublishNuget = $true }
 if ($PublishGitHub) { $releaseParams.PublishGitHub = $true }

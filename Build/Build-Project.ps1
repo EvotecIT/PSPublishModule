@@ -10,6 +10,7 @@ param(
     [switch] $Plan,
     [switch] $Validate,
     [switch] $PackagesOnly,
+    [switch] $ModuleOnly,
     [switch] $ToolsOnly,
     [switch] $PublishNuget,
     [switch] $PublishGitHub,
@@ -57,6 +58,7 @@ if ($PSBoundParameters.ContainsKey('ModulePreReleaseTag')) { $invokeParams.Modul
 if ($PSBoundParameters.ContainsKey('ModuleNoSign')) { $invokeParams.ModuleNoSign = $ModuleNoSign.IsPresent }
 if ($PSBoundParameters.ContainsKey('ModuleSignModule')) { $invokeParams.ModuleSignModule = $ModuleSignModule.IsPresent }
 if ($PackagesOnly) { $invokeParams.PackagesOnly = $true }
+if ($ModuleOnly) { $invokeParams.ModuleOnly = $true }
 if ($ToolsOnly) { $invokeParams.ToolsOnly = $true }
 if ($PublishNuget) { $invokeParams.PublishNuget = $true }
 if ($PublishGitHub) { $invokeParams.PublishProjectGitHub = $true }

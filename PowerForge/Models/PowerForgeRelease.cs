@@ -36,6 +36,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool PackagesOnly { get; set; }
 
+    public bool ModuleOnly { get; set; }
+
     public bool ToolsOnly { get; set; }
 
     public bool? PublishNuget { get; set; }

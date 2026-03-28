@@ -58,7 +58,7 @@ public sealed class ModuleBuildHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: true,
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
@@ -163,7 +163,7 @@ public sealed class ModuleBuildHostService
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
             arguments.Add("-Configuration");
-            arguments.Add(QuoteLiteral(request.Configuration));
+            arguments.Add(QuoteLiteral(request.Configuration!));
         }
 
         if (request.NoDotnetBuild)
@@ -172,13 +172,13 @@ public sealed class ModuleBuildHostService
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
             arguments.Add("-ModuleVersion");
-            arguments.Add(QuoteLiteral(request.ModuleVersion));
+            arguments.Add(QuoteLiteral(request.ModuleVersion!));
         }
 
         if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
         {
             arguments.Add("-PreReleaseTag");
-            arguments.Add(QuoteLiteral(request.PreReleaseTag));
+            arguments.Add(QuoteLiteral(request.PreReleaseTag!));
         }
 
         if (request.NoSign)
