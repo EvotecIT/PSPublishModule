@@ -1417,7 +1417,7 @@ internal sealed class ScribanThemeHelpers
         var label = string.IsNullOrWhiteSpace(title) ? "Entry" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
-            "pl" => "Otworz artykul: " + label,
+            "pl" => "Otwórz artykuł: " + label,
             "fr" => "Ouvrir l article: " + label,
             "de" => "Artikel offnen: " + label,
             "es" => "Abrir articulo: " + label,
@@ -1430,7 +1430,7 @@ internal sealed class ScribanThemeHelpers
         var label = string.IsNullOrWhiteSpace(title) ? "Post" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
-            "pl" => "Powiazany artykul: " + label,
+            "pl" => "Powiązany artykuł: " + label,
             "fr" => "Article associe: " + label,
             "de" => "Zugehoriger Beitrag: " + label,
             "es" => "Articulo relacionado: " + label,

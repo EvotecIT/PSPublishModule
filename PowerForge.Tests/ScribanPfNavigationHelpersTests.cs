@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using ImageMagick;
 using Xunit;
 using PowerForge.Web;
@@ -916,14 +917,15 @@ public class ScribanPfNavigationHelpersTests
             WebSiteBuilder.Build(spec, plan, outDir);
 
             var polishBlogHtml = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "index.html"));
+            var decodedPolishBlogHtml = WebUtility.HtmlDecode(polishBlogHtml);
             Assert.Contains("href=\"/pl/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/pl/topics/notes/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/pl/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/topics/release/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/sections/product-updates/\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("aria-label=\"Otworz artykul: Notatki wydania\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("aria-label=\"Kategoria: Product Updates\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("aria-label=\"Tag: release\"", polishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Otwórz artykuł: Notatki wydania\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Kategoria: Product Updates\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aria-label=\"Tag: release\"", decodedPolishBlogHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1120,11 +1122,12 @@ public class ScribanPfNavigationHelpersTests
             WebSiteBuilder.Build(spec, plan, outDir);
 
             var polishSecondPost = File.ReadAllText(Path.Combine(outDir, "pl", "blog", "second-post", "index.html"));
+            var decodedPolishSecondPost = WebUtility.HtmlDecode(polishSecondPost);
             Assert.Contains("href=\"/pl/blog/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Newer post: Pierwszy wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Older post: Trzeci wpis", polishSecondPost, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<a href=\"/pl/blog/first-post/\" aria-label=\"Powiazany artykul: Pierwszy wpis\">Pierwszy wpis</a>", polishSecondPost, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<a href=\"/pl/blog/third-post/\" aria-label=\"Powiazany artykul: Trzeci wpis\">Trzeci wpis</a>", polishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/first-post/\" aria-label=\"Powiązany artykuł: Pierwszy wpis\">Pierwszy wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<a href=\"/pl/blog/third-post/\" aria-label=\"Powiązany artykuł: Trzeci wpis\">Trzeci wpis</a>", decodedPolishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=\"/blog/first-post/\"", polishSecondPost, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("First post EN", polishSecondPost, StringComparison.OrdinalIgnoreCase);
         }
