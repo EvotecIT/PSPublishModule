@@ -39,7 +39,7 @@ public sealed class ModuleBuildHostService
     }
 
     /// <summary>
-    /// Executes a module build script while disabling signing-specific configuration overrides.
+    /// Executes a module build script through shared orchestration.
     /// </summary>
     public Task<ModuleBuildHostExecutionResult> ExecuteBuildAsync(ModuleBuildHostBuildRequest request, CancellationToken cancellationToken = default)
     {
@@ -48,7 +48,7 @@ public sealed class ModuleBuildHostService
         ValidateRequiredPath(request.ScriptPath, nameof(request.ScriptPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
-        var script = BuildBuildScript(request.RepositoryRoot, request.ScriptPath, request.ModulePath);
+        var script = BuildBuildScript(request.RepositoryRoot, request.ScriptPath, request.ModulePath, request);
         return RunCommandAsync(request.RepositoryRoot, script, cancellationToken);
     }
 
@@ -140,28 +140,54 @@ public sealed class ModuleBuildHostService
         });
     }
 
-    private static string BuildBuildScript(string repositoryRoot, string scriptPath, string modulePath)
+    private static string BuildBuildScript(string repositoryRoot, string scriptPath, string modulePath, ModuleBuildHostBuildRequest request)
     {
         var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
+        var invocation = BuildScriptInvocation(scriptPath, request);
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
             $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
-            "function New-ConfigurationBuild {",
-            "  param([Parameter(ValueFromRemainingArguments = $true)][object[]]$RemainingArgs)",
-            "  $cmd = Get-Command -Name New-ConfigurationBuild -Module PSPublishModule",
-            "  if ($RemainingArgs.Count -eq 1 -and $RemainingArgs[0] -is [System.Collections.IDictionary]) {",
-            "    $params = @{}",
-            "    foreach ($key in $RemainingArgs[0].Keys) { $params[$key] = $RemainingArgs[0][$key] }",
-            "    $params['SignModule'] = $false",
-            "    $params['CertificateThumbprint'] = $null",
-            "    & $cmd @params",
-            "    return",
-            "  }",
-            "  & $cmd @RemainingArgs -SignModule:$false",
-            "}",
-            $". {QuoteLiteral(scriptPath)}"
+            invocation
         });
+    }
+
+    private static string BuildScriptInvocation(string scriptPath, ModuleBuildHostBuildRequest request)
+    {
+        var arguments = new List<string>
+        {
+            ".",
+            QuoteLiteral(scriptPath)
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.Configuration))
+        {
+            arguments.Add("-Configuration");
+            arguments.Add(QuoteLiteral(request.Configuration!));
+        }
+
+        if (request.NoDotnetBuild)
+            arguments.Add("-NoDotnetBuild");
+
+        if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
+        {
+            arguments.Add("-ModuleVersion");
+            arguments.Add(QuoteLiteral(request.ModuleVersion!));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
+        {
+            arguments.Add("-PreReleaseTag");
+            arguments.Add(QuoteLiteral(request.PreReleaseTag!));
+        }
+
+        if (request.NoSign)
+            arguments.Add("-NoSign");
+
+        if (request.SignModule)
+            arguments.Add("-SignModule");
+
+        return string.Join(" ", arguments);
     }
 
     private static string BuildModuleImportClause(string modulePath)

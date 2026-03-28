@@ -6,6 +6,24 @@
   "properties": {
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Module": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "RepositoryRoot": { "type": [ "string", "null" ] },
+        "ScriptPath": { "type": [ "string", "null" ] },
+        "ModulePath": { "type": [ "string", "null" ] },
+        "NoDotnetBuild": { "type": [ "boolean", "null" ] },
+        "ModuleVersion": { "type": [ "string", "null" ] },
+        "PreReleaseTag": { "type": [ "string", "null" ] },
+        "NoSign": { "type": [ "boolean", "null" ] },
+        "SignModule": { "type": [ "boolean", "null" ] },
+        "ArtifactPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "Packages": { "$ref": "project.build.schema.json" },
     "WorkspaceValidation": {
       "type": "object",
@@ -34,6 +52,7 @@
           "additionalProperties": false,
           "properties": {
             "RootPath": { "type": [ "string", "null" ] },
+            "ModulesPath": { "type": [ "string", "null" ] },
             "PackagesPath": { "type": [ "string", "null" ] },
             "PortablePath": { "type": [ "string", "null" ] },
             "InstallerPath": { "type": [ "string", "null" ] },

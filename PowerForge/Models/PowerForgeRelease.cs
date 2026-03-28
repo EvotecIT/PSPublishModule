@@ -12,6 +12,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public int SchemaVersion { get; set; } = 1;
 
+    public PowerForgeModuleReleaseOptions? Module { get; set; }
+
     public ProjectBuildConfiguration? Packages { get; set; }
 
     public PowerForgeToolReleaseSpec? Tools { get; set; }
@@ -34,6 +36,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool PackagesOnly { get; set; }
 
+    public bool ModuleOnly { get; set; }
+
     public bool ToolsOnly { get; set; }
 
     public bool? PublishNuget { get; set; }
@@ -43,6 +47,16 @@ internal sealed class PowerForgeReleaseRequest
     public bool? PublishToolGitHub { get; set; }
 
     public string? Configuration { get; set; }
+
+    public bool? ModuleNoDotnetBuild { get; set; }
+
+    public string? ModuleVersion { get; set; }
+
+    public string? ModulePreReleaseTag { get; set; }
+
+    public bool? ModuleNoSign { get; set; }
+
+    public bool? ModuleSignModule { get; set; }
 
     public bool SkipRestore { get; set; }
 
@@ -124,6 +138,12 @@ internal sealed class PowerForgeReleaseResult
 
     public string ConfigPath { get; set; } = string.Empty;
 
+    public PowerForgeModuleReleasePlanSummary? ModulePlan { get; set; }
+
+    public ModuleBuildHostExecutionResult? Module { get; set; }
+
+    public string[] ModuleAssets { get; set; } = Array.Empty<string>();
+
     public ProjectBuildHostExecutionResult? Packages { get; set; }
 
     public PowerForgeToolReleasePlan? ToolPlan { get; set; }
@@ -165,6 +185,8 @@ internal sealed class PowerForgeReleaseStagingOptions
 {
     public string? RootPath { get; set; }
 
+    public string ModulesPath { get; set; } = "modules";
+
     public string PackagesPath { get; set; } = "nuget";
 
     public string PortablePath { get; set; } = "portable";
@@ -182,6 +204,7 @@ internal sealed class PowerForgeReleaseStagingOptions
 
 internal enum PowerForgeReleaseAssetCategory
 {
+    Module,
     Package,
     Portable,
     Installer,
@@ -189,6 +212,50 @@ internal enum PowerForgeReleaseAssetCategory
     Tool,
     Metadata,
     Other
+}
+
+internal sealed class PowerForgeModuleReleaseOptions
+{
+    public string? RepositoryRoot { get; set; }
+
+    public string? ScriptPath { get; set; }
+
+    public string? ModulePath { get; set; }
+
+    public bool? NoDotnetBuild { get; set; }
+
+    public string? ModuleVersion { get; set; }
+
+    public string? PreReleaseTag { get; set; }
+
+    public bool? NoSign { get; set; }
+
+    public bool? SignModule { get; set; }
+
+    public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
+}
+
+internal sealed class PowerForgeModuleReleasePlanSummary
+{
+    public string RepositoryRoot { get; set; } = string.Empty;
+
+    public string ScriptPath { get; set; } = string.Empty;
+
+    public string ModulePath { get; set; } = string.Empty;
+
+    public string? Configuration { get; set; }
+
+    public bool NoDotnetBuild { get; set; }
+
+    public string? ModuleVersion { get; set; }
+
+    public string? PreReleaseTag { get; set; }
+
+    public bool NoSign { get; set; }
+
+    public bool SignModule { get; set; }
+
+    public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class PowerForgeReleaseAssetEntry

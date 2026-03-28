@@ -1,6 +1,8 @@
 [CmdletBinding()] param(
     [ValidateSet('PowerForge', 'PowerForgeWeb', 'All')]
     [string[]] $Tool = @('PowerForge'),
+    [ValidateSet('Release', 'Debug')]
+    [string] $Configuration = 'Release',
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'linux-musl-x64', 'linux-musl-arm64', 'osx-x64', 'osx-arm64')]
     [string[]] $Runtime = @('win-x64'),
     [ValidateSet('net10.0', 'net8.0')]
@@ -23,6 +25,7 @@ if ($Tool -contains 'All') {
 
 $buildProjectParams = @{
     ConfigPath = $ConfigPath
+    Configuration = $Configuration
     ToolsOnly = $true
     Target = $Tool
     Runtime = $Runtime
