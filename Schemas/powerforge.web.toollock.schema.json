@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.web.toollock.schema.json",
+  "title": "PowerForge Web Tool Lock",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "description": "GitHub repository containing the published PowerForgeWeb release assets."
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Logical target name, usually PowerForgeWeb."
+    },
+    "tag": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact GitHub release tag to download."
+    },
+    "asset": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact release asset file name to download."
+    },
+    "binaryPath": {
+      "type": "string",
+      "description": "Optional relative path to the executable inside the extracted archive."
+    }
+  },
+  "required": [
+    "repository",
+    "tag",
+    "asset"
+  ]
+}

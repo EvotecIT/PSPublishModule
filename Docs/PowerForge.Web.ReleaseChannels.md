@@ -47,6 +47,7 @@ For binary mode, commit `.powerforge/tool-lock.json` and pin an exact release ta
 
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.web.toollock.schema.json",
   "repository": "EvotecIT/PSPublishModule",
   "target": "PowerForgeWeb",
   "tag": "PowerForgeWeb-v1.0.0-preview-20260328151156",
@@ -101,4 +102,4 @@ The shared runner workflow accepts:
 - `powerforge_lock_path` for source-mode commit locks
 - `powerforge_tool_lock_path` for binary-mode release locks
 
-That keeps consuming repos small: the repo-level workflow only chooses the mode and committed lock file, while the shared PowerForge workflow/script performs the actual resolution and execution.
+That keeps consuming repos small: the repo-level workflow only chooses the mode and committed lock file, while the shared `powerforge-web website-runner` command performs the actual resolution and execution.

@@ -103,13 +103,11 @@ jobs:
           fetch-depth: 1
 
       - name: Setup .NET
-        if: ${{ inputs.engine_mode == 'source' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
 
       - name: Cache NuGet packages
-        if: ${{ inputs.engine_mode == 'source' }}
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -130,18 +128,25 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           INDEXNOW_KEY: ${{ secrets.indexnow_key }}
         run: |
-          ./.powerforge-runner/Build/Invoke-PowerForgeWebsiteRunner.ps1 `
-            -WebsiteRoot '${{ inputs.website_root }}' `
-            -PipelineConfig '${{ inputs.pipeline_config }}' `
-            -EngineMode '${{ inputs.engine_mode }}' `
-            -PipelineMode '${{ inputs.pipeline_mode }}' `
-            -PowerForgeLockPath '${{ inputs.powerforge_lock_path }}' `
-            -PowerForgeRepository '${{ inputs.powerforge_repository }}' `
-            -PowerForgeRef '${{ inputs.powerforge_ref }}' `
-            -PowerForgeRepositoryOverride '${{ inputs.powerforge_repository_override }}' `
-            -PowerForgeRefOverride '${{ inputs.powerforge_ref_override }}' `
-            -PowerForgeToolLockPath '${{ inputs.powerforge_tool_lock_path }}' `
-            -MaintenanceModeNote:${{ inputs.maintenance_mode_note }}
+          $runnerArgs = @(
+            'website-runner',
+            '--website-root', '${{ inputs.website_root }}',
+            '--pipeline-config', '${{ inputs.pipeline_config }}',
+            '--engine-mode', '${{ inputs.engine_mode }}',
+            '--pipeline-mode', '${{ inputs.pipeline_mode }}',
+            '--powerforge-lock-path', '${{ inputs.powerforge_lock_path }}',
+            '--powerforge-repository', '${{ inputs.powerforge_repository }}',
+            '--powerforge-ref', '${{ inputs.powerforge_ref }}',
+            '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
+            '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
+            '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}'
+          )
+
+          if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
+            $runnerArgs += '--maintenance-note'
+          }
+
+          dotnet run --framework net10.0 --project ./.powerforge-runner/PowerForge.Web.Cli -- $runnerArgs
 
       - name: Upload website reports
         if: always()
