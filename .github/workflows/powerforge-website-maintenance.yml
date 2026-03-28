@@ -9,6 +9,10 @@ on:
       pipeline_config:
         required: true
         type: string
+      engine_mode:
+        required: false
+        type: string
+        default: "source"
       runner_labels_json:
         required: false
         type: string
@@ -45,6 +49,10 @@ on:
         required: false
         type: string
         default: ""
+      powerforge_tool_lock_path:
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -62,6 +70,7 @@ jobs:
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.pipeline_config }}
+      engine_mode: ${{ inputs.engine_mode }}
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
       dotnet_version: ${{ inputs.dotnet_version }}
@@ -71,6 +80,7 @@ jobs:
       powerforge_ref: ${{ inputs.powerforge_ref }}
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
       # Maintenance stays on strict CI mode; the selected pipeline config decides which tasks run.
       pipeline_mode: ci
       use_playwright_cache: true

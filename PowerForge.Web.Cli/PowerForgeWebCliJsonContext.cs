@@ -19,6 +19,8 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebScaffoldResult))]
 [JsonSerializable(typeof(WebEngineLockSpec))]
 [JsonSerializable(typeof(WebEngineLockResult))]
+[JsonSerializable(typeof(WebToolLockSpec))]
+[JsonSerializable(typeof(WebWebsiteRunnerResult))]
 [JsonSerializable(typeof(WebContentScaffoldResult))]
 [JsonSerializable(typeof(WebLlmsResult))]
 [JsonSerializable(typeof(WebSitemapResult))]
