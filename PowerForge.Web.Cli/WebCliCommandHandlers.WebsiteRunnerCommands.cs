@@ -23,7 +23,7 @@ internal static partial class WebCliCommandHandlers
                 {
                     WebsiteRoot = websiteRoot,
                     PipelineConfig = pipelineConfig,
-                    EngineMode = TryGetOptionValue(subArgs, "--engine-mode") ?? TryGetOptionValue(subArgs, "--engineMode") ?? "source",
+                    EngineMode = TryGetOptionValue(subArgs, "--engine-mode") ?? TryGetOptionValue(subArgs, "--engineMode") ?? string.Empty,
                     PipelineMode = TryGetOptionValue(subArgs, "--pipeline-mode") ?? TryGetOptionValue(subArgs, "--pipelineMode") ?? "ci",
                     PowerForgeLockPath = TryGetOptionValue(subArgs, "--powerforge-lock-path") ?? TryGetOptionValue(subArgs, "--powerforgeLockPath"),
                     PowerForgeRepository = TryGetOptionValue(subArgs, "--powerforge-repository") ?? TryGetOptionValue(subArgs, "--powerforgeRepository"),
@@ -31,6 +31,7 @@ internal static partial class WebCliCommandHandlers
                     PowerForgeRepositoryOverride = TryGetOptionValue(subArgs, "--powerforge-repository-override") ?? TryGetOptionValue(subArgs, "--powerforgeRepositoryOverride"),
                     PowerForgeRefOverride = TryGetOptionValue(subArgs, "--powerforge-ref-override") ?? TryGetOptionValue(subArgs, "--powerforgeRefOverride"),
                     PowerForgeToolLockPath = TryGetOptionValue(subArgs, "--powerforge-tool-lock-path") ?? TryGetOptionValue(subArgs, "--powerforgeToolLockPath"),
+                    PowerForgeWebTag = TryGetOptionValue(subArgs, "--powerforge-web-tag") ?? TryGetOptionValue(subArgs, "--powerforgeWebTag"),
                     GitHubToken = Environment.GetEnvironmentVariable("GH_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN"),
                     RunnerTempPath = Environment.GetEnvironmentVariable("RUNNER_TEMP"),
                     MaintenanceModeNote = HasOption(subArgs, "--maintenance-note") || HasOption(subArgs, "--maintenanceModeNote")

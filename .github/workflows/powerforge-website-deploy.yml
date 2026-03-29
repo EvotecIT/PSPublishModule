@@ -20,7 +20,7 @@ on:
       engine_mode:
         required: false
         type: string
-        default: "source"
+        default: ""
       runner_labels_json:
         required: false
         type: string
@@ -65,6 +65,10 @@ on:
         required: false
         type: string
         default: ""
+      powerforge_web_tag:
+        required: false
+        type: string
+        default: ""
       post_deploy_use_playwright_cache:
         required: false
         type: boolean
@@ -106,6 +110,7 @@ jobs:
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
       use_playwright_cache: true
       upload_pages_artifact: true
@@ -148,6 +153,7 @@ jobs:
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
       use_playwright_cache: ${{ inputs.post_deploy_use_playwright_cache }}
     secrets:

@@ -12,7 +12,7 @@ on:
       engine_mode:
         required: false
         type: string
-        default: "source"
+        default: ""
       runner_labels_json:
         required: false
         type: string
@@ -53,6 +53,10 @@ on:
         required: false
         type: string
         default: ""
+      powerforge_web_tag:
+        required: false
+        type: string
+        default: ""
     secrets:
       repository_read_token:
         required: false
@@ -88,6 +92,7 @@ jobs:
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       # Maintenance stays on strict CI mode; the selected pipeline config decides which tasks run.
       pipeline_mode: ci
       use_playwright_cache: true

@@ -12,7 +12,7 @@ on:
       engine_mode:
         required: false
         type: string
-        default: "source"
+        default: ""
       runner_labels_json:
         required: false
         type: string
@@ -50,6 +50,10 @@ on:
         type: string
         default: ""
       powerforge_tool_lock_path:
+        required: false
+        type: string
+        default: ""
+      powerforge_web_tag:
         required: false
         type: string
         default: ""
@@ -102,14 +106,14 @@ jobs:
           $resolvedRepository = [string]'${{ inputs.powerforge_repository }}'
           $resolvedRef = [string]'${{ inputs.powerforge_ref }}'
 
-          if ([string]::IsNullOrWhiteSpace($resolvedRepository) -or [string]::IsNullOrWhiteSpace($resolvedRef)) {
+          if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
+            $resolvedRepository = 'EvotecIT/PSPublishModule'
+          }
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
             $workflowRef = [string]'${{ github.workflow_ref }}'
             if ($workflowRef -notmatch '^(?<repository>[^/]+/[^/]+)/\.github/workflows/[^@]+@(?<ref>.+)$') {
               throw "Unable to parse github.workflow_ref: '$workflowRef'"
-            }
-
-            if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
-              $resolvedRepository = $Matches.repository
             }
 
             if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
@@ -169,7 +173,8 @@ jobs:
             '--powerforge-ref', '${{ inputs.powerforge_ref }}',
             '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
             '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
-            '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}'
+            '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',
+            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}'
           )
 
           if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
