@@ -121,6 +121,7 @@ internal sealed class PowerForgeReleaseService
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
@@ -215,6 +216,7 @@ internal sealed class PowerForgeReleaseService
                 if (!request.PlanOnly && !request.ValidateOnly)
                 {
                     var dotNetTools = _runDotNetTools(dotNetPlan);
+                    FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
                     result.DotNetTools = dotNetTools;
                     if (!dotNetTools.Succeeded)
                     {
@@ -841,6 +843,7 @@ internal sealed class PowerForgeReleaseService
         }
 
         ApplyDotNetRequestOverrides(spec, request);
+        ApplyDotNetToolOutputSelection(spec, ResolveSelectedToolOutputs(request));
         return new DotNetPublishPipelineRunner(logger).Plan(spec, configPath);
     }
 
@@ -1017,6 +1020,98 @@ internal sealed class PowerForgeReleaseService
                 }
             }
         }
+    }
+
+    internal static HashSet<PowerForgeReleaseToolOutputKind> ResolveSelectedToolOutputs(PowerForgeReleaseRequest request)
+    {
+        var selected = request.ToolOutputs is { Length: > 0 }
+            ? new HashSet<PowerForgeReleaseToolOutputKind>(request.ToolOutputs, EqualityComparer<PowerForgeReleaseToolOutputKind>.Default)
+            : Enum.GetValues<PowerForgeReleaseToolOutputKind>().ToHashSet();
+
+        foreach (var skipped in request.SkipToolOutputs ?? Array.Empty<PowerForgeReleaseToolOutputKind>())
+            selected.Remove(skipped);
+
+        return selected;
+    }
+
+    internal static void ApplyDotNetToolOutputSelection(
+        DotNetPublishSpec spec,
+        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        var includeTool = selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var includePortable = selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);
+        var includeInstaller = selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Installer);
+        var includeStore = selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Store);
+
+        foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+        {
+            target.Publish ??= new DotNetPublishPublishOptions();
+            if (!includeTool)
+            {
+                target.Publish.Zip = false;
+                target.Publish.ZipPath = null;
+                target.Publish.ZipNameTemplate = null;
+            }
+        }
+
+        if (!includeInstaller)
+            spec.Installers = Array.Empty<DotNetPublishInstaller>();
+
+        if (!includeStore)
+            spec.StorePackages = Array.Empty<DotNetPublishStorePackage>();
+
+        if (spec.Bundles is not { Length: > 0 } || includePortable)
+            return;
+
+        var requiredBundleIds = includeInstaller
+            ? new HashSet<string>(
+                (spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+                    .Where(installer => !string.IsNullOrWhiteSpace(installer.PrepareFromBundleId))
+                    .Select(installer => installer.PrepareFromBundleId!.Trim()),
+                StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        spec.Bundles = spec.Bundles
+            .Where(bundle => bundle is not null && requiredBundleIds.Contains(bundle.Id))
+            .ToArray();
+
+        foreach (var bundle in spec.Bundles)
+        {
+            bundle.Zip = false;
+            bundle.ZipPath = null;
+            bundle.ZipNameTemplate = null;
+        }
+    }
+
+    internal static void FilterDotNetToolResult(
+        DotNetPublishResult result,
+        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        result.Artefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .Where(artifact => IsSelectedDotNetArtefact(artifact, selectedOutputs))
+            .ToArray();
+
+        if (!selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Installer))
+            result.MsiBuilds = Array.Empty<DotNetPublishMsiBuildResult>();
+
+        if (!selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Store))
+            result.StorePackages = Array.Empty<DotNetPublishStorePackageResult>();
+    }
+
+    internal static bool IsSelectedDotNetArtefact(
+        DotNetPublishArtefactResult artifact,
+        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+    {
+        if (artifact.Category == DotNetPublishArtefactCategory.Bundle)
+            return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);
+
+        return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool);
     }
 
     private static void ApplyDotNetOutputRootOverride(DotNetPublishSpec spec, string outputRoot)

@@ -202,6 +202,20 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     public string[]? Flavors { get; set; }
 
     /// <summary>
+    /// Optional tool/app output selection for DotNetPublish-backed release flows.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("Tool", "Portable", "Installer", "Store")]
+    public string[]? ToolOutput { get; set; }
+
+    /// <summary>
+    /// Optional tool/app output exclusion for DotNetPublish-backed release flows.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("Tool", "Portable", "Installer", "Store")]
+    public string[]? SkipToolOutput { get; set; }
+
+    /// <summary>
     /// Optional output root override for tool/app assets.
     /// </summary>
     [Parameter]
@@ -406,6 +420,8 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
                 PackageSignThumbprint = NormalizeNullable(PackageSignThumbprint),
                 PackageSignStore = NormalizeNullable(PackageSignStore),
                 PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
+                ToolOutputs = ParseToolOutputs(ToolOutput),
+                SkipToolOutputs = ParseToolOutputs(SkipToolOutput),
                 Targets = NormalizeStrings(Target),
                 Runtimes = NormalizeStrings(Runtimes),
                 Frameworks = NormalizeStrings(Frameworks),
@@ -561,5 +577,27 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 
         throw new PSArgumentException(
             $"Unknown release flavor '{value}'. Expected one of: {string.Join(", ", Enum.GetNames(typeof(PowerForgeToolReleaseFlavor)))}");
+    }
+
+    private static PowerForgeReleaseToolOutputKind[] ParseToolOutputs(string[]? values)
+    {
+        if (values is null || values.Length == 0)
+            return Array.Empty<PowerForgeReleaseToolOutputKind>();
+
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(ParseToolOutput)
+            .ToArray();
+    }
+
+    private static PowerForgeReleaseToolOutputKind ParseToolOutput(string value)
+    {
+        if (Enum.TryParse(value, ignoreCase: true, out PowerForgeReleaseToolOutputKind kind))
+            return kind;
+
+        throw new PSArgumentException(
+            $"Unknown tool output '{value}'. Expected one of: {string.Join(", ", Enum.GetNames(typeof(PowerForgeReleaseToolOutputKind)))}");
     }
 }
