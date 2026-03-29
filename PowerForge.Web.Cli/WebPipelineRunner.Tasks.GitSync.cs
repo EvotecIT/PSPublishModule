@@ -14,6 +14,7 @@ internal static partial class WebPipelineRunner
         public string RepoInput { get; init; } = string.Empty;
         public string? RepoBaseUrl { get; init; }
         public string Repo { get; init; } = string.Empty;
+        public string DestinationInput { get; init; } = string.Empty;
         public string DestinationFull { get; init; } = string.Empty;
         public string? Reference { get; init; }
         public bool Clean { get; init; }
@@ -76,7 +77,7 @@ internal static partial class WebPipelineRunner
         var lockMode = NormalizeGitLockMode(GetString(step, "lockMode") ?? GetString(step, "lock-mode"));
         var lockPath = ResolveGitSyncLockPath(step, baseDir, lockMode);
         var lockEntries = lockMode == "verify"
-            ? LoadGitSyncLock(lockPath!)
+            ? LoadGitSyncLock(lockPath!, baseDir)
             : new Dictionary<string, GitSyncLockEntry>(StringComparer.OrdinalIgnoreCase);
         var lockUpdates = lockMode == "update"
             ? new List<GitSyncLockEntry>()
@@ -114,7 +115,7 @@ internal static partial class WebPipelineRunner
                 {
                     RepoInput = request.RepoInput,
                     Repo = request.Repo,
-                    Destination = request.DestinationFull,
+                    Destination = request.DestinationInput,
                     Commit = execution.Commit!
                 });
             }
@@ -256,6 +257,7 @@ internal static partial class WebPipelineRunner
             RepoInput = repoValue!,
             RepoBaseUrl = repoBaseUrl,
             Repo = NormalizeGitRepo(repoValue!, baseDir, repoBaseUrl, authType),
+            DestinationInput = destinationValue!,
             DestinationFull = Path.GetFullPath(destination),
             Reference = reference,
             Clean = clean,
@@ -808,7 +810,7 @@ internal static partial class WebPipelineRunner
             : Path.GetFullPath(resolved);
     }
 
-    private static Dictionary<string, GitSyncLockEntry> LoadGitSyncLock(string lockPath)
+    private static Dictionary<string, GitSyncLockEntry> LoadGitSyncLock(string lockPath, string baseDir)
     {
         if (string.IsNullOrWhiteSpace(lockPath) || !File.Exists(lockPath))
             throw new InvalidOperationException($"git-sync verify mode requires lock file: {lockPath}");
@@ -831,7 +833,13 @@ internal static partial class WebPipelineRunner
             if (string.IsNullOrWhiteSpace(destination) || string.IsNullOrWhiteSpace(commit))
                 continue;
 
-            var key = Path.GetFullPath(destination);
+            var resolvedDestination = Path.IsPathRooted(destination)
+                ? destination
+                : ResolvePath(baseDir, destination);
+            if (string.IsNullOrWhiteSpace(resolvedDestination))
+                continue;
+
+            var key = Path.GetFullPath(resolvedDestination);
             result[key] = new GitSyncLockEntry
             {
                 RepoInput = entry.TryGetProperty("repoInput", out var repoInputElement) && repoInputElement.ValueKind == JsonValueKind.String
@@ -840,7 +848,7 @@ internal static partial class WebPipelineRunner
                 Repo = entry.TryGetProperty("repo", out var repoElement) && repoElement.ValueKind == JsonValueKind.String
                     ? repoElement.GetString()
                     : null,
-                Destination = key,
+                Destination = destination,
                 Commit = commit.Trim()
             };
         }

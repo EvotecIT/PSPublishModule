@@ -896,6 +896,130 @@ public class WebPipelineRunnerGitSyncTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_GitSync_LockModeUpdate_PreservesRelativeDestination()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-lock-relative-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var lockPath = Path.Combine(root, "_reports", "git-sync-lock.json");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "relative-lock");
+            InitializeRepository(source, "relative-lock-init");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(source)}}",
+                      "destination": "./checkout",
+                      "lockMode": "update",
+                      "lockPath": "./_reports/git-sync-lock.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.True(File.Exists(lockPath));
+
+            using var document = JsonDocument.Parse(File.ReadAllText(lockPath));
+            var entry = document.RootElement.GetProperty("entries")[0];
+            var destination = entry.GetProperty("destination").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(destination));
+            Assert.False(Path.IsPathRooted(destination));
+            Assert.Equal("./checkout", destination);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_GitSync_LockModeVerify_WithRelativeDestinationLock_IsPortableAcrossRoots()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var sourceRoot = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-lock-portable-source-" + Guid.NewGuid().ToString("N"));
+        var updateRoot = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-lock-portable-update-" + Guid.NewGuid().ToString("N"));
+        var verifyRoot = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-lock-portable-verify-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(sourceRoot);
+        Directory.CreateDirectory(updateRoot);
+        Directory.CreateDirectory(verifyRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(sourceRoot, "README.md"), "portable-v1");
+            InitializeRepository(sourceRoot, "portable-v1");
+
+            var updatePipelinePath = Path.Combine(updateRoot, "pipeline-update.json");
+            File.WriteAllText(updatePipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(sourceRoot)}}",
+                      "destination": "./checkout",
+                      "lockMode": "update",
+                      "lockPath": "./_reports/git-sync-lock.json"
+                    }
+                  ]
+                }
+                """);
+
+            var updateResult = WebPipelineRunner.RunPipeline(updatePipelinePath, logger: null);
+            Assert.True(updateResult.Success);
+
+            File.WriteAllText(Path.Combine(sourceRoot, "README.md"), "portable-v2");
+            RunGit(sourceRoot, "add", ".");
+            RunGit(sourceRoot, "commit", "-m", "portable-v2", "--quiet");
+
+            var updateLockPath = Path.Combine(updateRoot, "_reports", "git-sync-lock.json");
+            var verifyLockDirectory = Path.Combine(verifyRoot, "_reports");
+            Directory.CreateDirectory(verifyLockDirectory);
+            File.Copy(updateLockPath, Path.Combine(verifyLockDirectory, "git-sync-lock.json"), overwrite: true);
+
+            var verifyPipelinePath = Path.Combine(verifyRoot, "pipeline-verify.json");
+            File.WriteAllText(verifyPipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(sourceRoot)}}",
+                      "destination": "./checkout",
+                      "lockMode": "verify",
+                      "lockPath": "./_reports/git-sync-lock.json"
+                    }
+                  ]
+                }
+                """);
+
+            var verifyResult = WebPipelineRunner.RunPipeline(verifyPipelinePath, logger: null);
+            Assert.True(verifyResult.Success);
+            Assert.Equal("portable-v1", File.ReadAllText(Path.Combine(verifyRoot, "checkout", "README.md")));
+        }
+        finally
+        {
+            TryDeleteDirectory(sourceRoot);
+            TryDeleteDirectory(updateRoot);
+            TryDeleteDirectory(verifyRoot);
+        }
+    }
+
     private static bool IsGitAvailable()
     {
         try

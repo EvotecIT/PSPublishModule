@@ -112,6 +112,7 @@ Best practices:
 - Prefer `TokenEnv` (defaults to `GITHUB_TOKEN`) over inline `Token` for private repos.
 - In CI, use a lock file: `lockMode: "verify"` and commit `.powerforge/git-sync-lock.json`.
 - In dev, you can refresh locks intentionally with `lockMode: "update"`.
+- Prefer repo-relative `Destination` values so committed `git-sync-lock.json` entries stay portable across machines and CI runners.
 - Keep `build` deterministic:
   - Use `sources-sync` (or `build --sync-sources`) explicitly, rather than auto-downloading inside normal builds.
 
