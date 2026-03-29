@@ -188,11 +188,63 @@ jobs:
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
 
+      - name: Archive Pages artifact
+        if: ${{ inputs.upload_pages_artifact && runner.os == 'Linux' }}
+        shell: sh
+        env:
+          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+        run: |
+          echo "::group::Archive Pages artifact"
+          tar \
+            --dereference --hard-dereference \
+            --directory "$PAGES_ARTIFACT_PATH" \
+            -cvf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git \
+            --exclude=.github \
+            .
+          echo "::endgroup::"
+
+      - name: Archive Pages artifact
+        if: ${{ inputs.upload_pages_artifact && runner.os == 'macOS' }}
+        shell: sh
+        env:
+          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+        run: |
+          echo "::group::Archive Pages artifact"
+          gtar \
+            --dereference --hard-dereference \
+            --directory "$PAGES_ARTIFACT_PATH" \
+            -cvf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git \
+            --exclude=.github \
+            .
+          echo "::endgroup::"
+
+      - name: Archive Pages artifact
+        if: ${{ inputs.upload_pages_artifact && runner.os == 'Windows' }}
+        shell: bash
+        env:
+          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+        run: |
+          echo "::group::Archive Pages artifact"
+          tar \
+            --dereference --hard-dereference \
+            --directory "$PAGES_ARTIFACT_PATH" \
+            -cvf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git \
+            --exclude=.github \
+            --force-local \
+            .
+          echo "::endgroup::"
+
       - name: Upload Pages artifact
         if: ${{ inputs.upload_pages_artifact }}
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          path: ${{ inputs.pages_artifact_path != '' && inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Cleanup Playwright cache
         if: ${{ always() && inputs.use_playwright_cache }}
