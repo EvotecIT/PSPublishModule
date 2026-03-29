@@ -33,6 +33,10 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
   - Remote: `https://github.com/EvotecIT/DomainDetective.git`
   - Track this repo when standardizing PowerForge-adjacent workflows, module usage, and release/build consistency.
 
+- TestimoX website/docs: `C:\Support\GitHub\TestimoX\Website`
+  - Remote: `https://github.com/EvotecIT/TestimoX.git`
+  - Track this repo when standardizing PowerForge-based website workflows, docs generation, and quality gates.
+
 ## Portable Path Discovery (WSL/macOS/Linux)
 
 If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout heuristic:
@@ -44,6 +48,7 @@ If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout 
   - `<root>/CodeMatrix/Website`
   - `<root>/OfficeIMO/Website`
   - `<root>/DomainDetective`
+  - `<root>/TestimoX/Website`
 
 Practical search strategy:
 
