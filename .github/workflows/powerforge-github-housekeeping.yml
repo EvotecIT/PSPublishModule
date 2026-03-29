@@ -3,35 +3,60 @@ name: PowerForge GitHub Housekeeping
 on:
   workflow_call:
     inputs:
+      config_path:
+        description: Path to the housekeeping config file in the caller repository.
+        required: false
+        default: ""
+        type: string
       config-path:
         description: Path to the housekeeping config file in the caller repository.
         required: false
-        default: ".powerforge/github-housekeeping.json"
+        default: ""
         type: string
       apply:
         description: Whether the run should apply deletions.
         required: false
         default: true
         type: boolean
+      powerforge_ref:
+        description: PSPublishModule ref used to resolve the shared housekeeping action.
+        required: false
+        default: ""
+        type: string
       powerforge-ref:
         description: PSPublishModule ref used to resolve the shared housekeeping action.
         required: false
-        default: "main"
+        default: ""
+        type: string
+      report_path:
+        description: Optional JSON report path relative to the caller workspace.
+        required: false
+        default: ""
         type: string
       report-path:
         description: Optional JSON report path relative to the caller workspace.
         required: false
-        default: ".powerforge/_reports/github-housekeeping.json"
+        default: ""
+        type: string
+      summary_path:
+        description: Optional Markdown summary path relative to the caller workspace.
+        required: false
+        default: ""
         type: string
       summary-path:
         description: Optional Markdown summary path relative to the caller workspace.
         required: false
-        default: ".powerforge/_reports/github-housekeeping.md"
+        default: ""
+        type: string
+      report_artifact_name:
+        description: Artifact name used when uploading housekeeping reports.
+        required: false
+        default: ""
         type: string
       report-artifact-name:
         description: Artifact name used when uploading housekeeping reports.
         required: false
-        default: "powerforge-github-housekeeping-reports"
+        default: ""
         type: string
     secrets:
       github-token:
@@ -46,30 +71,101 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Resolve workflow inputs
+        id: resolved
+        shell: pwsh
+        env:
+          INPUT_CONFIG_PATH: ${{ inputs.config_path }}
+          INPUT_CONFIG_PATH_LEGACY: ${{ inputs['config-path'] }}
+          INPUT_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          INPUT_POWERFORGE_REF_LEGACY: ${{ inputs['powerforge-ref'] }}
+          INPUT_REPORT_PATH: ${{ inputs.report_path }}
+          INPUT_REPORT_PATH_LEGACY: ${{ inputs['report-path'] }}
+          INPUT_SUMMARY_PATH: ${{ inputs.summary_path }}
+          INPUT_SUMMARY_PATH_LEGACY: ${{ inputs['summary-path'] }}
+          INPUT_REPORT_ARTIFACT_NAME: ${{ inputs.report_artifact_name }}
+          INPUT_REPORT_ARTIFACT_NAME_LEGACY: ${{ inputs['report-artifact-name'] }}
+        run: |
+          $configPath = if ([string]::IsNullOrWhiteSpace($env:INPUT_CONFIG_PATH)) {
+            [string]$env:INPUT_CONFIG_PATH_LEGACY
+          } else {
+            [string]$env:INPUT_CONFIG_PATH
+          }
+
+          if ([string]::IsNullOrWhiteSpace($configPath)) {
+            $configPath = '.powerforge/github-housekeeping.json'
+          }
+
+          $powerforgeRef = if ([string]::IsNullOrWhiteSpace($env:INPUT_POWERFORGE_REF)) {
+            [string]$env:INPUT_POWERFORGE_REF_LEGACY
+          } else {
+            [string]$env:INPUT_POWERFORGE_REF
+          }
+
+          if ([string]::IsNullOrWhiteSpace($powerforgeRef)) {
+            $powerforgeRef = 'main'
+          }
+
+          $reportPath = if ([string]::IsNullOrWhiteSpace($env:INPUT_REPORT_PATH)) {
+            [string]$env:INPUT_REPORT_PATH_LEGACY
+          } else {
+            [string]$env:INPUT_REPORT_PATH
+          }
+
+          if ([string]::IsNullOrWhiteSpace($reportPath)) {
+            $reportPath = '.powerforge/_reports/github-housekeeping.json'
+          }
+
+          $summaryPath = if ([string]::IsNullOrWhiteSpace($env:INPUT_SUMMARY_PATH)) {
+            [string]$env:INPUT_SUMMARY_PATH_LEGACY
+          } else {
+            [string]$env:INPUT_SUMMARY_PATH
+          }
+
+          if ([string]::IsNullOrWhiteSpace($summaryPath)) {
+            $summaryPath = '.powerforge/_reports/github-housekeeping.md'
+          }
+
+          $reportArtifactName = if ([string]::IsNullOrWhiteSpace($env:INPUT_REPORT_ARTIFACT_NAME)) {
+            [string]$env:INPUT_REPORT_ARTIFACT_NAME_LEGACY
+          } else {
+            [string]$env:INPUT_REPORT_ARTIFACT_NAME
+          }
+
+          if ([string]::IsNullOrWhiteSpace($reportArtifactName)) {
+            $reportArtifactName = 'powerforge-github-housekeeping-reports'
+          }
+
+          "config_path=$configPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "powerforge_ref=$powerforgeRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "report_path=$reportPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "summary_path=$summaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "report_artifact_name=$reportArtifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Checkout PSPublishModule
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: EvotecIT/PSPublishModule
-          ref: ${{ inputs['powerforge-ref'] }}
+          ref: ${{ steps.resolved.outputs.powerforge_ref }}
           path: .powerforge/pspublishmodule
 
       - name: Run PowerForge housekeeping
         id: housekeeping
         uses: ./.powerforge/pspublishmodule/.github/actions/github-housekeeping
         with:
-          config-path: ${{ inputs['config-path'] }}
+          config-path: ${{ steps.resolved.outputs.config_path }}
           apply: ${{ inputs.apply && 'true' || 'false' }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
-          report-path: ${{ inputs['report-path'] }}
-          summary-path: ${{ inputs['summary-path'] }}
+          report-path: ${{ steps.resolved.outputs.report_path }}
+          summary-path: ${{ steps.resolved.outputs.summary_path }}
 
       - name: Upload housekeeping reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ inputs['report-artifact-name'] }}
+          name: ${{ steps.resolved.outputs.report_artifact_name }}
           path: |
             ${{ steps.housekeeping.outputs.report-path }}
             ${{ steps.housekeeping.outputs.summary-path }}

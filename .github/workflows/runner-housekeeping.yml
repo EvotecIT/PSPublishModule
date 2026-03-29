@@ -1,0 +1,38 @@
+name: Runner Housekeeping
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply cleanup (true/false)"
+        required: false
+        default: "true"
+      min_free_gb:
+        description: "Minimum free disk (GiB) required after cleanup"
+        required: false
+        default: "20"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: runner-housekeeping-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup-linux-runner:
+    # Self-hosted runner cleanup is only relevant for private repos in our current setup.
+    if: ${{ github.event.repository.private }}
+    uses: ./.github/workflows/powerforge-github-runner-housekeeping.yml
+    with:
+      config_path: ./.powerforge/runner-housekeeping.json
+      apply: ${{ inputs.apply == 'true' }}
+      powerforge_ref: ${{ github.sha }}
+      runner_labels_json: '["self-hosted","ubuntu"]'
+      runner_min_free_gb: ${{ github.event_name == 'workflow_dispatch' && (inputs.min_free_gb != '' && inputs.min_free_gb || '20') || (vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB != '' && vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB || '') }}
+      report_artifact_name: runner-housekeeping-reports
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

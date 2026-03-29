@@ -3,6 +3,7 @@
 Last updated: 2026-02-19
 
 This is the canonical, short "how we build sites" document meant to prevent:
+
 - half-cooked themes,
 - silent fallbacks,
 - regressions across multiple websites,
@@ -37,12 +38,14 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
    - set `DefaultTheme`
-  - set `Features` explicitly (for example `["docs","blog","news","apiDocs","search"]`)
-   - define navigation menus + actions
-   - define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
-   - configure quality gates:
-     - verify: `baseline`, `failOnNewWarnings`
-     - audit: `baseline`, `failOnNewIssues`, budgets (`maxTotalFiles`, etc.)
+
+- set `Features` explicitly (for example `["docs","blog","news","apiDocs","search"]`)
+- define navigation menus + actions
+- define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
+- configure quality gates:
+  - verify: `baseline`, `failOnNewWarnings`
+  - audit: `baseline`, `failOnNewIssues`, budgets (`maxTotalFiles`, etc.)
+
 3. `pipeline.json`:
    - keep root `pipeline.json` small and inherit shared defaults via `extends`
    - put shared build/verify/audit/cache/profile defaults in `config/presets/pipeline.web-quality.json`
@@ -67,7 +70,9 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `github-artifacts-prune` (recommended `dryRun:true` + `optional:true`; flip to `apply:true` in scheduled maintenance runs)
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
-   - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)
+   - keep workflow YAML thin; normal binary consumers should usually pin only `powerforge_web_tag`
+   - keep `.powerforge/*` for committed site policy and baselines, not workflow implementation logic
+   - keep `.powerforge/engine-lock.json` committed only when the site intentionally uses source mode (prefer immutable SHA in `ref`)
    - default scaffolder workflow is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml`
    - default scaffolder maintenance workflow is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml`
    - reusable workflow resolves engine checkout from `POWERFORGE_LOCK_PATH` or explicit repo/ref inputs
@@ -103,6 +108,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 If your site needs content/projects from other repositories (public or private), declare them in `site.json` under `Sources` and sync them as part of your build.
 
 Best practices:
+
 - Prefer `TokenEnv` (defaults to `GITHUB_TOKEN`) over inline `Token` for private repos.
 - In CI, use a lock file: `lockMode: "verify"` and commit `.powerforge/git-sync-lock.json`.
 - In dev, you can refresh locks intentionally with `lockMode: "update"`.
@@ -110,12 +116,14 @@ Best practices:
   - Use `sources-sync` (or `build --sync-sources`) explicitly, rather than auto-downloading inside normal builds.
 
 How destinations work:
+
 - If `Destination` is omitted, PowerForge.Web clones each repo to:
   - `<ProjectsRoot>/<Slug>` (or `./projects/<Slug>` when `ProjectsRoot` is not set).
 - If `Slug` is omitted, it is inferred from the repo URL/name.
 - If you need a different folder layout, set `Destination`.
 
 Example `site.json` snippet:
+
 ```json
 {
   "ProjectsRoot": "projects",
@@ -132,16 +140,23 @@ Example `site.json` snippet:
 ```
 
 Dev bootstrap (refresh lock intentionally):
+
 ```powershell
 powerforge-web sources-sync --config ./site.json --lock-mode update --lock-path ./.powerforge/git-sync-lock.json
 ```
 
 Example `pipeline.json` snippet:
+
 ```json
 {
   "extends": "./config/presets/pipeline.web-quality.json",
   "steps": [
-    { "task": "sources-sync", "config": "./site.json", "lockMode": "verify", "lockPath": "./.powerforge/git-sync-lock.json" }
+    {
+      "task": "sources-sync",
+      "config": "./site.json",
+      "lockMode": "verify",
+      "lockPath": "./.powerforge/git-sync-lock.json"
+    }
   ]
 }
 ```
@@ -154,6 +169,7 @@ If your site is behind Cloudflare and caches HTML, consider purging key HTML URL
 - `Docs/PowerForge.Web.Cloudflare.md`
 
 Recommended deploy pattern:
+
 - purge:
   - `powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --site-config ./site.json`
 - verify:
@@ -182,12 +198,14 @@ If a theme declares `extends`, the base theme must be present on disk (vendored 
 `powerforge-web verify` warns when `extends` points to a missing base folder to avoid silent fallback.
 
 Recommendation:
+
 - Treat `extends` as a repo-local dependency (vendor base theme under `themes/<base>`).
 - Prefer a stable CSS variable namespace (`--pf-*`) rather than coupling variables to a base theme name.
 
 ## Agent Handoff Checklist (Required)
 
 In `AGENTS.md` (site repo):
+
 - repo purpose + build commands
 - list of enabled `Features`
 - theme structure + whether it uses `extends`
