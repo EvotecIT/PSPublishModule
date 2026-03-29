@@ -98,6 +98,8 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           token: ${{ github.token }}
+          # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve shared workflow source
         id: workflow_source
@@ -111,14 +113,11 @@ jobs:
           }
 
           if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-            $workflowRef = [string]'${{ github.workflow_ref }}'
-            if ($workflowRef -notmatch '^(?<repository>[^/]+/[^/]+)/\.github/workflows/[^@]+@(?<ref>.+)$') {
-              throw "Unable to parse github.workflow_ref: '$workflowRef'"
-            }
+            $resolvedRef = [string]'${{ github.workflow_sha }}'
+          }
 
-            if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-              $resolvedRef = $Matches.ref
-            }
+          if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
+            throw "Unable to resolve the shared workflow commit SHA. Pass powerforge_ref explicitly if github.workflow_sha is unavailable."
           }
 
           "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
