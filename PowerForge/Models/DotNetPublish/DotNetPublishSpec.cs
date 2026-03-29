@@ -353,6 +353,11 @@ public sealed class DotNetPublishBundle
     /// Optional PowerShell scripts executed after the bundle contents are copied.
     /// </summary>
     public DotNetPublishBundleScript[] Scripts { get; set; } = Array.Empty<DotNetPublishBundleScript>();
+
+    /// <summary>
+    /// Optional built-in post-processing actions executed after bundle scripts and before zip creation.
+    /// </summary>
+    public DotNetPublishBundlePostProcessOptions? PostProcess { get; set; }
 }
 
 /// <summary>
@@ -425,6 +430,77 @@ public sealed class DotNetPublishBundleScript
     /// When true, script failures fail the bundle step. Default: true.
     /// </summary>
     public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// Built-in post-processing actions executed after bundle scripts and before zip creation.
+/// </summary>
+public sealed class DotNetPublishBundlePostProcessOptions
+{
+    /// <summary>
+    /// Optional directory archive rules used to zip selected directories in-place.
+    /// </summary>
+    public DotNetPublishBundleArchiveRule[] ArchiveDirectories { get; set; } = Array.Empty<DotNetPublishBundleArchiveRule>();
+
+    /// <summary>
+    /// Optional wildcard patterns for files or directories to delete relative to bundle root.
+    /// Supports <c>*</c>, <c>?</c>, and <c>**</c>.
+    /// </summary>
+    public string[] DeletePatterns { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional metadata manifest emitted into the bundle after post-processing.
+    /// </summary>
+    public DotNetPublishBundleMetadataOptions? Metadata { get; set; }
+}
+
+/// <summary>
+/// Directory archive rule applied within a composed bundle.
+/// </summary>
+public sealed class DotNetPublishBundleArchiveRule
+{
+    /// <summary>
+    /// Directory path relative to the bundle root.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Archive selection mode. Default: <see cref="DotNetPublishBundleArchiveMode.Self"/>.
+    /// </summary>
+    public DotNetPublishBundleArchiveMode Mode { get; set; } = DotNetPublishBundleArchiveMode.Self;
+
+    /// <summary>
+    /// Optional archive file name template. Supports <c>{name}</c>.
+    /// Default: <c>{name}.zip</c>.
+    /// </summary>
+    public string? ArchiveNameTemplate { get; set; }
+
+    /// <summary>
+    /// When true, removes the source directory after the archive is created. Default: true.
+    /// </summary>
+    public bool DeleteSource { get; set; } = true;
+}
+
+/// <summary>
+/// Optional metadata manifest written into a composed bundle.
+/// </summary>
+public sealed class DotNetPublishBundleMetadataOptions
+{
+    /// <summary>
+    /// Output path relative to the bundle root.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, includes standard bundle properties such as id, target, runtime, framework, style, and timestamps.
+    /// Default: true.
+    /// </summary>
+    public bool IncludeStandardProperties { get; set; } = true;
+
+    /// <summary>
+    /// Optional additional metadata properties. Values support the same bundle tokens as bundle scripts plus <c>{createdUtc}</c>.
+    /// </summary>
+    public Dictionary<string, string>? Properties { get; set; }
 }
 
 /// <summary>

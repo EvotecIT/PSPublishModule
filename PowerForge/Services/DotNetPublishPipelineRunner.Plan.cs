@@ -1192,7 +1192,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ZipPath = bundle.ZipPath,
                 ZipNameTemplate = bundle.ZipNameTemplate,
                 Includes = includePlans.ToArray(),
-                Scripts = scriptPlans.ToArray()
+                Scripts = scriptPlans.ToArray(),
+                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess)
             });
         }
 
@@ -1559,6 +1560,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Kind = DotNetPublishStepKind.MsiPrepare,
             Title = "MSI prepare",
             InstallerId = installer.Id,
+            BundleId = installer.PrepareFromBundleId,
             TargetName = targetName,
             Framework = combo.Framework,
             Runtime = combo.Runtime,
@@ -1852,6 +1854,53 @@ public sealed partial class DotNetPublishPipelineRunner
         return clone;
     }
 
+    private static DotNetPublishBundlePostProcessOptions? NormalizeBundlePostProcess(
+        string bundleId,
+        DotNetPublishBundlePostProcessOptions? options)
+    {
+        var clone = CloneBundlePostProcessOptions(options);
+        if (clone is null)
+            return null;
+
+        clone.ArchiveDirectories = (clone.ArchiveDirectories ?? Array.Empty<DotNetPublishBundleArchiveRule>())
+            .Where(rule => rule is not null)
+            .Select(rule => new DotNetPublishBundleArchiveRule
+            {
+                Path = string.IsNullOrWhiteSpace(rule.Path)
+                    ? throw new ArgumentException($"Bundle '{bundleId}' ArchiveDirectories[] requires Path.")
+                    : rule.Path.Trim(),
+                Mode = rule.Mode,
+                ArchiveNameTemplate = string.IsNullOrWhiteSpace(rule.ArchiveNameTemplate)
+                    ? null
+                    : rule.ArchiveNameTemplate!.Trim(),
+                DeleteSource = rule.DeleteSource
+            })
+            .ToArray();
+
+        clone.DeletePatterns = NormalizeStrings(clone.DeletePatterns);
+
+        if (clone.Metadata is not null)
+        {
+            clone.Metadata = new DotNetPublishBundleMetadataOptions
+            {
+                Path = string.IsNullOrWhiteSpace(clone.Metadata.Path)
+                    ? throw new ArgumentException($"Bundle '{bundleId}' PostProcess.Metadata.Path is required.")
+                    : clone.Metadata.Path.Trim(),
+                IncludeStandardProperties = clone.Metadata.IncludeStandardProperties,
+                Properties = clone.Metadata.Properties is null
+                    ? null
+                    : clone.Metadata.Properties
+                        .Where(kv => !string.IsNullOrWhiteSpace(kv.Key))
+                        .ToDictionary(
+                            kv => kv.Key.Trim(),
+                            kv => kv.Value ?? string.Empty,
+                            StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
+        return clone;
+    }
+
     private static DotNetPublishMsiClientLicenseOptions? NormalizeInstallerClientLicense(
         string installerId,
         DotNetPublishMsiClientLicenseOptions? options)
@@ -1915,6 +1964,38 @@ public sealed partial class DotNetPublishPipelineRunner
 
         clone.Rules = rules;
         return clone;
+    }
+
+    private static DotNetPublishBundlePostProcessOptions? CloneBundlePostProcessOptions(
+        DotNetPublishBundlePostProcessOptions? options)
+    {
+        if (options is null)
+            return null;
+
+        return new DotNetPublishBundlePostProcessOptions
+        {
+            ArchiveDirectories = (options.ArchiveDirectories ?? Array.Empty<DotNetPublishBundleArchiveRule>())
+                .Where(rule => rule is not null)
+                .Select(rule => new DotNetPublishBundleArchiveRule
+                {
+                    Path = rule.Path,
+                    Mode = rule.Mode,
+                    ArchiveNameTemplate = rule.ArchiveNameTemplate,
+                    DeleteSource = rule.DeleteSource
+                })
+                .ToArray(),
+            DeletePatterns = NormalizeStrings(options.DeletePatterns),
+            Metadata = options.Metadata is null
+                ? null
+                : new DotNetPublishBundleMetadataOptions
+                {
+                    Path = options.Metadata.Path,
+                    IncludeStandardProperties = options.Metadata.IncludeStandardProperties,
+                    Properties = options.Metadata.Properties is null
+                        ? null
+                        : new Dictionary<string, string>(options.Metadata.Properties, StringComparer.OrdinalIgnoreCase)
+                }
+        };
     }
 
     private static bool TryParseUtcDate(string value, out DateTime date)

@@ -187,6 +187,12 @@ public sealed class DotNetPublishMsiPrepareResult
     /// <summary>Source publish style.</summary>
     public DotNetPublishStyle Style { get; set; }
 
+    /// <summary>Source artifact category used for MSI payload preparation.</summary>
+    public DotNetPublishArtefactCategory SourceCategory { get; set; } = DotNetPublishArtefactCategory.Publish;
+
+    /// <summary>Optional source bundle identifier when the payload was prepared from a composed bundle.</summary>
+    public string? BundleId { get; set; }
+
     /// <summary>Source publish output directory.</summary>
     public string SourceOutputDir { get; set; } = string.Empty;
 

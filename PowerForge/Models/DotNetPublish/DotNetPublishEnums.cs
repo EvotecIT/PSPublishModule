@@ -94,6 +94,17 @@ public enum DotNetPublishStoreBundleMode
 }
 
 /// <summary>
+/// How bundle archive rules select directories to zip.
+/// </summary>
+public enum DotNetPublishBundleArchiveMode
+{
+    /// <summary>Archive the configured directory itself.</summary>
+    Self,
+    /// <summary>Archive each direct child directory under the configured path.</summary>
+    ChildDirectories
+}
+
+/// <summary>
 /// Extraction source type for benchmark metrics.
 /// </summary>
 public enum DotNetPublishBenchmarkMetricSource

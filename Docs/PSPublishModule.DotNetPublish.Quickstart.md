@@ -123,6 +123,9 @@ Depending on config, the run can emit:
 - `PrepareFromTarget` selects the primary published target for the bundle.
 - `Includes[]` let you copy sidecar targets such as services, workers, helper CLIs, or plugin payloads into subdirectories inside the bundle.
 - `Scripts[]` let you run repo-specific finishing steps after the copy phase, for example exporting plugins, writing launchers, or producing metadata files.
+- `PostProcess.ArchiveDirectories[]` can zip bundle subdirectories after composition, which is useful for plugin packs or other nested payloads that should ship as archives.
+- `PostProcess.DeletePatterns[]` removes files or folders from the composed bundle using wildcard patterns such as `**/*.pdb` or `**/createdump.exe`.
+- `PostProcess.Metadata` writes a JSON manifest from standard bundle properties plus templated custom values.
 - Set `Zip`, `ZipPath`, or `ZipNameTemplate` on the bundle when the composed folder should also become a release-ready archive.
 
 ## MSI From Bundle
