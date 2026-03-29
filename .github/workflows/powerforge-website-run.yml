@@ -113,14 +113,11 @@ jobs:
           }
 
           if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-            $workflowRef = [string]'${{ github.workflow_ref }}'
-            if ($workflowRef -notmatch '^(?<repository>[^/]+/[^/]+)/\.github/workflows/[^@]+@(?<ref>.+)$') {
-              throw "Unable to parse github.workflow_ref: '$workflowRef'"
-            }
+            $resolvedRef = [string]'${{ github.workflow_sha }}'
+          }
 
-            if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
-              $resolvedRef = $Matches.ref
-            }
+          if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
+            throw "Unable to resolve the shared workflow commit SHA. Pass powerforge_ref explicitly if github.workflow_sha is unavailable."
           }
 
           "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
