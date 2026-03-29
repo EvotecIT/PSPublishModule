@@ -7,7 +7,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private DotNetPublishMsiPrepareResult PrepareMsiPackage(
+    internal DotNetPublishMsiPrepareResult PrepareMsiPackage(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,
         DotNetPublishStep step)
@@ -33,18 +33,23 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(step.ManifestPath))
             throw new InvalidOperationException($"Step '{step.Key}' is missing manifest path.");
 
-        var sourceArtefact = artefacts
-            .LastOrDefault(a =>
-                string.Equals(a.Target, target, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(a.Framework, framework, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(a.Runtime, runtime, StringComparison.OrdinalIgnoreCase)
-                && a.Style == style.Value);
+        var sourceBundleId = ResolveInstallerSourceBundleId(plan, installerId, step.BundleId);
+        var sourceArtefact = ResolveInstallerSourceArtefact(
+            artefacts,
+            target,
+            framework,
+            runtime,
+            style.Value,
+            sourceBundleId);
 
         if (sourceArtefact is null)
         {
+            var sourceKindText = string.IsNullOrWhiteSpace(sourceBundleId)
+                ? "publish artefact"
+                : $"bundle artefact '{sourceBundleId}'";
             throw new InvalidOperationException(
-                $"MSI prepare step '{step.Key}' could not find matching publish artefact for " +
-                $"target='{target}', framework='{framework}', runtime='{runtime}', style='{style.Value}'.");
+                $"MSI prepare step '{step.Key}' could not find matching source artefact for " +
+                $"target='{target}', framework='{framework}', runtime='{runtime}', style='{style.Value}', source={sourceKindText}.");
         }
 
         var sourceOutputDir = Path.GetFullPath(sourceArtefact.OutputDir);
@@ -111,6 +116,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Framework = framework,
             Runtime = runtime,
             Style = style.Value,
+            SourceCategory = sourceArtefact.Category,
+            BundleId = sourceArtefact.BundleId,
             SourceOutputDir = sourceOutputDir,
             StagingDir = stagingPath,
             ManifestPath = manifestPath,
@@ -130,6 +137,41 @@ public sealed partial class DotNetPublishPipelineRunner
         _logger.Info($"MSI prepare manifest -> {manifestPath}");
 
         return result;
+    }
+
+    private static string? ResolveInstallerSourceBundleId(
+        DotNetPublishPlan plan,
+        string installerId,
+        string? stepBundleId)
+    {
+        if (!string.IsNullOrWhiteSpace(stepBundleId))
+            return stepBundleId!.Trim();
+
+        var installer = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+            .FirstOrDefault(entry => string.Equals(entry.Id, installerId, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(installer?.PrepareFromBundleId)
+            ? null
+            : installer!.PrepareFromBundleId!.Trim();
+    }
+
+    private static DotNetPublishArtefactResult? ResolveInstallerSourceArtefact(
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        string target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style,
+        string? bundleId)
+    {
+        return (artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .LastOrDefault(a =>
+                string.Equals(a.Target, target, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.Framework, framework, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(a.Runtime, runtime, StringComparison.OrdinalIgnoreCase)
+                && a.Style == style
+                && string.Equals(a.BundleId, bundleId, StringComparison.OrdinalIgnoreCase)
+                && (bundleId is null
+                    ? a.Category == DotNetPublishArtefactCategory.Publish
+                    : a.Category == DotNetPublishArtefactCategory.Bundle));
     }
 
     private static string BuildWixHarvestFragment(

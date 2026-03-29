@@ -74,6 +74,10 @@
       "type": "string",
       "enum": ["Auto", "Always", "Never"]
     },
+    "DotNetPublishBundleArchiveMode": {
+      "type": "string",
+      "enum": ["Self", "ChildDirectories"]
+    },
     "DotNetPublishBenchmarkMetricSource": {
       "type": "string",
       "enum": ["JsonPath", "Regex"]
@@ -413,6 +417,45 @@
       },
       "required": ["Path"]
     },
+    "DotNetPublishBundleArchiveRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string", "minLength": 1 },
+        "Mode": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundleArchiveMode" }, { "type": "null" }] },
+        "ArchiveNameTemplate": { "type": ["string", "null"] },
+        "DeleteSource": { "type": "boolean" }
+      },
+      "required": ["Path"]
+    },
+    "DotNetPublishBundleMetadataOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string", "minLength": 1 },
+        "IncludeStandardProperties": { "type": "boolean" },
+        "Properties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["Path"]
+    },
+    "DotNetPublishBundlePostProcessOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ArchiveDirectories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleArchiveRule" }
+        },
+        "DeletePatterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Metadata": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundleMetadataOptions" }, { "type": "null" }] }
+      }
+    },
     "DotNetPublishBundle": {
       "type": "object",
       "additionalProperties": false,
@@ -434,7 +477,8 @@
         "Scripts": {
           "type": "array",
           "items": { "$ref": "#/$defs/DotNetPublishBundleScript" }
-        }
+        },
+        "PostProcess": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundlePostProcessOptions" }, { "type": "null" }] }
       },
       "required": ["Id", "PrepareFromTarget"]
     },

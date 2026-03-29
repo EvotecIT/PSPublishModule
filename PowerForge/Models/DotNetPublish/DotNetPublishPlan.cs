@@ -247,6 +247,9 @@ public sealed class DotNetPublishBundlePlan
 
     /// <summary>Bundle post-copy scripts.</summary>
     public DotNetPublishBundleScriptPlan[] Scripts { get; set; } = Array.Empty<DotNetPublishBundleScriptPlan>();
+
+    /// <summary>Optional built-in bundle post-processing actions.</summary>
+    public DotNetPublishBundlePostProcessOptions? PostProcess { get; set; }
 }
 
 /// <summary>

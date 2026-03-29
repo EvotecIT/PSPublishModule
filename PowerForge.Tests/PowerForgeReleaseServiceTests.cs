@@ -906,7 +906,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
@@ -1081,7 +1081,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
@@ -1217,7 +1217,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = root,
                     Configuration = "Release",
@@ -1358,7 +1358,7 @@ public sealed class PowerForgeReleaseServiceTests
                 planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = root,
                     Configuration = "Release",
@@ -1467,6 +1467,199 @@ public sealed class PowerForgeReleaseServiceTests
                 result.ReleaseAssetEntries,
                 entry => string.Equals(entry.Path, package, StringComparison.OrdinalIgnoreCase));
             Assert.Equal("nuget/" + Path.GetFileName(package), stagedPackage.RelativeStagePath!.Replace('\\', '/'));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ToolOutputSelection_InstallerOnlyKeepsRequiredBundlesButDisablesPortableZips()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var spec = new DotNetPublishSpec
+            {
+                Targets = new[]
+                {
+                    new DotNetPublishTarget
+                    {
+                        Name = "IntelligenceX.Chat.App",
+                        ProjectPath = Path.Combine(root, "IntelligenceX.Chat.App.csproj"),
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Style = DotNetPublishStyle.PortableCompat,
+                            Zip = true
+                        }
+                    }
+                },
+                Bundles = new[]
+                {
+                    new DotNetPublishBundle
+                    {
+                        Id = "portable",
+                        PrepareFromTarget = "IntelligenceX.Chat.App",
+                        Zip = true
+                    },
+                    new DotNetPublishBundle
+                    {
+                        Id = "unused",
+                        PrepareFromTarget = "IntelligenceX.Chat.App",
+                        Zip = true
+                    }
+                },
+                Installers = new[]
+                {
+                    new DotNetPublishInstaller
+                    {
+                        Id = "IntelligenceX.Chat.Installer",
+                        PrepareFromTarget = "IntelligenceX.Chat.App",
+                        PrepareFromBundleId = "portable",
+                        InstallerProjectPath = Path.Combine(root, "Installer.wixproj")
+                    }
+                },
+                StorePackages = new[]
+                {
+                    new DotNetPublishStorePackage
+                    {
+                        Id = "IntelligenceX.Chat.Store",
+                        PrepareFromTarget = "IntelligenceX.Chat.App",
+                        PackagingProjectPath = Path.Combine(root, "Store.wapproj")
+                    }
+                }
+            };
+
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "release.json"),
+                ToolOutputs = new[] { PowerForgeReleaseToolOutputKind.Installer }
+            };
+
+            var selectedOutputs = PowerForgeReleaseService.ResolveSelectedToolOutputs(request);
+            PowerForgeReleaseService.ApplyDotNetToolOutputSelection(spec, selectedOutputs);
+
+            var bundle = Assert.Single(spec.Bundles ?? Array.Empty<DotNetPublishBundle>());
+            Assert.Equal("portable", bundle.Id);
+            Assert.False(bundle.Zip);
+            Assert.False(spec.Targets![0].Publish!.Zip);
+            Assert.Single(spec.Installers ?? Array.Empty<DotNetPublishInstaller>());
+            Assert.Empty(spec.StorePackages ?? Array.Empty<DotNetPublishStorePackage>());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ToolOutputSelection_FiltersReturnedDotNetAssetsToRequestedKinds()
+    {
+        var root = CreateSandbox();
+        var toolZip = Path.Combine(root, "PowerForge-win-x64.zip");
+        var bundleZip = Path.Combine(root, "IntelligenceX.Chat-Portable-win-x64.zip");
+        var installer = Path.Combine(root, "IntelligenceX.Chat.Installer.msi");
+        var storeUpload = Path.Combine(root, "IntelligenceX.Chat.Store.msixupload");
+        File.WriteAllText(toolZip, "tool", new UTF8Encoding(false));
+        File.WriteAllText(bundleZip, "bundle", new UTF8Encoding(false));
+        File.WriteAllText(installer, "installer", new UTF8Encoding(false));
+        File.WriteAllText(storeUpload, "store", new UTF8Encoding(false));
+
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release"
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Publish,
+                            Target = "PowerForge",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            ZipPath = toolZip
+                        },
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Bundle,
+                            Target = "IntelligenceX.Chat.App",
+                            BundleId = "portable",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            ZipPath = bundleZip
+                        }
+                    },
+                    MsiBuilds = new[]
+                    {
+                        new DotNetPublishMsiBuildResult
+                        {
+                            InstallerId = "IntelligenceX.Chat.Installer",
+                            Target = "IntelligenceX.Chat.App",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputFiles = new[] { installer }
+                        }
+                    },
+                    StorePackages = new[]
+                    {
+                        new DotNetPublishStorePackageResult
+                        {
+                            StorePackageId = "IntelligenceX.Chat.Store",
+                            Target = "IntelligenceX.Chat.App",
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            UploadFiles = new[] { storeUpload }
+                        }
+                    }
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    ToolOutputs = new[] { PowerForgeReleaseToolOutputKind.Installer }
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.DotNetTools);
+            Assert.Empty(result.DotNetTools!.Artefacts);
+            Assert.Single(result.DotNetTools.MsiBuilds);
+            Assert.Empty(result.DotNetTools.StorePackages);
+            Assert.Contains(installer, result.ReleaseAssets);
+            Assert.DoesNotContain(toolZip, result.ReleaseAssets);
+            Assert.DoesNotContain(bundleZip, result.ReleaseAssets);
+            Assert.DoesNotContain(storeUpload, result.ReleaseAssets);
         }
         finally
         {

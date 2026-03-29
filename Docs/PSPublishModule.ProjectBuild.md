@@ -48,6 +48,7 @@ Unified release entrypoint
   - `--skip-workspace-validation`, `--workspace-config`, `--workspace-profile`
   - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-testimox-root`
   - `--target`, `--rid`, `--framework`, `--style`
+  - `--tool-output <Tool|Portable|Installer|Store>` and `--skip-tool-output <...>` when the unified release should keep the high-level release intent simple while PowerForge decides which internal DotNetPublish steps still need to run
   - `--skip-restore` and `--skip-build` for DotNetPublish-backed tool/app flows
   - `--output-root <path>` to remap DotNetPublish tool/app artefacts, manifests, bundle outputs, and installer staging under a different root
   - `--stage-root <path>` to copy unified release assets into a categorized release folder (`modules`, `nuget`, `portable`, `installer`, `tools`, `metadata`) and write `release-manifest.json` / `SHA256SUMS.txt` there by default

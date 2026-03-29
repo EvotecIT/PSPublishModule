@@ -125,6 +125,10 @@ internal sealed class PowerForgeReleaseRequest
     public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
 
     public PowerForgeToolReleaseFlavor[] Flavors { get; set; } = Array.Empty<PowerForgeToolReleaseFlavor>();
+
+    public PowerForgeReleaseToolOutputKind[] ToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
+
+    public PowerForgeReleaseToolOutputKind[] SkipToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
 }
 
 /// <summary>
@@ -200,6 +204,14 @@ internal sealed class PowerForgeReleaseStagingOptions
     public string MetadataPath { get; set; } = "metadata";
 
     public string OtherPath { get; set; } = "assets";
+}
+
+internal enum PowerForgeReleaseToolOutputKind
+{
+    Tool,
+    Portable,
+    Installer,
+    Store
 }
 
 internal enum PowerForgeReleaseAssetCategory
