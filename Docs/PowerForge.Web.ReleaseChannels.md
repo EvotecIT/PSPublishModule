@@ -2,6 +2,12 @@
 
 This document defines a low-risk rollout model for websites consuming `EvotecIT/PSPublishModule` in CI, whether they run the engine from source or from published binaries.
 
+The key split is:
+
+- workflow YAML should stay thin and mostly declare which shared workflow to call plus the selected `powerforge_web_tag`
+- committed `.powerforge/*` files should hold durable site/repo policy such as baselines, engine locks for source mode, media profiles, or housekeeping config
+- consumer repos should not carry download/extract/checksum implementation logic in workflow YAML
+
 ## Goals
 
 - Avoid surprise breakage when engine defaults evolve.
@@ -20,7 +26,7 @@ This document defines a low-risk rollout model for websites consuming `EvotecIT/
 - `binary`: workflow downloads an exact published release asset and runs the extracted `PowerForgeWeb` executable.
 - The reusable workflow defaults to `source` unless a `powerforge_web_tag` is provided.
 
-Each website should commit `.powerforge/engine-lock.json` and resolve checkout from that file:
+Source-mode websites should commit `.powerforge/engine-lock.json` and resolve checkout from that file:
 
 ```yaml
 env:
@@ -40,6 +46,7 @@ Lock format:
 ```
 
 Optional canary override remains available via repository/org variables:
+
 - `POWERFORGE_REPOSITORY`
 - `POWERFORGE_REF`
 
@@ -72,6 +79,7 @@ Advanced mode still supports `.powerforge/tool-lock.json` when a repo needs an e
 ```
 
 Guidelines:
+
 - prefer `powerforge_web_tag` in workflow inputs for normal consumers
 - use exact `tag` + exact `asset` only when you intentionally need a fixed asset override
 - the runner now infers the correct asset for the current OS/architecture
@@ -102,14 +110,14 @@ Guidelines:
 
 ## Scaffold Alignment
 
-`powerforge-web scaffold` now generates:
+`powerforge-web scaffold` and the shared workflow defaults now aim for the smallest normal consumer surface:
 
-- `.powerforge/engine-lock.json` (pinned ref)
-- `./.github/workflows/website-ci.yml` that resolves checkout from the lock file
-- CI executes `pipeline --mode ci` using the checked-out engine
+- `./.github/workflows/website-ci.yml` that can stay as a thin wrapper
+- binary consumers can usually pin only `powerforge_web_tag`
+- source-mode consumers keep `.powerforge/engine-lock.json` as the committed engine policy
 - workflow-level concurrency cancelation and NuGet package caching enabled by default
 
-This keeps new websites aligned with channel pinning by default.
+This keeps websites aligned with channel pinning without pushing runner implementation details into each consuming repo.
 
 ## Reusable Workflow Inputs
 
