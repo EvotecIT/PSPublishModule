@@ -53,6 +53,13 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      repository_read_token:
+        required: false
+      cloudflare_api_token:
+        required: false
+      cloudflare_zone_id:
+        required: false
 
 permissions:
   contents: read
@@ -85,3 +92,7 @@ jobs:
       pipeline_mode: ci
       use_playwright_cache: true
       maintenance_mode_note: true
+    secrets:
+      repository_read_token: ${{ secrets.repository_read_token }}
+      cloudflare_api_token: ${{ secrets.cloudflare_api_token }}
+      cloudflare_zone_id: ${{ secrets.cloudflare_zone_id }}

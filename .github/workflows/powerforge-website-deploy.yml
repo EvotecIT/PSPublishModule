@@ -1,0 +1,157 @@
+name: PowerForge Website Deploy
+
+on:
+  workflow_call:
+    inputs:
+      website_root:
+        required: true
+        type: string
+      pipeline_config:
+        required: true
+        type: string
+      site_output_path:
+        required: false
+        type: string
+        default: ""
+      post_deploy_pipeline_config:
+        required: false
+        type: string
+        default: ""
+      engine_mode:
+        required: false
+        type: string
+        default: "source"
+      runner_labels_json:
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      timeout_minutes:
+        required: false
+        type: number
+        default: 20
+      dotnet_version:
+        required: false
+        type: string
+        default: "10.0.x"
+      report_artifact_name:
+        required: false
+        type: string
+        default: "powerforge-website-deploy-reports"
+      post_deploy_report_artifact_name:
+        required: false
+        type: string
+        default: "powerforge-website-post-deploy-reports"
+      powerforge_lock_path:
+        required: false
+        type: string
+        default: ""
+      powerforge_repository:
+        required: false
+        type: string
+        default: ""
+      powerforge_ref:
+        required: false
+        type: string
+        default: ""
+      powerforge_repository_override:
+        required: false
+        type: string
+        default: ""
+      powerforge_ref_override:
+        required: false
+        type: string
+        default: ""
+      powerforge_tool_lock_path:
+        required: false
+        type: string
+        default: ""
+      post_deploy_use_playwright_cache:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      indexnow_key:
+        required: false
+      repository_read_token:
+        required: false
+      cloudflare_api_token:
+        required: false
+      cloudflare_zone_id:
+        required: false
+
+permissions:
+  actions: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: powerforge-website-deploy-${{ github.repository }}-${{ inputs.website_root }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/powerforge-website-run.yml
+    with:
+      website_root: ${{ inputs.website_root }}
+      pipeline_config: ${{ inputs.pipeline_config }}
+      engine_mode: ${{ inputs.engine_mode }}
+      runner_labels_json: ${{ inputs.runner_labels_json }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      dotnet_version: ${{ inputs.dotnet_version }}
+      report_artifact_name: ${{ inputs.report_artifact_name }}
+      powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
+      powerforge_repository: ${{ inputs.powerforge_repository }}
+      powerforge_ref: ${{ inputs.powerforge_ref }}
+      powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
+      powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      pipeline_mode: ci
+      use_playwright_cache: true
+      upload_pages_artifact: true
+      pages_artifact_path: ${{ inputs.site_output_path }}
+    secrets:
+      indexnow_key: ${{ secrets.indexnow_key }}
+      repository_read_token: ${{ secrets.repository_read_token }}
+      cloudflare_api_token: ${{ secrets.cloudflare_api_token }}
+      cloudflare_zone_id: ${{ secrets.cloudflare_zone_id }}
+
+  deploy:
+    needs: build
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  post-deploy:
+    if: ${{ inputs.post_deploy_pipeline_config != '' }}
+    needs: deploy
+    uses: ./.github/workflows/powerforge-website-run.yml
+    with:
+      website_root: ${{ inputs.website_root }}
+      pipeline_config: ${{ inputs.post_deploy_pipeline_config }}
+      engine_mode: ${{ inputs.engine_mode }}
+      runner_labels_json: ${{ inputs.runner_labels_json }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      dotnet_version: ${{ inputs.dotnet_version }}
+      report_artifact_name: ${{ inputs.post_deploy_report_artifact_name }}
+      powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
+      powerforge_repository: ${{ inputs.powerforge_repository }}
+      powerforge_ref: ${{ inputs.powerforge_ref }}
+      powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
+      powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      pipeline_mode: ci
+      use_playwright_cache: ${{ inputs.post_deploy_use_playwright_cache }}
+    secrets:
+      indexnow_key: ${{ secrets.indexnow_key }}
+      repository_read_token: ${{ secrets.repository_read_token }}
+      cloudflare_api_token: ${{ secrets.cloudflare_api_token }}
+      cloudflare_zone_id: ${{ secrets.cloudflare_zone_id }}

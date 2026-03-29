@@ -65,8 +65,22 @@ on:
         required: false
         type: boolean
         default: false
+      upload_pages_artifact:
+        required: false
+        type: boolean
+        default: false
+      pages_artifact_path:
+        required: false
+        type: string
+        default: ""
     secrets:
       indexnow_key:
+        required: false
+      repository_read_token:
+        required: false
+      cloudflare_api_token:
+        required: false
+      cloudflare_zone_id:
         required: false
 
 jobs:
@@ -140,6 +154,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           INDEXNOW_KEY: ${{ secrets.indexnow_key }}
+          POWERFORGE_REPOSITORY_TOKEN: ${{ secrets.repository_read_token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $runnerArgs = @(
             'website-runner',
@@ -170,6 +187,12 @@ jobs:
             ./${{ inputs.website_root }}/_reports/**
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
+
+      - name: Upload Pages artifact
+        if: ${{ inputs.upload_pages_artifact }}
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ inputs.pages_artifact_path != '' && inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
 
       - name: Cleanup Playwright cache
         if: ${{ always() && inputs.use_playwright_cache }}
