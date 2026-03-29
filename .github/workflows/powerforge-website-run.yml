@@ -85,13 +85,26 @@ jobs:
         id: workflow_source
         shell: pwsh
         run: |
-          $workflowRef = [string]'${{ github.workflow_ref }}'
-          if ($workflowRef -notmatch '^(?<repository>[^/]+/[^/]+)/\.github/workflows/[^@]+@(?<ref>.+)$') {
-            throw "Unable to parse github.workflow_ref: '$workflowRef'"
+          $resolvedRepository = [string]'${{ inputs.powerforge_repository }}'
+          $resolvedRef = [string]'${{ inputs.powerforge_ref }}'
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRepository) -or [string]::IsNullOrWhiteSpace($resolvedRef)) {
+            $workflowRef = [string]'${{ github.workflow_ref }}'
+            if ($workflowRef -notmatch '^(?<repository>[^/]+/[^/]+)/\.github/workflows/[^@]+@(?<ref>.+)$') {
+              throw "Unable to parse github.workflow_ref: '$workflowRef'"
+            }
+
+            if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
+              $resolvedRepository = $Matches.repository
+            }
+
+            if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
+              $resolvedRef = $Matches.ref
+            }
           }
 
-          "repository=$($Matches.repository)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "ref=$($Matches.ref)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout shared PowerForge runner
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
