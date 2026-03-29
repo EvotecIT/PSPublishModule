@@ -112,7 +112,8 @@ Best practices:
 - Prefer `TokenEnv` (defaults to `GITHUB_TOKEN`) over inline `Token` for private repos.
 - In CI, use a lock file: `lockMode: "verify"` and commit `.powerforge/git-sync-lock.json`.
 - In dev, you can refresh locks intentionally with `lockMode: "update"`.
-- Prefer repo-relative `Destination` values so committed `git-sync-lock.json` entries stay portable across machines and CI runners.
+- Prefer repo-relative `Destination` values so committed `git-sync-lock.json` entries stay portable across machines and CI runners. Absolute destinations make the lock file machine-specific.
+- To migrate older absolute-path locks, run one intentional `lockMode: "update"` pass after switching the source config to repo-relative destinations.
 - Keep `build` deterministic:
   - Use `sources-sync` (or `build --sync-sources`) explicitly, rather than auto-downloading inside normal builds.
 

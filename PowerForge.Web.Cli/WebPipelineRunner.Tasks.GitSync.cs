@@ -88,6 +88,11 @@ internal static partial class WebPipelineRunner
         for (var i = 0; i < requests.Length; i++)
         {
             var request = requests[i];
+            if (lockUpdates is not null && Path.IsPathRooted(request.DestinationInput))
+            {
+                logger?.Warn($"[PFWEB.GITSYNC.PORTABILITY] git-sync repos[{i}] uses absolute destination '{request.DestinationInput}'. Prefer a repo-relative destination so committed lock files remain portable.");
+            }
+
             string? lockedCommit = null;
             if (lockMode == "verify")
             {
@@ -153,6 +158,8 @@ internal static partial class WebPipelineRunner
             message += $" lock={lockPath} mode={lockMode}";
         if (hasInlineToken)
             message += " warning=[PFWEB.GITSYNC.SECURITY]";
+        if (lockUpdates is not null && Array.Exists(requests, request => Path.IsPathRooted(request.DestinationInput)))
+            message += " warning=[PFWEB.GITSYNC.PORTABILITY]";
         stepResult.Message = message;
     }
 
@@ -837,7 +844,7 @@ internal static partial class WebPipelineRunner
                 ? destination
                 : ResolvePath(baseDir, destination);
             if (string.IsNullOrWhiteSpace(resolvedDestination))
-                continue;
+                throw new InvalidOperationException($"git-sync lock file entry has invalid destination '{destination}': {lockPath}");
 
             var key = Path.GetFullPath(resolvedDestination);
             result[key] = new GitSyncLockEntry
@@ -848,6 +855,7 @@ internal static partial class WebPipelineRunner
                 Repo = entry.TryGetProperty("repo", out var repoElement) && repoElement.ValueKind == JsonValueKind.String
                     ? repoElement.GetString()
                     : null,
+                // Keep the original lock value so update mode can preserve portable relative destinations.
                 Destination = destination,
                 Commit = commit.Trim()
             };
