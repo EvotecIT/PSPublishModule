@@ -906,7 +906,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
@@ -1081,7 +1081,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
@@ -1217,7 +1217,7 @@ public sealed class PowerForgeReleaseServiceTests
                         }
                     },
                     configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = root,
                     Configuration = "Release",
@@ -1358,7 +1358,7 @@ public sealed class PowerForgeReleaseServiceTests
                 planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = root,
                     Configuration = "Release",
@@ -1576,7 +1576,7 @@ public sealed class PowerForgeReleaseServiceTests
                 planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
-                planDotNetTools: (_, _, _) => new DotNetPublishPlan
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
                     ProjectRoot = root,
                     Configuration = "Release"

@@ -6,7 +6,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private DotNetPublishArtefactResult BuildBundle(
+    internal DotNetPublishArtefactResult BuildBundle(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,
         DotNetPublishStep step)
@@ -155,12 +155,12 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
 
         var createdUtc = DateTimeOffset.UtcNow.ToString("o");
-        var tokens = new Dictionary<string, string>(baseTokens, StringComparer.OrdinalIgnoreCase)
-        {
-            ["createdUtc"] = createdUtc,
-            ["bundleId"] = bundle.Id,
-            ["bundleOutput"] = outputDir
-        };
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in baseTokens)
+            tokens[entry.Key] = entry.Value;
+        tokens["createdUtc"] = createdUtc;
+        tokens["bundleId"] = bundle.Id;
+        tokens["bundleOutput"] = outputDir;
 
         ApplyBundleArchiveRules(plan, bundle, outputDir, tokens);
         ApplyBundleDeletePatterns(outputDir, bundle.PostProcess.DeletePatterns);
@@ -194,10 +194,10 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (var directory in directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
                 var directoryName = new DirectoryInfo(directory).Name;
-                var archiveTokens = new Dictionary<string, string>(tokens, StringComparer.OrdinalIgnoreCase)
-                {
-                    ["name"] = directoryName
-                };
+                var archiveTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in tokens)
+                    archiveTokens[entry.Key] = entry.Value;
+                archiveTokens["name"] = directoryName;
 
                 var archiveName = ApplyTemplate(
                     string.IsNullOrWhiteSpace(rule.ArchiveNameTemplate) ? "{name}.zip" : rule.ArchiveNameTemplate!,
@@ -236,9 +236,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     else if (File.Exists(match))
                         File.Delete(match);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // best effort; failures should not make post-processing noisy by default
+                    _logger.Warn($"Failed to delete bundle post-process match '{match}'. Error: {ex.Message}");
                 }
             }
         }
@@ -277,7 +277,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         // Treat "**/name" as "name anywhere, including the bundle root".
         if (pattern.StartsWith("**/", StringComparison.Ordinal))
-            return WildcardMatch(relativePath, pattern["**/".Length..]);
+            return WildcardMatch(relativePath, pattern.Substring("**/".Length));
 
         return false;
     }
@@ -335,7 +335,10 @@ public sealed partial class DotNetPublishPipelineRunner
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
-        return candidate.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar), comparison)
+        return string.Equals(
+                candidate,
+                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                comparison)
             || candidate.StartsWith(root, comparison);
     }
 

@@ -7,7 +7,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private DotNetPublishMsiPrepareResult PrepareMsiPackage(
+    internal DotNetPublishMsiPrepareResult PrepareMsiPackage(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,
         DotNetPublishStep step)

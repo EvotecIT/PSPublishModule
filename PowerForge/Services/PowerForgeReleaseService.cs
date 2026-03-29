@@ -48,7 +48,7 @@ internal sealed class PowerForgeReleaseService
     private readonly Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> _planTools;
     private readonly Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> _runTools;
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
-    private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, DotNetPublishPlan> _planDotNetTools;
+    private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
 
@@ -62,7 +62,7 @@ internal sealed class PowerForgeReleaseService
             (spec, configPath, request) => new PowerForgeToolReleaseService(logger).Plan(spec, configPath, request),
             plan => new PowerForgeToolReleaseService(logger).Run(plan),
             LoadDotNetToolsSpec,
-            (spec, configPath, request) => PlanDotNetTools(logger, spec, configPath, request),
+            (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishRequest => new GitHubReleasePublisher(logger).PublishRelease(publishRequest))
     {
@@ -80,7 +80,7 @@ internal sealed class PowerForgeReleaseService
             planTools,
             runTools,
             LoadDotNetToolsSpec,
-            (spec, configPath, request) => PlanDotNetTools(logger, spec, configPath, request),
+            (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishGitHubRelease)
     {
@@ -92,7 +92,7 @@ internal sealed class PowerForgeReleaseService
         Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools,
         Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> runTools,
         Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> loadDotNetToolsSpec,
-        Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, DotNetPublishPlan> planDotNetTools,
+        Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> planDotNetTools,
         Func<DotNetPublishPlan, DotNetPublishResult> runDotNetTools,
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease)
     {
@@ -209,7 +209,7 @@ internal sealed class PowerForgeReleaseService
             if (UsesDotNetToolWorkflow(spec.Tools!))
             {
                 var (dotNetSpec, dotNetSourcePath) = _loadDotNetToolsSpec(spec.Tools!, configPath);
-                var dotNetPlan = _planDotNetTools(dotNetSpec, dotNetSourcePath, request);
+                var dotNetPlan = _planDotNetTools(dotNetSpec, dotNetSourcePath, request, selectedToolOutputs);
                 ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                 result.DotNetToolPlan = dotNetPlan;
 
@@ -833,7 +833,8 @@ internal sealed class PowerForgeReleaseService
         ILogger logger,
         DotNetPublishSpec spec,
         string configPath,
-        PowerForgeReleaseRequest request)
+        PowerForgeReleaseRequest request,
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
         if (request.Flavors is { Length: > 0 })
         {
@@ -843,7 +844,7 @@ internal sealed class PowerForgeReleaseService
         }
 
         ApplyDotNetRequestOverrides(spec, request);
-        ApplyDotNetToolOutputSelection(spec, ResolveSelectedToolOutputs(request));
+        ApplyDotNetToolOutputSelection(spec, selectedOutputs);
         return new DotNetPublishPipelineRunner(logger).Plan(spec, configPath);
     }
 
@@ -1024,11 +1025,16 @@ internal sealed class PowerForgeReleaseService
 
     internal static HashSet<PowerForgeReleaseToolOutputKind> ResolveSelectedToolOutputs(PowerForgeReleaseRequest request)
     {
-        var selected = request.ToolOutputs is { Length: > 0 }
-            ? new HashSet<PowerForgeReleaseToolOutputKind>(request.ToolOutputs, EqualityComparer<PowerForgeReleaseToolOutputKind>.Default)
-            : Enum.GetValues<PowerForgeReleaseToolOutputKind>().ToHashSet();
+        var requestedOutputs = request.ToolOutputs ?? Array.Empty<PowerForgeReleaseToolOutputKind>();
+        var skippedOutputs = request.SkipToolOutputs ?? Array.Empty<PowerForgeReleaseToolOutputKind>();
 
-        foreach (var skipped in request.SkipToolOutputs ?? Array.Empty<PowerForgeReleaseToolOutputKind>())
+        var selected = requestedOutputs.Length > 0
+            ? new HashSet<PowerForgeReleaseToolOutputKind>(requestedOutputs, EqualityComparer<PowerForgeReleaseToolOutputKind>.Default)
+            : new HashSet<PowerForgeReleaseToolOutputKind>(
+                ((PowerForgeReleaseToolOutputKind[])Enum.GetValues(typeof(PowerForgeReleaseToolOutputKind))),
+                EqualityComparer<PowerForgeReleaseToolOutputKind>.Default);
+
+        foreach (var skipped in skippedOutputs)
             selected.Remove(skipped);
 
         return selected;
@@ -1036,7 +1042,7 @@ internal sealed class PowerForgeReleaseService
 
     internal static void ApplyDotNetToolOutputSelection(
         DotNetPublishSpec spec,
-        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
@@ -1088,7 +1094,7 @@ internal sealed class PowerForgeReleaseService
 
     internal static void FilterDotNetToolResult(
         DotNetPublishResult result,
-        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
         if (result is null)
             throw new ArgumentNullException(nameof(result));
@@ -1106,7 +1112,7 @@ internal sealed class PowerForgeReleaseService
 
     internal static bool IsSelectedDotNetArtefact(
         DotNetPublishArtefactResult artifact,
-        IReadOnlySet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
         if (artifact.Category == DotNetPublishArtefactCategory.Bundle)
             return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);

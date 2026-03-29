@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -160,6 +159,71 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
     }
 
     [Fact]
+    public void BuildBundle_RejectsPostProcessPathsOutsideBundleRoot()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "App.exe"), "app");
+
+            var outputDir = Path.Combine(root, "Artifacts", "Bundles", "portable");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Bundles = new[]
+                {
+                    new DotNetPublishBundlePlan
+                    {
+                        Id = "portable",
+                        PrepareFromTarget = "app",
+                        PostProcess = new DotNetPublishBundlePostProcessOptions
+                        {
+                            Metadata = new DotNetPublishBundleMetadataOptions
+                            {
+                                Path = "../portable_sibling/outside.json"
+                            }
+                        }
+                    }
+                }
+            };
+
+            var artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    OutputDir = publishDir,
+                    PublishDir = publishDir
+                }
+            };
+
+            var step = new DotNetPublishStep
+            {
+                Key = "bundle:portable:app:net10.0:win-x64:PortableCompat",
+                Kind = DotNetPublishStepKind.Bundle,
+                BundleId = "portable",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat,
+                BundleOutputPath = outputDir
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => InvokeBuildBundle(plan, artefacts, step));
+            Assert.Contains("metadata path", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PrepareMsiPackage_UsesBundleArtefact_WhenInstallerPrepareFromBundleIdConfigured()
     {
         var root = CreateTempRoot();
@@ -248,9 +312,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         DotNetPublishStep step)
     {
         var runner = new DotNetPublishPipelineRunner(new NullLogger());
-        var method = typeof(DotNetPublishPipelineRunner).GetMethod("BuildBundle", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-        var result = method!.Invoke(runner, new object[] { plan, artefacts, step }) as DotNetPublishArtefactResult;
+        var result = runner.BuildBundle(plan, artefacts, step);
         Assert.NotNull(result);
         return result!;
     }
@@ -261,9 +323,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         DotNetPublishStep step)
     {
         var runner = new DotNetPublishPipelineRunner(new NullLogger());
-        var method = typeof(DotNetPublishPipelineRunner).GetMethod("PrepareMsiPackage", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-        var result = method!.Invoke(runner, new object[] { plan, artefacts, step }) as DotNetPublishMsiPrepareResult;
+        var result = runner.PrepareMsiPackage(plan, artefacts, step);
         Assert.NotNull(result);
         return result!;
     }
