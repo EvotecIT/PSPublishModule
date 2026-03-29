@@ -1,8 +1,8 @@
 # Agent Guide (PSPublishModule / PowerForge.Web + Websites)
 
-Last updated: 2026-03-11
+Last updated: 2026-03-29
 
-This file is the "start here" context for any agent working on the PowerForge.Web engine and the three websites that use it.
+This file is the "start here" context for any agent working on the PowerForge.Web engine and the tracked sibling repos that build on it.
 
 ## Repos / Local Paths
 
@@ -25,6 +25,18 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
 - CodeGlyphX website: `C:\Support\GitHub\CodeMatrix\Website`
   - Remote: `https://github.com/EvotecIT/CodeGlyphX.git`
 
+- OfficeIMO website/docs: `C:\Support\GitHub\OfficeIMO\Website`
+  - Remote: `https://github.com/EvotecIT/OfficeIMO.git`
+  - Track this repo when standardizing website workflows, docs generation, and PowerForge-based housekeeping.
+
+- DomainDetective repo: `C:\Support\GitHub\DomainDetective`
+  - Remote: `https://github.com/EvotecIT/DomainDetective.git`
+  - Track this repo when standardizing PowerForge-adjacent workflows, module usage, and release/build consistency.
+
+- TestimoX website/docs: `C:\Support\GitHub\TestimoX\Website`
+  - Remote: `https://github.com/EvotecIT/TestimoX.git`
+  - Track this repo when standardizing PowerForge-based website workflows, docs generation, and quality gates.
+
 ## Portable Path Discovery (WSL/macOS/Linux)
 
 If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout heuristic:
@@ -34,6 +46,9 @@ If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout 
   - `<root>/HtmlForgeX/Website`
   - `<root>/IntelligenceX/Website`
   - `<root>/CodeMatrix/Website`
+  - `<root>/OfficeIMO/Website`
+  - `<root>/DomainDetective`
+  - `<root>/TestimoX/Website`
 
 Practical search strategy:
 
