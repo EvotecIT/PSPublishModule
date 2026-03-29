@@ -98,6 +98,8 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           token: ${{ github.token }}
+          # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve shared workflow source
         id: workflow_source
