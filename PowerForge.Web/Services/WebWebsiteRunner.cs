@@ -3,6 +3,7 @@ using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace PowerForge.Web;
@@ -21,7 +22,7 @@ public static class WebWebsiteRunner
 
         var websiteRoot = ResolveRequiredDirectory(options.WebsiteRoot, "Website root");
         var pipelineConfig = ResolveRequiredFile(options.PipelineConfig, "Pipeline config");
-        var engineMode = NormalizeValue(options.EngineMode, "source").ToLowerInvariant();
+        var engineMode = ResolveRequestedEngineMode(options);
         if (!engineMode.Equals("source", StringComparison.Ordinal) &&
             !engineMode.Equals("binary", StringComparison.Ordinal))
         {
@@ -136,21 +137,18 @@ public static class WebWebsiteRunner
         Action<string>? standardOutput,
         Action<string>? standardError)
     {
-        var toolLockPath = string.IsNullOrWhiteSpace(options.PowerForgeToolLockPath)
-            ? Path.Combine(websiteRoot, ".powerforge", "tool-lock.json")
-            : ResolvePath(options.PowerForgeToolLockPath!, Directory.GetCurrentDirectory());
-
-        var toolLock = WebToolLockFile.Read(toolLockPath, WebJson.Options);
-        var issues = WebToolLockFile.Validate(toolLock);
-        if (issues.Length > 0)
-            throw new InvalidOperationException($"Tool lock is invalid: {string.Join(" ", issues)}");
-
+        var toolLock = ResolveBinaryToolSpec(options, websiteRoot);
         var repository = NormalizeGitHubRepository(toolLock.Repository);
-        var assetDownloadUrl = ResolveGitHubReleaseAssetDownloadUrl(repository, toolLock.Tag, toolLock.Asset, options.GitHubToken);
+        var release = ResolveGitHubRelease(repository, toolLock.Tag, options.GitHubToken);
+        var resolvedAsset = ResolveReleaseAsset(
+            release.Assets,
+            toolLock.Target,
+            toolLock.Asset,
+            GetCurrentRuntimeIdentifier());
 
-        var assetPath = Path.Combine(sessionRoot, toolLock.Asset);
-        DownloadFile(assetDownloadUrl, assetPath, options.GitHubToken);
-        VerifySha256IfPresent(assetPath, toolLock.Sha256);
+        var assetPath = Path.Combine(sessionRoot, resolvedAsset.Name);
+        DownloadFile(resolvedAsset.DownloadUrl, assetPath, options.GitHubToken);
+        VerifySha256IfPresent(assetPath, string.IsNullOrWhiteSpace(toolLock.Sha256) ? resolvedAsset.Sha256 : toolLock.Sha256);
 
         var extractRoot = Path.Combine(sessionRoot, "tool");
         ExtractArchive(assetPath, extractRoot);
@@ -173,12 +171,105 @@ public static class WebWebsiteRunner
             PipelineMode = NormalizeValue(options.PipelineMode, "ci"),
             Repository = repository,
             Tag = toolLock.Tag,
-            Asset = toolLock.Asset,
+            Asset = resolvedAsset.Name,
             LaunchedPath = executablePath
         };
     }
 
-    private static string ResolveGitHubReleaseAssetDownloadUrl(string repository, string tag, string assetName, string? token)
+    internal static string ResolveRequestedEngineMode(WebWebsiteRunnerOptions options)
+    {
+        var configuredMode = NormalizeValue(options.EngineMode, string.Empty).ToLowerInvariant();
+        if (configuredMode.Equals("source", StringComparison.Ordinal) || configuredMode.Equals("binary", StringComparison.Ordinal))
+            return configuredMode;
+        if (!string.IsNullOrWhiteSpace(configuredMode))
+            return configuredMode;
+
+        if (!string.IsNullOrWhiteSpace(options.PowerForgeWebTag) || !string.IsNullOrWhiteSpace(options.PowerForgeToolLockPath))
+            return "binary";
+
+        return "source";
+    }
+
+    internal static string GetCurrentRuntimeIdentifier()
+    {
+        var os = OperatingSystem.IsWindows()
+            ? "win"
+            : OperatingSystem.IsMacOS()
+                ? "osx"
+                : OperatingSystem.IsLinux()
+                    ? "linux"
+                    : throw new InvalidOperationException("Binary mode supports only Windows, Linux, and macOS runners.");
+
+        var architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.Arm64 => "arm64",
+            _ => throw new InvalidOperationException($"Binary mode does not support architecture '{RuntimeInformation.ProcessArchitecture}'.")
+        };
+
+        return $"{os}-{architecture}";
+    }
+
+    internal static WebGitHubReleaseAsset ResolveReleaseAsset(
+        IReadOnlyList<WebGitHubReleaseAsset> assets,
+        string target,
+        string? configuredAsset,
+        string runtimeIdentifier)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredAsset))
+        {
+            var explicitAsset = assets.FirstOrDefault(asset => asset.Name.Equals(configuredAsset.Trim(), StringComparison.Ordinal));
+            if (explicitAsset is null)
+                throw new InvalidOperationException($"GitHub release does not contain asset '{configuredAsset}'.");
+            return explicitAsset;
+        }
+
+        var matches = assets
+            .Where(asset =>
+                asset.Name.StartsWith(target + "-", StringComparison.OrdinalIgnoreCase) &&
+                asset.Name.Contains("-" + runtimeIdentifier + "-", StringComparison.OrdinalIgnoreCase) &&
+                (asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                 asset.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                 asset.Name.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        if (matches.Length == 0)
+            throw new InvalidOperationException($"GitHub release does not contain a supported asset for target '{target}' and runtime '{runtimeIdentifier}'.");
+
+        if (matches.Length == 1)
+            return matches[0];
+
+        var singleContained = matches.Where(asset => asset.Name.Contains("-SingleContained", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (singleContained.Length == 1)
+            return singleContained[0];
+
+        throw new InvalidOperationException($"GitHub release contains multiple matching assets for target '{target}' and runtime '{runtimeIdentifier}'.");
+    }
+
+    private static WebToolLockSpec ResolveBinaryToolSpec(WebWebsiteRunnerOptions options, string websiteRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(options.PowerForgeWebTag))
+        {
+            return WebToolLockFile.Normalize(new WebToolLockSpec
+            {
+                Repository = WebToolLockFile.DefaultRepository,
+                Target = WebToolLockFile.DefaultTarget,
+                Tag = options.PowerForgeWebTag
+            });
+        }
+
+        var toolLockPath = string.IsNullOrWhiteSpace(options.PowerForgeToolLockPath)
+            ? Path.Combine(websiteRoot, ".powerforge", "tool-lock.json")
+            : ResolvePath(options.PowerForgeToolLockPath!, Directory.GetCurrentDirectory());
+
+        var toolLock = WebToolLockFile.Read(toolLockPath, WebJson.Options);
+        var issues = WebToolLockFile.Validate(toolLock);
+        if (issues.Length > 0)
+            throw new InvalidOperationException($"Tool lock is invalid: {string.Join(" ", issues)}");
+        return toolLock;
+    }
+
+    private static WebGitHubRelease ResolveGitHubRelease(string repository, string tag, string? token)
     {
         using var http = CreateGitHubHttpClient(token);
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/tags/{Uri.EscapeDataString(tag)}");
@@ -190,20 +281,29 @@ public static class WebWebsiteRunner
         if (!document.RootElement.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException($"GitHub release '{tag}' in '{repository}' did not return an assets array.");
 
+        var releaseAssets = new List<WebGitHubReleaseAsset>();
         foreach (var asset in assets.EnumerateArray())
         {
             var name = asset.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
-            if (!string.Equals(name, assetName, StringComparison.Ordinal))
+            var url = asset.TryGetProperty("browser_download_url", out var urlElement) ? urlElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
                 continue;
 
-            var url = asset.TryGetProperty("browser_download_url", out var urlElement) ? urlElement.GetString() : null;
-            if (string.IsNullOrWhiteSpace(url))
-                throw new InvalidOperationException($"GitHub release asset '{assetName}' did not expose browser_download_url.");
-
-            return url;
+            var digest = asset.TryGetProperty("digest", out var digestElement) ? digestElement.GetString() : null;
+            releaseAssets.Add(new WebGitHubReleaseAsset
+            {
+                Name = name,
+                DownloadUrl = url,
+                Sha256 = NormalizeGitHubDigest(digest)
+            });
         }
 
-        throw new InvalidOperationException($"GitHub release '{tag}' in '{repository}' does not contain asset '{assetName}'.");
+        return new WebGitHubRelease
+        {
+            Repository = repository,
+            Tag = tag,
+            Assets = releaseAssets
+        };
     }
 
     private static void DownloadFile(string url, string destinationPath, string? token)
@@ -479,5 +579,32 @@ public static class WebWebsiteRunner
     {
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
+    }
+
+    private static string NormalizeGitHubDigest(string? digest)
+    {
+        var normalized = NormalizeValue(digest, string.Empty);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        const string prefix = "sha256:";
+        if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[prefix.Length..];
+
+        return normalized.Trim().ToLowerInvariant();
+    }
+
+    internal sealed class WebGitHubRelease
+    {
+        public string Repository { get; init; } = string.Empty;
+        public string Tag { get; init; } = string.Empty;
+        public IReadOnlyList<WebGitHubReleaseAsset> Assets { get; init; } = Array.Empty<WebGitHubReleaseAsset>();
+    }
+
+    internal sealed class WebGitHubReleaseAsset
+    {
+        public string Name { get; init; } = string.Empty;
+        public string DownloadUrl { get; init; } = string.Empty;
+        public string Sha256 { get; init; } = string.Empty;
     }
 }

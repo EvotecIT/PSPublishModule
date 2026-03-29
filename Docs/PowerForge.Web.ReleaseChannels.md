@@ -18,7 +18,7 @@ This document defines a low-risk rollout model for websites consuming `EvotecIT/
 
 - `source`: workflow resolves `repository` + immutable `ref` and runs `PowerForge.Web.Cli` from a checked-out engine repo.
 - `binary`: workflow downloads an exact published release asset and runs the extracted `PowerForgeWeb` executable.
-- The reusable workflow defaults to `source`. Repos must opt into `binary` explicitly.
+- The reusable workflow defaults to `source` unless a `powerforge_web_tag` is provided.
 
 Each website should commit `.powerforge/engine-lock.json` and resolve checkout from that file:
 
@@ -43,7 +43,21 @@ Optional canary override remains available via repository/org variables:
 - `POWERFORGE_REPOSITORY`
 - `POWERFORGE_REF`
 
-For binary mode, commit `.powerforge/tool-lock.json` and pin an exact release tag + asset:
+For the normal binary path, pin the exact published tag directly in the workflow:
+
+```yaml
+jobs:
+  website:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@<workflow-sha>
+    with:
+      website_root: Website
+      pipeline_config: Website/pipeline.json
+      powerforge_web_tag: PowerForgeWeb-v1.0.0-preview-20260328151156
+```
+
+The shared runner resolves the matching asset for the current runner OS/architecture and uses GitHub's published asset digest when available.
+
+Advanced mode still supports `.powerforge/tool-lock.json` when a repo needs an explicit asset/binary override:
 
 ```json
 {
@@ -51,16 +65,17 @@ For binary mode, commit `.powerforge/tool-lock.json` and pin an exact release ta
   "repository": "EvotecIT/PSPublishModule",
   "target": "PowerForgeWeb",
   "tag": "PowerForgeWeb-v1.0.0-preview-20260328151156",
-  "asset": "PowerForgeWeb-1.0.0-net10.0-linux-x64-SingleContained.tar.gz",
+  "asset": "PowerForgeWeb-1.0.0-net10.0-linux-x64-SingleContained.zip",
   "binaryPath": "PowerForgeWeb",
   "sha256": "<optional sha256>"
 }
 ```
 
 Guidelines:
-- use exact `tag` + exact `asset`
-- use the published asset format for the runner OS: `.zip` on Windows, `.tar.gz` on Linux/macOS
-- add `sha256` when you want the workflow to verify the downloaded asset before execution
+- prefer `powerforge_web_tag` in workflow inputs for normal consumers
+- use exact `tag` + exact `asset` only when you intentionally need a fixed asset override
+- the runner now infers the correct asset for the current OS/architecture
+- add `sha256` only when you intentionally want to override or supplement GitHub's published asset digest
 - do not use "latest"
 - default production repos to stable tags
 - opt into preview tags only in repos that intentionally test preview builds
@@ -102,6 +117,7 @@ The shared runner workflow accepts:
 
 - `engine_mode: source|binary`
 - `powerforge_lock_path` for source-mode commit locks
+- `powerforge_web_tag` for the normal binary pin
 - `powerforge_tool_lock_path` for binary-mode release locks
 
-That keeps consuming repos small: the repo-level workflow only chooses the mode and committed lock file, while the shared `powerforge-web website-runner` command performs the actual resolution and execution.
+That keeps consuming repos small: the repo-level workflow can usually choose only the website path, pipeline config, and published tag, while the shared `powerforge-web website-runner` command performs the actual resolution and execution.

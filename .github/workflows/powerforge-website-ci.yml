@@ -12,7 +12,7 @@ on:
       engine_mode:
         required: false
         type: string
-        default: "source"
+        default: ""
       runner_labels_json:
         required: false
         type: string
@@ -53,8 +53,18 @@ on:
         required: false
         type: string
         default: ""
+      powerforge_web_tag:
+        required: false
+        type: string
+        default: ""
     secrets:
       INDEXNOW_KEY:
+        required: false
+      repository_read_token:
+        required: false
+      cloudflare_api_token:
+        required: false
+      cloudflare_zone_id:
         required: false
 
 permissions:
@@ -81,7 +91,11 @@ jobs:
       powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
       powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
       use_playwright_cache: true
     secrets:
       indexnow_key: ${{ secrets.INDEXNOW_KEY }}
+      repository_read_token: ${{ secrets.repository_read_token }}
+      cloudflare_api_token: ${{ secrets.cloudflare_api_token }}
+      cloudflare_zone_id: ${{ secrets.cloudflare_zone_id }}

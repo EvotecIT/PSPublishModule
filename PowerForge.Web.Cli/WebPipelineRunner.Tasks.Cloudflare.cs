@@ -45,6 +45,10 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException($"cloudflare: unsupported operation '{operation}'. Supported operations: purge, verify.");
 
         var zoneId = GetString(step, "zoneId") ?? GetString(step, "zone-id") ?? GetString(step, "zone");
+        var zoneIdEnv = GetString(step, "zoneIdEnv") ?? GetString(step, "zone-id-env") ??
+                        GetString(step, "zoneEnv") ?? GetString(step, "zone-env");
+        if (string.IsNullOrWhiteSpace(zoneId) && !string.IsNullOrWhiteSpace(zoneIdEnv))
+            zoneId = Environment.GetEnvironmentVariable(zoneIdEnv);
         if (string.IsNullOrWhiteSpace(zoneId))
             throw new InvalidOperationException("cloudflare: missing required 'zoneId' (or 'zone-id').");
 

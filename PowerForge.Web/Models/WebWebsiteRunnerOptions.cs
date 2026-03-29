@@ -9,8 +9,8 @@ public sealed class WebWebsiteRunnerOptions
     /// <summary>Pipeline config path.</summary>
     public string PipelineConfig { get; set; } = string.Empty;
 
-    /// <summary>Runner mode: source or binary.</summary>
-    public string EngineMode { get; set; } = "source";
+    /// <summary>Runner mode: source, binary, or empty for auto-resolution.</summary>
+    public string EngineMode { get; set; } = string.Empty;
 
     /// <summary>Pipeline mode, usually ci or dev.</summary>
     public string PipelineMode { get; set; } = "ci";
@@ -32,6 +32,9 @@ public sealed class WebWebsiteRunnerOptions
 
     /// <summary>Optional tool lock path override.</summary>
     public string? PowerForgeToolLockPath { get; set; }
+
+    /// <summary>Optional exact GitHub release tag for the published PowerForgeWeb binary.</summary>
+    public string? PowerForgeWebTag { get; set; }
 
     /// <summary>Optional GitHub token used for downloads.</summary>
     public string? GitHubToken { get; set; }
