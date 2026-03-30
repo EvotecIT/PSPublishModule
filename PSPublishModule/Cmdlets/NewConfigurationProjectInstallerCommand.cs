@@ -51,12 +51,14 @@ public sealed class NewConfigurationProjectInstallerCommand : PSCmdlet
     /// Optional runtime filter.
     /// </summary>
     [Parameter]
+    [Alias("Runtime")]
     public string[]? Runtimes { get; set; }
 
     /// <summary>
     /// Optional framework filter.
     /// </summary>
     [Parameter]
+    [Alias("Framework")]
     public string[]? Frameworks { get; set; }
 
     /// <summary>

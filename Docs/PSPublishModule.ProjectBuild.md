@@ -18,6 +18,12 @@ PowerShell-authored project release objects
   - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
 - This stays on the same unified release engine used by `powerforge release` and `Invoke-PowerForgeRelease -ConfigPath ...`.
 - Relative target and installer paths are resolved from `ConfigurationProject.ProjectRoot` when provided.
+- `New-ConfigurationProjectRelease` can now also carry default release intent such as:
+  - `-PublishToolGitHub`
+  - `-SkipRestore`
+  - `-SkipBuild`
+  - `-ToolOutput <Tool|Portable|Installer|Store>`
+  - `-SkipToolOutput <...>`
 - In the current first slice, tool/app targets should still declare an explicit runtime for DotNetPublish-backed plan/build flows.
 
 Example:

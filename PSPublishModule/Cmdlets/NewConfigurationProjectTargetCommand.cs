@@ -48,6 +48,7 @@ public sealed class NewConfigurationProjectTargetCommand : PSCmdlet
     /// Optional runtime matrix values.
     /// </summary>
     [Parameter]
+    [Alias("Runtime")]
     public string[]? Runtimes { get; set; }
 
     /// <summary>

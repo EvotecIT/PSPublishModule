@@ -11,7 +11,11 @@ public sealed class PowerForgeProjectDslMapperTests
             ProjectRoot = ".",
             Release = new ConfigurationProjectRelease
             {
-                Configuration = "Release"
+                Configuration = "Release",
+                PublishToolGitHub = true,
+                SkipRestore = true,
+                SkipBuild = true,
+                SkipToolOutput = new[] { ConfigurationProjectReleaseOutputType.Tool }
             },
             Workspace = new ConfigurationProjectWorkspace
             {
@@ -93,6 +97,9 @@ public sealed class PowerForgeProjectDslMapperTests
 
         Assert.True(request.ToolsOnly);
         Assert.Equal("Release", request.Configuration);
+        Assert.True(request.PublishToolGitHub);
+        Assert.True(request.SkipRestore);
+        Assert.True(request.SkipBuild);
         Assert.Equal("oss", request.WorkspaceProfile);
         Assert.Equal("Artifacts/Custom", request.OutputRoot);
         Assert.Equal("Artifacts/Release", request.StageRoot);
@@ -102,6 +109,7 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Contains(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs);
         Assert.Contains(PowerForgeReleaseToolOutputKind.Portable, request.ToolOutputs);
         Assert.Contains(PowerForgeReleaseToolOutputKind.Installer, request.ToolOutputs);
+        Assert.Contains(PowerForgeReleaseToolOutputKind.Tool, request.SkipToolOutputs);
     }
 
     [Fact]
@@ -130,5 +138,39 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Empty(spec.Tools.DotNetPublish.Installers);
         Assert.Single(request.ToolOutputs);
         Assert.Equal(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs[0]);
+    }
+
+    [Fact]
+    public void CreateRelease_UsesExplicitReleaseOutputDefaultsWhenProvided()
+    {
+        var project = new ConfigurationProject
+        {
+            Name = "Demo",
+            Release = new ConfigurationProjectRelease
+            {
+                ToolOutput = new[]
+                {
+                    ConfigurationProjectReleaseOutputType.Portable,
+                    ConfigurationProjectReleaseOutputType.Installer
+                }
+            },
+            Targets = new[]
+            {
+                new ConfigurationProjectTarget
+                {
+                    Name = "Cli",
+                    ProjectPath = "src/Cli/Cli.csproj",
+                    Framework = "net10.0",
+                    Runtimes = new[] { "win-x64" }
+                }
+            }
+        };
+
+        var (_, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+
+        Assert.Equal(2, request.ToolOutputs.Length);
+        Assert.Contains(PowerForgeReleaseToolOutputKind.Portable, request.ToolOutputs);
+        Assert.Contains(PowerForgeReleaseToolOutputKind.Installer, request.ToolOutputs);
+        Assert.DoesNotContain(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs);
     }
 }

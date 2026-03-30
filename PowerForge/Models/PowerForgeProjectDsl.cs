@@ -55,6 +55,31 @@ public sealed class ConfigurationProjectRelease
     /// Build configuration used by the release workflow.
     /// </summary>
     public string Configuration { get; set; } = "Release";
+
+    /// <summary>
+    /// When true, enables tool/app GitHub release publishing by default for this project object.
+    /// </summary>
+    public bool PublishToolGitHub { get; set; }
+
+    /// <summary>
+    /// When true, skips restore operations for DotNetPublish-backed tool/app flows.
+    /// </summary>
+    public bool SkipRestore { get; set; }
+
+    /// <summary>
+    /// When true, skips build operations for DotNetPublish-backed tool/app flows.
+    /// </summary>
+    public bool SkipBuild { get; set; }
+
+    /// <summary>
+    /// Optional release-level output selection defaults.
+    /// </summary>
+    public ConfigurationProjectReleaseOutputType[] ToolOutput { get; set; } = Array.Empty<ConfigurationProjectReleaseOutputType>();
+
+    /// <summary>
+    /// Optional release-level output exclusion defaults.
+    /// </summary>
+    public ConfigurationProjectReleaseOutputType[] SkipToolOutput { get; set; } = Array.Empty<ConfigurationProjectReleaseOutputType>();
 }
 
 /// <summary>
@@ -357,4 +382,30 @@ public enum ConfigurationProjectTargetOutputType
     /// Produce a portable bundle from the raw publish output.
     /// </summary>
     Portable
+}
+
+/// <summary>
+/// High-level release output categories supported by the PowerShell project-build DSL release model.
+/// </summary>
+public enum ConfigurationProjectReleaseOutputType
+{
+    /// <summary>
+    /// Keep the raw publish output as a requested release artefact.
+    /// </summary>
+    Tool,
+
+    /// <summary>
+    /// Produce a portable bundle from the raw publish output.
+    /// </summary>
+    Portable,
+
+    /// <summary>
+    /// Produce an installer artefact.
+    /// </summary>
+    Installer,
+
+    /// <summary>
+    /// Produce a store package artefact.
+    /// </summary>
+    Store
 }

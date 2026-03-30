@@ -34,6 +34,7 @@ Current scope:
 - PowerShell-authored object composition instead of raw CLI argument shaping
 - path resolution relative to `ProjectRoot`
 - installer entries that map onto the existing DotNetPublish installer flow
+- release-level defaults for `PublishToolGitHub`, `SkipRestore`, `SkipBuild`, `ToolOutput`, and `SkipToolOutput`
 
 Current intentional limits:
 
@@ -103,7 +104,9 @@ Example:
 Import-Module PSPublishModule -Force
 
 $release = New-ConfigurationProjectRelease `
-    -Configuration Release
+    -Configuration Release `
+    -SkipRestore `
+    -ToolOutput Portable
 
 $target = New-ConfigurationProjectTarget `
     -Name 'ChatApp' `
@@ -193,6 +196,11 @@ This is likely the best balance between:
 Current first-slice responsibility:
 
 - `Configuration`
+- `PublishToolGitHub`
+- `SkipRestore`
+- `SkipBuild`
+- `ToolOutput`
+- `SkipToolOutput`
 
 Future expansion could add run-level choices such as:
 

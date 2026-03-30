@@ -79,6 +79,9 @@ internal static class PowerForgeProjectDslMapper
             ConfigPath = configPath,
             ToolsOnly = true,
             Configuration = string.IsNullOrWhiteSpace(release.Configuration) ? null : release.Configuration.Trim(),
+            PublishToolGitHub = release.PublishToolGitHub,
+            SkipRestore = release.SkipRestore,
+            SkipBuild = release.SkipBuild,
             SkipWorkspaceValidation = project.Workspace?.SkipValidation == true,
             WorkspaceConfigPath = ResolveOptionalPath(fullProjectRoot, project.Workspace?.ConfigPath),
             WorkspaceProfile = NormalizeNullable(project.Workspace?.Profile),
@@ -89,7 +92,10 @@ internal static class PowerForgeProjectDslMapper
             ManifestJsonPath = NormalizeNullable(project.Output?.ManifestJsonPath),
             ChecksumsPath = NormalizeNullable(project.Output?.ChecksumsPath),
             SkipReleaseChecksums = project.Output is not null && !project.Output.IncludeChecksums,
-            ToolOutputs = ComputeRequestedOutputs(targets, installers)
+            ToolOutputs = release.ToolOutput.Length > 0
+                ? MapReleaseOutputs(release.ToolOutput)
+                : ComputeRequestedOutputs(targets, installers),
+            SkipToolOutputs = MapReleaseOutputs(release.SkipToolOutput)
         };
 
         return (spec, request);
@@ -225,6 +231,24 @@ internal static class PowerForgeProjectDslMapper
             outputs.Add(PowerForgeReleaseToolOutputKind.Tool);
 
         return outputs.ToArray();
+    }
+
+    private static PowerForgeReleaseToolOutputKind[] MapReleaseOutputs(ConfigurationProjectReleaseOutputType[]? values)
+    {
+        if (values is null || values.Length == 0)
+            return Array.Empty<PowerForgeReleaseToolOutputKind>();
+
+        return values
+            .Distinct()
+            .Select(value => value switch
+            {
+                ConfigurationProjectReleaseOutputType.Tool => PowerForgeReleaseToolOutputKind.Tool,
+                ConfigurationProjectReleaseOutputType.Portable => PowerForgeReleaseToolOutputKind.Portable,
+                ConfigurationProjectReleaseOutputType.Installer => PowerForgeReleaseToolOutputKind.Installer,
+                ConfigurationProjectReleaseOutputType.Store => PowerForgeReleaseToolOutputKind.Store,
+                _ => throw new InvalidOperationException($"Unsupported release output type '{value}'.")
+            })
+            .ToArray();
     }
 
     private static bool IncludesPortableOutput(IReadOnlyList<ConfigurationProjectTarget> targets, string targetName)
