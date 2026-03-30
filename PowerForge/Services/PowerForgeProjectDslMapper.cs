@@ -29,7 +29,7 @@ internal static class PowerForgeProjectDslMapper
         var bundleTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var target in targets)
         {
-            if (IncludesOutput(target, ConfigurationProjectTargetOutputType.Portable))
+            if (IncludesPortableOutput(release, target))
                 bundleTargets.Add(target.Name);
         }
 
@@ -37,7 +37,7 @@ internal static class PowerForgeProjectDslMapper
             bundleTargets.Add(installer.Target);
 
         var bundles = bundleTargets
-            .Select(targetName => CreateBundle(targetName, IncludesPortableOutput(targets, targetName)))
+            .Select(targetName => CreateBundle(targetName, IncludesPortableOutput(release, targets, targetName)))
             .ToArray();
         var dotNetTargets = targets
             .Select(target => MapTarget(target, signing, fullProjectRoot))
@@ -251,11 +251,22 @@ internal static class PowerForgeProjectDslMapper
             .ToArray();
     }
 
-    private static bool IncludesPortableOutput(IReadOnlyList<ConfigurationProjectTarget> targets, string targetName)
+    private static bool IncludesPortableOutput(
+        ConfigurationProjectRelease release,
+        IReadOnlyList<ConfigurationProjectTarget> targets,
+        string targetName)
     {
         return targets.Any(target =>
             string.Equals(target.Name, targetName, StringComparison.OrdinalIgnoreCase)
-            && IncludesOutput(target, ConfigurationProjectTargetOutputType.Portable));
+            && IncludesPortableOutput(release, target));
+    }
+
+    private static bool IncludesPortableOutput(ConfigurationProjectRelease release, ConfigurationProjectTarget target)
+    {
+        if (release.ToolOutput.Length > 0)
+            return release.ToolOutput.Contains(ConfigurationProjectReleaseOutputType.Portable);
+
+        return IncludesOutput(target, ConfigurationProjectTargetOutputType.Portable);
     }
 
     private static bool IncludesOutput(ConfigurationProjectTarget target, ConfigurationProjectTargetOutputType outputType)

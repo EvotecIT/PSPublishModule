@@ -26,6 +26,8 @@ Available cmdlets:
 - `New-ConfigurationProjectOutput`
 - `New-ConfigurationProjectInstaller`
 - `New-ConfigurationProject`
+- `Export-ConfigurationProject`
+- `Import-ConfigurationProject`
 - `Invoke-ProjectRelease`
 - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
 
@@ -36,6 +38,7 @@ Current scope:
 - path resolution relative to `ProjectRoot`
 - installer entries that map onto the existing DotNetPublish installer flow
 - release-level defaults for `PublishToolGitHub`, `SkipRestore`, `SkipBuild`, `ToolOutput`, and `SkipToolOutput`
+- JSON import/export for `ConfigurationProject`
 
 Current intentional limits:
 

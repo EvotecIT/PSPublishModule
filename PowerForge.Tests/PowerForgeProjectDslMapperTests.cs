@@ -173,4 +173,37 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Contains(PowerForgeReleaseToolOutputKind.Installer, request.ToolOutputs);
         Assert.DoesNotContain(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs);
     }
+
+    [Fact]
+    public void CreateRelease_GeneratesBundleWhenReleaseDefaultsRequestPortableOutput()
+    {
+        var project = new ConfigurationProject
+        {
+            Name = "Demo",
+            Release = new ConfigurationProjectRelease
+            {
+                ToolOutput = new[] { ConfigurationProjectReleaseOutputType.Portable }
+            },
+            Targets = new[]
+            {
+                new ConfigurationProjectTarget
+                {
+                    Name = "Cli",
+                    ProjectPath = "src/Cli/Cli.csproj",
+                    Framework = "net10.0",
+                    Runtimes = new[] { "win-x64" },
+                    OutputType = new[] { ConfigurationProjectTargetOutputType.Tool }
+                }
+            }
+        };
+
+        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+
+        Assert.NotNull(spec.Tools);
+        Assert.NotNull(spec.Tools!.DotNetPublish);
+        Assert.Single(spec.Tools.DotNetPublish.Bundles);
+        Assert.Equal("Cli", spec.Tools.DotNetPublish.Bundles[0].PrepareFromTarget);
+        Assert.Single(request.ToolOutputs);
+        Assert.Equal(PowerForgeReleaseToolOutputKind.Portable, request.ToolOutputs[0]);
+    }
 }

@@ -15,6 +15,8 @@ PowerShell-authored project release objects
   - `New-ConfigurationProjectOutput`
   - `New-ConfigurationProjectInstaller`
   - `New-ConfigurationProject`
+  - `Export-ConfigurationProject`
+  - `Import-ConfigurationProject`
   - `Invoke-ProjectRelease`
   - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
 - This stays on the same unified release engine used by `powerforge release` and `Invoke-PowerForgeRelease -ConfigPath ...`.
@@ -25,6 +27,9 @@ PowerShell-authored project release objects
   - `-SkipBuild`
   - `-ToolOutput <Tool|Portable|Installer|Store>`
   - `-SkipToolOutput <...>`
+- Project objects can now round-trip through JSON:
+  - `Export-ConfigurationProject -Project $project -OutputPath '.\Build\project.release.json'`
+  - `Import-ConfigurationProject -Path '.\Build\project.release.json'`
 - In the current first slice, tool/app targets should still declare an explicit runtime for DotNetPublish-backed plan/build flows.
 
 Example:
