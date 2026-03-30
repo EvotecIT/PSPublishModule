@@ -27,16 +27,25 @@ namespace PSPublishModule;
 /// <summary>Run tool releases only and publish tool assets to GitHub</summary>
 /// <code>Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishToolGitHub -ExitCode</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Invoke, "PowerForgeRelease", SupportsShouldProcess = true)]
+[Cmdlet(VerbsLifecycle.Invoke, "PowerForgeRelease", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetConfig)]
 [OutputType(typeof(PowerForgeReleaseResult))]
 public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 {
+    private const string ParameterSetConfig = "Config";
+    private const string ParameterSetProject = "Project";
+
     /// <summary>
     /// Path to the unified release configuration file. When omitted, the cmdlet searches current
     /// and parent directories for standard release config file names.
     /// </summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? ConfigPath { get; set; }
+
+    /// <summary>
+    /// PowerShell-authored project/release object that is translated into the unified release engine.
+    /// </summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProject)]
+    public ConfigurationProject? Project { get; set; }
 
     /// <summary>
     /// Builds the release plan without executing steps.
@@ -370,8 +379,29 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             if (scopedCount > 1)
                 throw new PSArgumentException("Use at most one of -PackagesOnly, -ModuleOnly, or -ToolsOnly.");
 
-            var configFullPath = ResolveConfigPath(ConfigPath);
-            var spec = LoadConfig(configFullPath);
+            var usingProjectObject = string.Equals(ParameterSetName, ParameterSetProject, StringComparison.Ordinal);
+            PowerForgeReleaseSpec spec;
+            PowerForgeReleaseRequest requestDefaults;
+            string configFullPath;
+
+            if (usingProjectObject)
+            {
+                if (Project is null)
+                    throw new PSArgumentException("Project is required.");
+
+                var projectRoot = ResolveProjectRoot(Project.ProjectRoot);
+                configFullPath = Path.Combine(projectRoot, ".powerforge", "release.project.ps1");
+                (spec, requestDefaults) = PowerForgeProjectDslMapper.CreateRelease(Project, configFullPath, projectRoot);
+            }
+            else
+            {
+                configFullPath = ResolveConfigPath(ConfigPath);
+                spec = LoadConfig(configFullPath);
+                requestDefaults = new PowerForgeReleaseRequest
+                {
+                    ConfigPath = configFullPath
+                };
+            }
 
             if (!Plan.IsPresent && !Validate.IsPresent &&
                 !ShouldProcess(configFullPath, "Execute unified release workflow"))
@@ -381,60 +411,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
                 return;
             }
 
-            var request = new PowerForgeReleaseRequest
-            {
-                ConfigPath = configFullPath,
-                PlanOnly = Plan.IsPresent,
-                ValidateOnly = Validate.IsPresent,
-                PackagesOnly = PackagesOnly.IsPresent,
-                ModuleOnly = ModuleOnly.IsPresent,
-                ToolsOnly = ToolsOnly.IsPresent,
-                PublishNuget = ResolveRequestedFlag(boundParameters, nameof(PublishNuget)),
-                PublishProjectGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishProjectGitHub)),
-                PublishToolGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishToolGitHub)),
-                Configuration = NormalizeNullable(Configuration),
-                ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
-                ModuleVersion = NormalizeNullable(ModuleVersion),
-                ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),
-                ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
-                ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),
-                SkipWorkspaceValidation = SkipWorkspaceValidation.IsPresent,
-                WorkspaceConfigPath = NormalizeNullable(WorkspaceConfigPath),
-                WorkspaceProfile = NormalizeNullable(WorkspaceProfile),
-                WorkspaceEnableFeatures = NormalizeStrings(WorkspaceEnableFeature),
-                WorkspaceDisableFeatures = NormalizeStrings(WorkspaceDisableFeature),
-                SkipRestore = SkipRestore.IsPresent,
-                SkipBuild = SkipBuild.IsPresent,
-                OutputRoot = NormalizeNullable(OutputRoot),
-                StageRoot = NormalizeNullable(StageRoot),
-                ManifestJsonPath = NormalizeNullable(ManifestJsonPath),
-                ChecksumsPath = NormalizeNullable(ChecksumsPath),
-                SkipReleaseChecksums = SkipReleaseChecksums.IsPresent,
-                KeepSymbols = ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)),
-                EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
-                SignProfile = NormalizeNullable(SignProfile),
-                SignToolPath = NormalizeNullable(SignToolPath),
-                SignThumbprint = NormalizeNullable(SignThumbprint),
-                SignSubjectName = NormalizeNullable(SignSubjectName),
-                SignOnMissingTool = SignOnMissingTool,
-                SignOnFailure = SignOnFailure,
-                SignTimestampUrl = NormalizeNullable(SignTimestampUrl),
-                SignDescription = NormalizeNullable(SignDescription),
-                SignUrl = NormalizeNullable(SignUrl),
-                SignCsp = NormalizeNullable(SignCsp),
-                SignKeyContainer = NormalizeNullable(SignKeyContainer),
-                PackageSignThumbprint = NormalizeNullable(PackageSignThumbprint),
-                PackageSignStore = NormalizeNullable(PackageSignStore),
-                PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
-                InstallerMsBuildProperties = ParseKeyValuePairs(InstallerProperty),
-                ToolOutputs = ParseToolOutputs(ToolOutput),
-                SkipToolOutputs = ParseToolOutputs(SkipToolOutput),
-                Targets = NormalizeStrings(Target),
-                Runtimes = NormalizeStrings(Runtimes),
-                Frameworks = NormalizeStrings(Frameworks),
-                Styles = Styles?.Distinct().ToArray() ?? Array.Empty<DotNetPublishStyle>(),
-                Flavors = ParseFlavors(Flavors)
-            };
+            var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
 
             var result = new PowerForgeReleaseService(logger).Execute(spec, request);
             WriteObject(result);
@@ -465,6 +442,14 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 
         throw new PSArgumentException(
             "ConfigPath is required when no default release config could be found. Searched: powerforge.release.json, .powerforge/release.json, Build/release.json, release.json.");
+    }
+
+    private string ResolveProjectRoot(string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path))
+            return SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
+
+        return SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory;
     }
 
     private static string? FindDefaultConfigPath(string baseDirectory)
@@ -586,6 +571,90 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 
     private static string? NormalizeNullable(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private PowerForgeReleaseRequest BuildRequest(
+        string configFullPath,
+        PowerForgeReleaseRequest defaults,
+        IDictionary<string, object>? boundParameters)
+    {
+        var request = defaults ?? new PowerForgeReleaseRequest();
+        request.ConfigPath = configFullPath;
+        request.PlanOnly = Plan.IsPresent;
+        request.ValidateOnly = Validate.IsPresent;
+        request.PackagesOnly = PackagesOnly.IsPresent;
+        request.ModuleOnly = ModuleOnly.IsPresent;
+        request.ToolsOnly = request.ToolsOnly || ToolsOnly.IsPresent;
+
+        request.PublishNuget = ChooseBool(request.PublishNuget, ResolveRequestedFlag(boundParameters, nameof(PublishNuget)));
+        request.PublishProjectGitHub = ChooseBool(request.PublishProjectGitHub, ResolveRequestedFlag(boundParameters, nameof(PublishProjectGitHub)));
+        request.PublishToolGitHub = ChooseBool(request.PublishToolGitHub, ResolveRequestedFlag(boundParameters, nameof(PublishToolGitHub)));
+        request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)));
+        request.ModuleNoSign = ChooseBool(request.ModuleNoSign, ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)));
+        request.ModuleSignModule = ChooseBool(request.ModuleSignModule, ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)));
+        request.KeepSymbols = ChooseBool(request.KeepSymbols, ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)));
+        request.EnableSigning = ChooseBool(request.EnableSigning, ResolveRequestedFlag(boundParameters, nameof(Sign)));
+
+        request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || SkipWorkspaceValidation.IsPresent;
+        request.SkipRestore = request.SkipRestore || SkipRestore.IsPresent;
+        request.SkipBuild = request.SkipBuild || SkipBuild.IsPresent;
+        request.SkipReleaseChecksums = request.SkipReleaseChecksums || SkipReleaseChecksums.IsPresent;
+
+        request.Configuration = ChooseString(request.Configuration, NormalizeNullable(Configuration));
+        request.ModuleVersion = ChooseString(request.ModuleVersion, NormalizeNullable(ModuleVersion));
+        request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, NormalizeNullable(ModulePreReleaseTag));
+        request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, NormalizeNullable(WorkspaceConfigPath));
+        request.WorkspaceProfile = ChooseString(request.WorkspaceProfile, NormalizeNullable(WorkspaceProfile));
+        request.OutputRoot = ChooseString(request.OutputRoot, NormalizeNullable(OutputRoot));
+        request.StageRoot = ChooseString(request.StageRoot, NormalizeNullable(StageRoot));
+        request.ManifestJsonPath = ChooseString(request.ManifestJsonPath, NormalizeNullable(ManifestJsonPath));
+        request.ChecksumsPath = ChooseString(request.ChecksumsPath, NormalizeNullable(ChecksumsPath));
+        request.SignProfile = ChooseString(request.SignProfile, NormalizeNullable(SignProfile));
+        request.SignToolPath = ChooseString(request.SignToolPath, NormalizeNullable(SignToolPath));
+        request.SignThumbprint = ChooseString(request.SignThumbprint, NormalizeNullable(SignThumbprint));
+        request.SignSubjectName = ChooseString(request.SignSubjectName, NormalizeNullable(SignSubjectName));
+        request.SignTimestampUrl = ChooseString(request.SignTimestampUrl, NormalizeNullable(SignTimestampUrl));
+        request.SignDescription = ChooseString(request.SignDescription, NormalizeNullable(SignDescription));
+        request.SignUrl = ChooseString(request.SignUrl, NormalizeNullable(SignUrl));
+        request.SignCsp = ChooseString(request.SignCsp, NormalizeNullable(SignCsp));
+        request.SignKeyContainer = ChooseString(request.SignKeyContainer, NormalizeNullable(SignKeyContainer));
+        request.PackageSignThumbprint = ChooseString(request.PackageSignThumbprint, NormalizeNullable(PackageSignThumbprint));
+        request.PackageSignStore = ChooseString(request.PackageSignStore, NormalizeNullable(PackageSignStore));
+        request.PackageSignTimestampUrl = ChooseString(request.PackageSignTimestampUrl, NormalizeNullable(PackageSignTimestampUrl));
+
+        if (SignOnMissingTool.HasValue)
+            request.SignOnMissingTool = SignOnMissingTool;
+        if (SignOnFailure.HasValue)
+            request.SignOnFailure = SignOnFailure;
+
+        if (boundParameters?.ContainsKey(nameof(WorkspaceEnableFeature)) == true)
+            request.WorkspaceEnableFeatures = NormalizeStrings(WorkspaceEnableFeature);
+        if (boundParameters?.ContainsKey(nameof(WorkspaceDisableFeature)) == true)
+            request.WorkspaceDisableFeatures = NormalizeStrings(WorkspaceDisableFeature);
+        if (boundParameters?.ContainsKey(nameof(Target)) == true)
+            request.Targets = NormalizeStrings(Target);
+        if (boundParameters?.ContainsKey(nameof(Runtimes)) == true)
+            request.Runtimes = NormalizeStrings(Runtimes);
+        if (boundParameters?.ContainsKey(nameof(Frameworks)) == true)
+            request.Frameworks = NormalizeStrings(Frameworks);
+        if (boundParameters?.ContainsKey(nameof(Styles)) == true)
+            request.Styles = Styles?.Distinct().ToArray() ?? Array.Empty<DotNetPublishStyle>();
+        if (boundParameters?.ContainsKey(nameof(Flavors)) == true)
+            request.Flavors = ParseFlavors(Flavors);
+        if (boundParameters?.ContainsKey(nameof(ToolOutput)) == true)
+            request.ToolOutputs = ParseToolOutputs(ToolOutput);
+        if (boundParameters?.ContainsKey(nameof(SkipToolOutput)) == true)
+            request.SkipToolOutputs = ParseToolOutputs(SkipToolOutput);
+        if (boundParameters?.ContainsKey(nameof(InstallerProperty)) == true)
+            request.InstallerMsBuildProperties = ParseKeyValuePairs(InstallerProperty);
+
+        return request;
+    }
+
+    private static string? ChooseString(string? currentValue, string? overrideValue)
+        => string.IsNullOrWhiteSpace(overrideValue) ? currentValue : overrideValue;
+
+    private static bool? ChooseBool(bool? currentValue, bool? overrideValue)
+        => overrideValue.HasValue ? overrideValue : currentValue;
 
     private static PowerForgeToolReleaseFlavor[] ParseFlavors(string[]? values)
     {

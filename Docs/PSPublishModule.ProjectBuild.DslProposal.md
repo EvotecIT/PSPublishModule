@@ -13,6 +13,34 @@ Provide a project-build authoring experience that:
 - maps to the same PowerForge release and DotNetPublish models already used by JSON config
 - reduces thin-wrapper noise such as local `Add-Flag` / `Add-Option` helpers
 
+## Current Status
+
+The first implementation slice is now in the module.
+
+Available cmdlets:
+
+- `New-ConfigurationProjectRelease`
+- `New-ConfigurationProjectTarget`
+- `New-ConfigurationProjectSigning`
+- `New-ConfigurationProjectWorkspace`
+- `New-ConfigurationProjectOutput`
+- `New-ConfigurationProjectInstaller`
+- `New-ConfigurationProject`
+- `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
+
+Current scope:
+
+- tool/app release flows backed by the unified PowerForge release engine
+- PowerShell-authored object composition instead of raw CLI argument shaping
+- path resolution relative to `ProjectRoot`
+- installer entries that map onto the existing DotNetPublish installer flow
+
+Current intentional limits:
+
+- this first slice does not add a new standalone `Invoke-ProjectBuild` cmdlet yet
+- workspace validation still needs an explicit config path when the repo wants that lane
+- tool/app targets should currently declare an explicit runtime
+
 ## Non-Goals
 
 - no bare-keyword DSL like `Tool {}` / `Signing {}`
@@ -66,7 +94,8 @@ The smallest useful command set is:
 - `New-ConfigurationProjectRelease`
 - `New-ConfigurationProjectTarget`
 - `New-ConfigurationProjectSigning`
-- `Invoke-ProjectBuild`
+- `New-ConfigurationProject`
+- `Invoke-PowerForgeRelease -Project`
 
 Example:
 
@@ -74,8 +103,7 @@ Example:
 Import-Module PSPublishModule -Force
 
 $release = New-ConfigurationProjectRelease `
-    -Configuration Release `
-    -WorkspaceProfile oss
+    -Configuration Release
 
 $target = New-ConfigurationProjectTarget `
     -Name 'ChatApp' `
@@ -90,7 +118,13 @@ $signing = New-ConfigurationProjectSigning `
     -TimestampUrl 'http://timestamp.digicert.com' `
     -Description 'IntelligenceX Chat'
 
-Invoke-ProjectBuild -ProjectName 'IntelligenceX' -Release $release -Target $target -Signing $signing
+$project = New-ConfigurationProject `
+    -Name 'IntelligenceX' `
+    -Release $release `
+    -Target $target `
+    -Signing $signing
+
+Invoke-PowerForgeRelease -Project $project -Plan
 ```
 
 This is intentionally plain PowerShell:
@@ -110,19 +144,17 @@ The more practical version adds a small number of composition cmdlets:
 - `New-ConfigurationProjectWorkspace`
 - `New-ConfigurationProjectOutput`
 - `New-ConfigurationProjectInstaller`
-- `Invoke-ProjectBuild`
+- `Invoke-PowerForgeRelease -Project`
 
 Example:
 
 ```powershell
 $workspace = New-ConfigurationProjectWorkspace `
     -Profile oss `
-    -SkipTests:$false `
-    -SkipHarness:$false
+    -ConfigPath '.\Build\workspace.validation.json'
 
 $output = New-ConfigurationProjectOutput `
-    -StageRoot '.\Artifacts\Release' `
-    -IncludeChecksums
+    -StageRoot '.\Artifacts\Release'
 
 $target = New-ConfigurationProjectTarget `
     -Name 'ChatApp' `
@@ -144,7 +176,7 @@ $project = New-ConfigurationProject `
     -Target $target `
     -Signing $signing
 
-Invoke-ProjectBuild -Project $project
+Invoke-PowerForgeRelease -Project $project -Plan
 ```
 
 This is likely the best balance between:
@@ -158,9 +190,12 @@ This is likely the best balance between:
 
 ### `New-ConfigurationProjectRelease`
 
-Owns run-level choices such as:
+Current first-slice responsibility:
 
 - `Configuration`
+
+Future expansion could add run-level choices such as:
+
 - `PackagesOnly`
 - `ToolsOnly`
 - `WorkspaceProfile`
@@ -178,8 +213,9 @@ Owns per-target build intent such as:
 - `Framework`
 - `Style`
 - `OutputType`
-- `IncludeSymbols`
-- `InstallerProperty`
+- `KeepSymbols`
+- `KeepDocs`
+- `ReadyToRun`
 
 ### `New-ConfigurationProjectSigning`
 
@@ -202,11 +238,11 @@ Owns repo preflight and workspace validation intent:
 
 - `Profile`
 - `SkipValidation`
-- `SkipTests`
-- `SkipHarness`
 - `EnableFeature`
 - `DisableFeature`
-- `TestimoXRoot` or a future generic external-root concept
+- `ConfigPath`
+
+Future expansion could add broader preflight choices when there is a reusable engine contract for them.
 
 ### `New-ConfigurationProjectOutput`
 
@@ -214,11 +250,11 @@ Owns staged outputs and layout:
 
 - `OutputRoot`
 - `StageRoot`
-- `ManifestPath`
+- `ManifestJsonPath`
 - `ChecksumsPath`
-- `IncludeChecksums`
+- `NoChecksums`
 
-### `Invoke-ProjectBuild`
+### `Invoke-PowerForgeRelease -Project`
 
 Consumes the typed objects and translates them into the engine request model.
 
@@ -267,7 +303,7 @@ This keeps the authoring model declarative without feeling alien.
 
 ## Migration Strategy
 
-1. Introduce the minimal typed objects and `Invoke-ProjectBuild -Project`.
+1. Introduce the minimal typed objects and `Invoke-PowerForgeRelease -Project`.
 2. Make them translate to the existing PowerForge release engine.
 3. Keep JSON fully supported.
 4. Migrate one real repo wrapper from manual CLI arg assembly to the new object model.
@@ -282,6 +318,6 @@ Start with:
 - `New-ConfigurationProjectSigning`
 - `New-ConfigurationProjectWorkspace`
 - `New-ConfigurationProject`
-- `Invoke-ProjectBuild -Project`
+- `Invoke-PowerForgeRelease -Project`
 
 That is enough to make project builds feel more like `Invoke-ModuleBuild` without over-designing the surface too early.

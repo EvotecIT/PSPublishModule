@@ -6,6 +6,47 @@ see `Build/release.json` and `powerforge release`.
 For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
 see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
 
+PowerShell-authored project release objects
+- A first PowerShell-first slice is now available through:
+  - `New-ConfigurationProjectRelease`
+  - `New-ConfigurationProjectTarget`
+  - `New-ConfigurationProjectSigning`
+  - `New-ConfigurationProjectWorkspace`
+  - `New-ConfigurationProjectOutput`
+  - `New-ConfigurationProjectInstaller`
+  - `New-ConfigurationProject`
+  - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
+- This stays on the same unified release engine used by `powerforge release` and `Invoke-PowerForgeRelease -ConfigPath ...`.
+- Relative target and installer paths are resolved from `ConfigurationProject.ProjectRoot` when provided.
+- In the current first slice, tool/app targets should still declare an explicit runtime for DotNetPublish-backed plan/build flows.
+
+Example:
+
+```powershell
+Import-Module PSPublishModule -Force
+
+$release = New-ConfigurationProjectRelease -Configuration Release
+$signing = New-ConfigurationProjectSigning -Mode OnDemand
+$output = New-ConfigurationProjectOutput -StageRoot '.\Artifacts\DslSmoke'
+$target = New-ConfigurationProjectTarget `
+    -Name 'PowerForgeCli' `
+    -ProjectPath '.\PowerForge.Cli\PowerForge.Cli.csproj' `
+    -Runtime 'win-x64' `
+    -Framework 'net10.0' `
+    -Style PortableCompat `
+    -OutputType Tool, Portable
+
+$project = New-ConfigurationProject `
+    -Name 'PSPublishModule' `
+    -ProjectRoot (Get-Location).Path `
+    -Release $release `
+    -Signing $signing `
+    -Output $output `
+    -Target $target
+
+Invoke-PowerForgeRelease -Project $project -Plan
+```
+
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
 see `Docs/PSPublishModule.ModuleDocumentation.md`.
 
