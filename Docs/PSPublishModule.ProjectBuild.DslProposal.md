@@ -26,6 +26,7 @@ Available cmdlets:
 - `New-ConfigurationProjectOutput`
 - `New-ConfigurationProjectInstaller`
 - `New-ConfigurationProject`
+- `Invoke-ProjectRelease`
 - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
 
 Current scope:
@@ -96,6 +97,7 @@ The smallest useful command set is:
 - `New-ConfigurationProjectTarget`
 - `New-ConfigurationProjectSigning`
 - `New-ConfigurationProject`
+- `Invoke-ProjectRelease`
 - `Invoke-PowerForgeRelease -Project`
 
 Example:
@@ -127,7 +129,7 @@ $project = New-ConfigurationProject `
     -Target $target `
     -Signing $signing
 
-Invoke-PowerForgeRelease -Project $project -Plan
+Invoke-ProjectRelease -Project $project -Plan
 ```
 
 This is intentionally plain PowerShell:
@@ -147,6 +149,7 @@ The more practical version adds a small number of composition cmdlets:
 - `New-ConfigurationProjectWorkspace`
 - `New-ConfigurationProjectOutput`
 - `New-ConfigurationProjectInstaller`
+- `Invoke-ProjectRelease`
 - `Invoke-PowerForgeRelease -Project`
 
 Example:
@@ -179,7 +182,7 @@ $project = New-ConfigurationProject `
     -Target $target `
     -Signing $signing
 
-Invoke-PowerForgeRelease -Project $project -Plan
+Invoke-ProjectRelease -Project $project -Plan
 ```
 
 This is likely the best balance between:
@@ -277,6 +280,16 @@ It should not:
 
 - become another custom orchestration language
 - reimplement PowerForge planning logic in PowerShell
+
+### `Invoke-ProjectRelease`
+
+This is the friendlier top-level wrapper for the same object model.
+
+It should:
+
+- feel closer to `Invoke-ModuleBuild`
+- keep project-object authoring front and center
+- stay thin over the same PowerForge release engine
 
 ## Mapping to Existing Engine
 

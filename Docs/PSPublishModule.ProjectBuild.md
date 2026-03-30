@@ -15,6 +15,7 @@ PowerShell-authored project release objects
   - `New-ConfigurationProjectOutput`
   - `New-ConfigurationProjectInstaller`
   - `New-ConfigurationProject`
+  - `Invoke-ProjectRelease`
   - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
 - This stays on the same unified release engine used by `powerforge release` and `Invoke-PowerForgeRelease -ConfigPath ...`.
 - Relative target and installer paths are resolved from `ConfigurationProject.ProjectRoot` when provided.
@@ -50,7 +51,7 @@ $project = New-ConfigurationProject `
     -Output $output `
     -Target $target
 
-Invoke-PowerForgeRelease -Project $project -Plan
+Invoke-ProjectRelease -Project $project -Plan
 ```
 
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
