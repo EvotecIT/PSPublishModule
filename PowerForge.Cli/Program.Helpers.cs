@@ -18,6 +18,12 @@ internal static partial class Program
       powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]
       powerforge dotnet bundle-postprocess [--config <DotNetPublish.json>] --bundle <Id> --bundle-root <path> [--project-root <path>] [--target <Name>] [--rid <Rid>] [--framework <tfm>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--configuration <Release|Debug>] [--zip-path <path>] [--source-output <path>] [--delete-pattern <glob>] [--skip-archive] [--skip-metadata] [--token <name=value>] [--plan] [--output json]
       powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]
+      powerforge project release [--config <project.release.json>] [--plan] [--validate] [--publish-tool-github] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>]
+                               [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--checksums-path <path>]
+                               [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>]
+                               [--sign-on-failure <Warn|Fail|Skip>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--installer-property <Name=Value>]
+                               [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--output json]
+      powerforge project scaffold [--project-root <path>] [--project <App.csproj>] [--name <Name>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--configuration <Release|Debug>] [--out <project.release.json>] [--portable] [--overwrite] [--output json]
       powerforge plugin export [--config <powerforge.plugins.json>] [--project-root <path>] [--group <Name[,Name...]>] [--framework <tfm>] [--configuration <Release|Debug>] [--output-root <path>] [--keep-symbols] [--plan] [--output json]
       powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--tools-only] [--configuration <Release|Debug>] [--skip-workspace-validation]
                         [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>]
@@ -68,6 +74,7 @@ internal static partial class Program
       Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json
       in the current directory and parent directories.
       DotNet publish searches for powerforge.dotnetpublish.json / .powerforge/dotnetpublish.json.
+      Project release searches for project.release.json / .powerforge/project.release.json / Build/project.release.json.
       Plugin export searches for powerforge.plugins.json / .powerforge/plugins.json / Build/plugins.json.
       Release searches for powerforge.release.json / .powerforge/release.json / Build/release.json.
       Store submission searches for powerforge.store.submit.json / .powerforge/store.submit.json / Build/store.submit.json.

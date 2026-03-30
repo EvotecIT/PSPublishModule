@@ -74,80 +74,7 @@ internal static partial class Program
             var spec = loaded.Value;
             var fullConfigPath = loaded.FullPath;
 
-            var flavors = ParseCsvOptionValues(argv, "--flavor")
-                .Select(ParsePowerForgeToolReleaseFlavor)
-                .Distinct()
-                .ToArray();
-            var toolOutputs = ParseCsvOptionValues(argv, "--tool-output")
-                .Select(ParsePowerForgeReleaseToolOutputKind)
-                .Distinct()
-                .ToArray();
-            var skipToolOutputs = ParseCsvOptionValues(argv, "--skip-tool-output")
-                .Select(ParsePowerForgeReleaseToolOutputKind)
-                .Distinct()
-                .ToArray();
-            var styles = ParseCsvOptionValues(argv, "--style")
-                .Select(ParseDotNetPublishStyle)
-                .Distinct()
-                .ToArray();
-
-            var request = new PowerForgeReleaseRequest
-            {
-                ConfigPath = fullConfigPath,
-                PlanOnly = planOnly,
-                ValidateOnly = validateOnly,
-                PackagesOnly = packagesOnly,
-                ModuleOnly = moduleOnly,
-                ToolsOnly = toolsOnly,
-                Configuration = TryGetOptionValue(argv, "--configuration"),
-                SkipWorkspaceValidation = argv.Any(a => a.Equals("--skip-workspace-validation", StringComparison.OrdinalIgnoreCase)),
-                WorkspaceConfigPath = TryGetOptionValue(argv, "--workspace-config"),
-                WorkspaceProfile = TryGetOptionValue(argv, "--workspace-profile"),
-                WorkspaceTestimoXRoot = TryGetOptionValue(argv, "--workspace-testimox-root"),
-                WorkspaceEnableFeatures = ParseCsvOptionValues(argv, "--workspace-enable-feature"),
-                WorkspaceDisableFeatures = ParseCsvOptionValues(argv, "--workspace-disable-feature"),
-                SkipRestore = argv.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase)),
-                SkipBuild = argv.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase)),
-                OutputRoot = TryGetOptionValue(argv, "--output-root"),
-                StageRoot = TryGetOptionValue(argv, "--stage-root"),
-                PublishNuget = argv.Any(a => a.Equals("--publish-nuget", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                PublishProjectGitHub = argv.Any(a => a.Equals("--publish-project-github", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                PublishToolGitHub = argv.Any(a => a.Equals("--publish-tool-github", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                ModuleNoDotnetBuild = argv.Any(a => a.Equals("--module-no-dotnet-build", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                ModuleVersion = TryGetOptionValue(argv, "--module-version"),
-                ModulePreReleaseTag = TryGetOptionValue(argv, "--module-prerelease-tag"),
-                ModuleNoSign = argv.Any(a => a.Equals("--module-no-sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                ModuleSignModule = argv.Any(a => a.Equals("--module-sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                ManifestJsonPath = TryGetOptionValue(argv, "--manifest-json"),
-                ChecksumsPath = TryGetOptionValue(argv, "--checksums-path"),
-                SkipReleaseChecksums = argv.Any(a => a.Equals("--skip-release-checksums", StringComparison.OrdinalIgnoreCase)),
-                KeepSymbols = argv.Any(a => a.Equals("--keep-symbols", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                EnableSigning = argv.Any(a => a.Equals("--sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
-                SignProfile = TryGetOptionValue(argv, "--sign-profile"),
-                SignToolPath = TryGetOptionValue(argv, "--sign-tool-path"),
-                SignThumbprint = TryGetOptionValue(argv, "--sign-thumbprint"),
-                SignSubjectName = TryGetOptionValue(argv, "--sign-subject-name"),
-                SignOnMissingTool = TryParseDotNetPublishPolicyMode(TryGetOptionValue(argv, "--sign-on-missing-tool")),
-                SignOnFailure = TryParseDotNetPublishPolicyMode(TryGetOptionValue(argv, "--sign-on-failure")),
-                SignTimestampUrl = TryGetOptionValue(argv, "--sign-timestamp-url"),
-                SignDescription = TryGetOptionValue(argv, "--sign-description"),
-                SignUrl = TryGetOptionValue(argv, "--sign-url"),
-                SignCsp = TryGetOptionValue(argv, "--sign-csp"),
-                SignKeyContainer = TryGetOptionValue(argv, "--sign-key-container"),
-                PackageSignThumbprint = TryGetOptionValue(argv, "--package-sign-thumbprint"),
-                PackageSignStore = TryGetOptionValue(argv, "--package-sign-store"),
-                PackageSignTimestampUrl = TryGetOptionValue(argv, "--package-sign-timestamp-url"),
-                InstallerMsBuildProperties = ParseKeyValueOptions(argv, "--installer-property")
-                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && kv.Value is not null)
-                    .ToDictionary(kv => kv.Key, kv => kv.Value!, StringComparer.OrdinalIgnoreCase),
-                ToolOutputs = toolOutputs,
-                SkipToolOutputs = skipToolOutputs,
-                Targets = ParseCsvOptionValues(argv, "--target"),
-                Runtimes = ParseCsvOptionValues(argv, "--rid", "--runtime"),
-                Frameworks = ParseCsvOptionValues(argv, "--framework"),
-                Styles = styles,
-                Flavors = flavors
-            };
+            var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
 
             var service = new PowerForgeReleaseService(cmdLogger);
             var result = RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
@@ -310,6 +237,91 @@ internal static partial class Program
 
         logger.Error(message);
         return exitCode;
+    }
+
+    private static PowerForgeReleaseRequest BuildReleaseRequestFromArgs(
+        string[] argv,
+        string fullConfigPath,
+        bool planOnly,
+        bool validateOnly,
+        bool packagesOnly,
+        bool moduleOnly,
+        bool toolsOnly)
+    {
+        var flavors = ParseCsvOptionValues(argv, "--flavor")
+            .Select(ParsePowerForgeToolReleaseFlavor)
+            .Distinct()
+            .ToArray();
+        var toolOutputs = ParseCsvOptionValues(argv, "--tool-output")
+            .Select(ParsePowerForgeReleaseToolOutputKind)
+            .Distinct()
+            .ToArray();
+        var skipToolOutputs = ParseCsvOptionValues(argv, "--skip-tool-output")
+            .Select(ParsePowerForgeReleaseToolOutputKind)
+            .Distinct()
+            .ToArray();
+        var styles = ParseCsvOptionValues(argv, "--style")
+            .Select(ParseDotNetPublishStyle)
+            .Distinct()
+            .ToArray();
+
+        return new PowerForgeReleaseRequest
+        {
+            ConfigPath = fullConfigPath,
+            PlanOnly = planOnly,
+            ValidateOnly = validateOnly,
+            PackagesOnly = packagesOnly,
+            ModuleOnly = moduleOnly,
+            ToolsOnly = toolsOnly,
+            Configuration = TryGetOptionValue(argv, "--configuration"),
+            SkipWorkspaceValidation = argv.Any(a => a.Equals("--skip-workspace-validation", StringComparison.OrdinalIgnoreCase)),
+            WorkspaceConfigPath = TryGetOptionValue(argv, "--workspace-config"),
+            WorkspaceProfile = TryGetOptionValue(argv, "--workspace-profile"),
+            WorkspaceTestimoXRoot = TryGetOptionValue(argv, "--workspace-testimox-root"),
+            WorkspaceEnableFeatures = ParseCsvOptionValues(argv, "--workspace-enable-feature"),
+            WorkspaceDisableFeatures = ParseCsvOptionValues(argv, "--workspace-disable-feature"),
+            SkipRestore = argv.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase)),
+            SkipBuild = argv.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase)),
+            OutputRoot = TryGetOptionValue(argv, "--output-root"),
+            StageRoot = TryGetOptionValue(argv, "--stage-root"),
+            PublishNuget = argv.Any(a => a.Equals("--publish-nuget", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            PublishProjectGitHub = argv.Any(a => a.Equals("--publish-project-github", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            PublishToolGitHub = argv.Any(a => a.Equals("--publish-tool-github", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            ModuleNoDotnetBuild = argv.Any(a => a.Equals("--module-no-dotnet-build", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            ModuleVersion = TryGetOptionValue(argv, "--module-version"),
+            ModulePreReleaseTag = TryGetOptionValue(argv, "--module-prerelease-tag"),
+            ModuleNoSign = argv.Any(a => a.Equals("--module-no-sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            ModuleSignModule = argv.Any(a => a.Equals("--module-sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            ManifestJsonPath = TryGetOptionValue(argv, "--manifest-json"),
+            ChecksumsPath = TryGetOptionValue(argv, "--checksums-path"),
+            SkipReleaseChecksums = argv.Any(a => a.Equals("--skip-release-checksums", StringComparison.OrdinalIgnoreCase)),
+            KeepSymbols = argv.Any(a => a.Equals("--keep-symbols", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            EnableSigning = argv.Any(a => a.Equals("--sign", StringComparison.OrdinalIgnoreCase)) ? true : null,
+            SignProfile = TryGetOptionValue(argv, "--sign-profile"),
+            SignToolPath = TryGetOptionValue(argv, "--sign-tool-path"),
+            SignThumbprint = TryGetOptionValue(argv, "--sign-thumbprint"),
+            SignSubjectName = TryGetOptionValue(argv, "--sign-subject-name"),
+            SignOnMissingTool = TryParseDotNetPublishPolicyMode(TryGetOptionValue(argv, "--sign-on-missing-tool")),
+            SignOnFailure = TryParseDotNetPublishPolicyMode(TryGetOptionValue(argv, "--sign-on-failure")),
+            SignTimestampUrl = TryGetOptionValue(argv, "--sign-timestamp-url"),
+            SignDescription = TryGetOptionValue(argv, "--sign-description"),
+            SignUrl = TryGetOptionValue(argv, "--sign-url"),
+            SignCsp = TryGetOptionValue(argv, "--sign-csp"),
+            SignKeyContainer = TryGetOptionValue(argv, "--sign-key-container"),
+            PackageSignThumbprint = TryGetOptionValue(argv, "--package-sign-thumbprint"),
+            PackageSignStore = TryGetOptionValue(argv, "--package-sign-store"),
+            PackageSignTimestampUrl = TryGetOptionValue(argv, "--package-sign-timestamp-url"),
+            InstallerMsBuildProperties = ParseKeyValueOptions(argv, "--installer-property")
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && kv.Value is not null)
+                .ToDictionary(kv => kv.Key, kv => kv.Value!, StringComparer.OrdinalIgnoreCase),
+            ToolOutputs = toolOutputs,
+            SkipToolOutputs = skipToolOutputs,
+            Targets = ParseCsvOptionValues(argv, "--target"),
+            Runtimes = ParseCsvOptionValues(argv, "--rid", "--runtime"),
+            Frameworks = ParseCsvOptionValues(argv, "--framework"),
+            Styles = styles,
+            Flavors = flavors
+        };
     }
 
     private static PowerForgeToolReleaseFlavor ParsePowerForgeToolReleaseFlavor(string? value)

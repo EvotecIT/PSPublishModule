@@ -55,6 +55,8 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(PowerForgeReleaseSpec))]
 [JsonSerializable(typeof(PowerForgeReleaseResult))]
 [JsonSerializable(typeof(PowerForgeReleaseRequest))]
+[JsonSerializable(typeof(ConfigurationProject))]
+[JsonSerializable(typeof(PowerForgeProjectConfigurationScaffoldResult))]
 [JsonSerializable(typeof(PowerForgePluginCatalogSpec))]
 [JsonSerializable(typeof(PowerForgePluginFolderExportPlan))]
 [JsonSerializable(typeof(PowerForgePluginFolderExportResult))]
