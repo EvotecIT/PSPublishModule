@@ -155,6 +155,9 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Optional MSI version policy used by build steps.</summary>
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }
 
+    /// <summary>Optional installer-specific MSBuild properties passed to <c>msi.build</c>.</summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+
     /// <summary>Optional MSI signing options used by sign steps.</summary>
     public DotNetPublishSignOptions? Sign { get; set; }
 

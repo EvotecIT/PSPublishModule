@@ -67,6 +67,9 @@ internal static partial class Program
             return CommandPack(filteredArgs, cli, logger);
         case "dotnet":
             return CommandDotNet(filteredArgs, cli, logger);
+        case "plugin":
+        case "plugins":
+            return CommandPlugin(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
         case "store":

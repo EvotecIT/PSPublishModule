@@ -346,6 +346,95 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PlanOnly_InstallerPropertyOverridesFlowIntoDotNetInstallerPlan()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var projectPath = Path.Combine(root, "App.csproj");
+            File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+            var installerPath = Path.Combine(root, "Installer", "Package.wixproj");
+            Directory.CreateDirectory(Path.GetDirectoryName(installerPath)!);
+            File.WriteAllText(installerPath, "<Project />", new UTF8Encoding(false));
+
+            var service = new PowerForgeReleaseService(new NullLogger());
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            DotNet = new DotNetPublishDotNetOptions
+                            {
+                                ProjectRoot = ".",
+                                Configuration = "Release"
+                            },
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "App",
+                                    ProjectPath = "App.csproj",
+                                    Publish = new DotNetPublishPublishOptions
+                                    {
+                                        Framework = "net10.0-windows",
+                                        Runtimes = new[] { "win-x64" },
+                                        Style = DotNetPublishStyle.PortableCompat
+                                    }
+                                }
+                            },
+                            Installers = new[]
+                            {
+                                new DotNetPublishInstaller
+                                {
+                                    Id = "app.msi",
+                                    PrepareFromTarget = "App",
+                                    InstallerProjectPath = "Installer/Package.wixproj",
+                                    Versioning = new DotNetPublishMsiVersionOptions
+                                    {
+                                        Enabled = true,
+                                        Major = 1,
+                                        Minor = 0,
+                                        FloorDateUtc = "2026-01-01"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true,
+                    ToolsOnly = true,
+                    InstallerMsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["ProductName"] = "Custom Chat",
+                        ["ProductVersion"] = "9.8.7"
+                    }
+                });
+
+            Assert.True(result.Success);
+            var installer = Assert.Single(result.DotNetToolPlan!.Installers);
+            Assert.NotNull(installer.MsBuildProperties);
+            Assert.Equal("Custom Chat", installer.MsBuildProperties!["ProductName"]);
+            Assert.Equal("9.8.7", installer.MsBuildProperties["ProductVersion"]);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_WorkspaceValidation_RunsBeforePackages()
     {
         var root = CreateSandbox();

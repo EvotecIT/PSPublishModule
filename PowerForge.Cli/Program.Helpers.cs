@@ -16,7 +16,9 @@ internal static partial class Program
       powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
       powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]
       powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]
+      powerforge dotnet bundle-postprocess [--config <DotNetPublish.json>] --bundle <Id> --bundle-root <path> [--project-root <path>] [--target <Name>] [--rid <Rid>] [--framework <tfm>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--configuration <Release|Debug>] [--zip-path <path>] [--source-output <path>] [--delete-pattern <glob>] [--skip-archive] [--skip-metadata] [--token <name=value>] [--plan] [--output json]
       powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]
+      powerforge plugin export [--config <powerforge.plugins.json>] [--project-root <path>] [--group <Name[,Name...]>] [--framework <tfm>] [--configuration <Release|Debug>] [--output-root <path>] [--keep-symbols] [--plan] [--output json]
       powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--tools-only] [--configuration <Release|Debug>] [--skip-workspace-validation]
                         [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>]
                         [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--skip-restore] [--skip-build] [--output-root <path>] [--manifest-json <path>] [--checksums-path <path>] [--keep-symbols] [--sign]
@@ -66,6 +68,7 @@ internal static partial class Program
       Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json
       in the current directory and parent directories.
       DotNet publish searches for powerforge.dotnetpublish.json / .powerforge/dotnetpublish.json.
+      Plugin export searches for powerforge.plugins.json / .powerforge/plugins.json / Build/plugins.json.
       Release searches for powerforge.release.json / .powerforge/release.json / Build/release.json.
       Store submission searches for powerforge.store.submit.json / .powerforge/store.submit.json / Build/store.submit.json.
       Run profiles search for run.profiles.json / .powerforge/run.profiles.json / Build/run.profiles.json.

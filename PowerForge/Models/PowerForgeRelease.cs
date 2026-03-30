@@ -116,6 +116,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? PackageSignTimestampUrl { get; set; }
 
+    public Dictionary<string, string> InstallerMsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string[] Targets { get; set; } = Array.Empty<string>();
 
     public string[] Runtimes { get; set; } = Array.Empty<string>();

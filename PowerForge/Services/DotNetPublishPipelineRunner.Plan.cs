@@ -700,6 +700,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestDirectoryRefId = i.HarvestDirectoryRefId,
                 HarvestComponentGroupId = i.HarvestComponentGroupId,
                 Versioning = CloneMsiVersionOptions(i.Versioning),
+                MsBuildProperties = CloneDictionary(i.MsBuildProperties),
                 SignProfile = i.SignProfile,
                 Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(i.Sign),
                 SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(i.SignOverrides),
@@ -839,6 +840,14 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyName = versioning.PropertyName,
             PatchCap = versioning.PatchCap
         };
+    }
+
+    private static Dictionary<string, string>? CloneDictionary(Dictionary<string, string>? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        return new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
     }
 
     private static DotNetPublishMsiClientLicenseOptions? CloneMsiClientLicenseOptions(DotNetPublishMsiClientLicenseOptions? options)
@@ -1287,6 +1296,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestDirectoryRefId = installer.HarvestDirectoryRefId,
                 HarvestComponentGroupId = installer.HarvestComponentGroupId,
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
+                MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
                 Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
                     signingProfiles,
                     installer.SignProfile,
@@ -2076,7 +2086,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
-    private static bool WildcardMatch(string value, string pattern)
+    internal static bool WildcardMatch(string value, string pattern)
     {
         var pat = "^" + Regex.Escape(pattern)
             .Replace(@"\*", ".*")

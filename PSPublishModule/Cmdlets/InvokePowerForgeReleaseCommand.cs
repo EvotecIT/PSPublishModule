@@ -343,6 +343,12 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? PackageSignTimestampUrl { get; set; }
 
     /// <summary>
+    /// Optional installer MSBuild property overrides in <c>Name=Value</c> form.
+    /// </summary>
+    [Parameter]
+    public string[]? InstallerProperty { get; set; }
+
+    /// <summary>
     /// Sets host exit code: 0 on success, 1 on failure.
     /// </summary>
     [Parameter]
@@ -420,6 +426,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
                 PackageSignThumbprint = NormalizeNullable(PackageSignThumbprint),
                 PackageSignStore = NormalizeNullable(PackageSignStore),
                 PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
+                InstallerMsBuildProperties = ParseKeyValuePairs(InstallerProperty),
                 ToolOutputs = ParseToolOutputs(ToolOutput),
                 SkipToolOutputs = ParseToolOutputs(SkipToolOutput),
                 Targets = NormalizeStrings(Target),
@@ -552,6 +559,29 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static Dictionary<string, string> ParseKeyValuePairs(string[]? values)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rawValue in values ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+                continue;
+
+            var separatorIndex = rawValue.IndexOf('=');
+            if (separatorIndex <= 0 || separatorIndex == rawValue.Length - 1)
+                throw new PSArgumentException($"InstallerProperty entries must use Name=Value form. Invalid value: '{rawValue}'.");
+
+            var key = rawValue.Substring(0, separatorIndex).Trim();
+            var value = rawValue.Substring(separatorIndex + 1).Trim();
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                throw new PSArgumentException($"InstallerProperty entries must use Name=Value form. Invalid value: '{rawValue}'.");
+
+            result[key] = value;
+        }
+
+        return result;
     }
 
     private static string? NormalizeNullable(string? value)

@@ -986,6 +986,16 @@ internal sealed class PowerForgeReleaseService
             }
         }
 
+        if (request.InstallerMsBuildProperties.Count > 0)
+        {
+            foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+            {
+                installer.MsBuildProperties ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in request.InstallerMsBuildProperties)
+                    installer.MsBuildProperties[entry.Key] = entry.Value;
+            }
+        }
+
         if (HasSigningOverrides(request))
         {
             foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())

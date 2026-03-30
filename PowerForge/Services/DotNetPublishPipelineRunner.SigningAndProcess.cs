@@ -140,7 +140,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool IsWindows()
+    internal static bool IsWindows()
     {
 #if NET472
         return true;
@@ -238,7 +238,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static string ApplyTemplate(string template, IReadOnlyDictionary<string, string> tokens)
+    internal static string ApplyTemplate(string template, IReadOnlyDictionary<string, string> tokens)
     {
         var t = template ?? string.Empty;
         foreach (var kv in tokens)

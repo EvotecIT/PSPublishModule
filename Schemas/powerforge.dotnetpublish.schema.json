@@ -357,6 +357,10 @@
         "HarvestDirectoryRefId": { "type": ["string", "null"] },
         "HarvestComponentGroupId": { "type": ["string", "null"] },
         "Versioning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiVersionOptions" }, { "type": "null" }] },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
         "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
         "SignProfile": { "type": ["string", "null"] },
         "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },

@@ -212,6 +212,33 @@ internal static partial class Program
         return null;
     }
 
+    static string? FindDefaultPluginCatalogConfig(string baseDir)
+    {
+        var candidates = new[]
+        {
+            "powerforge.plugins.json",
+            Path.Combine(".powerforge", "plugins.json"),
+            Path.Combine("Build", "plugins.json"),
+            "plugins.json"
+        };
+
+        foreach (var dir in EnumerateSelfAndParents(baseDir))
+        {
+            foreach (var rel in candidates)
+            {
+                try
+                {
+                    var full = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(full)) return full;
+                }
+                catch (IOException) { /* ignore */ }
+                catch (UnauthorizedAccessException) { /* ignore */ }
+            }
+        }
+
+        return null;
+    }
+
     static string? FindDefaultRunProfilesConfig(string baseDir)
     {
         var candidates = new[]
@@ -383,6 +410,14 @@ internal static partial class Program
         var full = ResolveExistingFilePath(path);
         var json = File.ReadAllText(full);
         var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.PowerForgeReleaseSpec, full);
+        return (spec, full);
+    }
+
+    static (PowerForgePluginCatalogSpec Value, string FullPath) LoadPowerForgePluginCatalogSpecWithPath(string path)
+    {
+        var full = ResolveExistingFilePath(path);
+        var json = File.ReadAllText(full);
+        var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.PowerForgePluginCatalogSpec, full);
         return (spec, full);
     }
 

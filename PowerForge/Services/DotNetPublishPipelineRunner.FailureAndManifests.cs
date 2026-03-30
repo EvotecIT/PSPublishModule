@@ -122,7 +122,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(kv => $"/p:{kv.Key}={kv.Value}");
     }
 
-    private static string ResolvePath(string baseDir, string path)
+    internal static string ResolvePath(string baseDir, string path)
     {
         var p = (path ?? string.Empty).Trim();
         if (!IsWindows())
@@ -132,7 +132,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return Path.GetFullPath(Path.Combine(baseDir, p));
     }
 
-    private static void EnsurePathWithinRoot(string rootPath, string path, string label)
+    internal static void EnsurePathWithinRoot(string rootPath, string path, string label)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new InvalidOperationException("ProjectRoot is required for path safety checks.");
@@ -317,7 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return relative.Replace('\\', '/');
     }
 
-    private static string GetRelativePath(string relativeTo, string path)
+    internal static string GetRelativePath(string relativeTo, string path)
     {
 #if NET472
         var basePath = Path.GetFullPath(relativeTo)

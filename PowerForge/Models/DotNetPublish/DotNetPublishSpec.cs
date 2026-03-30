@@ -200,6 +200,12 @@ public sealed class DotNetPublishInstaller
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }
 
     /// <summary>
+    /// Optional installer-specific MSBuild properties passed to <c>msi.build</c> as <c>/p:Name=Value</c>.
+    /// Values here override matching entries from <see cref="DotNetPublishDotNetOptions.MsBuildProperties"/>.
+    /// </summary>
+    public Dictionary<string, string>? MsBuildProperties { get; set; }
+
+    /// <summary>
     /// Optional named signing profile reference used when <see cref="Sign"/> is not set.
     /// </summary>
     public string? SignProfile { get; set; }
