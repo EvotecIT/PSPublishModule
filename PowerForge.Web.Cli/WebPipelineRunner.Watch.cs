@@ -431,42 +431,31 @@ internal static partial class WebPipelineRunner
     {
         ArgumentNullException.ThrowIfNull(ex);
 
-        var firstMessage = GetFirstNonBlankExceptionMessage(ex, out var messageException);
-        if (!string.IsNullOrWhiteSpace(firstMessage))
-        {
-            if (ReferenceEquals(messageException, ex))
-                return firstMessage;
-
-            var outerType = ex.GetType().Name;
-            var messageType = messageException?.GetType().Name;
-            return string.IsNullOrWhiteSpace(messageType) || string.Equals(messageType, outerType, StringComparison.Ordinal)
-                ? $"{outerType}: {firstMessage}"
-                : $"{outerType} -> {messageType}: {firstMessage}";
-        }
-
-        if (ex is AggregateException aggregateException && aggregateException.InnerExceptions.Count > 1)
-            return $"{aggregateException.GetType().Name}: {aggregateException.InnerExceptions.Count} inner exceptions";
-
-        return ex.GetType().Name;
-    }
-
-    private static string? GetFirstNonBlankExceptionMessage(Exception ex, out Exception? messageException)
-    {
+        var segments = new List<string>();
         var queue = new Queue<Exception>();
         var seen = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
         queue.Enqueue(ex);
 
-        while (queue.Count > 0)
+        while (queue.Count > 0 && segments.Count < 6)
         {
             var current = queue.Dequeue();
-            if (!seen.Add(current))
+            if (current is null || !seen.Add(current))
                 continue;
 
-            if (!string.IsNullOrWhiteSpace(current.Message))
+            var message = current.Message?.Trim();
+            if (string.IsNullOrWhiteSpace(message))
+                message = current.GetType().Name;
+
+            if (current is FileNotFoundException fileNotFound &&
+                !string.IsNullOrWhiteSpace(fileNotFound.FileName) &&
+                message.IndexOf(fileNotFound.FileName, StringComparison.OrdinalIgnoreCase) < 0)
             {
-                messageException = current;
-                return current.Message.Trim();
+                message += $" [file: {fileNotFound.FileName}]";
             }
+
+            var segment = $"{current.GetType().Name}: {message}";
+            if (segments.Count == 0 || !segments[^1].Equals(segment, StringComparison.Ordinal))
+                segments.Add(segment);
 
             if (current is AggregateException aggregateException)
             {
@@ -481,8 +470,10 @@ internal static partial class WebPipelineRunner
                 queue.Enqueue(current.InnerException);
         }
 
-        messageException = null;
-        return null;
+        if (segments.Count == 0)
+            return ex.GetType().Name;
+
+        return string.Join(" <-- ", segments);
     }
 
     private static string FormatDuration(TimeSpan elapsed)

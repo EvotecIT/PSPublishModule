@@ -151,221 +151,224 @@ internal static partial class WebPipelineRunner
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
 
+        string? configPath = null;
         try
         {
-            legacyAliasMode = WebCliHelpers.NormalizeApiDocsLegacyAliasMode(legacyAliasMode);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new InvalidOperationException($"{label}: {ex.Message}", ex);
-        }
-
-        var preflightWarnings = ValidateApiDocsPreflight(
-            apiType,
-            sourceRoot,
-            sourceUrl,
-            sourceUrlMappings,
-            nav,
-            navSurfaceName,
-            navContextPath,
-            powerShellExamplesPath);
-        var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
-            ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
-            : preflightWarnings;
-        if (filteredPreflightWarnings.Length > 0)
-        {
-            logger?.Warn($"{label}: apidocs preflight warnings: {filteredPreflightWarnings.Length}");
-
-            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
-            if (previewLimit > 0)
-            {
-                foreach (var warning in filteredPreflightWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
-                {
-                    logger?.Warn($"{label}: {warning}");
-                }
-
-                var remaining = filteredPreflightWarnings.Length - previewLimit;
-                if (remaining > 0)
-                    logger?.Warn($"{label}: (+{remaining} more warnings)");
-            }
-
-            if (failOnWarnings)
-            {
-                var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
-                               ?? "API docs preflight warnings encountered.";
-                throw new InvalidOperationException(headline);
-            }
-        }
-
-        // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
-        // unless the step overrides it explicitly. This prevents "API reference has no navigation"
-        // and theme drift when agents forget to wire config/nav.
-        var configPath = ResolvePath(baseDir, GetString(step, "config"));
-        if (string.IsNullOrWhiteSpace(configPath))
-        {
-            var defaultSiteConfig = Path.Combine(baseDir, "site.json");
-            if (File.Exists(defaultSiteConfig))
-                configPath = defaultSiteConfig;
-        }
-
-        // If the user configured header/footer paths but they don't exist, treat them as unset so
-        // we can fall back to theme fragments (or embedded fragments) deterministically.
-        if (!string.IsNullOrWhiteSpace(head) && !File.Exists(Path.GetFullPath(head)))
-        {
-            logger?.Warn($"{label}: apidocs headHtml not found: {head}");
-            head = null;
-        }
-        if (!string.IsNullOrWhiteSpace(header) && !File.Exists(Path.GetFullPath(header)))
-        {
-            logger?.Warn($"{label}: apidocs headerHtml not found: {header}");
-            header = null;
-        }
-        if (!string.IsNullOrWhiteSpace(footer) && !File.Exists(Path.GetFullPath(footer)))
-        {
-            logger?.Warn($"{label}: apidocs footerHtml not found: {footer}");
-            footer = null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(configPath))
-        {
-            if (string.IsNullOrWhiteSpace(nav))
-            {
-                // Prefer site-nav.json when the repo provides it (static/data). This supports navigation profiles
-                // and avoids "API reference has no navigation" drift across sites.
-                try
-                {
-                    var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
-                    var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-                    var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
-                    var relativeRoot = Path.IsPathRooted(dataRoot) ? "data" : dataRoot.TrimStart('/', '\\');
-                    var staticNavPath = Path.Combine(plan.RootPath, "static", relativeRoot, "site-nav.json");
-                    nav = File.Exists(staticNavPath) ? staticNavPath : configPath;
-                }
-                catch
-                {
-                    nav = configPath;
-                }
-            }
-
-            TryResolveApiFragmentsFromTheme(configPath, ref head, ref header, ref footer);
-
-            if (injectCriticalCss)
-            {
-                try
-                {
-                    var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
-                    var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-                    injectedCriticalCssHtml = RenderCriticalCssHtml(spec.AssetRegistry, plan.RootPath);
-                    if (!string.IsNullOrWhiteSpace(injectedCriticalCssHtml))
-                        criticalCssPath = null; // avoid accidental double-injection if both are set
-                }
-                catch
-                {
-                    // Best-effort: critical CSS injection is optional.
-                }
-            }
-
             try
             {
-                var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
-                prismSpec = spec.Prism;
-                assetPolicyMode = spec.AssetPolicy?.Mode;
-                siteName ??= spec.Social?.SiteName ?? spec.Name;
-                socialImage ??= spec.Social?.Image;
-                socialImageWidth ??= spec.Social?.ImageWidth;
-                socialImageHeight ??= spec.Social?.ImageHeight;
-                socialTwitterCard ??= spec.Social?.TwitterCard;
-                socialTwitterSite ??= spec.Social?.TwitterSite;
-                socialTwitterCreator ??= spec.Social?.TwitterCreator;
-                socialAutoGenerate ??= spec.Social?.AutoGenerateCards;
-                var generatedCardsPath = spec.Social?.GeneratedCardsPath;
-                socialCardPath ??= string.IsNullOrWhiteSpace(generatedCardsPath)
-                    ? null
-                    : generatedCardsPath.TrimEnd('/') + "/api";
-                socialCardWidth ??= spec.Social?.GeneratedCardWidth;
-                socialCardHeight ??= spec.Social?.GeneratedCardHeight;
-                siteBaseUrl ??= spec.BaseUrl;
+                legacyAliasMode = WebCliHelpers.NormalizeApiDocsLegacyAliasMode(legacyAliasMode);
             }
-            catch
+            catch (ArgumentException ex)
             {
-                // Best-effort: API docs can still fall back to default Prism CDN settings.
+                throw new InvalidOperationException($"{label}: {ex.Message}", ex);
             }
-        }
 
-        var options = new WebApiDocsOptions
-        {
-            Type = apiType,
-            XmlPath = xml ?? string.Empty,
-            HelpPath = help,
-            PowerShellModuleManifestPath = powerShellManifestPath,
-            PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
-            AssemblyPath = assembly,
-            OutputPath = outPath,
-            Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
-            BaseUrl = baseUrl,
-            SiteBaseUrl = siteBaseUrl,
-            LanguageCode = languageCode,
-            Format = format,
-            CssHref = css,
-            CriticalCssHtml = injectedCriticalCssHtml,
-            CriticalCssPath = criticalCssPath,
-            HeadHtmlPath = head,
-            HeaderHtmlPath = header,
-            FooterHtmlPath = footer,
-            Template = template,
-            TemplateRootPath = templateRoot,
-            IndexTemplatePath = indexTemplate,
-            TypeTemplatePath = typeTemplate,
-            DocsIndexTemplatePath = docsIndexTemplate,
-            DocsTypeTemplatePath = docsTypeTemplate,
-            DocsScriptPath = docsScript,
-            SearchScriptPath = searchScript,
-            DocsHomeUrl = docsHome,
-            SidebarPosition = sidebar,
-            BodyClass = bodyClass,
-            LegacyAliasMode = legacyAliasMode,
-            InjectPrismAssets = GetBool(step, "injectPrism") ?? GetBool(step, "inject-prism") ?? true,
-            Prism = prismSpec,
-            AssetPolicyMode = assetPolicyMode,
-            DisplayNameMode = displayNameMode,
-            SourceRootPath = sourceRoot,
-            SourcePathPrefix = sourcePathPrefix,
-            SourceUrlPattern = sourceUrl,
-            GenerateCoverageReport = generateCoverageReport,
-            CoverageReportPath = coverageReportPath,
-            GenerateXrefMap = generateXrefMap,
-            GenerateMemberXrefs = generateMemberXrefs,
-            MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
-            XrefMapPath = xrefMapPath,
-            GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
-            PowerShellExamplesPath = powerShellExamplesPath,
-            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
-            GenerateGitFreshness = generateGitFreshness,
-            GitFreshnessNewDays = gitFreshnessNewDays,
-            GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
-            IncludeUndocumentedTypes = includeUndocumented,
-            NavJsonPath = nav,
-            // Default to root context for profile selection to avoid accidental "API header has different nav"
-            // when sites define /api profiles that override menus. Sites that want /api-specific menus can set navContextPath explicitly.
-            NavContextPath = navContextPath,
-            NavContextCollection = navContextCollection,
-            NavContextLayout = navContextLayout,
-            NavContextProject = navContextProject,
-            NavSurfaceName = navSurfaceName,
-            SiteName = siteName,
-            SocialImage = socialImage,
-            SocialImageWidth = socialImageWidth,
-            SocialImageHeight = socialImageHeight,
-            SocialTwitterCard = socialTwitterCard,
-            SocialTwitterSite = socialTwitterSite,
-            SocialTwitterCreator = socialTwitterCreator,
-            AutoGenerateSocialCards = socialAutoGenerate ?? false,
-            SocialCardPath = socialCardPath,
-            SocialCardWidth = socialCardWidth ?? 1200,
-            SocialCardHeight = socialCardHeight ?? 630,
-            BrandUrl = brandUrl,
-            BrandIcon = brandIcon
-        };
+            var preflightWarnings = ValidateApiDocsPreflight(
+                apiType,
+                sourceRoot,
+                sourceUrl,
+                sourceUrlMappings,
+                nav,
+                navSurfaceName,
+                navContextPath,
+                powerShellExamplesPath);
+            var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
+                ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
+                : preflightWarnings;
+            if (filteredPreflightWarnings.Length > 0)
+            {
+                logger?.Warn($"{label}: apidocs preflight warnings: {filteredPreflightWarnings.Length}");
+
+                var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+                if (previewLimit > 0)
+                {
+                    foreach (var warning in filteredPreflightWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
+                    {
+                        logger?.Warn($"{label}: {warning}");
+                    }
+
+                    var remaining = filteredPreflightWarnings.Length - previewLimit;
+                    if (remaining > 0)
+                        logger?.Warn($"{label}: (+{remaining} more warnings)");
+                }
+
+                if (failOnWarnings)
+                {
+                    var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                                   ?? "API docs preflight warnings encountered.";
+                    throw new InvalidOperationException(headline);
+                }
+            }
+
+            // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
+            // unless the step overrides it explicitly. This prevents "API reference has no navigation"
+            // and theme drift when agents forget to wire config/nav.
+            configPath = ResolvePath(baseDir, GetString(step, "config"));
+            if (string.IsNullOrWhiteSpace(configPath))
+            {
+                var defaultSiteConfig = Path.Combine(baseDir, "site.json");
+                if (File.Exists(defaultSiteConfig))
+                    configPath = defaultSiteConfig;
+            }
+
+            // If the user configured header/footer paths but they don't exist, treat them as unset so
+            // we can fall back to theme fragments (or embedded fragments) deterministically.
+            if (!string.IsNullOrWhiteSpace(head) && !File.Exists(Path.GetFullPath(head)))
+            {
+                logger?.Warn($"{label}: apidocs headHtml not found: {head}");
+                head = null;
+            }
+            if (!string.IsNullOrWhiteSpace(header) && !File.Exists(Path.GetFullPath(header)))
+            {
+                logger?.Warn($"{label}: apidocs headerHtml not found: {header}");
+                header = null;
+            }
+            if (!string.IsNullOrWhiteSpace(footer) && !File.Exists(Path.GetFullPath(footer)))
+            {
+                logger?.Warn($"{label}: apidocs footerHtml not found: {footer}");
+                footer = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                if (string.IsNullOrWhiteSpace(nav))
+                {
+                    // Prefer site-nav.json when the repo provides it (static/data). This supports navigation profiles
+                    // and avoids "API reference has no navigation" drift across sites.
+                    try
+                    {
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+                        var relativeRoot = Path.IsPathRooted(dataRoot) ? "data" : dataRoot.TrimStart('/', '\\');
+                        var staticNavPath = Path.Combine(plan.RootPath, "static", relativeRoot, "site-nav.json");
+                        nav = File.Exists(staticNavPath) ? staticNavPath : configPath;
+                    }
+                    catch
+                    {
+                        nav = configPath;
+                    }
+                }
+
+                TryResolveApiFragmentsFromTheme(configPath, ref head, ref header, ref footer);
+
+                if (injectCriticalCss)
+                {
+                    try
+                    {
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        injectedCriticalCssHtml = RenderCriticalCssHtml(spec.AssetRegistry, plan.RootPath);
+                        if (!string.IsNullOrWhiteSpace(injectedCriticalCssHtml))
+                            criticalCssPath = null; // avoid accidental double-injection if both are set
+                    }
+                    catch
+                    {
+                        // Best-effort: critical CSS injection is optional.
+                    }
+                }
+
+                try
+                {
+                    var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                    prismSpec = spec.Prism;
+                    assetPolicyMode = spec.AssetPolicy?.Mode;
+                    siteName ??= spec.Social?.SiteName ?? spec.Name;
+                    socialImage ??= spec.Social?.Image;
+                    socialImageWidth ??= spec.Social?.ImageWidth;
+                    socialImageHeight ??= spec.Social?.ImageHeight;
+                    socialTwitterCard ??= spec.Social?.TwitterCard;
+                    socialTwitterSite ??= spec.Social?.TwitterSite;
+                    socialTwitterCreator ??= spec.Social?.TwitterCreator;
+                    socialAutoGenerate ??= spec.Social?.AutoGenerateCards;
+                    var generatedCardsPath = spec.Social?.GeneratedCardsPath;
+                    socialCardPath ??= string.IsNullOrWhiteSpace(generatedCardsPath)
+                        ? null
+                        : generatedCardsPath.TrimEnd('/') + "/api";
+                    socialCardWidth ??= spec.Social?.GeneratedCardWidth;
+                    socialCardHeight ??= spec.Social?.GeneratedCardHeight;
+                    siteBaseUrl ??= spec.BaseUrl;
+                }
+                catch
+                {
+                    // Best-effort: API docs can still fall back to default Prism CDN settings.
+                }
+            }
+
+            var options = new WebApiDocsOptions
+            {
+                Type = apiType,
+                XmlPath = xml ?? string.Empty,
+                HelpPath = help,
+                PowerShellModuleManifestPath = powerShellManifestPath,
+                PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
+                AssemblyPath = assembly,
+                OutputPath = outPath,
+                Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
+                BaseUrl = baseUrl,
+                SiteBaseUrl = siteBaseUrl,
+                LanguageCode = languageCode,
+                Format = format,
+                CssHref = css,
+                CriticalCssHtml = injectedCriticalCssHtml,
+                CriticalCssPath = criticalCssPath,
+                HeadHtmlPath = head,
+                HeaderHtmlPath = header,
+                FooterHtmlPath = footer,
+                Template = template,
+                TemplateRootPath = templateRoot,
+                IndexTemplatePath = indexTemplate,
+                TypeTemplatePath = typeTemplate,
+                DocsIndexTemplatePath = docsIndexTemplate,
+                DocsTypeTemplatePath = docsTypeTemplate,
+                DocsScriptPath = docsScript,
+                SearchScriptPath = searchScript,
+                DocsHomeUrl = docsHome,
+                SidebarPosition = sidebar,
+                BodyClass = bodyClass,
+                LegacyAliasMode = legacyAliasMode,
+                InjectPrismAssets = GetBool(step, "injectPrism") ?? GetBool(step, "inject-prism") ?? true,
+                Prism = prismSpec,
+                AssetPolicyMode = assetPolicyMode,
+                DisplayNameMode = displayNameMode,
+                SourceRootPath = sourceRoot,
+                SourcePathPrefix = sourcePathPrefix,
+                SourceUrlPattern = sourceUrl,
+                GenerateCoverageReport = generateCoverageReport,
+                CoverageReportPath = coverageReportPath,
+                GenerateXrefMap = generateXrefMap,
+                GenerateMemberXrefs = generateMemberXrefs,
+                MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
+                XrefMapPath = xrefMapPath,
+                GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+                PowerShellExamplesPath = powerShellExamplesPath,
+                PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
+                GenerateGitFreshness = generateGitFreshness,
+                GitFreshnessNewDays = gitFreshnessNewDays,
+                GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
+                IncludeUndocumentedTypes = includeUndocumented,
+                NavJsonPath = nav,
+                // Default to root context for profile selection to avoid accidental "API header has different nav"
+                // when sites define /api profiles that override menus. Sites that want /api-specific menus can set navContextPath explicitly.
+                NavContextPath = navContextPath,
+                NavContextCollection = navContextCollection,
+                NavContextLayout = navContextLayout,
+                NavContextProject = navContextProject,
+                NavSurfaceName = navSurfaceName,
+                SiteName = siteName,
+                SocialImage = socialImage,
+                SocialImageWidth = socialImageWidth,
+                SocialImageHeight = socialImageHeight,
+                SocialTwitterCard = socialTwitterCard,
+                SocialTwitterSite = socialTwitterSite,
+                SocialTwitterCreator = socialTwitterCreator,
+                AutoGenerateSocialCards = socialAutoGenerate ?? false,
+                SocialCardPath = socialCardPath,
+                SocialCardWidth = socialCardWidth ?? 1200,
+                SocialCardHeight = socialCardHeight ?? 630,
+                BrandUrl = brandUrl,
+                BrandIcon = brandIcon
+            };
         if (TryGetObject(step, "templateTokens", out var templateTokens) ||
             TryGetObject(step, "template-tokens", out templateTokens))
         {
@@ -550,6 +553,13 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(res.PowerShellExampleMediaManifestPath))
             note += $" (ps-example-media: {Path.GetFileName(res.PowerShellExampleMediaManifestPath)})";
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                BuildApiDocsFailureMessage(label, apiType, xml, help, assembly, outPath, configPath, nav, sourceRoot, ex),
+                ex);
+        }
     }
 
     private static void ExecuteApiDocsBatch(
