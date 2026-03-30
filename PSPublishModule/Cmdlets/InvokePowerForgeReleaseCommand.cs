@@ -573,8 +573,8 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             if (separatorIndex <= 0 || separatorIndex == rawValue.Length - 1)
                 throw new PSArgumentException($"InstallerProperty entries must use Name=Value form. Invalid value: '{rawValue}'.");
 
-            var key = rawValue[..separatorIndex].Trim();
-            var value = rawValue[(separatorIndex + 1)..].Trim();
+            var key = rawValue.Substring(0, separatorIndex).Trim();
+            var value = rawValue.Substring(separatorIndex + 1).Trim();
             if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
                 throw new PSArgumentException($"InstallerProperty entries must use Name=Value form. Invalid value: '{rawValue}'.");
 

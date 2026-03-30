@@ -338,6 +338,89 @@ public sealed class Two : IPluginContract {}
         }
     }
 
+    [Fact]
+    public void ExportAndPack_QuoteMsBuildPropertyValuesWithSpaces()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var projectPath = Path.Combine(root, "SamplePlugin.csproj");
+            File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Sample.Plugin</AssemblyName>
+    <PackageId>Sample.Plugin.Package</PackageId>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+            var commands = new List<string>();
+            var service = new PowerForgePluginCatalogService(
+                new NullLogger(),
+                runProcess: psi =>
+                {
+                    commands.Add(psi.Arguments);
+                    var outputPath = ExtractOptionValue(psi.Arguments, "-o")
+                        ?? throw new InvalidOperationException("Output path was not provided.");
+
+                    Directory.CreateDirectory(outputPath);
+                    if (psi.Arguments.StartsWith("pack ", StringComparison.Ordinal))
+                        File.WriteAllText(Path.Combine(outputPath, "Sample.Plugin.Package.1.2.3.nupkg"), "pkg", new UTF8Encoding(false));
+                    else
+                        File.WriteAllText(Path.Combine(outputPath, "Sample.Plugin.dll"), "dll", new UTF8Encoding(false));
+
+                    return new PluginCatalogProcessResult(0, "ok", string.Empty);
+                });
+
+            var spec = new PowerForgePluginCatalogSpec
+            {
+                ProjectRoot = ".",
+                Catalog = new[]
+                {
+                    new PowerForgePluginCatalogEntry
+                    {
+                        Id = "sample",
+                        ProjectPath = "SamplePlugin.csproj",
+                        Groups = new[] { "public", "pack-public" },
+                        MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["ProductName"] = "Sample Plugin"
+                        }
+                    }
+                }
+            };
+
+            var exportPlan = service.PlanFolderExport(
+                spec,
+                Path.Combine(root, "plugins.json"),
+                new PowerForgePluginCatalogRequest
+                {
+                    Groups = new[] { "public" }
+                });
+            var exportResult = service.ExportFolders(exportPlan);
+
+            var packPlan = service.PlanPackages(
+                spec,
+                Path.Combine(root, "plugins.json"),
+                new PowerForgePluginPackageRequest
+                {
+                    Groups = new[] { "pack-public" },
+                    PackageVersion = "1.2.3"
+                });
+            var packResult = service.PackPackages(packPlan);
+
+            Assert.True(exportResult.Success);
+            Assert.True(packResult.Success);
+            Assert.Contains(commands, command => command.Contains("/p:ProductName=\"Sample Plugin\"", StringComparison.Ordinal));
+            Assert.Contains(commands, command => command.Contains("/p:PackageVersion=\"1.2.3\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static string? ExtractOptionValue(string arguments, string optionName)
     {
         var pattern = Regex.Escape(optionName) + "\\s+\"([^\"]+)\"";

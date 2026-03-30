@@ -143,7 +143,7 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
             if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
                 continue;
 
-            result[key] = value;
+            result[key!] = value!;
         }
 
         return result.Count == 0 ? null : result;

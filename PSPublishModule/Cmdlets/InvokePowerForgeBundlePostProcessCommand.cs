@@ -275,7 +275,7 @@ public sealed class InvokePowerForgeBundlePostProcessCommand : PSCmdlet
     }
 
     private static string? NormalizeNullable(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
     private static Dictionary<string, string> NormalizeKeyValue(string[]? values)
     {
@@ -296,7 +296,7 @@ public sealed class InvokePowerForgeBundlePostProcessCommand : PSCmdlet
             if (string.IsNullOrWhiteSpace(key))
                 continue;
 
-            result[key] = value[(separator + 1)..].Trim();
+            result[key] = value.Substring(separator + 1).Trim();
         }
 
         return result;

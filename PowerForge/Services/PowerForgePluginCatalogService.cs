@@ -459,7 +459,7 @@ internal sealed class PowerForgePluginCatalogService
         args.Add("/p:UseAppHost=false");
 
         foreach (var property in entry.MsBuildProperties)
-            args.Add($"/p:{property.Key}={property.Value}");
+            args.Add(BuildMsBuildPropertyArgument(property.Key, property.Value));
 
         psi.Arguments = string.Join(" ", args);
 
@@ -499,9 +499,9 @@ internal sealed class PowerForgePluginCatalogService
         if (plan.NoBuild)
             args.Add("--no-build");
         if (!string.IsNullOrWhiteSpace(plan.PackageVersion))
-            args.Add("/p:PackageVersion=" + plan.PackageVersion);
+            args.Add(BuildMsBuildPropertyArgument("PackageVersion", plan.PackageVersion));
         else if (!string.IsNullOrWhiteSpace(plan.VersionSuffix))
-            args.Add("/p:VersionSuffix=" + plan.VersionSuffix);
+            args.Add(BuildMsBuildPropertyArgument("VersionSuffix", plan.VersionSuffix));
         if (plan.IncludeSymbols)
         {
             args.Add("/p:IncludeSymbols=true");
@@ -509,7 +509,7 @@ internal sealed class PowerForgePluginCatalogService
         }
 
         foreach (var property in entry.MsBuildProperties)
-            args.Add($"/p:{property.Key}={property.Value}");
+            args.Add(BuildMsBuildPropertyArgument(property.Key, property.Value));
 
         psi.Arguments = string.Join(" ", args);
 
@@ -824,7 +824,10 @@ internal sealed class PowerForgePluginCatalogService
     private static string Quote(string value)
         => "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
 
-    private static void ClearDirectory(string path)
+    private static string BuildMsBuildPropertyArgument(string key, string? value)
+        => "/p:" + key + "=" + Quote(value ?? string.Empty);
+
+    private void ClearDirectory(string path)
     {
         if (!Directory.Exists(path))
             return;
@@ -838,9 +841,14 @@ internal sealed class PowerForgePluginCatalogService
                 else
                     File.Delete(entry);
             }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                _logger.Warn($"Failed to clean plugin output entry '{entry}'. Error: {ex.Message}");
+                throw;
+            }
             catch
             {
-                // best effort
+                throw;
             }
         }
     }
