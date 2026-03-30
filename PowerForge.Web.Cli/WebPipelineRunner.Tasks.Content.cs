@@ -675,7 +675,8 @@ internal static partial class WebPipelineRunner
                 var sourceRootName = new DirectoryInfo(fullSourceRoot).Name;
                 var nestedRepoRoot = Path.Combine(fullSourceRoot, repoName);
                 if (!string.Equals(sourceRootName, repoName, StringComparison.OrdinalIgnoreCase) &&
-                    Directory.Exists(nestedRepoRoot))
+                    Directory.Exists(nestedRepoRoot) &&
+                    !LooksLikeGitRepositoryRoot(fullSourceRoot))
                 {
                     warnings.Add(
                         $"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot '{fullSourceRoot}' looks one level above repo '{repoName}'. " +
@@ -772,6 +773,12 @@ internal static partial class WebPipelineRunner
 
         repoName = segments[1];
         return !string.IsNullOrWhiteSpace(repoName);
+    }
+
+    private static bool LooksLikeGitRepositoryRoot(string path)
+    {
+        var gitPath = Path.Combine(path, ".git");
+        return Directory.Exists(gitPath) || File.Exists(gitPath);
     }
 
     private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
