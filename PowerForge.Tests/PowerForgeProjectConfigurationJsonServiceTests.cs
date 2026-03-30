@@ -48,7 +48,7 @@ public sealed class PowerForgeProjectConfigurationJsonServiceTests
 
             Assert.Equal(Path.GetFullPath(path), savedPath);
             Assert.Equal("PSPublishModule", loaded.Name);
-            Assert.Equal(".", loaded.ProjectRoot);
+            Assert.Equal(Path.GetFullPath(tempRoot), loaded.ProjectRoot);
             Assert.Equal("Release", loaded.Release.Configuration);
             Assert.True(loaded.Release.PublishToolGitHub);
             Assert.True(loaded.Release.SkipRestore);
@@ -99,6 +99,42 @@ public sealed class PowerForgeProjectConfigurationJsonServiceTests
             Assert.Equal(ConfigurationProjectReleaseOutputType.Portable, loaded.Release.ToolOutput[0]);
             Assert.Single(loaded.Targets);
             Assert.Equal("win-x64", loaded.Targets[0].Runtimes[0]);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ResolvesRelativeProjectRootAgainstConfigDirectory()
+    {
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var buildDirectory = Path.Combine(tempRoot, "Build");
+            Directory.CreateDirectory(buildDirectory);
+            var path = Path.Combine(buildDirectory, "project.release.json");
+            File.WriteAllText(path, """
+                {
+                  "Name": "Demo",
+                  "ProjectRoot": "..",
+                  "Targets": [
+                    {
+                      "Name": "Cli",
+                      "ProjectPath": "src/Cli/Cli.csproj",
+                      "Framework": "net10.0",
+                      "Runtimes": [ "win-x64" ]
+                    }
+                  ]
+                }
+                """);
+
+            var service = new PowerForgeProjectConfigurationJsonService();
+            var loaded = service.Load(path);
+
+            Assert.Equal(Path.GetFullPath(tempRoot), loaded.ProjectRoot);
         }
         finally
         {

@@ -20,10 +20,16 @@ public sealed class PowerForgeProjectConfigurationJsonService
             throw new ArgumentException("Path is required.", nameof(path));
 
         var fullPath = Path.GetFullPath(path);
+        var configDirectory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         var json = File.ReadAllText(fullPath);
         var project = JsonSerializer.Deserialize<ConfigurationProject>(json, DeserializeOptions);
         if (project is null)
             throw new InvalidOperationException($"Unable to deserialize project configuration: {fullPath}");
+
+        if (!string.IsNullOrWhiteSpace(project.ProjectRoot) && !Path.IsPathRooted(project.ProjectRoot))
+        {
+            project.ProjectRoot = Path.GetFullPath(Path.Combine(configDirectory, project.ProjectRoot));
+        }
 
         return project;
     }

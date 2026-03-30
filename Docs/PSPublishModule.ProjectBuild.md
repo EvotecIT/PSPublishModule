@@ -15,6 +15,7 @@ PowerShell-authored project release objects
   - `New-ConfigurationProjectOutput`
   - `New-ConfigurationProjectInstaller`
   - `New-ConfigurationProject`
+  - `New-ProjectReleaseConfig`
   - `Export-ConfigurationProject`
   - `Import-ConfigurationProject`
   - `Invoke-ProjectRelease`
@@ -30,6 +31,9 @@ PowerShell-authored project release objects
 - Project objects can now round-trip through JSON:
   - `Export-ConfigurationProject -Project $project -OutputPath '.\Build\project.release.json'`
   - `Import-ConfigurationProject -Path '.\Build\project.release.json'`
+- Starter JSON can now be scaffolded directly:
+  - `New-ProjectReleaseConfig -ProjectRoot '.' -PassThru`
+  - `New-ProjectReleaseConfig -Project '.\src\App\App.csproj' -Portable -Force`
 - In the current first slice, tool/app targets should still declare an explicit runtime for DotNetPublish-backed plan/build flows.
 
 Example:

@@ -26,6 +26,7 @@ Available cmdlets:
 - `New-ConfigurationProjectOutput`
 - `New-ConfigurationProjectInstaller`
 - `New-ConfigurationProject`
+- `New-ProjectReleaseConfig`
 - `Export-ConfigurationProject`
 - `Import-ConfigurationProject`
 - `Invoke-ProjectRelease`
@@ -39,6 +40,7 @@ Current scope:
 - installer entries that map onto the existing DotNetPublish installer flow
 - release-level defaults for `PublishToolGitHub`, `SkipRestore`, `SkipBuild`, `ToolOutput`, and `SkipToolOutput`
 - JSON import/export for `ConfigurationProject`
+- starter config scaffolding through `New-ProjectReleaseConfig`
 
 Current intentional limits:
 
