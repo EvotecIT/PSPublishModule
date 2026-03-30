@@ -252,13 +252,17 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                 stagingDir,
                 "INSTALLFOLDER",
                 "ProductFiles");
+            var normalizedFragment = fragment.Replace('\\', '/');
+            var expectedAfZaPath = Path.Combine(stagingDir, "af-ZA", "Microsoft.ui.xaml.dll.mui").Replace('\\', '/');
+            var expectedAmEtPath = Path.Combine(stagingDir, "am-ET", "Microsoft.ui.xaml.dll.mui").Replace('\\', '/');
+            var expectedRootPath = Path.Combine(stagingDir, "root.txt").Replace('\\', '/');
 
             Assert.Contains("<DirectoryRef Id=\"INSTALLFOLDER\">", fragment, StringComparison.Ordinal);
             Assert.Contains("Name=\"af-ZA\"", fragment, StringComparison.Ordinal);
             Assert.Contains("Name=\"am-ET\"", fragment, StringComparison.Ordinal);
-            Assert.Contains("payload\\af-ZA\\Microsoft.ui.xaml.dll.mui", fragment, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("payload\\am-ET\\Microsoft.ui.xaml.dll.mui", fragment, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("payload\\root.txt", fragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedAfZaPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedAmEtPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expectedRootPath, normalizedFragment, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
