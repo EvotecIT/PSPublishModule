@@ -3,6 +3,8 @@
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
 For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
 see `Build/release.json` and `powerforge release`.
+For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
+see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
 
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
 see `Docs/PSPublishModule.ModuleDocumentation.md`.
