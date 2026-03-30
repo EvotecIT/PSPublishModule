@@ -321,7 +321,7 @@ Primary publish style.
 Type: DotNetPublishStyle
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Portable, PortableCompat, PortableSize, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named
@@ -337,7 +337,7 @@ Optional style matrix values.
 Type: DotNetPublishStyle[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Portable, PortableCompat, PortableSize, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named

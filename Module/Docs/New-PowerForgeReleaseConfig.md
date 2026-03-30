@@ -4,36 +4,53 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-DotNetPublishConfig
+# New-PowerForgeReleaseConfig
 ## SYNOPSIS
-Scaffolds a starter powerforge.dotnetpublish.json configuration file.
+Scaffolds a starter unified release.json configuration file.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-DotNetPublishConfig [-ProjectRoot <string>] [-ProjectPath <string>] [-TargetName <string>] [-Framework <string>] [-Runtimes <string[]>] [-Styles <DotNetPublishStyle[]>] [-Configuration <string>] [-OutputPath <string>] [-Force] [-NoSchema] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-PowerForgeReleaseConfig [-ProjectRoot <string>] [-PackagesConfigPath <string>] [-DotNetPublishConfigPath <string>] [-OutputPath <string>] [-Configuration <string>] [-Force] [-NoSchema] [-SkipPackages] [-SkipTools] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Use this cmdlet for JSON-first onboarding of the DotNet publish engine.
-The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....
+Use this cmdlet to assemble a repository-level release config from the build configs the repo
+already has, typically Build/project.build.json and
+Build/powerforge.dotnetpublish.json.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-DotNetPublishConfig -ProjectRoot '.' -PassThru
+New-PowerForgeReleaseConfig -ProjectRoot '.' -PassThru
 ```
 
 ### EXAMPLE 2
 ```powershell
-New-DotNetPublishConfig -Project '.\src\App\App.csproj' -Runtimes 'win-x64','win-arm64' -Styles PortableCompat,AotSpeed -Force
+New-PowerForgeReleaseConfig -PackagesConfigPath '.\Build\project.build.json' -DotNetPublishConfigPath '.\Build\powerforge.dotnetpublish.json' -Force
 ```
 
 ## PARAMETERS
 
 ### -Configuration
-Build configuration (default: Release).
+Release configuration value written into the tool section.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Release, Debug
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DotNetPublishConfigPath
+Optional path to an existing DotNet publish config file.
 
 ```yaml
 Type: String
@@ -49,28 +66,12 @@ Accept wildcard characters: True
 ```
 
 ### -Force
-Overwrite existing config file.
+Overwrite an existing config file.
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: Overwrite
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Framework
-Optional framework override (for example net10.0).
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
 Possible values: 
 
 Required: False
@@ -97,7 +98,7 @@ Accept wildcard characters: True
 ```
 
 ### -OutputPath
-Output config path (default: powerforge.dotnetpublish.json).
+Output config path (default: Build\release.json).
 
 ```yaml
 Type: String
@@ -112,11 +113,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -PassThru
-Returns detailed scaffold metadata instead of only config path.
+### -PackagesConfigPath
+Optional path to an existing project-build config file.
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -128,13 +129,13 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProjectPath
-Optional path to a specific project file. When omitted, the first matching .csproj is used.
+### -PassThru
+Returns detailed scaffold metadata instead of only the config path.
 
 ```yaml
-Type: String
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
-Aliases: Project
+Aliases: None
 Possible values: 
 
 Required: False
@@ -160,11 +161,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Runtimes
-Optional runtime identifiers override.
+### -SkipPackages
+Skips package config discovery.
 
 ```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -176,27 +177,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Styles
-Optional publish styles override.
+### -SkipTools
+Skips tool/app config discovery.
 
 ```yaml
-Type: DotNetPublishStyle[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -TargetName
-Optional target name override. Defaults to project file name.
-
-```yaml
-Type: String
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -218,7 +203,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## OUTPUTS
 
 - `System.String
-PowerForge.DotNetPublishConfigScaffoldResult`
+PowerForge.PowerForgeReleaseConfigScaffoldResult`
 
 ## RELATED LINKS
 

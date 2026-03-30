@@ -3348,6 +3348,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -3526,6 +3527,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -3716,6 +3718,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
@@ -6394,6 +6397,1358 @@ local development and CI pipelines.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Invoke-PowerForgeRelease</command:name>
+      <command:verb>Invoke</command:verb>
+      <command:noun>PowerForgeRelease</command:noun>
+      <maml:description>
+        <maml:para>Executes the unified repository release workflow from a JSON configuration.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>This cmdlet is the PowerShell entry point for the same unified release engine used by&#xD;
+powerforge release. It can coordinate repository package publishing and downloadable&#xD;
+tool/app artefacts from one configuration file.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Invoke-PowerForgeRelease</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ChecksumsPath</maml:name>
+          <maml:description>
+            <maml:para>Optional release checksums output path override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current&#xD;
+and parent directories for standard release config file names.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Configuration</maml:name>
+          <maml:description>
+            <maml:para>Optional configuration override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExitCode</maml:name>
+          <maml:description>
+            <maml:para>Sets host exit code: 0 on success, 1 on failure.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Flavor">
+          <maml:name>Flavors</maml:name>
+          <maml:description>
+            <maml:para>Optional legacy tool flavor filter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">SingleContained</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SingleFx</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fx</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Framework">
+          <maml:name>Frameworks</maml:name>
+          <maml:description>
+            <maml:para>Optional framework filter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeepSymbols</maml:name>
+          <maml:description>
+            <maml:para>Keeps symbol files for tool/app artefacts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ManifestJsonPath</maml:name>
+          <maml:description>
+            <maml:para>Optional release manifest output path override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModuleNoDotnetBuild</maml:name>
+          <maml:description>
+            <maml:para>Skips the dotnet build step inside the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModuleNoSign</maml:name>
+          <maml:description>
+            <maml:para>Disables signing for the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModuleOnly</maml:name>
+          <maml:description>
+            <maml:para>Executes only the module portion of the release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModulePreReleaseTag</maml:name>
+          <maml:description>
+            <maml:para>Optional prerelease tag override for the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModuleSignModule</maml:name>
+          <maml:description>
+            <maml:para>Enables signing for the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ModuleVersion</maml:name>
+          <maml:description>
+            <maml:para>Optional module version override for the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OutputRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional output root override for tool/app assets.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageSignStore</maml:name>
+          <maml:description>
+            <maml:para>Optional package-signing certificate store override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LocalMachine</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageSignThumbprint</maml:name>
+          <maml:description>
+            <maml:para>Optional package-signing thumbprint override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageSignTimestampUrl</maml:name>
+          <maml:description>
+            <maml:para>Optional package-signing timestamp URL override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackagesOnly</maml:name>
+          <maml:description>
+            <maml:para>Executes only the package portion of the release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Builds the release plan without executing steps.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishNuget</maml:name>
+          <maml:description>
+            <maml:para>Enables NuGet publishing for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishProjectGitHub</maml:name>
+          <maml:description>
+            <maml:para>Enables project/package GitHub release publishing for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PublishToolGitHub</maml:name>
+          <maml:description>
+            <maml:para>Enables tool/app GitHub release publishing for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Runtime,Rid">
+          <maml:name>Runtimes</maml:name>
+          <maml:description>
+            <maml:para>Optional runtime filter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Sign</maml:name>
+          <maml:description>
+            <maml:para>Enables signing for tool/app outputs when supported by the release config.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignCsp</maml:name>
+          <maml:description>
+            <maml:para>Optional signing CSP override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignDescription</maml:name>
+          <maml:description>
+            <maml:para>Optional signing description override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignKeyContainer</maml:name>
+          <maml:description>
+            <maml:para>Optional signing key container override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignOnFailure</maml:name>
+          <maml:description>
+            <maml:para>Optional policy when signing fails.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignOnMissingTool</maml:name>
+          <maml:description>
+            <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignProfile</maml:name>
+          <maml:description>
+            <maml:para>Optional signing profile override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignSubjectName</maml:name>
+          <maml:description>
+            <maml:para>Optional signing certificate subject name override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignThumbprint</maml:name>
+          <maml:description>
+            <maml:para>Optional signing thumbprint override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignTimestampUrl</maml:name>
+          <maml:description>
+            <maml:para>Optional signing timestamp URL override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignToolPath</maml:name>
+          <maml:description>
+            <maml:para>Optional signing tool path override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignUrl</maml:name>
+          <maml:description>
+            <maml:para>Optional signing URL override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipBuild</maml:name>
+          <maml:description>
+            <maml:para>Disables build operations for the tool/app publish flow.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipReleaseChecksums</maml:name>
+          <maml:description>
+            <maml:para>Skips top-level release checksums generation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipRestore</maml:name>
+          <maml:description>
+            <maml:para>Disables restore operations for the tool/app publish flow.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipToolOutput</maml:name>
+          <maml:description>
+            <maml:para>Optional tool/app output exclusion for DotNetPublish-backed release flows.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Tool</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Installer</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Store</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipWorkspaceValidation</maml:name>
+          <maml:description>
+            <maml:para>Skips workspace validation defined by the release config.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StageRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional staged release root override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Style">
+          <maml:name>Styles</maml:name>
+          <maml:description>
+            <maml:para>Optional publish style filter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
+          <maml:name>Target</maml:name>
+          <maml:description>
+            <maml:para>Optional target-name filter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ToolOutput</maml:name>
+          <maml:description>
+            <maml:para>Optional tool/app output selection for DotNetPublish-backed release flows.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Tool</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Installer</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Store</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ToolsOnly</maml:name>
+          <maml:description>
+            <maml:para>Executes only the tool/app portion of the release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Validate</maml:name>
+          <maml:description>
+            <maml:para>Validates configuration through plan-only execution.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Optional workspace validation config override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceDisableFeature</maml:name>
+          <maml:description>
+            <maml:para>Optional workspace feature disable list override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceEnableFeature</maml:name>
+          <maml:description>
+            <maml:para>Optional workspace feature enable list override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceProfile</maml:name>
+          <maml:description>
+            <maml:para>Optional workspace validation profile override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ChecksumsPath</maml:name>
+        <maml:description>
+          <maml:para>Optional release checksums output path override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current&#xD;
+and parent directories for standard release config file names.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Configuration</maml:name>
+        <maml:description>
+          <maml:para>Optional configuration override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExitCode</maml:name>
+        <maml:description>
+          <maml:para>Sets host exit code: 0 on success, 1 on failure.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Flavor">
+        <maml:name>Flavors</maml:name>
+        <maml:description>
+          <maml:para>Optional legacy tool flavor filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">SingleContained</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SingleFx</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fx</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Framework">
+        <maml:name>Frameworks</maml:name>
+        <maml:description>
+          <maml:para>Optional framework filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KeepSymbols</maml:name>
+        <maml:description>
+          <maml:para>Keeps symbol files for tool/app artefacts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ManifestJsonPath</maml:name>
+        <maml:description>
+          <maml:para>Optional release manifest output path override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModuleNoDotnetBuild</maml:name>
+        <maml:description>
+          <maml:para>Skips the dotnet build step inside the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModuleNoSign</maml:name>
+        <maml:description>
+          <maml:para>Disables signing for the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModuleOnly</maml:name>
+        <maml:description>
+          <maml:para>Executes only the module portion of the release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModulePreReleaseTag</maml:name>
+        <maml:description>
+          <maml:para>Optional prerelease tag override for the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModuleSignModule</maml:name>
+        <maml:description>
+          <maml:para>Enables signing for the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ModuleVersion</maml:name>
+        <maml:description>
+          <maml:para>Optional module version override for the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OutputRoot</maml:name>
+        <maml:description>
+          <maml:para>Optional output root override for tool/app assets.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackageSignStore</maml:name>
+        <maml:description>
+          <maml:para>Optional package-signing certificate store override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LocalMachine</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackageSignThumbprint</maml:name>
+        <maml:description>
+          <maml:para>Optional package-signing thumbprint override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackageSignTimestampUrl</maml:name>
+        <maml:description>
+          <maml:para>Optional package-signing timestamp URL override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackagesOnly</maml:name>
+        <maml:description>
+          <maml:para>Executes only the package portion of the release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Plan</maml:name>
+        <maml:description>
+          <maml:para>Builds the release plan without executing steps.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PublishNuget</maml:name>
+        <maml:description>
+          <maml:para>Enables NuGet publishing for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PublishProjectGitHub</maml:name>
+        <maml:description>
+          <maml:para>Enables project/package GitHub release publishing for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PublishToolGitHub</maml:name>
+        <maml:description>
+          <maml:para>Enables tool/app GitHub release publishing for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Runtime,Rid">
+        <maml:name>Runtimes</maml:name>
+        <maml:description>
+          <maml:para>Optional runtime filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Sign</maml:name>
+        <maml:description>
+          <maml:para>Enables signing for tool/app outputs when supported by the release config.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignCsp</maml:name>
+        <maml:description>
+          <maml:para>Optional signing CSP override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignDescription</maml:name>
+        <maml:description>
+          <maml:para>Optional signing description override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignKeyContainer</maml:name>
+        <maml:description>
+          <maml:para>Optional signing key container override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignOnFailure</maml:name>
+        <maml:description>
+          <maml:para>Optional policy when signing fails.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignOnMissingTool</maml:name>
+        <maml:description>
+          <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignProfile</maml:name>
+        <maml:description>
+          <maml:para>Optional signing profile override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignSubjectName</maml:name>
+        <maml:description>
+          <maml:para>Optional signing certificate subject name override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignThumbprint</maml:name>
+        <maml:description>
+          <maml:para>Optional signing thumbprint override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignTimestampUrl</maml:name>
+        <maml:description>
+          <maml:para>Optional signing timestamp URL override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignToolPath</maml:name>
+        <maml:description>
+          <maml:para>Optional signing tool path override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignUrl</maml:name>
+        <maml:description>
+          <maml:para>Optional signing URL override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipBuild</maml:name>
+        <maml:description>
+          <maml:para>Disables build operations for the tool/app publish flow.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipReleaseChecksums</maml:name>
+        <maml:description>
+          <maml:para>Skips top-level release checksums generation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipRestore</maml:name>
+        <maml:description>
+          <maml:para>Disables restore operations for the tool/app publish flow.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipToolOutput</maml:name>
+        <maml:description>
+          <maml:para>Optional tool/app output exclusion for DotNetPublish-backed release flows.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Tool</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Installer</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Store</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipWorkspaceValidation</maml:name>
+        <maml:description>
+          <maml:para>Skips workspace validation defined by the release config.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StageRoot</maml:name>
+        <maml:description>
+          <maml:para>Optional staged release root override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Style">
+        <maml:name>Styles</maml:name>
+        <maml:description>
+          <maml:para>Optional publish style filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishStyle[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Targets">
+        <maml:name>Target</maml:name>
+        <maml:description>
+          <maml:para>Optional target-name filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ToolOutput</maml:name>
+        <maml:description>
+          <maml:para>Optional tool/app output selection for DotNetPublish-backed release flows.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Tool</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Installer</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Store</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ToolsOnly</maml:name>
+        <maml:description>
+          <maml:para>Executes only the tool/app portion of the release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Validate</maml:name>
+        <maml:description>
+          <maml:para>Validates configuration through plan-only execution.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkspaceConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Optional workspace validation config override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkspaceDisableFeature</maml:name>
+        <maml:description>
+          <maml:para>Optional workspace feature disable list override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkspaceEnableFeature</maml:name>
+        <maml:description>
+          <maml:para>Optional workspace feature enable list override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkspaceProfile</maml:name>
+        <maml:description>
+          <maml:para>Optional workspace validation profile override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.PowerForgeReleaseResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Plan the configured release without running build/publish steps</maml:title>
+        <dev:code>Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -Plan</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Run tool releases only and publish tool assets to GitHub</maml:title>
+        <dev:code>Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishToolGitHub -ExitCode</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Invoke-ProjectBuild</command:name>
       <command:verb>Invoke</command:verb>
       <command:noun>ProjectBuild</command:noun>
@@ -7943,6 +9298,19 @@ Use -SignIncludeBinaries:$false to opt out.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SyncNETProjectVersion</maml:name>
+          <maml:description>
+            <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.&#xD;
+This is opt-in and updates the source .csproj file when a project path can be resolved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UseWildcardForFunctions</maml:name>
           <maml:description>
             <maml:para>Export all functions/aliases via wildcard in PSD1.</maml:para>
@@ -8627,6 +9995,19 @@ Use -SignIncludeBinaries:$false to opt out.</maml:para>
         <maml:name>SkipBuiltinReplacements</maml:name>
         <maml:description>
           <maml:para>Disables built-in replacements done by the module builder.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SyncNETProjectVersion</maml:name>
+        <maml:description>
+          <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.&#xD;
+This is opt-in and updates the source .csproj file when a project path can be resolved.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -11380,6 +12761,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -11450,6 +12832,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
@@ -14207,6 +15590,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -14226,6 +15610,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -14518,6 +15903,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
@@ -14537,6 +15923,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
@@ -19252,6 +20639,18 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ScriptAnalyzerInstallIfUnavailable</maml:name>
+          <maml:description>
+            <maml:para>Install PSScriptAnalyzer on demand before validation when it is missing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ScriptAnalyzerSeverity</maml:name>
           <maml:description>
             <maml:para>Severity for PSScriptAnalyzer checks.</maml:para>
@@ -19782,6 +21181,18 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ScriptAnalyzerInstallIfUnavailable</maml:name>
+        <maml:description>
+          <maml:para>Install PSScriptAnalyzer on demand before validation when it is missing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ScriptAnalyzerSeverity</maml:name>
         <maml:description>
           <maml:para>Severity for PSScriptAnalyzer checks.</maml:para>
@@ -20172,6 +21583,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
@@ -20314,6 +21726,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
@@ -20583,6 +21996,313 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
       <command:example>
         <maml:title>Create markdown about topic source</maml:title>
         <dev:code>New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>New-PowerForgeReleaseConfig</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>PowerForgeReleaseConfig</command:noun>
+      <maml:description>
+        <maml:para>Scaffolds a starter unified release.json configuration file.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Use this cmdlet to assemble a repository-level release config from the build configs the repo&#xD;
+already has, typically Build/project.build.json and&#xD;
+Build/powerforge.dotnetpublish.json.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-PowerForgeReleaseConfig</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Configuration</maml:name>
+          <maml:description>
+            <maml:para>Release configuration value written into the tool section.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DotNetPublishConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to an existing DotNet publish config file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Overwrite">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite an existing config file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoSchema</maml:name>
+          <maml:description>
+            <maml:para>Omits the $schema property from generated JSON.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path,ConfigPath">
+          <maml:name>OutputPath</maml:name>
+          <maml:description>
+            <maml:para>Output config path (default: Build\release.json).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackagesConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to an existing project-build config file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Returns detailed scaffold metadata instead of only the config path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Project root used to resolve relative paths.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipPackages</maml:name>
+          <maml:description>
+            <maml:para>Skips package config discovery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipTools</maml:name>
+          <maml:description>
+            <maml:para>Skips tool/app config discovery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Configuration</maml:name>
+        <maml:description>
+          <maml:para>Release configuration value written into the tool section.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DotNetPublishConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Optional path to an existing DotNet publish config file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Overwrite">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Overwrite an existing config file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoSchema</maml:name>
+        <maml:description>
+          <maml:para>Omits the $schema property from generated JSON.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path,ConfigPath">
+        <maml:name>OutputPath</maml:name>
+        <maml:description>
+          <maml:para>Output config path (default: Build\release.json).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackagesConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Optional path to an existing project-build config file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Returns detailed scaffold metadata instead of only the config path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Project root used to resolve relative paths.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipPackages</maml:name>
+        <maml:description>
+          <maml:para>Skips package config discovery.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipTools</maml:name>
+        <maml:description>
+          <maml:para>Skips tool/app config discovery.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String&#xD;
+PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Create a starter unified release config from the current repository root</maml:title>
+        <dev:code>New-PowerForgeReleaseConfig -ProjectRoot '.' -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Generate config from explicit package and DotNet publish config files</maml:title>
+        <dev:code>New-PowerForgeReleaseConfig -PackagesConfigPath '.\Build\project.build.json' -DotNetPublishConfigPath '.\Build\powerforge.dotnetpublish.json' -Force</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

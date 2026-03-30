@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.1
+Help Version: 3.0.2
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -57,6 +57,9 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
+
+### [Invoke-PowerForgeRelease](Invoke-PowerForgeRelease.md)
+Executes the unified repository release workflow from a JSON configuration.
 
 ### [Invoke-ProjectBuild](Invoke-ProjectBuild.md)
 Executes a repository-wide .NET build/release pipeline from a JSON configuration.
@@ -168,6 +171,9 @@ Scaffolds a starter powerforge.dotnetpublish.json configuration file.
 
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
+
+### [New-PowerForgeReleaseConfig](New-PowerForgeReleaseConfig.md)
+Scaffolds a starter unified release.json configuration file.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).

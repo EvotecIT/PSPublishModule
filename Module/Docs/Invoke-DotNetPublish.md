@@ -240,7 +240,7 @@ Optional style override for selected targets.
 Type: DotNetPublishStyle[]
 Parameter Sets: Settings, Config
 Aliases: Style
-Possible values: Portable, PortableCompat, PortableSize, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named

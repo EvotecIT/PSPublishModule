@@ -80,8 +80,34 @@ function Reset-PSModulePathForEdition {
   }
 }
 
+function Initialize-DesktopImportCapacity {
+  if ($PSVersionTable.PSEdition -ne 'Desktop') { return }
+
+  $targetFunctionCount = 18000
+  $targetVariableCount = 18000
+
+  try {
+    if (($MaximumFunctionCount -as [int]) -lt $targetFunctionCount) {
+      $global:MaximumFunctionCount = $targetFunctionCount
+    }
+  } catch {
+    $global:MaximumFunctionCount = $targetFunctionCount
+  }
+
+  try {
+    if (($MaximumVariableCount -as [int]) -lt $targetVariableCount) {
+      $global:MaximumVariableCount = $targetVariableCount
+    }
+  } catch {
+    $global:MaximumVariableCount = $targetVariableCount
+  }
+
+  Write-Verbose "Raised Windows PowerShell import limits to Function=$global:MaximumFunctionCount Variable=$global:MaximumVariableCount."
+}
+
 try {
   Reset-PSModulePathForEdition
+  Initialize-DesktopImportCapacity
 
   if ($ImportRequired -eq '1') {
     $modules = DecodeModules $ModulesB64

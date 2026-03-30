@@ -201,7 +201,12 @@ public sealed partial class ModulePipelineRunner
                         : mergeExecution.MergedModule
                             ? $"Build wrote a merged .psm1 entry script from {mergeExecution.ScriptFilesDetected} script source file(s)."
                             : "Build entry script did not require changes.",
-                details: Array.Empty<string>()));
+                details: BuildMergeExecutionOwnerDetails(
+                    mergeExecution.RequiredModules,
+                    mergeExecution.ApprovedModules,
+                    mergeExecution.DependentModules,
+                    mergeExecution.TopLevelInlinedFunctions,
+                    mergeExecution.TotalInlinedFunctions)));
         }
 
         if (documentationResult is not null &&
@@ -234,6 +239,53 @@ public sealed partial class ModulePipelineRunner
         }
 
         return notes.ToArray();
+    }
+
+    internal static string[] BuildMergeExecutionOwnerDetails(
+        IReadOnlyList<RequiredModuleReference>? requiredModules,
+        IReadOnlyList<string>? approvedModules,
+        IReadOnlyList<string>? dependentModules,
+        int topLevelInlinedFunctions,
+        int totalInlinedFunctions)
+    {
+        var details = new List<string>();
+
+        var formattedRequiredModules = (requiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .OrderBy(static module => module.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Select(FormatRequiredModule)
+            .Where(static module => !string.IsNullOrWhiteSpace(module))
+            .ToArray();
+        if (formattedRequiredModules.Length > 0)
+            details.Add($"Required modules ({formattedRequiredModules.Length}): {string.Join(", ", formattedRequiredModules)}");
+
+        var orderedApprovedModules = (approvedModules ?? Array.Empty<string>())
+            .Where(static module => !string.IsNullOrWhiteSpace(module))
+            .Select(static module => module.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static module => module, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (orderedApprovedModules.Length > 0)
+            details.Add($"Approved modules ({orderedApprovedModules.Length}): {string.Join(", ", orderedApprovedModules)}");
+
+        var orderedDependentModules = (dependentModules ?? Array.Empty<string>())
+            .Where(static module => !string.IsNullOrWhiteSpace(module))
+            .Select(static module => module.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static module => module, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (orderedDependentModules.Length > 0)
+            details.Add($"Dependent modules ({orderedDependentModules.Length}): {string.Join(", ", orderedDependentModules)}");
+
+        if (totalInlinedFunctions > 0)
+        {
+            details.Add(
+                topLevelInlinedFunctions > 0
+                    ? $"Functions inlined during merge: {topLevelInlinedFunctions} top-level function(s) inlined (total {totalInlinedFunctions} including dependencies)."
+                    : $"Functions inlined during merge: {totalInlinedFunctions} dependency function(s) inlined (no top-level functions required).");
+        }
+
+        return details.ToArray();
     }
 
     private BuildDiagnostic[] CreateBinaryConflictDiagnostics(
