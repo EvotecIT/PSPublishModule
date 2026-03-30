@@ -427,6 +427,64 @@ internal static partial class WebPipelineRunner
         return $"{baseMessage} ({duration})";
     }
 
+    internal static string FormatFailureMessage(Exception ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+
+        var firstMessage = GetFirstNonBlankExceptionMessage(ex, out var messageException);
+        if (!string.IsNullOrWhiteSpace(firstMessage))
+        {
+            if (ReferenceEquals(messageException, ex))
+                return firstMessage;
+
+            var outerType = ex.GetType().Name;
+            var messageType = messageException?.GetType().Name;
+            return string.IsNullOrWhiteSpace(messageType) || string.Equals(messageType, outerType, StringComparison.Ordinal)
+                ? $"{outerType}: {firstMessage}"
+                : $"{outerType} -> {messageType}: {firstMessage}";
+        }
+
+        if (ex is AggregateException aggregateException && aggregateException.InnerExceptions.Count > 1)
+            return $"{aggregateException.GetType().Name}: {aggregateException.InnerExceptions.Count} inner exceptions";
+
+        return ex.GetType().Name;
+    }
+
+    private static string? GetFirstNonBlankExceptionMessage(Exception ex, out Exception? messageException)
+    {
+        var queue = new Queue<Exception>();
+        var seen = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
+        queue.Enqueue(ex);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!seen.Add(current))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(current.Message))
+            {
+                messageException = current;
+                return current.Message.Trim();
+            }
+
+            if (current is AggregateException aggregateException)
+            {
+                foreach (var inner in aggregateException.InnerExceptions)
+                {
+                    if (inner is not null)
+                        queue.Enqueue(inner);
+                }
+            }
+
+            if (current.InnerException is not null)
+                queue.Enqueue(current.InnerException);
+        }
+
+        messageException = null;
+        return null;
+    }
+
     private static string FormatDuration(TimeSpan elapsed)
     {
         if (elapsed.TotalSeconds < 1)

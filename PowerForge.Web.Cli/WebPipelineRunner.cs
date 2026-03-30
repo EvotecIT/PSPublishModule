@@ -208,7 +208,7 @@ internal static partial class WebPipelineRunner
             catch (Exception ex)
             {
                 stepResult.Success = false;
-                stepResult.Message = AppendDuration(ex.Message, stopwatch);
+                stepResult.Message = AppendDuration(FormatFailureMessage(ex), stopwatch);
                 stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
                 result.Steps.Add(stepResult);
                 stepResultsByIndex[stepIndex] = stepResult;
