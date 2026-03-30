@@ -208,7 +208,9 @@ internal static partial class WebPipelineRunner
             catch (Exception ex)
             {
                 stepResult.Success = false;
-                stepResult.Message = AppendDuration(FormatFailureMessage(ex), stopwatch);
+                var failureMessage = FormatFailureMessage(ex);
+                logger?.Error($"{label}: {failureMessage}");
+                stepResult.Message = AppendDuration(failureMessage, stopwatch);
                 stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
                 result.Steps.Add(stepResult);
                 stepResultsByIndex[stepIndex] = stepResult;
@@ -289,5 +291,41 @@ internal static partial class WebPipelineRunner
         var infoVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty;
         var mvid = assembly.ManifestModule.ModuleVersionId.ToString("N");
         parts.Add($"{label}:{assemblyName}:{version}:{infoVersion}:{mvid}");
+    }
+
+    private static string BuildApiDocsFailureMessage(
+        string label,
+        ApiDocsType apiType,
+        string? xml,
+        string? help,
+        string? assembly,
+        string? outPath,
+        string? configPath,
+        string? nav,
+        string? sourceRoot,
+        Exception ex)
+    {
+        var fields = new List<string>
+        {
+            $"type={apiType}"
+        };
+
+        AppendApiDocsFailureField(fields, "xml", xml);
+        AppendApiDocsFailureField(fields, "help", help);
+        AppendApiDocsFailureField(fields, "assembly", assembly);
+        AppendApiDocsFailureField(fields, "out", outPath);
+        AppendApiDocsFailureField(fields, "config", configPath);
+        AppendApiDocsFailureField(fields, "nav", nav);
+        AppendApiDocsFailureField(fields, "sourceRoot", sourceRoot);
+
+        return $"{label}: apidocs failed ({string.Join(", ", fields)}): {FormatFailureMessage(ex)}";
+    }
+
+    private static void AppendApiDocsFailureField(List<string> fields, string key, string? value)
+    {
+        if (fields is null || string.IsNullOrWhiteSpace(value))
+            return;
+
+        fields.Add($"{key}='{value}'");
     }
 }
