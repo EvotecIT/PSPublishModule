@@ -7,6 +7,45 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    internal static Dictionary<string, string> BuildPublishMsBuildProperties(
+        IReadOnlyDictionary<string, string>? globalProperties,
+        DotNetPublishPublishOptions publish,
+        DotNetPublishStyle style)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in globalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key))
+                continue;
+
+            result[entry.Key] = entry.Value ?? string.Empty;
+        }
+
+        foreach (var entry in publish?.MsBuildProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key))
+                continue;
+
+            result[entry.Key] = entry.Value ?? string.Empty;
+        }
+
+        if (publish?.StyleOverrides is not null
+            && publish.StyleOverrides.TryGetValue(style.ToString(), out var styleOverride)
+            && styleOverride?.MsBuildProperties is not null)
+        {
+            foreach (var entry in styleOverride.MsBuildProperties)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key))
+                    continue;
+
+                result[entry.Key] = entry.Value ?? string.Empty;
+            }
+        }
+
+        return result;
+    }
+
     private static void AppendPublishStyleArgs(List<string> args, DotNetPublishPublishOptions publish, DotNetPublishStyle style)
     {
         switch (style)

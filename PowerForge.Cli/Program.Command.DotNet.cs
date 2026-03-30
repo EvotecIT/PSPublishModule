@@ -8,6 +8,8 @@ internal static partial class Program
 {
     private const string DotNetPublishUsage =
         "Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]";
+    private const string DotNetBundlePostProcessUsage =
+        "Usage: powerforge dotnet bundle-postprocess [--config <DotNetPublish.json>] --bundle <Id> --bundle-root <path> [--project-root <path>] [--target <Name>] [--rid <Rid>] [--framework <tfm>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--configuration <Release|Debug>] [--zip-path <path>] [--source-output <path>] [--delete-pattern <glob>] [--skip-archive] [--skip-metadata] [--token <name=value>] [--plan] [--output json]";
     private const string DotNetScaffoldUsage =
         "Usage: powerforge dotnet scaffold [--project-root <path>] [--project <App.csproj>] [--target <Name>] [--framework <tfm>] [--rid <Rid[,Rid...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>[,...]] [--configuration <Release|Debug>] [--out <powerforge.dotnetpublish.json>] [--overwrite] [--no-schema] [--output json]";
 
@@ -17,6 +19,7 @@ internal static partial class Program
         if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine(DotNetPublishUsage);
+            Console.WriteLine(DotNetBundlePostProcessUsage);
             Console.WriteLine(DotNetScaffoldUsage);
             return 2;
         }
@@ -233,6 +236,191 @@ internal static partial class Program
                     return 1;
                 }
             }
+            case "bundle-postprocess":
+            case "bundle-post-process":
+            case "bundle-finish":
+            case "bundle-finalize":
+            {
+                var subArgs = argv.Skip(1).ToArray();
+                var outputJson = IsJsonOutput(subArgs);
+                if (subArgs.Any(a => a.Equals("-h", StringComparison.OrdinalIgnoreCase) || a.Equals("--help", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.bundle-postprocess",
+                            Success = true,
+                            ExitCode = 0,
+                            Result = System.Text.Json.JsonSerializer.SerializeToElement(new { usage = DotNetBundlePostProcessUsage })
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine(DotNetBundlePostProcessUsage);
+                    }
+
+                    return 0;
+                }
+
+                var planOnly = subArgs.Any(a => a.Equals("--plan", StringComparison.OrdinalIgnoreCase) || a.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
+                var bundleId = TryGetOptionValue(subArgs, "--bundle")
+                    ?? TryGetOptionValue(subArgs, "--bundle-id");
+                var bundleRoot = TryGetOptionValue(subArgs, "--bundle-root")
+                    ?? TryGetOptionValue(subArgs, "--output-root")
+                    ?? TryGetOptionValue(subArgs, "--out");
+
+                if (string.IsNullOrWhiteSpace(bundleId) || string.IsNullOrWhiteSpace(bundleRoot))
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.bundle-postprocess",
+                            Success = false,
+                            ExitCode = 2,
+                            Error = "Both --bundle and --bundle-root are required."
+                        });
+                        return 2;
+                    }
+
+                    Console.WriteLine(DotNetBundlePostProcessUsage);
+                    return 2;
+                }
+
+                var configPath = TryGetOptionValue(subArgs, "--config");
+                if (string.IsNullOrWhiteSpace(configPath))
+                {
+                    var baseDir = TryGetProjectRoot(subArgs);
+                    if (!string.IsNullOrWhiteSpace(baseDir))
+                        baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+                    else
+                        baseDir = Directory.GetCurrentDirectory();
+
+                    configPath = FindDefaultDotNetPublishConfig(baseDir);
+                }
+
+                if (string.IsNullOrWhiteSpace(configPath))
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.bundle-postprocess",
+                            Success = false,
+                            ExitCode = 2,
+                            Error = "Missing --config and no default dotnet publish config found."
+                        });
+                        return 2;
+                    }
+
+                    Console.WriteLine(DotNetBundlePostProcessUsage);
+                    return 2;
+                }
+
+                try
+                {
+                    var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+                    var loaded = LoadDotNetPublishSpecWithPath(configPath);
+                    var spec = loaded.Value;
+                    var specPath = loaded.FullPath;
+                    var projectRoot = TryGetOptionValue(subArgs, "--project-root");
+                    if (!string.IsNullOrWhiteSpace(projectRoot))
+                        spec.DotNet.ProjectRoot = Path.GetFullPath(projectRoot.Trim().Trim('"'));
+
+                    var runner = new DotNetPublishPipelineRunner(cmdLogger);
+                    var plan = runner.Plan(spec, specPath);
+                    var bundle = (spec.Bundles ?? Array.Empty<DotNetPublishBundle>())
+                        .FirstOrDefault(entry => string.Equals(entry.Id, bundleId, StringComparison.OrdinalIgnoreCase));
+                    if (bundle is null)
+                        throw new InvalidOperationException($"Bundle '{bundleId}' was not found in the dotnet publish config.");
+                    if (bundle.PostProcess is null)
+                        throw new InvalidOperationException($"Bundle '{bundleId}' does not define PostProcess rules.");
+
+                    var request = new PowerForgeBundlePostProcessRequest
+                    {
+                        ProjectRoot = plan.ProjectRoot,
+                        AllowOutputOutsideProjectRoot = plan.AllowOutputOutsideProjectRoot,
+                        BundleRoot = Path.GetFullPath(bundleRoot.Trim().Trim('"')),
+                        BundleId = bundle.Id,
+                        TargetName = TryGetOptionValue(subArgs, "--target") ?? bundle.PrepareFromTarget,
+                        Runtime = TryGetOptionValue(subArgs, "--rid") ?? TryGetOptionValue(subArgs, "--runtime"),
+                        Framework = TryGetOptionValue(subArgs, "--framework"),
+                        Style = TryGetOptionValue(subArgs, "--style"),
+                        Configuration = TryGetOptionValue(subArgs, "--configuration") ?? plan.Configuration,
+                        ZipPath = TryGetOptionValue(subArgs, "--zip-path"),
+                        SourceOutputPath = TryGetOptionValue(subArgs, "--source-output"),
+                        SkipArchiveDirectories = subArgs.Any(a => a.Equals("--skip-archive", StringComparison.OrdinalIgnoreCase)),
+                        SkipMetadata = subArgs.Any(a => a.Equals("--skip-metadata", StringComparison.OrdinalIgnoreCase)),
+                        AdditionalDeletePatterns = ParseRepeatedOptionValues(subArgs, "--delete-pattern"),
+                        Tokens = ParseKeyValueOptions(subArgs, "--token")
+                            .ToDictionary(entry => entry.Key, entry => entry.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+                        PostProcess = bundle.PostProcess
+                    };
+
+                    var result = planOnly
+                        ? null
+                        : RunWithStatus(outputJson, cli, "Applying bundle post-process", () => new PowerForgeBundlePostProcessService(cmdLogger).Run(request));
+
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.bundle-postprocess",
+                            Success = true,
+                            ExitCode = 0,
+                            Config = "dotnetpublish",
+                            ConfigPath = specPath,
+                            Spec = CliJson.SerializeToElement(spec, CliJson.Context.DotNetPublishSpec),
+                            Plan = CliJson.SerializeToElement(request, CliJson.Context.PowerForgeBundlePostProcessRequest),
+                            Result = result is null ? null : CliJson.SerializeToElement(result, CliJson.Context.PowerForgeBundlePostProcessResult),
+                            Logs = LogsToJsonElement(logBuffer)
+                        });
+                        return 0;
+                    }
+
+                    if (planOnly)
+                    {
+                        cmdLogger.Success("Planned bundle post-process.");
+                        cmdLogger.Info($"Bundle: {request.BundleId}");
+                        cmdLogger.Info($"Bundle root: {request.BundleRoot}");
+                        return 0;
+                    }
+
+                    cmdLogger.Success($"Bundle post-process completed: {request.BundleRoot}");
+                    if (result is not null)
+                    {
+                        foreach (var archive in result.ArchivePaths ?? Array.Empty<string>())
+                            cmdLogger.Info($" -> archive: {archive}");
+                        if (!string.IsNullOrWhiteSpace(result.MetadataPath))
+                            cmdLogger.Info($" -> metadata: {result.MetadataPath}");
+                    }
+
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.bundle-postprocess",
+                            Success = false,
+                            ExitCode = 1,
+                            Error = ex.Message
+                        });
+                        return 1;
+                    }
+
+                    logger.Error(ex.Message);
+                    return 1;
+                }
+            }
             case "scaffold":
             case "init":
             {
@@ -332,6 +520,7 @@ internal static partial class Program
             default:
             {
                 Console.WriteLine(DotNetPublishUsage);
+                Console.WriteLine(DotNetBundlePostProcessUsage);
                 Console.WriteLine(DotNetScaffoldUsage);
                 return 2;
             }

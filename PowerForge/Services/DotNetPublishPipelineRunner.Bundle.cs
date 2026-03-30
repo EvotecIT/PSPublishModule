@@ -1,6 +1,4 @@
 using System.IO.Compression;
-using System.Text;
-using System.Text.Json;
 
 namespace PowerForge;
 
@@ -118,7 +116,24 @@ public sealed partial class DotNetPublishPipelineRunner
         tokens["signEnabled"] = (sourceTargetPlan?.Publish?.Sign?.Enabled ?? false).ToString();
 
         RunBundleScripts(plan, bundle, tokens);
-        ApplyBundlePostProcess(plan, bundle, outputDir, step, tokens);
+        if (bundle.PostProcess is not null)
+        {
+            _ = new PowerForgeBundlePostProcessService(_logger).Run(new PowerForgeBundlePostProcessRequest
+            {
+                ProjectRoot = plan.ProjectRoot,
+                AllowOutputOutsideProjectRoot = plan.AllowOutputOutsideProjectRoot,
+                BundleRoot = outputDir,
+                BundleId = bundle.Id,
+                TargetName = step.TargetName,
+                Runtime = step.Runtime,
+                Framework = step.Framework,
+                Style = step.Style?.ToString(),
+                Configuration = plan.Configuration,
+                ZipPath = step.BundleZipPath,
+                SourceOutputPath = sourceArtefact.OutputDir,
+                PostProcess = bundle.PostProcess
+            });
+        }
 
         string? zipPath = null;
         if (bundle.Zip)
@@ -142,204 +157,6 @@ public sealed partial class DotNetPublishPipelineRunner
             ExePath = summary.ExePath,
             ExeBytes = summary.ExeBytes
         };
-    }
-
-    private void ApplyBundlePostProcess(
-        DotNetPublishPlan plan,
-        DotNetPublishBundlePlan bundle,
-        string outputDir,
-        DotNetPublishStep step,
-        IReadOnlyDictionary<string, string> baseTokens)
-    {
-        if (bundle.PostProcess is null)
-            return;
-
-        var createdUtc = DateTimeOffset.UtcNow.ToString("o");
-        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in baseTokens)
-            tokens[entry.Key] = entry.Value;
-        tokens["createdUtc"] = createdUtc;
-        tokens["bundleId"] = bundle.Id;
-        tokens["bundleOutput"] = outputDir;
-
-        ApplyBundleArchiveRules(plan, bundle, outputDir, tokens);
-        ApplyBundleDeletePatterns(outputDir, bundle.PostProcess.DeletePatterns);
-        WriteBundleMetadata(plan, bundle, outputDir, step, createdUtc, tokens);
-    }
-
-    private void ApplyBundleArchiveRules(
-        DotNetPublishPlan plan,
-        DotNetPublishBundlePlan bundle,
-        string outputDir,
-        IReadOnlyDictionary<string, string> tokens)
-    {
-        foreach (var rule in bundle.PostProcess?.ArchiveDirectories ?? Array.Empty<DotNetPublishBundleArchiveRule>())
-        {
-            if (rule is null || string.IsNullOrWhiteSpace(rule.Path))
-                continue;
-
-            var rootPath = ResolvePath(outputDir, ApplyTemplate(rule.Path!, tokens));
-            EnsurePathWithinRoot(outputDir, rootPath, $"Bundle '{bundle.Id}' archive path");
-
-            if (!Directory.Exists(rootPath))
-            {
-                _logger.Warn($"Bundle '{bundle.Id}' archive path was not found: {rootPath}");
-                continue;
-            }
-
-            IEnumerable<string> directories = rule.Mode == DotNetPublishBundleArchiveMode.ChildDirectories
-                ? Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
-                : new[] { rootPath };
-
-            foreach (var directory in directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
-            {
-                var directoryName = new DirectoryInfo(directory).Name;
-                var archiveTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var entry in tokens)
-                    archiveTokens[entry.Key] = entry.Value;
-                archiveTokens["name"] = directoryName;
-
-                var archiveName = ApplyTemplate(
-                    string.IsNullOrWhiteSpace(rule.ArchiveNameTemplate) ? "{name}.zip" : rule.ArchiveNameTemplate!,
-                    archiveTokens);
-                if (!archiveName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                    archiveName += ".zip";
-
-                var archivePath = Path.Combine(Path.GetDirectoryName(directory)!, archiveName);
-                EnsurePathWithinRoot(outputDir, archivePath, $"Bundle '{bundle.Id}' archive output path");
-
-                if (File.Exists(archivePath))
-                    File.Delete(archivePath);
-
-                ZipFile.CreateFromDirectory(directory, archivePath);
-                _logger.Info($"Bundle archive -> {archivePath}");
-
-                if (rule.DeleteSource && Directory.Exists(directory))
-                    Directory.Delete(directory, recursive: true);
-            }
-        }
-    }
-
-    private void ApplyBundleDeletePatterns(string outputDir, IReadOnlyList<string>? patterns)
-    {
-        foreach (var pattern in (patterns ?? Array.Empty<string>())
-            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
-            .Select(pattern => pattern.Trim()))
-        {
-            var matches = FindBundlePatternMatches(outputDir, pattern);
-            foreach (var match in matches.OrderByDescending(path => path.Length).ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    if (Directory.Exists(match))
-                        Directory.Delete(match, recursive: true);
-                    else if (File.Exists(match))
-                        File.Delete(match);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn($"Failed to delete bundle post-process match '{match}'. Error: {ex.Message}");
-                }
-            }
-        }
-    }
-
-    private static string[] FindBundlePatternMatches(string outputDir, string pattern)
-    {
-        var normalizedPattern = (pattern ?? string.Empty)
-            .Trim()
-            .Replace('\\', '/');
-        if (normalizedPattern.Length == 0)
-            return Array.Empty<string>();
-
-        var exactPath = ResolvePath(outputDir, normalizedPattern);
-        if ((File.Exists(exactPath) || Directory.Exists(exactPath)) && IsPathInside(outputDir, exactPath))
-        {
-            return new[] { exactPath };
-        }
-
-        var entries = Directory.EnumerateFileSystemEntries(outputDir, "*", SearchOption.AllDirectories)
-            .Where(path =>
-            {
-                var relative = GetRelativePath(outputDir, path).Replace('\\', '/');
-                return BundlePatternMatches(relative, normalizedPattern);
-            })
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return entries;
-    }
-
-    private static bool BundlePatternMatches(string relativePath, string pattern)
-    {
-        if (WildcardMatch(relativePath, pattern))
-            return true;
-
-        // Treat "**/name" as "name anywhere, including the bundle root".
-        if (pattern.StartsWith("**/", StringComparison.Ordinal))
-            return WildcardMatch(relativePath, pattern.Substring("**/".Length));
-
-        return false;
-    }
-
-    private void WriteBundleMetadata(
-        DotNetPublishPlan plan,
-        DotNetPublishBundlePlan bundle,
-        string outputDir,
-        DotNetPublishStep step,
-        string createdUtc,
-        IReadOnlyDictionary<string, string> tokens)
-    {
-        var metadata = bundle.PostProcess?.Metadata;
-        if (metadata is null || string.IsNullOrWhiteSpace(metadata.Path))
-            return;
-
-        var metadataPath = ResolvePath(outputDir, ApplyTemplate(metadata.Path!, tokens));
-        EnsurePathWithinRoot(outputDir, metadataPath, $"Bundle '{bundle.Id}' metadata path");
-        Directory.CreateDirectory(Path.GetDirectoryName(metadataPath)!);
-
-        var payload = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        if (metadata.IncludeStandardProperties)
-        {
-            payload["schemaVersion"] = 1;
-            payload["bundleId"] = bundle.Id;
-            payload["target"] = step.TargetName ?? string.Empty;
-            payload["runtime"] = step.Runtime ?? string.Empty;
-            payload["framework"] = step.Framework ?? string.Empty;
-            payload["style"] = step.Style?.ToString() ?? string.Empty;
-            payload["configuration"] = plan.Configuration;
-            payload["outputPath"] = outputDir;
-            payload["zipPath"] = step.BundleZipPath;
-            payload["createdUtc"] = createdUtc;
-        }
-
-        foreach (var property in metadata.Properties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
-        {
-            payload[property.Key] = ApplyTemplate(property.Value ?? string.Empty, tokens);
-        }
-
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(metadataPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        _logger.Info($"Bundle metadata -> {metadataPath}");
-    }
-
-    private static bool IsPathInside(string rootPath, string candidatePath)
-    {
-        var root = Path.GetFullPath(rootPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        var candidate = Path.GetFullPath(candidatePath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        var comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
-        return string.Equals(
-                candidate,
-                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                comparison)
-            || candidate.StartsWith(root, comparison);
     }
 
     private static DotNetPublishArtefactResult? ResolveBundleSourceArtefact(

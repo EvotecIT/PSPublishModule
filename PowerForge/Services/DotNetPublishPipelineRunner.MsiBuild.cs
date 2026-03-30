@@ -69,7 +69,14 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan.Restore)
             args.Add("--no-restore");
 
-        args.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
+        var installerMsBuildProperties = BuildInstallerMsBuildProperties(
+            plan.MsBuildProperties,
+            installerConfig?.MsBuildProperties,
+            versionResolution.PropertyName,
+            versionResolution.Version,
+            licenseResolution.PropertyName,
+            licenseResolution.Path);
+        args.AddRange(BuildMsBuildPropertyArgs(installerMsBuildProperties));
         args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
         args.Add($"/p:PowerForgeMsiPayloadDir={prepare.StagingDir}");
         args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
@@ -83,16 +90,18 @@ public sealed partial class DotNetPublishPipelineRunner
             args.Add($"/p:PowerForgeMsiHarvestDirectoryRefId={prepare.HarvestDirectoryRefId}");
         if (!string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
             args.Add($"/p:PowerForgeMsiHarvestComponentGroupId={prepare.HarvestComponentGroupId}");
-        if (!string.IsNullOrWhiteSpace(versionResolution.Version))
+        if (!string.IsNullOrWhiteSpace(versionResolution.Version) &&
+            !string.IsNullOrWhiteSpace(versionResolution.PropertyName) &&
+            !installerMsBuildProperties.ContainsKey(versionResolution.PropertyName!))
         {
-            args.Add($"/p:{versionResolution.PropertyName}={versionResolution.Version}");
             args.Add($"/p:PowerForgeMsiVersion={versionResolution.Version}");
             _logger.Info(
                 $"MSI version for '{installerId}' resolved to {versionResolution.Version} ({versionResolution.PropertyName}).");
         }
-        if (!string.IsNullOrWhiteSpace(licenseResolution.Path))
+        if (!string.IsNullOrWhiteSpace(licenseResolution.Path) &&
+            !string.IsNullOrWhiteSpace(licenseResolution.PropertyName) &&
+            !installerMsBuildProperties.ContainsKey(licenseResolution.PropertyName!))
         {
-            args.Add($"/p:{licenseResolution.PropertyName}={licenseResolution.Path}");
             args.Add($"/p:PowerForgeMsiClientLicensePath={licenseResolution.Path}");
             if (!string.IsNullOrWhiteSpace(licenseResolution.ClientId))
                 args.Add($"/p:PowerForgeMsiClientId={licenseResolution.ClientId}");
@@ -145,6 +154,45 @@ public sealed partial class DotNetPublishPipelineRunner
         if (installer is null || string.IsNullOrWhiteSpace(installer.InstallerProjectPath))
             throw new InvalidOperationException($"Installer project path not configured for installer '{installerId}'.");
         return Path.GetFullPath(installer.InstallerProjectPath!);
+    }
+
+    internal static Dictionary<string, string> BuildInstallerMsBuildProperties(
+        IReadOnlyDictionary<string, string>? globalProperties,
+        IReadOnlyDictionary<string, string>? installerProperties,
+        string? versionPropertyName,
+        string? versionValue,
+        string? licensePropertyName,
+        string? licensePath)
+    {
+        var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (globalProperties is not null)
+        {
+            foreach (var entry in globalProperties)
+                merged[entry.Key] = entry.Value;
+        }
+
+        if (installerProperties is not null)
+        {
+            foreach (var entry in installerProperties)
+                merged[entry.Key] = entry.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(versionValue) &&
+            !string.IsNullOrWhiteSpace(versionPropertyName) &&
+            !merged.ContainsKey(versionPropertyName!))
+        {
+            merged[versionPropertyName!] = versionValue!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(licensePath) &&
+            !string.IsNullOrWhiteSpace(licensePropertyName) &&
+            !merged.ContainsKey(licensePropertyName!))
+        {
+            merged[licensePropertyName!] = licensePath!;
+        }
+
+        return merged;
     }
 
     private static Dictionary<string, DateTime> SnapshotMsiOutputs(string root)

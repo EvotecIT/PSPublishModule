@@ -126,6 +126,8 @@ Depending on config, the run can emit:
 - `PostProcess.ArchiveDirectories[]` can zip bundle subdirectories after composition, which is useful for plugin packs or other nested payloads that should ship as archives.
 - `PostProcess.DeletePatterns[]` removes files or folders from the composed bundle using wildcard patterns such as `**/*.pdb` or `**/createdump.exe`.
 - `PostProcess.Metadata` writes a JSON manifest from standard bundle properties plus templated custom values.
+- The same reusable post-process contract is also available outside the full publish pipeline through `powerforge dotnet bundle-postprocess` and `Invoke-PowerForgeBundlePostProcess`.
+- Standalone bundle post-process is useful when a repo keeps a thin PowerShell wrapper for product-specific launcher/readme generation but wants archive/delete/metadata mechanics to stay in PowerForge.
 - Set `Zip`, `ZipPath`, or `ZipNameTemplate` on the bundle when the composed folder should also become a release-ready archive.
 
 ## MSI From Bundle

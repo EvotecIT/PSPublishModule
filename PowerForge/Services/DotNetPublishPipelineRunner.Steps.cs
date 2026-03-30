@@ -177,7 +177,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan.NoBuildInPublish) publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);
-        publishArgs.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
+        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan.MsBuildProperties, target.Publish, style)));
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
         RunDotnet(plan.ProjectRoot, publishArgs);

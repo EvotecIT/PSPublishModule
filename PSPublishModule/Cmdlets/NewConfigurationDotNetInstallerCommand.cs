@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
 
@@ -89,6 +92,12 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }
 
     /// <summary>
+    /// Optional installer-specific MSBuild properties passed to <c>msi.build</c>.
+    /// </summary>
+    [Parameter]
+    public Hashtable? MsBuildProperties { get; set; }
+
+    /// <summary>
     /// Optional client-license injection policy.
     /// </summary>
     [Parameter]
@@ -113,10 +122,30 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
             HarvestComponentGroupId = NormalizeNullable(HarvestComponentGroupId),
             Sign = Sign,
             Versioning = Versioning,
+            MsBuildProperties = NormalizeHashtable(MsBuildProperties),
             ClientLicense = ClientLicense
         });
     }
 
     private static string? NormalizeNullable(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private static Dictionary<string, string>? NormalizeHashtable(Hashtable? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in values)
+        {
+            var key = entry.Key?.ToString()?.Trim();
+            var value = entry.Value?.ToString()?.Trim();
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                continue;
+
+            result[key] = value;
+        }
+
+        return result.Count == 0 ? null : result;
+    }
 }
