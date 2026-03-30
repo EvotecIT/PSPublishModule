@@ -154,6 +154,119 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "true",
+                ["WarningsNotAsErrors"] = "IL3000"
+            }
+        };
+
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions
+            {
+                MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PublishSingleFile"] = "false",
+                    ["SkipChatServiceSidecarBuild"] = "true"
+                },
+                StyleOverrides = new Dictionary<string, DotNetPublishStyleOverride>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PortableCompat"] = new DotNetPublishStyleOverride
+                    {
+                        MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["WarningsNotAsErrors"] = "NU1510",
+                            ["WindowsAppSDKSelfContained"] = "true"
+                        }
+                    }
+                }
+            }
+        };
+
+        var merged = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.Equal("false", merged["PublishSingleFile"]);
+        Assert.Equal("true", merged["SkipChatServiceSidecarBuild"]);
+        Assert.Equal("NU1510", merged["WarningsNotAsErrors"]);
+        Assert.Equal("true", merged["WindowsAppSDKSelfContained"]);
+    }
+
+    [Fact]
+    public void BuildPublishArguments_AppendsMergedOverridesAfterStyleDefaults()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release",
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "false"
+            }
+        };
+
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net8.0-windows10.0.26100.0",
+            "win-x64",
+            DotNetPublishStyle.PortableCompat,
+            "out");
+
+        var firstSingleFile = args.IndexOf("/p:PublishSingleFile=true");
+        var finalSingleFile = args.LastIndexOf("/p:PublishSingleFile=false");
+
+        Assert.True(firstSingleFile >= 0, "Expected style defaults to request single-file publish.");
+        Assert.True(finalSingleFile > firstSingleFile, "Expected merged overrides to win by appearing after style defaults.");
+    }
+
+    [Fact]
+    public void BuildWixHarvestFragment_PreservesSubdirectoriesForNestedFiles()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var stagingDir = Directory.CreateDirectory(Path.Combine(root, "payload")).FullName;
+            Directory.CreateDirectory(Path.Combine(stagingDir, "af-ZA"));
+            Directory.CreateDirectory(Path.Combine(stagingDir, "am-ET"));
+            File.WriteAllText(Path.Combine(stagingDir, "af-ZA", "Microsoft.ui.xaml.dll.mui"), "a");
+            File.WriteAllText(Path.Combine(stagingDir, "am-ET", "Microsoft.ui.xaml.dll.mui"), "b");
+            File.WriteAllText(Path.Combine(stagingDir, "root.txt"), "root");
+
+            var fragment = DotNetPublishPipelineRunner.BuildWixHarvestFragment(
+                stagingDir,
+                "INSTALLFOLDER",
+                "ProductFiles");
+
+            Assert.Contains("<DirectoryRef Id=\"INSTALLFOLDER\">", fragment, StringComparison.Ordinal);
+            Assert.Contains("Name=\"af-ZA\"", fragment, StringComparison.Ordinal);
+            Assert.Contains("Name=\"am-ET\"", fragment, StringComparison.Ordinal);
+            Assert.Contains("payload\\af-ZA\\Microsoft.ui.xaml.dll.mui", fragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("payload\\am-ET\\Microsoft.ui.xaml.dll.mui", fragment, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("payload\\root.txt", fragment, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void EnsureOutputDirectoryUnlocked_WhenLockedAndPolicyFail_Throws()
     {
         var root = CreateTempRoot();

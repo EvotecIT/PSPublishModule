@@ -80,6 +80,10 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? ManifestJsonPath { get; set; }
 
+    public bool AllowOutputOutsideProjectRoot { get; set; }
+
+    public bool AllowManifestOutsideProjectRoot { get; set; }
+
     public string? ChecksumsPath { get; set; }
 
     public bool SkipReleaseChecksums { get; set; }

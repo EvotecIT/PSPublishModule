@@ -861,6 +861,17 @@ internal sealed class PowerForgeReleaseService
             spec.DotNet.Configuration = request.Configuration!.Trim();
         }
 
+        if (request.AllowOutputOutsideProjectRoot || request.AllowManifestOutsideProjectRoot)
+        {
+            spec.DotNet ??= new DotNetPublishDotNetOptions();
+
+            if (request.AllowOutputOutsideProjectRoot)
+                spec.DotNet.AllowOutputOutsideProjectRoot = true;
+
+            if (request.AllowManifestOutsideProjectRoot)
+                spec.DotNet.AllowManifestOutsideProjectRoot = true;
+        }
+
         if (!string.IsNullOrWhiteSpace(request.OutputRoot))
             ApplyDotNetOutputRootOverride(spec, request.OutputRoot!);
 

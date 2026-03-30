@@ -162,22 +162,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"Using staging publish dir -> {publishDir}");
         }
 
-        var publishArgs = new List<string>
-        {
-            "publish",
-            target.ProjectPath,
-            "-c", cfg,
-            "--nologo",
-            "-f", tfm,
-            "--runtime", rid,
-            "--output", publishDir
-        };
-
-        if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        if (plan.NoBuildInPublish) publishArgs.Add("--no-build");
-
-        AppendPublishStyleArgs(publishArgs, target.Publish, style);
-        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan.MsBuildProperties, target.Publish, style)));
+        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
         RunDotnet(plan.ProjectRoot, publishArgs);
@@ -242,6 +227,63 @@ public sealed partial class DotNetPublishPipelineRunner
             StateTransfer = stateTransfer,
             SignedFiles = signedFiles
         };
+    }
+
+    internal static List<string> BuildPublishArguments(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style,
+        string outputDir)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        var publishArgs = new List<string>
+        {
+            "publish",
+            target.ProjectPath,
+            "-c", plan.Configuration,
+            "--nologo",
+            "-f", framework,
+            "--runtime", runtime,
+            "--output", outputDir
+        };
+
+        if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
+        if (plan.NoBuildInPublish) publishArgs.Add("--no-build");
+
+        AppendPublishStyleArgs(publishArgs, target.Publish, style);
+        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, style)));
+        return publishArgs;
+    }
+
+    internal static Dictionary<string, string> BuildPublishMsBuildProperties(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishStyle style)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        var merged = new Dictionary<string, string>(plan.MsBuildProperties, StringComparer.OrdinalIgnoreCase);
+
+        if (target.Publish.MsBuildProperties is not null)
+        {
+            foreach (var kv in target.Publish.MsBuildProperties)
+                merged[kv.Key] = kv.Value;
+        }
+
+        if (target.Publish.StyleOverrides is not null
+            && target.Publish.StyleOverrides.TryGetValue(style.ToString(), out var styleOverride)
+            && styleOverride?.MsBuildProperties is not null)
+        {
+            foreach (var kv in styleOverride.MsBuildProperties)
+                merged[kv.Key] = kv.Value;
+        }
+
+        return merged;
     }
 
 }
