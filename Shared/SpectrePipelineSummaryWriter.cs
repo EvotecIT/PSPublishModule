@@ -757,12 +757,45 @@ internal static class SpectrePipelineSummaryWriter
         var fyi = visibleNotes
             .Where(static note => note.Severity != ModuleOwnerNoteSeverity.Warning)
             .ToArray();
+        var detailedFyi = fyi
+            .Where(ShouldRenderOwnerNoteAsPanel)
+            .ToArray();
+        var compactFyi = fyi
+            .Where(note => !ShouldRenderOwnerNoteAsPanel(note))
+            .ToArray();
 
         AnsiConsole.WriteLine();
         AnsiConsole.Write(new Rule("[grey]Owner Notes[/]").LeftJustified());
 
         WriteOwnerNoteGroup("Action Needed", actionable, border, "[yellow]");
-        WriteOwnerNoteSummaryTable("FYI", fyi, border, "[blue]");
+        WriteOwnerNoteGroup("FYI", detailedFyi, border, "[blue]");
+        WriteOwnerNoteSummaryTable(detailedFyi.Length > 0 ? "More FYI" : "FYI", compactFyi, border, "[blue]");
+    }
+
+    internal static bool ShouldRenderOwnerNoteAsPanel(ModuleOwnerNote note)
+    {
+        if (note is null)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(note.WhyItMatters) || !string.IsNullOrWhiteSpace(note.NextStep))
+            return true;
+
+        var details = (note.Details ?? Array.Empty<string>())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .Select(static line => line.Trim())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+
+        if (details.Length > 1)
+            return true;
+
+        if (details.Length == 1 &&
+            !details[0].Equals(note.Summary?.Trim() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static void WriteOwnerNoteGroup(
