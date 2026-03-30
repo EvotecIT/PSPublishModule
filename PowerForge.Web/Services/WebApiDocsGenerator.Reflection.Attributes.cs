@@ -335,6 +335,11 @@ public static partial class WebApiDocsGenerator
         return ApiDocsAssemblyLoadContext.GetHostAssemblyProbeDirectories(assemblyPath);
     }
 
+    internal static IReadOnlyList<string> GetApiDocsNuGetPackageRootCandidates()
+    {
+        return ApiDocsAssemblyLoadContext.GetNuGetPackageRootCandidates();
+    }
+
     private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
     {
         private readonly AssemblyDependencyResolver _resolver;
@@ -578,17 +583,60 @@ public static partial class WebApiDocsGenerator
             }
         }
 
+        internal static IReadOnlyList<string> GetNuGetPackageRootCandidates()
+        {
+            var candidates = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddCandidate(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return;
+
+                try
+                {
+                    var fullPath = Path.GetFullPath(path);
+                    if (seen.Add(fullPath))
+                        candidates.Add(fullPath);
+                }
+                catch
+                {
+                    // Ignore invalid candidate paths.
+                }
+            }
+
+            AddCandidate(Environment.GetEnvironmentVariable("NUGET_PACKAGES"));
+
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (!string.IsNullOrWhiteSpace(home))
+                AddCandidate(Path.Combine(home, ".nuget", "packages"));
+
+            var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+            if (!string.IsNullOrWhiteSpace(userProfile))
+                AddCandidate(Path.Combine(userProfile, ".nuget", "packages"));
+
+            var homeDrive = Environment.GetEnvironmentVariable("HOMEDRIVE");
+            var homePath = Environment.GetEnvironmentVariable("HOMEPATH");
+            if (!string.IsNullOrWhiteSpace(homeDrive) && !string.IsNullOrWhiteSpace(homePath))
+                AddCandidate(Path.Combine(homeDrive + homePath, ".nuget", "packages"));
+
+            var specialFolderProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(specialFolderProfile))
+                AddCandidate(Path.Combine(specialFolderProfile, ".nuget", "packages"));
+
+            return candidates;
+        }
+
         private static string GetNuGetPackageRoot()
         {
-            var configured = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
-            if (!string.IsNullOrWhiteSpace(configured))
-                return Path.GetFullPath(configured);
+            var candidates = GetNuGetPackageRootCandidates();
+            foreach (var candidate in candidates)
+            {
+                if (Directory.Exists(candidate))
+                    return candidate;
+            }
 
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (string.IsNullOrWhiteSpace(userProfile))
-                return string.Empty;
-
-            return Path.Combine(userProfile, ".nuget", "packages");
+            return candidates.FirstOrDefault() ?? string.Empty;
         }
     }
 
