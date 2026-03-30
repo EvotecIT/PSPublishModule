@@ -22,7 +22,20 @@ public sealed class ModuleOwnerNotesSummaryTests
         Assert.Contains("PSSharedGoods", string.Join(Environment.NewLine, details), StringComparison.Ordinal);
         Assert.Contains("Approved modules (2): PSSharedGoods, PSWriteColor", details, StringComparer.Ordinal);
         Assert.Contains("Dependent modules (1): Microsoft.Graph.Authentication", details, StringComparer.Ordinal);
-        Assert.Contains("MergeMissing: 10 top-level function(s) inlined (total 12 including dependencies).", details, StringComparer.Ordinal);
+        Assert.Contains("Functions inlined during merge: 10 top-level function(s) inlined (total 12 including dependencies).", details, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void BuildMergeExecutionOwnerDetails_ReturnsEmptyArrayForNullInputsAndZeroCounts()
+    {
+        var details = ModulePipelineRunner.BuildMergeExecutionOwnerDetails(
+            requiredModules: null,
+            approvedModules: null,
+            dependentModules: null,
+            topLevelInlinedFunctions: 0,
+            totalInlinedFunctions: 0);
+
+        Assert.Empty(details);
     }
 
     [Fact]
@@ -35,7 +48,7 @@ public sealed class ModuleOwnerNotesSummaryTests
             details: new[]
             {
                 "Required modules (2): PSSharedGoods, PSWriteColor",
-                "MergeMissing: 10 top-level function(s) inlined (total 12 including dependencies)."
+                "Functions inlined during merge: 10 top-level function(s) inlined (total 12 including dependencies)."
             });
 
         Assert.True(SpectrePipelineSummaryWriter.ShouldRenderOwnerNoteAsPanel(note));

@@ -88,21 +88,21 @@ function Initialize-DesktopImportCapacity {
 
   try {
     if (($MaximumFunctionCount -as [int]) -lt $targetFunctionCount) {
-      $script:MaximumFunctionCount = $targetFunctionCount
+      $global:MaximumFunctionCount = $targetFunctionCount
     }
   } catch {
-    $script:MaximumFunctionCount = $targetFunctionCount
+    $global:MaximumFunctionCount = $targetFunctionCount
   }
 
   try {
     if (($MaximumVariableCount -as [int]) -lt $targetVariableCount) {
-      $script:MaximumVariableCount = $targetVariableCount
+      $global:MaximumVariableCount = $targetVariableCount
     }
   } catch {
-    $script:MaximumVariableCount = $targetVariableCount
+    $global:MaximumVariableCount = $targetVariableCount
   }
 
-  Write-Verbose "Raised Windows PowerShell import limits to Function=$MaximumFunctionCount Variable=$MaximumVariableCount."
+  Write-Verbose "Raised Windows PowerShell import limits to Function=$global:MaximumFunctionCount Variable=$global:MaximumVariableCount."
 }
 
 try {

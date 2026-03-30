@@ -783,7 +783,6 @@ internal static class SpectrePipelineSummaryWriter
         var details = (note.Details ?? Array.Empty<string>())
             .Where(static line => !string.IsNullOrWhiteSpace(line))
             .Select(static line => line.Trim())
-            .Where(static line => !string.IsNullOrWhiteSpace(line))
             .ToArray();
 
         if (details.Length > 1)

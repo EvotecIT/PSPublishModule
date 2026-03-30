@@ -10,8 +10,8 @@ public sealed class PowerForgeScriptsTests
         var script = PowerForgeScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");
 
         Assert.Contains("function Initialize-DesktopImportCapacity", script, StringComparison.Ordinal);
-        Assert.Contains("$script:MaximumFunctionCount = $targetFunctionCount", script, StringComparison.Ordinal);
-        Assert.Contains("$script:MaximumVariableCount = $targetVariableCount", script, StringComparison.Ordinal);
+        Assert.Contains("$global:MaximumFunctionCount = $targetFunctionCount", script, StringComparison.Ordinal);
+        Assert.Contains("$global:MaximumVariableCount = $targetVariableCount", script, StringComparison.Ordinal);
 
         var resetIndex = script.IndexOf("Reset-PSModulePathForEdition", StringComparison.Ordinal);
         var initializeCallIndex = script.LastIndexOf("Initialize-DesktopImportCapacity", StringComparison.Ordinal);

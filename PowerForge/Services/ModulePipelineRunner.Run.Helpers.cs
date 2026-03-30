@@ -277,8 +277,13 @@ public sealed partial class ModulePipelineRunner
         if (orderedDependentModules.Length > 0)
             details.Add($"Dependent modules ({orderedDependentModules.Length}): {string.Join(", ", orderedDependentModules)}");
 
-        if (topLevelInlinedFunctions > 0 || totalInlinedFunctions > 0)
-            details.Add($"MergeMissing: {topLevelInlinedFunctions} top-level function(s) inlined (total {totalInlinedFunctions} including dependencies).");
+        if (totalInlinedFunctions > 0)
+        {
+            details.Add(
+                topLevelInlinedFunctions > 0
+                    ? $"Functions inlined during merge: {topLevelInlinedFunctions} top-level function(s) inlined (total {totalInlinedFunctions} including dependencies)."
+                    : $"Functions inlined during merge: {totalInlinedFunctions} dependency function(s) inlined (no top-level functions required).");
+        }
 
         return details.ToArray();
     }
