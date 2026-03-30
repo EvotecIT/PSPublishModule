@@ -330,28 +330,49 @@ public static partial class WebApiDocsGenerator
         }
     }
 
+    internal static IReadOnlyList<string> GetApiDocsHostProbeDirectories(string assemblyPath)
+    {
+        return ApiDocsAssemblyLoadContext.GetHostAssemblyProbeDirectories(assemblyPath);
+    }
+
     private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
     {
         private readonly AssemblyDependencyResolver _resolver;
         private readonly IReadOnlyDictionary<string, string> _dependencyPaths;
+        private readonly IReadOnlyDictionary<string, string> _hostProbePaths;
 
         internal ApiDocsAssemblyLoadContext(string assemblyPath)
             : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPath)}", isCollectible: false)
         {
             _resolver = new AssemblyDependencyResolver(assemblyPath);
             _dependencyPaths = BuildDependencyPathMap(assemblyPath);
+            _hostProbePaths = BuildHostAssemblyPathMap(assemblyPath);
         }
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             var dependencyPath = _resolver.ResolveAssemblyToPath(assemblyName);
-            if (!string.IsNullOrWhiteSpace(dependencyPath))
-                return LoadFromAssemblyPath(dependencyPath);
+            var dependencyAssembly = TryLoadFromPath(dependencyPath);
+            if (dependencyAssembly is not null)
+                return dependencyAssembly;
 
             if (!string.IsNullOrWhiteSpace(assemblyName.Name) &&
                 _dependencyPaths.TryGetValue(assemblyName.Name, out var mappedPath) &&
                 File.Exists(mappedPath))
-                return LoadFromAssemblyPath(mappedPath);
+            {
+                var mappedAssembly = TryLoadFromPath(mappedPath);
+                if (mappedAssembly is not null)
+                    return mappedAssembly;
+            }
+
+            if (!string.IsNullOrWhiteSpace(assemblyName.Name) &&
+                _hostProbePaths.TryGetValue(assemblyName.Name, out var hostPath) &&
+                File.Exists(hostPath))
+            {
+                var hostAssembly = TryLoadFromPath(hostPath);
+                if (hostAssembly is not null)
+                    return hostAssembly;
+            }
 
             var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
                 .FirstOrDefault(existing => AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
@@ -368,6 +389,29 @@ public static partial class WebApiDocsGenerator
                 return LoadUnmanagedDllFromPath(unmanagedDllPath);
 
             return IntPtr.Zero;
+        }
+
+        private Assembly? TryLoadFromPath(string? candidatePath)
+        {
+            if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                return null;
+
+            try
+            {
+                return LoadFromAssemblyPath(candidatePath);
+            }
+            catch (FileNotFoundException)
+            {
+                return null;
+            }
+            catch (FileLoadException)
+            {
+                return null;
+            }
+            catch (BadImageFormatException)
+            {
+                return null;
+            }
         }
 
         private static IReadOnlyDictionary<string, string> BuildDependencyPathMap(string assemblyPath)
@@ -428,6 +472,77 @@ public static partial class WebApiDocsGenerator
             }
 
             return dependencyPaths;
+        }
+
+        private static IReadOnlyDictionary<string, string> BuildHostAssemblyPathMap(string assemblyPath)
+        {
+            var dependencyPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var directory in GetHostAssemblyProbeDirectories(assemblyPath))
+            {
+                if (!Directory.Exists(directory))
+                    continue;
+
+                foreach (var dllPath in Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly))
+                {
+                    var assemblyName = Path.GetFileNameWithoutExtension(dllPath);
+                    if (string.IsNullOrWhiteSpace(assemblyName) || dependencyPaths.ContainsKey(assemblyName))
+                        continue;
+
+                    dependencyPaths[assemblyName] = dllPath;
+                }
+            }
+
+            return dependencyPaths;
+        }
+
+        internal static IReadOnlyList<string> GetHostAssemblyProbeDirectories(string assemblyPath)
+        {
+            var directories = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddDirectory(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return;
+
+                try
+                {
+                    var fullPath = Path.GetFullPath(path);
+                    if (Directory.Exists(fullPath) && seen.Add(fullPath))
+                        directories.Add(fullPath);
+                }
+                catch
+                {
+                    // Ignore invalid probe paths.
+                }
+            }
+
+            AddDirectory(Path.GetDirectoryName(assemblyPath));
+            AddDirectory(AppContext.BaseDirectory);
+            AddDirectory(Environment.GetEnvironmentVariable("PSHOME"));
+
+            var pathValue = Environment.GetEnvironmentVariable("PATH");
+            if (!string.IsNullOrWhiteSpace(pathValue))
+            {
+                foreach (var entry in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    AddDirectory(entry);
+                }
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                AddDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7"));
+                AddDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell"));
+            }
+            else
+            {
+                AddDirectory("/opt/microsoft/powershell/7");
+                AddDirectory("/usr/local/microsoft/powershell/7");
+                AddDirectory("/usr/share/powershell/7");
+            }
+
+            return directories;
         }
 
         private static void AddDependencyPaths(
