@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -10,7 +12,7 @@ internal static class PowerForgeReleaseRequestMapper
         PowerForgeReleaseRequest? defaults,
         PowerForgeReleaseInvocationOptions options)
     {
-        var request = defaults ?? new PowerForgeReleaseRequest();
+        var request = Clone(defaults);
         request.ConfigPath = configFullPath;
         request.PlanOnly = options.PlanOnly;
         request.ValidateOnly = options.ValidateOnly;
@@ -81,6 +83,68 @@ internal static class PowerForgeReleaseRequestMapper
             request.InstallerMsBuildProperties = options.InstallerMsBuildProperties;
 
         return request;
+    }
+
+    private static PowerForgeReleaseRequest Clone(PowerForgeReleaseRequest? source)
+    {
+        if (source is null)
+            return new PowerForgeReleaseRequest();
+
+        return new PowerForgeReleaseRequest
+        {
+            ConfigPath = source.ConfigPath,
+            PlanOnly = source.PlanOnly,
+            ValidateOnly = source.ValidateOnly,
+            PackagesOnly = source.PackagesOnly,
+            ModuleOnly = source.ModuleOnly,
+            ToolsOnly = source.ToolsOnly,
+            PublishNuget = source.PublishNuget,
+            PublishProjectGitHub = source.PublishProjectGitHub,
+            PublishToolGitHub = source.PublishToolGitHub,
+            Configuration = source.Configuration,
+            ModuleNoDotnetBuild = source.ModuleNoDotnetBuild,
+            ModuleVersion = source.ModuleVersion,
+            ModulePreReleaseTag = source.ModulePreReleaseTag,
+            ModuleNoSign = source.ModuleNoSign,
+            ModuleSignModule = source.ModuleSignModule,
+            SkipRestore = source.SkipRestore,
+            SkipBuild = source.SkipBuild,
+            SkipWorkspaceValidation = source.SkipWorkspaceValidation,
+            WorkspaceConfigPath = source.WorkspaceConfigPath,
+            WorkspaceProfile = source.WorkspaceProfile,
+            WorkspaceTestimoXRoot = source.WorkspaceTestimoXRoot,
+            WorkspaceEnableFeatures = source.WorkspaceEnableFeatures.ToArray(),
+            WorkspaceDisableFeatures = source.WorkspaceDisableFeatures.ToArray(),
+            OutputRoot = source.OutputRoot,
+            StageRoot = source.StageRoot,
+            ManifestJsonPath = source.ManifestJsonPath,
+            ChecksumsPath = source.ChecksumsPath,
+            SkipReleaseChecksums = source.SkipReleaseChecksums,
+            KeepSymbols = source.KeepSymbols,
+            EnableSigning = source.EnableSigning,
+            SignProfile = source.SignProfile,
+            SignToolPath = source.SignToolPath,
+            SignThumbprint = source.SignThumbprint,
+            SignSubjectName = source.SignSubjectName,
+            SignOnMissingTool = source.SignOnMissingTool,
+            SignOnFailure = source.SignOnFailure,
+            SignTimestampUrl = source.SignTimestampUrl,
+            SignDescription = source.SignDescription,
+            SignUrl = source.SignUrl,
+            SignCsp = source.SignCsp,
+            SignKeyContainer = source.SignKeyContainer,
+            PackageSignThumbprint = source.PackageSignThumbprint,
+            PackageSignStore = source.PackageSignStore,
+            PackageSignTimestampUrl = source.PackageSignTimestampUrl,
+            InstallerMsBuildProperties = new Dictionary<string, string>(source.InstallerMsBuildProperties, StringComparer.OrdinalIgnoreCase),
+            Targets = source.Targets.ToArray(),
+            Runtimes = source.Runtimes.ToArray(),
+            Frameworks = source.Frameworks.ToArray(),
+            Styles = source.Styles.ToArray(),
+            Flavors = source.Flavors.ToArray(),
+            ToolOutputs = source.ToolOutputs.ToArray(),
+            SkipToolOutputs = source.SkipToolOutputs.ToArray()
+        };
     }
 
     private static string? ChooseString(string? currentValue, string? overrideValue)
