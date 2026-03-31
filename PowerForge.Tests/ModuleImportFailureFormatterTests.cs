@@ -38,6 +38,9 @@ public sealed class ModuleImportFailureFormatterTests
                 "PFIMPORT::FAILED\n" +
                 "PFIMPORT::PSVERSION::5.1.26100.1\n" +
                 "PFIMPORT::PSEDITION::Desktop\n" +
+                "PFIMPORT::PSMODULEPATH::BEGIN\n" +
+                @"C:\Users\Test\Documents\WindowsPowerShell\Modules;C:\Program Files\WindowsPowerShell\Modules" + "\n" +
+                "PFIMPORT::PSMODULEPATH::END\n" +
                 "PFIMPORT::ERRORTYPE::System.Reflection.ReflectionTypeLoadException\n" +
                 "PFIMPORT::ERROR::Unable to load one or more of the requested types. Retrieve the LoaderExceptions property for more information.\n" +
                 "PFIMPORT::LOADERERROR::Could not load file or assembly 'System.Data.SQLite, Version=1.0.119.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139' or one of its dependencies.\n",
@@ -54,6 +57,7 @@ public sealed class ModuleImportFailureFormatterTests
         Assert.Contains("Import-Module failed during Windows PowerShell/Desktop validation (exit 1).", message);
         Assert.Contains("Cause: Could not load file or assembly 'System.Data.SQLite, Version=1.0.119.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139' or one of its dependencies.", message);
         Assert.Contains("PowerShell: 5.1.26100.1 (Desktop)", message);
+        Assert.Contains(@"PSModulePath: C:\Users\Test\Documents\WindowsPowerShell\Modules | C:\Program Files\WindowsPowerShell\Modules", message);
         Assert.DoesNotContain("Cause: Unable to load one or more of the requested types.", message);
     }
 }

@@ -51,6 +51,45 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         }
     }
 
+    [Fact]
+    public void GetImportValidationTargets_UsesCoreOnly_WhenCompatiblePSEditionsAreCoreOnly()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var targets = ModulePipelineRunner.GetImportValidationTargets(new[] { "Core" });
+
+        var target = Assert.Single(targets);
+        Assert.Equal("Core", target.PowerShellEdition);
+        Assert.True(target.PreferPwsh);
+    }
+
+    [Fact]
+    public void GetImportValidationTargets_SkipsDesktop_WhenMinimumPowerShellVersionRequiresPwsh()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var stagingPath = CreateStagingPath();
+        try
+        {
+            CreateBinaryPayload(stagingPath, "Default");
+
+            var targets = ModulePipelineRunner.GetImportValidationTargets(
+                new[] { "Desktop", "Core" },
+                stagingPath,
+                minimumPowerShellVersion: "7.5");
+
+            var target = Assert.Single(targets);
+            Assert.Equal("Core", target.PowerShellEdition);
+            Assert.True(target.PreferPwsh);
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingPath);
+        }
+    }
+
     private static string CreateStagingPath()
     {
         var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

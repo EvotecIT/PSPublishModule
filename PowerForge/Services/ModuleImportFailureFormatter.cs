@@ -46,6 +46,9 @@ internal static class ModuleImportFailureFormatter
         if (!string.IsNullOrWhiteSpace(result.Executable))
             sb.AppendLine().Append("Executable: ").Append(result.Executable);
 
+        if (diagnostics.PSModulePathEntries.Length > 0)
+            sb.AppendLine().Append("PSModulePath: ").Append(string.Join(" | ", diagnostics.PSModulePathEntries));
+
         if (!string.IsNullOrWhiteSpace(diagnostics.StderrSummary) &&
             !StringEqualsNormalized(diagnostics.StderrSummary, cause))
         {
@@ -80,12 +83,41 @@ internal static class ModuleImportFailureFormatter
         string? errorType = null;
         string? importError = null;
         string? stdoutSummary = null;
+        var psModulePathEntries = new List<string>();
         var loaderErrors = new List<string>();
+        var inPsModulePath = false;
 
         foreach (var rawLine in SplitLines(stdout))
         {
             var line = rawLine.Trim();
             if (line.Length == 0) continue;
+
+            if (line.Equals("PFIMPORT::PSMODULEPATH::BEGIN", StringComparison.OrdinalIgnoreCase))
+            {
+                inPsModulePath = true;
+                continue;
+            }
+
+            if (line.Equals("PFIMPORT::PSMODULEPATH::END", StringComparison.OrdinalIgnoreCase))
+            {
+                inPsModulePath = false;
+                continue;
+            }
+
+            if (inPsModulePath)
+            {
+                foreach (var entry in line.Split(
+                    new[] { ';', Path.PathSeparator },
+                    StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static value => value.Trim())
+                    .Where(static value => !string.IsNullOrWhiteSpace(value)))
+                {
+                    if (!psModulePathEntries.Contains(entry, StringComparer.OrdinalIgnoreCase))
+                        psModulePathEntries.Add(entry);
+                }
+
+                continue;
+            }
 
             if (line.StartsWith("PFIMPORT::PSVERSION::", StringComparison.OrdinalIgnoreCase))
             {
@@ -133,6 +165,7 @@ internal static class ModuleImportFailureFormatter
             psEdition,
             errorType,
             importError,
+            psModulePathEntries.ToArray(),
             loaderErrors.ToArray(),
             Normalize(stderr),
             stdoutSummary);
@@ -165,6 +198,7 @@ internal static class ModuleImportFailureFormatter
         internal string? PSEdition { get; }
         internal string? ErrorType { get; }
         internal string? ImportError { get; }
+        internal string[] PSModulePathEntries { get; }
         internal string[] LoaderErrors { get; }
         internal string? StderrSummary { get; }
         internal string? StdoutSummary { get; }
@@ -174,6 +208,7 @@ internal static class ModuleImportFailureFormatter
             string? psEdition,
             string? errorType,
             string? importError,
+            string[]? psModulePathEntries,
             string[]? loaderErrors,
             string? stderrSummary,
             string? stdoutSummary)
@@ -182,6 +217,7 @@ internal static class ModuleImportFailureFormatter
             PSEdition = psEdition;
             ErrorType = errorType;
             ImportError = importError;
+            PSModulePathEntries = psModulePathEntries ?? Array.Empty<string>();
             LoaderErrors = loaderErrors ?? Array.Empty<string>();
             StderrSummary = stderrSummary;
             StdoutSummary = stdoutSummary;

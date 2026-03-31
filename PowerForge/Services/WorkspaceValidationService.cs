@@ -176,7 +176,7 @@ public sealed class WorkspaceValidationService
         lines.Add($"Step '{step.Name}' failed with exit code {exitCode}.");
         lines.Add($"Command: {step.DisplayCommand}");
 
-        var detail = FirstNonEmptyLine(stdErr) ?? FirstNonEmptyLine(stdOut);
+        var detail = BuildFailureDetail(stdErr, stdOut);
         if (!string.IsNullOrWhiteSpace(detail))
             lines.Add($"Detail: {detail}");
 
@@ -186,16 +186,49 @@ public sealed class WorkspaceValidationService
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string? FirstNonEmptyLine(string? text)
+    private static string? BuildFailureDetail(string? stdErr, string? stdOut)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        var stderrLines = ExtractFailureLines(stdErr);
+        var stdoutLines = ExtractFailureLines(stdOut);
+        var detailLines = new List<string>();
+
+        if (stderrLines.Count > 0)
+            detailLines.AddRange(stderrLines);
+        else if (stdoutLines.Count > 0)
+            detailLines.AddRange(stdoutLines);
+
+        if (detailLines.Count == 0)
             return null;
 
-        var value = text!;
-        return value
+        return string.Join(Environment.NewLine, detailLines.Take(6));
+    }
+
+    private static List<string> ExtractFailureLines(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new List<string>();
+
+        var lines = text!
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
-            .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Where(line => !ShouldSkipFailureLine(line))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return lines;
+    }
+
+    private static bool ShouldSkipFailureLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return true;
+
+        return line.StartsWith("At ", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("+ CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("+ FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase);
     }
 
     private static WorkspaceValidationProfile ResolveProfile(WorkspaceValidationSpec spec, string? requestedProfile)
