@@ -18,7 +18,7 @@ public sealed class InvokeProjectReleaseCommand : PSCmdlet
     /// PowerShell-authored project/release object.
     /// </summary>
     [Parameter(Mandatory = true)]
-    public ConfigurationProject? Project { get; set; }
+    public ConfigurationProject Project { get; set; } = new();
 
     /// <summary>
     /// Builds the release plan without executing steps.
@@ -254,11 +254,8 @@ public sealed class InvokeProjectReleaseCommand : PSCmdlet
 
         try
         {
-            if (Project is null)
-                throw new PSArgumentException("Project is required.");
-
             var projectRoot = ResolveProjectRoot(Project.ProjectRoot);
-            var configFullPath = Path.Combine(projectRoot, ".powerforge", "release.project.ps1");
+            var configFullPath = Path.Combine(projectRoot, ".powerforge", "project.release.json");
             var (spec, requestDefaults) = PowerForgeProjectDslMapper.CreateRelease(Project, configFullPath, projectRoot);
 
             if (!Plan.IsPresent && !Validate.IsPresent &&

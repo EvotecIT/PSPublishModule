@@ -64,7 +64,7 @@ public sealed class PowerForgeProjectDslMapperTests
             }
         };
 
-        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\project.release.json", @"C:\repo");
 
         Assert.NotNull(spec.Tools);
         Assert.NotNull(spec.Tools!.DotNetPublish);
@@ -129,7 +129,7 @@ public sealed class PowerForgeProjectDslMapperTests
             }
         };
 
-        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\project.release.json", @"C:\repo");
 
         Assert.NotNull(spec.Tools);
         Assert.NotNull(spec.Tools!.DotNetPublish);
@@ -166,7 +166,7 @@ public sealed class PowerForgeProjectDslMapperTests
             }
         };
 
-        var (_, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+        var (_, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\project.release.json", @"C:\repo");
 
         Assert.Equal(2, request.ToolOutputs.Length);
         Assert.Contains(PowerForgeReleaseToolOutputKind.Portable, request.ToolOutputs);
@@ -197,7 +197,7 @@ public sealed class PowerForgeProjectDslMapperTests
             }
         };
 
-        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\release.project.ps1", @"C:\repo");
+        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(project, @"C:\repo\.powerforge\project.release.json", @"C:\repo");
 
         Assert.NotNull(spec.Tools);
         Assert.NotNull(spec.Tools!.DotNetPublish);

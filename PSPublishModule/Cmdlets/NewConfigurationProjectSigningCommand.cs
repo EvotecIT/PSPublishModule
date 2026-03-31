@@ -50,7 +50,7 @@ public sealed class NewConfigurationProjectSigningCommand : PSCmdlet
     /// Optional timestamp URL.
     /// </summary>
     [Parameter]
-    public string? TimestampUrl { get; set; } = "http://timestamp.digicert.com";
+    public string? TimestampUrl { get; set; } = "https://timestamp.digicert.com";
 
     /// <summary>
     /// Optional signature description.

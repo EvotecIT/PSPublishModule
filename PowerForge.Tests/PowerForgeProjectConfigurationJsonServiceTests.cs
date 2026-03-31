@@ -143,6 +143,40 @@ public sealed class PowerForgeProjectConfigurationJsonServiceTests
         }
     }
 
+    [Fact]
+    public void Save_ThrowsWhenFileExistsAndOverwriteIsFalse()
+    {
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var path = Path.Combine(tempRoot, "project.release.json");
+            File.WriteAllText(path, "{}");
+
+            var service = new PowerForgeProjectConfigurationJsonService();
+            var project = new ConfigurationProject
+            {
+                Name = "Demo",
+                Targets = new[]
+                {
+                    new ConfigurationProjectTarget
+                    {
+                        Name = "Cli",
+                        ProjectPath = "src/Cli/Cli.csproj",
+                        Framework = "net10.0"
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Save(project, path, overwrite: false));
+            Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "PowerForgeProjectJson-" + Guid.NewGuid().ToString("N"));

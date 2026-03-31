@@ -70,7 +70,7 @@ public sealed class NewConfigurationProjectTargetCommand : PSCmdlet
     public string? OutputPath { get; set; }
 
     /// <summary>
-    /// Requested output categories for this target.
+    /// Requested output categories for this target. Defaults to <c>Tool</c> when omitted.
     /// </summary>
     [Parameter]
     public ConfigurationProjectTargetOutputType[]? OutputType { get; set; }

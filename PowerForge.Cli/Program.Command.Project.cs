@@ -83,7 +83,7 @@ internal static partial class Program
             var projectRoot = string.IsNullOrWhiteSpace(project.ProjectRoot)
                 ? Path.GetDirectoryName(fullConfigPath) ?? Directory.GetCurrentDirectory()
                 : project.ProjectRoot!;
-            var syntheticConfigPath = Path.Combine(projectRoot, ".powerforge", "release.project.json");
+            var syntheticConfigPath = Path.Combine(projectRoot, ".powerforge", "project.release.json");
             var (spec, requestDefaults) = PowerForgeProjectDslMapper.CreateRelease(project, syntheticConfigPath, projectRoot);
             var request = BuildReleaseRequestFromArgs(
                 argv,

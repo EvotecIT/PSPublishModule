@@ -19,7 +19,7 @@ public sealed class ImportConfigurationProjectCommand : PSCmdlet
     /// Path to the JSON configuration file.
     /// </summary>
     [Parameter(Mandatory = true)]
-    [Alias("ConfigPath", "OutputPath")]
+    [Alias("ConfigPath", "FilePath", "JsonPath")]
     public string Path { get; set; } = string.Empty;
 
     /// <summary>

@@ -53,7 +53,8 @@ public sealed class NewConfigurationProjectCommand : PSCmdlet
     /// Project targets.
     /// </summary>
     [Parameter(Mandatory = true)]
-    public ConfigurationProjectTarget[]? Target { get; set; }
+    [ValidateCount(1, int.MaxValue)]
+    public ConfigurationProjectTarget[] Target { get; set; } = Array.Empty<ConfigurationProjectTarget>();
 
     /// <summary>
     /// Optional installers.
@@ -66,7 +67,7 @@ public sealed class NewConfigurationProjectCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var targets = (Target ?? Array.Empty<ConfigurationProjectTarget>())
+        var targets = Target
             .Where(value => value is not null)
             .ToArray();
         if (targets.Length == 0)

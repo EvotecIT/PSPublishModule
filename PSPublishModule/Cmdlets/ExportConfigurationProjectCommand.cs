@@ -20,7 +20,7 @@ public sealed class ExportConfigurationProjectCommand : PSCmdlet
     /// Project configuration object to export.
     /// </summary>
     [Parameter(Mandatory = true)]
-    public ConfigurationProject? Project { get; set; }
+    public ConfigurationProject Project { get; set; } = new();
 
     /// <summary>
     /// Output JSON path.
@@ -41,9 +41,6 @@ public sealed class ExportConfigurationProjectCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        if (Project is null)
-            throw new PSArgumentException("Project is required.");
-
         var fullPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputPath);
         if (!ShouldProcess(fullPath, File.Exists(fullPath) ? "Overwrite project configuration" : "Create project configuration"))
             return;

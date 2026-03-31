@@ -45,7 +45,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     /// PowerShell-authored project/release object that is translated into the unified release engine.
     /// </summary>
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetProject)]
-    public ConfigurationProject? Project { get; set; }
+    public ConfigurationProject Project { get; set; } = new();
 
     /// <summary>
     /// Builds the release plan without executing steps.
@@ -386,11 +386,8 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
 
             if (usingProjectObject)
             {
-                if (Project is null)
-                    throw new PSArgumentException("Project is required.");
-
                 var projectRoot = ResolveProjectRoot(Project.ProjectRoot);
-                configFullPath = Path.Combine(projectRoot, ".powerforge", "release.project.ps1");
+                configFullPath = Path.Combine(projectRoot, ".powerforge", "project.release.json");
                 (spec, requestDefaults) = PowerForgeProjectDslMapper.CreateRelease(Project, configFullPath, projectRoot);
             }
             else
@@ -588,7 +585,7 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             ValidateOnly = Validate.IsPresent,
             PackagesOnly = PackagesOnly.IsPresent,
             ModuleOnly = ModuleOnly.IsPresent,
-            ToolsOnly = ToolsOnly.IsPresent,
+            ToolsOnly = ResolveRequestedFlag(boundParameters, nameof(ToolsOnly)),
             PublishNuget = ResolveRequestedFlag(boundParameters, nameof(PublishNuget)),
             PublishProjectGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishProjectGitHub)),
             PublishToolGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishToolGitHub)),

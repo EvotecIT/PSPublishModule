@@ -125,7 +125,7 @@ $target = New-ConfigurationProjectTarget `
 
 $signing = New-ConfigurationProjectSigning `
     -Mode OnDemand `
-    -TimestampUrl 'http://timestamp.digicert.com' `
+    -TimestampUrl 'https://timestamp.digicert.com' `
     -Description 'IntelligenceX Chat'
 
 $project = New-ConfigurationProject `
@@ -177,7 +177,7 @@ $target = New-ConfigurationProjectTarget `
 
 $signing = New-ConfigurationProjectSigning `
     -Mode OnDemand `
-    -TimestampUrl 'http://timestamp.digicert.com'
+    -TimestampUrl 'https://timestamp.digicert.com'
 
 $project = New-ConfigurationProject `
     -Name 'IntelligenceX' `

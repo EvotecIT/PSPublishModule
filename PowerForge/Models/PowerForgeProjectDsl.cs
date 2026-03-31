@@ -151,7 +151,7 @@ public sealed class ConfigurationProjectSigning
     /// <summary>
     /// Optional RFC3161 timestamp URL.
     /// </summary>
-    public string? TimestampUrl { get; set; } = "http://timestamp.digicert.com";
+    public string? TimestampUrl { get; set; } = "https://timestamp.digicert.com";
 
     /// <summary>
     /// Optional signature description.
@@ -256,7 +256,7 @@ public sealed class ConfigurationProjectTarget
     public string? OutputPath { get; set; }
 
     /// <summary>
-    /// Optional requested output categories for this target.
+    /// Optional requested output categories for this target. Defaults to <see cref="ConfigurationProjectTargetOutputType.Tool"/> when omitted.
     /// </summary>
     public ConfigurationProjectTargetOutputType[] OutputType { get; set; } = new[] { ConfigurationProjectTargetOutputType.Tool };
 

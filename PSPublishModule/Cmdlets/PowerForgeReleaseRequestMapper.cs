@@ -16,7 +16,7 @@ internal static class PowerForgeReleaseRequestMapper
         request.ValidateOnly = options.ValidateOnly;
         request.PackagesOnly = options.PackagesOnly;
         request.ModuleOnly = options.ModuleOnly;
-        request.ToolsOnly = request.ToolsOnly || options.ToolsOnly;
+        request.ToolsOnly = ChooseBool(request.ToolsOnly, options.ToolsOnly) ?? false;
 
         request.PublishNuget = ChooseBool(request.PublishNuget, options.PublishNuget);
         request.PublishProjectGitHub = ChooseBool(request.PublishProjectGitHub, options.PublishProjectGitHub);
