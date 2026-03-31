@@ -981,7 +981,7 @@ internal static class SpectrePipelineSummaryWriter
         {
             foreach (var line in lines)
             {
-                if (ShouldSkipFailureLine(line))
+                if (PowerShellFailureLineFilter.ShouldSkip(line))
                     continue;
 
                 if (!structuredLines.Contains(line, StringComparer.OrdinalIgnoreCase))
@@ -1003,18 +1003,6 @@ internal static class SpectrePipelineSummaryWriter
             return msg.Substring(0, effectiveMaxLength - 1) + "…";
 
         return msg;
-    }
-
-    private static bool ShouldSkipFailureLine(string line)
-    {
-        if (string.IsNullOrWhiteSpace(line))
-            return true;
-
-        return line.StartsWith("At ", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("+ CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("+ FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildHint(string message)

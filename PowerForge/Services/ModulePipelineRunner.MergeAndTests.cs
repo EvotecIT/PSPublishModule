@@ -323,10 +323,10 @@ public sealed partial class ModulePipelineRunner
 
     private static Version? TryParseMinimumPowerShellVersion(string? minimumPowerShellVersion)
     {
-        if (string.IsNullOrWhiteSpace(minimumPowerShellVersion))
+        var normalized = minimumPowerShellVersion?.Trim();
+        if (normalized is null || normalized.Length == 0)
             return null;
 
-        var normalized = minimumPowerShellVersion!.Trim();
         var prereleaseIndex = normalized.IndexOf('-');
         if (prereleaseIndex > 0)
             normalized = normalized.Substring(0, prereleaseIndex);

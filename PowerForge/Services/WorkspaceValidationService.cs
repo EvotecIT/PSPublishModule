@@ -5,6 +5,7 @@ namespace PowerForge;
 
 public sealed class WorkspaceValidationService
 {
+    private const int MaxFailureDetailLines = 6;
     private readonly IProcessRunner _processRunner;
 
     public WorkspaceValidationService(IProcessRunner? processRunner = null)
@@ -200,7 +201,8 @@ public sealed class WorkspaceValidationService
         if (detailLines.Count == 0)
             return null;
 
-        return string.Join(Environment.NewLine, detailLines.Take(6));
+        // Cap the detail block so the summary stays readable in terminal output.
+        return string.Join(Environment.NewLine, detailLines.Take(MaxFailureDetailLines));
     }
 
     private static List<string> ExtractFailureLines(string? text)
@@ -212,23 +214,11 @@ public sealed class WorkspaceValidationService
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
             .Where(line => !string.IsNullOrWhiteSpace(line))
-            .Where(line => !ShouldSkipFailureLine(line))
+            .Where(line => !PowerShellFailureLineFilter.ShouldSkip(line))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return lines;
-    }
-
-    private static bool ShouldSkipFailureLine(string line)
-    {
-        if (string.IsNullOrWhiteSpace(line))
-            return true;
-
-        return line.StartsWith("At ", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("+ CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("CategoryInfo", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("+ FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("FullyQualifiedErrorId", StringComparison.OrdinalIgnoreCase);
     }
 
     private static WorkspaceValidationProfile ResolveProfile(WorkspaceValidationSpec spec, string? requestedProfile)

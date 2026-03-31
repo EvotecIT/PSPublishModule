@@ -7,12 +7,9 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineRunnerImportTargetsTests
 {
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_SkipsDesktop_WhenStagingHasNoDefaultPayload()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var stagingPath = CreateStagingPath();
         try
         {
@@ -29,12 +26,9 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_UsesAvailableBinaryPayloads_WhenEditionsAreUnspecified()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var stagingPath = CreateStagingPath();
         try
         {
@@ -51,12 +45,9 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_UsesCoreOnly_WhenCompatiblePSEditionsAreCoreOnly()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var targets = ModulePipelineRunner.GetImportValidationTargets(new[] { "Core" });
 
         var target = Assert.Single(targets);
@@ -64,12 +55,9 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         Assert.True(target.PreferPwsh);
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_SkipsDesktop_WhenMinimumPowerShellVersionRequiresPwsh()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var stagingPath = CreateStagingPath();
         try
         {
