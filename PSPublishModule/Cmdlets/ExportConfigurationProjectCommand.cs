@@ -42,7 +42,18 @@ public sealed class ExportConfigurationProjectCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var fullPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputPath);
-        if (!ShouldProcess(fullPath, File.Exists(fullPath) ? "Overwrite project configuration" : "Create project configuration"))
+        var fileExists = File.Exists(fullPath);
+        if (fileExists && !Force.IsPresent)
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new IOException($"File already exists: '{fullPath}'. Use -Force to overwrite."),
+                "ExportConfigurationProjectFileExists",
+                ErrorCategory.ResourceExists,
+                fullPath));
+            return;
+        }
+
+        if (!ShouldProcess(fullPath, fileExists ? "Overwrite project configuration" : "Create project configuration"))
             return;
 
         try
