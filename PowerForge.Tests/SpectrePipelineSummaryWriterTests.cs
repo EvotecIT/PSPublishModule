@@ -36,4 +36,15 @@ public sealed class SpectrePipelineSummaryWriterTests
         Assert.DoesNotContain(@"At C:\Temp\Import-Modules.ps1:1 char:1", normalized);
         Assert.DoesNotContain("…", normalized);
     }
+
+    [Fact]
+    public void NormalizeFailureMessage_TruncatesLongUnstructuredMessagesByDefault()
+    {
+        var message = new string('x', 2105);
+
+        var normalized = SpectrePipelineSummaryWriter.NormalizeFailureMessage(new InvalidOperationException(message));
+
+        Assert.Equal(2000, normalized.Length);
+        Assert.EndsWith("…", normalized);
+    }
 }

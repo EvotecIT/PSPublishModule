@@ -942,6 +942,8 @@ internal static class SpectrePipelineSummaryWriter
 
     internal static string NormalizeFailureMessage(Exception error, int maxLength = 0)
     {
+        const int DefaultUnstructuredFailureMessageMaxLength = 2000;
+
         if (error is null) return string.Empty;
 
         var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
@@ -988,8 +990,17 @@ internal static class SpectrePipelineSummaryWriter
         }
 
         msg = string.Join(Environment.NewLine, structuredLines);
-        if (maxLength > 0 && msg.Length > maxLength)
-            return msg.Substring(0, maxLength - 1) + "…";
+        if (structuredLines.Any(line => preferredPrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
+        {
+            if (maxLength > 0 && msg.Length > maxLength)
+                return msg.Substring(0, maxLength - 1) + "…";
+
+            return msg;
+        }
+
+        var effectiveMaxLength = maxLength > 0 ? maxLength : DefaultUnstructuredFailureMessageMaxLength;
+        if (msg.Length > effectiveMaxLength)
+            return msg.Substring(0, effectiveMaxLength - 1) + "…";
 
         return msg;
     }
