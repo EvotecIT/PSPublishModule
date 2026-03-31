@@ -340,6 +340,11 @@ public static partial class WebApiDocsGenerator
         return ApiDocsAssemblyLoadContext.GetNuGetPackageRootCandidates();
     }
 
+    internal static IReadOnlyList<string> GetApiDocsNuGetPackageRootCandidates(string assemblyPath)
+    {
+        return ApiDocsAssemblyLoadContext.GetNuGetPackageRootCandidates(assemblyPath);
+    }
+
     private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
     {
         private readonly AssemblyDependencyResolver _resolver;
@@ -425,8 +430,10 @@ public static partial class WebApiDocsGenerator
             if (!File.Exists(depsPath))
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            var packageRoot = GetNuGetPackageRoot();
-            if (string.IsNullOrWhiteSpace(packageRoot) || !Directory.Exists(packageRoot))
+            var packageRoots = GetNuGetPackageRootCandidates(assemblyPath)
+                .Where(Directory.Exists)
+                .ToArray();
+            if (packageRoots.Length == 0)
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             using var stream = File.OpenRead(depsPath);
@@ -472,7 +479,8 @@ public static partial class WebApiDocsGenerator
                         continue;
                     }
 
-                    AddDependencyPaths(library.Value, relativePackagePath, packageRoot, dependencyPaths);
+                    foreach (var packageRoot in packageRoots)
+                        AddDependencyPaths(library.Value, relativePackagePath, packageRoot, dependencyPaths);
                 }
             }
 
@@ -585,6 +593,11 @@ public static partial class WebApiDocsGenerator
 
         internal static IReadOnlyList<string> GetNuGetPackageRootCandidates()
         {
+            return GetNuGetPackageRootCandidates(null);
+        }
+
+        internal static IReadOnlyList<string> GetNuGetPackageRootCandidates(string? assemblyPath)
+        {
             var candidates = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -596,7 +609,7 @@ public static partial class WebApiDocsGenerator
                 try
                 {
                     var fullPath = Path.GetFullPath(path);
-                    if (seen.Add(fullPath))
+                    if (Directory.Exists(fullPath) && seen.Add(fullPath))
                         candidates.Add(fullPath);
                 }
                 catch
@@ -606,6 +619,17 @@ public static partial class WebApiDocsGenerator
             }
 
             AddCandidate(Environment.GetEnvironmentVariable("NUGET_PACKAGES"));
+
+            if (!string.IsNullOrWhiteSpace(assemblyPath))
+            {
+                foreach (var directory in EnumerateAssemblyProbeDirectories(assemblyPath))
+                {
+                    AddCandidate(Path.Combine(directory, ".nuget", "packages"));
+
+                    foreach (var configPath in EnumerateNuGetConfigPaths(directory))
+                        AddCandidate(GetConfiguredPackageRoot(configPath));
+                }
+            }
 
             var home = Environment.GetEnvironmentVariable("HOME");
             if (!string.IsNullOrWhiteSpace(home))
@@ -625,6 +649,58 @@ public static partial class WebApiDocsGenerator
                 AddCandidate(Path.Combine(specialFolderProfile, ".nuget", "packages"));
 
             return candidates;
+        }
+
+        private static IEnumerable<string> EnumerateAssemblyProbeDirectories(string assemblyPath)
+        {
+            var current = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
+            while (!string.IsNullOrWhiteSpace(current))
+            {
+                yield return current;
+
+                var parent = Directory.GetParent(current);
+                if (parent is null)
+                    yield break;
+
+                current = parent.FullName;
+            }
+        }
+
+        private static IEnumerable<string> EnumerateNuGetConfigPaths(string directory)
+        {
+            var canonical = Path.Combine(directory, "NuGet.config");
+            if (File.Exists(canonical))
+                yield return canonical;
+
+            var lowerCase = Path.Combine(directory, "nuget.config");
+            if (!string.Equals(lowerCase, canonical, StringComparison.OrdinalIgnoreCase) && File.Exists(lowerCase))
+                yield return lowerCase;
+        }
+
+        private static string? GetConfiguredPackageRoot(string configPath)
+        {
+            try
+            {
+                var document = XDocument.Load(configPath, LoadOptions.PreserveWhitespace);
+                var configuredFolder = document.Root?
+                    .Element("config")?
+                    .Elements("add")
+                    .FirstOrDefault(element =>
+                        string.Equals((string?)element.Attribute("key"), "globalPackagesFolder", StringComparison.OrdinalIgnoreCase))
+                    ?.Attribute("value")
+                    ?.Value;
+
+                if (string.IsNullOrWhiteSpace(configuredFolder))
+                    return null;
+
+                return Path.IsPathRooted(configuredFolder)
+                    ? configuredFolder
+                    : Path.Combine(Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory, configuredFolder);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static string GetNuGetPackageRoot()

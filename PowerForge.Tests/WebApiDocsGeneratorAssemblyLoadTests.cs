@@ -114,6 +114,58 @@ public sealed class WebApiDocsGeneratorAssemblyLoadTests
     }
 
     [Fact]
+    public void GetNuGetPackageRootCandidates_IncludesRepoLocalPackagesNearAssembly()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-local-packages-" + Guid.NewGuid().ToString("N"))).FullName;
+        var assemblyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "src", "TestimoX", "bin", "Release", "net8.0-windows")).FullName;
+        var repoLocalPackages = Directory.CreateDirectory(Path.Combine(tempRoot, ".nuget", "packages")).FullName;
+        var assemblyPath = Path.Combine(assemblyDirectory, "TestimoX.dll");
+        File.WriteAllText(assemblyPath, string.Empty);
+
+        try
+        {
+            var candidates = WebApiDocsGenerator.GetApiDocsNuGetPackageRootCandidates(assemblyPath);
+
+            Assert.Contains(Path.GetFullPath(repoLocalPackages), candidates, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public void GetNuGetPackageRootCandidates_UsesNuGetConfigRelativeGlobalPackagesFolder()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-nuget-config-" + Guid.NewGuid().ToString("N"))).FullName;
+        var assemblyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "Website", "..", "TestimoX", "bin", "Release", "net8.0-windows")).FullName;
+        var configuredPackages = Directory.CreateDirectory(Path.Combine(tempRoot, ".nuget", "packages")).FullName;
+        var assemblyPath = Path.Combine(assemblyDirectory, "TestimoX.dll");
+        var configPath = Path.Combine(tempRoot, "NuGet.config");
+        File.WriteAllText(assemblyPath, string.Empty);
+        File.WriteAllText(configPath,
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <config>
+                <add key="globalPackagesFolder" value=".nuget/packages" />
+              </config>
+            </configuration>
+            """);
+
+        try
+        {
+            var candidates = WebApiDocsGenerator.GetApiDocsNuGetPackageRootCandidates(assemblyPath);
+
+            Assert.Contains(Path.GetFullPath(configuredPackages), candidates, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
     public void GetApiDocsResolvedHeadHtml_IncludesSiteHeadLinksFromNavConfig()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-head-links-" + Guid.NewGuid().ToString("N"))).FullName;
