@@ -656,6 +656,7 @@ public static partial class WebApiDocsGenerator
         public string SocialTwitterCreator { get; set; } = string.Empty;
         public string BrandUrl { get; set; } = "/";
         public string BrandIcon { get; set; } = "/codeglyphx-qr-icon.png";
+        public string HeadLinksHtml { get; set; } = string.Empty;
         public List<NavItem> Primary { get; set; } = new();
         public List<NavAction> Actions { get; set; } = new();
         public List<NavItem> FooterProduct { get; set; } = new();

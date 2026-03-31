@@ -22,6 +22,21 @@ public static partial class WebApiDocsGenerator
         return File.ReadAllText(full);
     }
 
+    internal static string GetApiDocsResolvedHeadHtml(WebApiDocsOptions options)
+    {
+        var explicitHead = LoadOptionalHtml(options.HeadHtmlPath);
+        var nav = LoadNavConfig(options);
+        var navHead = nav?.HeadLinksHtml ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(explicitHead))
+            return navHead;
+
+        if (string.IsNullOrWhiteSpace(navHead))
+            return explicitHead;
+
+        return string.Join(Environment.NewLine, new[] { explicitHead, navHead }.Where(fragment => !string.IsNullOrWhiteSpace(fragment)));
+    }
+
     private static string LoadEmbeddedRaw(string fileName)
     {
         var assembly = typeof(WebApiDocsGenerator).Assembly;
@@ -127,6 +142,7 @@ public static partial class WebApiDocsGenerator
         {
             if (headProp.TryGetProperty("Links", out var linksProp) && linksProp.ValueKind == JsonValueKind.Array)
             {
+                nav.HeadLinksHtml = RenderHeadLinksHtml(linksProp);
                 foreach (var link in linksProp.EnumerateArray())
                 {
                     if (!link.TryGetProperty("Rel", out var relProp) || relProp.ValueKind != JsonValueKind.String)
@@ -187,6 +203,50 @@ public static partial class WebApiDocsGenerator
             nav.Actions = ParseSiteNavActions(actionsProp);
 
         return nav;
+    }
+
+    private static string RenderHeadLinksHtml(JsonElement linksProp)
+    {
+        if (linksProp.ValueKind != JsonValueKind.Array)
+            return string.Empty;
+
+        var fragments = new List<string>();
+        foreach (var link in linksProp.EnumerateArray())
+        {
+            if (link.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var href = ReadString(link, "Href", "href");
+            var rel = ReadString(link, "Rel", "rel");
+            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(rel))
+                continue;
+
+            var attributes = new List<string>
+            {
+                $"rel=\"{System.Web.HttpUtility.HtmlAttributeEncode(rel)}\"",
+                $"href=\"{System.Web.HttpUtility.HtmlAttributeEncode(href)}\""
+            };
+
+            AddAttributeIfPresent(attributes, "type", ReadString(link, "Type", "type"));
+            AddAttributeIfPresent(attributes, "crossorigin", ReadString(link, "Crossorigin", "crossorigin", "CrossOrigin", "crossOrigin"));
+            AddAttributeIfPresent(attributes, "media", ReadString(link, "Media", "media"));
+            AddAttributeIfPresent(attributes, "sizes", ReadString(link, "Sizes", "sizes"));
+            AddAttributeIfPresent(attributes, "imagesrcset", ReadString(link, "ImageSrcSet", "imageSrcSet", "imagesrcset"));
+            AddAttributeIfPresent(attributes, "imagesizes", ReadString(link, "ImageSizes", "imageSizes", "imagesizes"));
+            AddAttributeIfPresent(attributes, "as", ReadString(link, "As", "as"));
+            AddAttributeIfPresent(attributes, "referrerpolicy", ReadString(link, "ReferrerPolicy", "referrerPolicy", "referrerpolicy"));
+            AddAttributeIfPresent(attributes, "fetchpriority", ReadString(link, "FetchPriority", "fetchPriority", "fetchpriority"));
+
+            fragments.Add($"<link {string.Join(" ", attributes)} />");
+        }
+
+        return string.Join(Environment.NewLine, fragments);
+    }
+
+    private static void AddAttributeIfPresent(List<string> attributes, string attributeName, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            attributes.Add($"{attributeName}=\"{System.Web.HttpUtility.HtmlAttributeEncode(value)}\"");
     }
 
     private static bool TryReadInt32(JsonElement element, out int value)

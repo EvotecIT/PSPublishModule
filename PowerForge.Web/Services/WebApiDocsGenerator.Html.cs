@@ -24,7 +24,7 @@ public static partial class WebApiDocsGenerator
             return;
         }
 
-        var head = LoadOptionalHtml(options.HeadHtmlPath);
+        var head = GetApiDocsResolvedHeadHtml(options);
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
@@ -113,7 +113,7 @@ public static partial class WebApiDocsGenerator
 
     private static void GenerateDocsHtml(string outputPath, WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, List<string> warnings)
     {
-        var head = LoadOptionalHtml(options.HeadHtmlPath);
+        var head = GetApiDocsResolvedHeadHtml(options);
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
