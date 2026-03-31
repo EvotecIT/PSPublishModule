@@ -70,6 +70,8 @@ internal static partial class Program
         case "plugin":
         case "plugins":
             return CommandPlugin(filteredArgs, cli, logger);
+        case "project":
+            return CommandProject(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
         case "store":

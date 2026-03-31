@@ -3,6 +3,65 @@
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
 For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
 see `Build/release.json` and `powerforge release`.
+For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
+see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
+
+PowerShell-authored project release objects
+- A first PowerShell-first slice is now available through:
+  - `New-ConfigurationProjectRelease`
+  - `New-ConfigurationProjectTarget`
+  - `New-ConfigurationProjectSigning`
+  - `New-ConfigurationProjectWorkspace`
+  - `New-ConfigurationProjectOutput`
+  - `New-ConfigurationProjectInstaller`
+  - `New-ConfigurationProject`
+  - `New-ProjectReleaseConfig`
+  - `Export-ConfigurationProject`
+  - `Import-ConfigurationProject`
+  - `Invoke-ProjectRelease`
+  - `Invoke-PowerForgeRelease -Project <ConfigurationProject>`
+- This stays on the same unified release engine used by `powerforge release` and `Invoke-PowerForgeRelease -ConfigPath ...`.
+- Relative target and installer paths are resolved from `ConfigurationProject.ProjectRoot` when provided.
+- `New-ConfigurationProjectRelease` can now also carry default release intent such as:
+  - `-PublishToolGitHub`
+  - `-SkipRestore`
+  - `-SkipBuild`
+  - `-ToolOutput <Tool|Portable|Installer|Store>`
+  - `-SkipToolOutput <...>`
+- Project objects can now round-trip through JSON:
+  - `Export-ConfigurationProject -Project $project -OutputPath '.\Build\project.release.json'`
+  - `Import-ConfigurationProject -Path '.\Build\project.release.json'`
+- Starter JSON can now be scaffolded directly:
+  - `New-ProjectReleaseConfig -ProjectRoot '.' -PassThru`
+  - `New-ProjectReleaseConfig -Project '.\src\App\App.csproj' -Portable -Force`
+- In the current first slice, tool/app targets should still declare an explicit runtime for DotNetPublish-backed plan/build flows.
+
+Example:
+
+```powershell
+Import-Module PSPublishModule -Force
+
+$release = New-ConfigurationProjectRelease -Configuration Release
+$signing = New-ConfigurationProjectSigning -Mode OnDemand
+$output = New-ConfigurationProjectOutput -StageRoot '.\Artifacts\DslSmoke'
+$target = New-ConfigurationProjectTarget `
+    -Name 'PowerForgeCli' `
+    -ProjectPath '.\PowerForge.Cli\PowerForge.Cli.csproj' `
+    -Runtime 'win-x64' `
+    -Framework 'net10.0' `
+    -Style PortableCompat `
+    -OutputType Tool, Portable
+
+$project = New-ConfigurationProject `
+    -Name 'PSPublishModule' `
+    -ProjectRoot (Get-Location).Path `
+    -Release $release `
+    -Signing $signing `
+    -Output $output `
+    -Target $target
+
+Invoke-ProjectRelease -Project $project -Plan
+```
 
 For module help/docs generation workflow (`Invoke-ModuleBuild`, `New-ConfigurationDocumentation`, `about_*` topics),
 see `Docs/PSPublishModule.ModuleDocumentation.md`.
