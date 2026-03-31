@@ -92,7 +92,8 @@ internal static partial class Program
                 validateOnly: argv.Any(a => a.Equals("--validate", StringComparison.OrdinalIgnoreCase)),
                 packagesOnly: false,
                 moduleOnly: false,
-                toolsOnly: true);
+                toolsOnly: true,
+                defaults: requestDefaults);
 
             var service = new PowerForgeReleaseService(cmdLogger);
             var result = RunWithStatus(outputJson, cli, "Running project release workflow", () => service.Execute(spec, request));
