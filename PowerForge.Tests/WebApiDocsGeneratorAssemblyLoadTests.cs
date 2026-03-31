@@ -113,6 +113,83 @@ public sealed class WebApiDocsGeneratorAssemblyLoadTests
         }
     }
 
+    [Fact]
+    public void GetApiDocsResolvedHeadHtml_IncludesSiteHeadLinksFromNavConfig()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-head-links-" + Guid.NewGuid().ToString("N"))).FullName;
+        var siteJsonPath = Path.Combine(tempRoot, "site.json");
+
+        try
+        {
+            File.WriteAllText(siteJsonPath,
+                """
+                {
+                  "Name": "HtmlForgeX",
+                  "Head": {
+                    "Links": [
+                      { "Rel": "preconnect", "Href": "https://cdn.jsdelivr.net", "Crossorigin": "anonymous" },
+                      { "Rel": "dns-prefetch", "Href": "https://cdn.jsdelivr.net" }
+                    ]
+                  }
+                }
+                """);
+
+            var options = new WebApiDocsOptions
+            {
+                NavJsonPath = siteJsonPath
+            };
+
+            var headHtml = WebApiDocsGenerator.GetApiDocsResolvedHeadHtml(options);
+
+            Assert.Contains("rel=\"preconnect\"", headHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://cdn.jsdelivr.net\"", headHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("crossorigin=\"anonymous\"", headHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("rel=\"dns-prefetch\"", headHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public void GetApiDocsResolvedHeadHtml_AppendsSiteHeadLinksAfterExplicitHeadHtml()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-head-links-merge-" + Guid.NewGuid().ToString("N"))).FullName;
+        var siteJsonPath = Path.Combine(tempRoot, "site.json");
+        var headHtmlPath = Path.Combine(tempRoot, "head.html");
+
+        try
+        {
+            File.WriteAllText(siteJsonPath,
+                """
+                {
+                  "Head": {
+                    "Links": [
+                      { "Rel": "preconnect", "Href": "https://cdn.jsdelivr.net", "Crossorigin": "anonymous" }
+                    ]
+                  }
+                }
+                """);
+            File.WriteAllText(headHtmlPath, "<meta name=\"robots\" content=\"index,follow\" />");
+
+            var options = new WebApiDocsOptions
+            {
+                NavJsonPath = siteJsonPath,
+                HeadHtmlPath = headHtmlPath
+            };
+
+            var headHtml = WebApiDocsGenerator.GetApiDocsResolvedHeadHtml(options);
+
+            Assert.Contains("<meta name=\"robots\" content=\"index,follow\" />", headHtml, StringComparison.Ordinal);
+            Assert.Contains("href=\"https://cdn.jsdelivr.net\"", headHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
