@@ -17,6 +17,7 @@ public sealed class SpectrePipelineSummaryWriterTests
             "Detail: " + detail,
             "Loader: Missing.Dependency.dll",
             "PowerShell: 7.5.0 (Core)",
+            @"PSModulePath: C:\Users\Test\Documents\PowerShell\Modules | C:\Program Files\PowerShell\Modules",
             @"Manifest: C:\Temp\TestModule\TestModule.psd1",
             "Executable: pwsh.exe",
             @"At C:\Temp\Import-Modules.ps1:1 char:1"
@@ -29,6 +30,7 @@ public sealed class SpectrePipelineSummaryWriterTests
         Assert.Contains("Detail: " + detail, normalized);
         Assert.Contains("Loader: Missing.Dependency.dll", normalized);
         Assert.Contains("PowerShell: 7.5.0 (Core)", normalized);
+        Assert.Contains(@"PSModulePath: C:\Users\Test\Documents\PowerShell\Modules | C:\Program Files\PowerShell\Modules", normalized);
         Assert.Contains(@"Manifest: C:\Temp\TestModule\TestModule.psd1", normalized);
         Assert.Contains("Executable: pwsh.exe", normalized);
         Assert.DoesNotContain(@"At C:\Temp\Import-Modules.ps1:1 char:1", normalized);

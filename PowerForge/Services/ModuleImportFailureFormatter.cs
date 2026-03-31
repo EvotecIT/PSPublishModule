@@ -104,13 +104,12 @@ internal static class ModuleImportFailureFormatter
                 continue;
             }
 
+            if (inPsModulePath && line.StartsWith("PFIMPORT::", StringComparison.OrdinalIgnoreCase))
+                inPsModulePath = false;
+
             if (inPsModulePath)
             {
-                foreach (var entry in line.Split(
-                    new[] { ';', Path.PathSeparator },
-                    StringSplitOptions.RemoveEmptyEntries)
-                    .Select(static value => value.Trim())
-                    .Where(static value => !string.IsNullOrWhiteSpace(value)))
+                foreach (var entry in SplitPsModulePathEntries(line))
                 {
                     if (!psModulePathEntries.Contains(entry, StringComparer.OrdinalIgnoreCase))
                         psModulePathEntries.Add(entry);
@@ -169,6 +168,26 @@ internal static class ModuleImportFailureFormatter
             loaderErrors.ToArray(),
             Normalize(stderr),
             stdoutSummary);
+    }
+
+    private static IEnumerable<string> SplitPsModulePathEntries(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            yield break;
+
+        if (line.IndexOf(';') >= 0)
+        {
+            foreach (var value in line.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var entry = value.Trim();
+                if (!string.IsNullOrWhiteSpace(entry))
+                    yield return entry;
+            }
+
+            yield break;
+        }
+
+        yield return line.Trim();
     }
 
     private static IEnumerable<string> SplitLines(string? text)

@@ -326,10 +326,10 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(minimumPowerShellVersion))
             return null;
 
-        var normalized = minimumPowerShellVersion.Trim();
-        var prereleaseIndex = normalized.IndexOf('-', StringComparison.Ordinal);
+        var normalized = minimumPowerShellVersion!.Trim();
+        var prereleaseIndex = normalized.IndexOf('-');
         if (prereleaseIndex > 0)
-            normalized = normalized[..prereleaseIndex];
+            normalized = normalized.Substring(0, prereleaseIndex);
 
         return Version.TryParse(normalized, out var parsed) ? parsed : null;
     }

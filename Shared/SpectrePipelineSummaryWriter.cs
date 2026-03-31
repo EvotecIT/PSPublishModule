@@ -960,6 +960,7 @@ internal static class SpectrePipelineSummaryWriter
             "Detail:",
             "Loader:",
             "PowerShell:",
+            "PSModulePath:",
             "Manifest:",
             "Executable:"
         };
