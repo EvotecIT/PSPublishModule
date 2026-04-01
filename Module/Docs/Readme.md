@@ -19,6 +19,9 @@ Converts a project to a consistent encoding/line ending policy and reports the r
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
 Exports a code-signing certificate to DER format for NuGet.org registration.
 
+### [Export-ConfigurationProject](Export-ConfigurationProject.md)
+Exports a PowerShell-authored project release object to JSON.
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
@@ -40,6 +43,9 @@ Provides comprehensive analysis of encoding and line ending consistency across a
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
 Retrieves project version information from .csproj, .psd1, and build scripts.
 
+### [Import-ConfigurationProject](Import-ConfigurationProject.md)
+Imports a PowerShell-authored project release object from JSON.
+
 ### [Install-PrivateModule](Install-PrivateModule.md)
 Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
 
@@ -58,11 +64,23 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
 
+### [Invoke-PowerForgeBundlePostProcess](Invoke-PowerForgeBundlePostProcess.md)
+Applies reusable bundle post-process rules from a dotnet publish config to an existing bundle directory.
+
+### [Invoke-PowerForgePluginExport](Invoke-PowerForgePluginExport.md)
+Exports plugin folders from a reusable PowerForge plugin catalog configuration.
+
+### [Invoke-PowerForgePluginPack](Invoke-PowerForgePluginPack.md)
+Packs plugin-related NuGet packages from a reusable PowerForge plugin catalog configuration.
+
 ### [Invoke-PowerForgeRelease](Invoke-PowerForgeRelease.md)
 Executes the unified repository release workflow from a JSON configuration.
 
 ### [Invoke-ProjectBuild](Invoke-ProjectBuild.md)
 Executes a repository-wide .NET build/release pipeline from a JSON configuration.
+
+### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
+Executes a PowerShell-authored project release object through the unified PowerForge release engine.
 
 ### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
 Tells the module to create an artefact of a specified type.
@@ -157,6 +175,27 @@ Provides a way to ignore certain commands or modules during build process and co
 ### [New-ConfigurationPlaceHolder](New-ConfigurationPlaceHolder.md)
 Helps define custom placeholders replacing content within a script or module during the build process.
 
+### [New-ConfigurationProject](New-ConfigurationProject.md)
+Creates a PowerShell-first project/release object for the unified PowerForge release engine.
+
+### [New-ConfigurationProjectInstaller](New-ConfigurationProjectInstaller.md)
+Creates an installer entry for a PowerShell-authored project build.
+
+### [New-ConfigurationProjectOutput](New-ConfigurationProjectOutput.md)
+Creates output-root and staging defaults for a PowerShell-authored project build.
+
+### [New-ConfigurationProjectRelease](New-ConfigurationProjectRelease.md)
+Creates release-level defaults for a PowerShell-authored project build.
+
+### [New-ConfigurationProjectSigning](New-ConfigurationProjectSigning.md)
+Creates signing defaults for a PowerShell-authored project build.
+
+### [New-ConfigurationProjectTarget](New-ConfigurationProjectTarget.md)
+Creates a high-level target entry for a PowerShell-authored project build.
+
+### [New-ConfigurationProjectWorkspace](New-ConfigurationProjectWorkspace.md)
+Creates workspace-validation defaults for a PowerShell-authored project build.
+
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 Provides a way to configure publishing to PowerShell Gallery, GitHub, or private galleries such as Azure Artifacts.
 
@@ -174,6 +213,9 @@ Creates an about_*.help.txt template source file for module documentation.
 
 ### [New-PowerForgeReleaseConfig](New-PowerForgeReleaseConfig.md)
 Scaffolds a starter unified release.json configuration file.
+
+### [New-ProjectReleaseConfig](New-ProjectReleaseConfig.md)
+Scaffolds a starter project release configuration file for PowerShell-authored project builds.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).

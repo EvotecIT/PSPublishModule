@@ -9,9 +9,14 @@ schema: 2.0.0
 Executes the unified repository release workflow from a JSON configuration.
 
 ## SYNTAX
-### __AllParameterSets
+### Config (Default)
 ```powershell
-Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Project
+```powershell
+Invoke-PowerForgeRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSignModule] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -33,12 +38,44 @@ Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishT
 
 ## PARAMETERS
 
+### -AllowManifestOutsideProjectRoot
+Allows DotNetPublish-backed manifest/report paths to resolve outside the configured project root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowOutputOutsideProjectRoot
+Allows DotNetPublish-backed outputs to resolve outside the configured project root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config, Project
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ChecksumsPath
 Optional release checksums output path override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -55,7 +92,7 @@ and parent directories for standard release config file names.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config
 Aliases: None
 Possible values: 
 
@@ -71,7 +108,7 @@ Optional configuration override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: Release, Debug
 
@@ -87,7 +124,7 @@ Sets host exit code: 0 on success, 1 on failure.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -103,7 +140,7 @@ Optional legacy tool flavor filter.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: Flavor
 Possible values: SingleContained, SingleFx, Portable, Fx
 
@@ -119,8 +156,24 @@ Optional framework filter.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: Framework
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallerProperty
+Optional installer MSBuild property overrides in Name=Value form.
+
+```yaml
+Type: String[]
+Parameter Sets: Config, Project
+Aliases: None
 Possible values: 
 
 Required: False
@@ -135,7 +188,7 @@ Keeps symbol files for tool/app artefacts.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -151,7 +204,7 @@ Optional release manifest output path override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -167,7 +220,7 @@ Skips the dotnet build step inside the native module-release lane.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -183,7 +236,7 @@ Disables signing for the native module-release lane.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -199,7 +252,7 @@ Executes only the module portion of the release.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -215,7 +268,7 @@ Optional prerelease tag override for the native module-release lane.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -231,7 +284,7 @@ Enables signing for the native module-release lane.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -247,7 +300,7 @@ Optional module version override for the native module-release lane.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -263,7 +316,7 @@ Optional output root override for tool/app assets.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -279,7 +332,7 @@ Optional package-signing certificate store override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: CurrentUser, LocalMachine
 
@@ -295,7 +348,7 @@ Optional package-signing thumbprint override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -311,7 +364,7 @@ Optional package-signing timestamp URL override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -327,7 +380,7 @@ Executes only the package portion of the release.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -343,11 +396,27 @@ Builds the release plan without executing steps.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Project
+PowerShell-authored project/release object that is translated into the unified release engine.
+
+```yaml
+Type: ConfigurationProject
+Parameter Sets: Project
+Aliases: None
+Possible values: 
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -359,7 +428,7 @@ Enables NuGet publishing for this run.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -375,7 +444,7 @@ Enables project/package GitHub release publishing for this run.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -391,7 +460,7 @@ Enables tool/app GitHub release publishing for this run.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -407,7 +476,7 @@ Optional runtime filter.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: Runtime, Rid
 Possible values: 
 
@@ -423,7 +492,7 @@ Enables signing for tool/app outputs when supported by the release config.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -439,7 +508,7 @@ Optional signing CSP override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -455,7 +524,7 @@ Optional signing description override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -471,7 +540,7 @@ Optional signing key container override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -487,7 +556,7 @@ Optional policy when signing fails.
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -503,7 +572,7 @@ Optional policy when the configured signing tool is missing.
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -519,7 +588,7 @@ Optional signing profile override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -535,7 +604,7 @@ Optional signing certificate subject name override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -551,7 +620,7 @@ Optional signing thumbprint override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -567,7 +636,7 @@ Optional signing timestamp URL override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -583,7 +652,7 @@ Optional signing tool path override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -599,7 +668,7 @@ Optional signing URL override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -615,7 +684,7 @@ Disables build operations for the tool/app publish flow.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -631,7 +700,7 @@ Skips top-level release checksums generation.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -647,7 +716,7 @@ Disables restore operations for the tool/app publish flow.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -663,7 +732,7 @@ Optional tool/app output exclusion for DotNetPublish-backed release flows.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: Tool, Portable, Installer, Store
 
@@ -679,7 +748,7 @@ Skips workspace validation defined by the release config.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -695,7 +764,7 @@ Optional staged release root override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -711,7 +780,7 @@ Optional publish style filter.
 
 ```yaml
 Type: DotNetPublishStyle[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: Style
 Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
 
@@ -727,7 +796,7 @@ Optional target-name filter.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: Targets
 Possible values: 
 
@@ -743,7 +812,7 @@ Optional tool/app output selection for DotNetPublish-backed release flows.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: Tool, Portable, Installer, Store
 
@@ -759,7 +828,7 @@ Executes only the tool/app portion of the release.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -775,7 +844,7 @@ Validates configuration through plan-only execution.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -791,7 +860,7 @@ Optional workspace validation config override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -807,7 +876,7 @@ Optional workspace feature disable list override.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -823,7 +892,7 @@ Optional workspace feature enable list override.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 
@@ -839,7 +908,7 @@ Optional workspace validation profile override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Config, Project
 Aliases: None
 Possible values: 
 

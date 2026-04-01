@@ -4,62 +4,37 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ConfigurationDotNetInstaller
+# Invoke-PowerForgePluginPack
 ## SYNOPSIS
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Packs plugin-related NuGet packages from a reusable PowerForge plugin catalog configuration.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-InstallerProjectId <string>] [-InstallerProjectPath <string>] [-StagingPath <string>] [-ManifestPath <string>] [-Harvest <DotNetPublishMsiHarvestMode>] [-HarvestPath <string>] [-HarvestDirectoryRefId <string>] [-HarvestComponentGroupId <string>] [-Sign <DotNetPublishSignOptions>] [-Versioning <DotNetPublishMsiVersionOptions>] [-MsBuildProperties <hashtable>] [-ClientLicense <DotNetPublishMsiClientLicenseOptions>] [<CommonParameters>]
+Invoke-PowerForgePluginPack [-ConfigPath <string>] [-ProjectRoot <string>] [-Group <string[]>] [-Configuration <string>] [-OutputRoot <string>] [-NoBuild] [-IncludeSymbols] [-PackageVersion <string>] [-VersionSuffix <string>] [-Push] [-Source <string>] [-ApiKey <string>] [-Plan] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+This cmdlet is the PowerShell entry point for the same generic plugin package workflow used by
+powerforge plugin pack. It selects package groups from the shared catalog, runs
+dotnet pack, and can optionally push only the packages produced by the current run.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationDotNetInstaller -Id 'service.msi' -PrepareFromTarget 'My.Service' -InstallerProjectPath 'Installer/My.Service.wixproj' -Harvest Auto
+Invoke-PowerForgePluginPack -Plan
+```
+
+### EXAMPLE 2
+```powershell
+Invoke-PowerForgePluginPack -ConfigPath '.\Build\powerforge.plugins.json' -Group pack-public -Push -Source https://api.nuget.org/v3/index.json -ApiKey $env:NUGET_API_KEY -ExitCode
 ```
 
 ## PARAMETERS
 
-### -ClientLicense
-Optional client-license injection policy.
-
-```yaml
-Type: DotNetPublishMsiClientLicenseOptions
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Harvest
-Harvest behavior for payload tree.
-
-```yaml
-Type: DotNetPublishMsiHarvestMode
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: None, Auto
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -HarvestComponentGroupId
-Optional WiX component group id template for generated harvest fragment.
+### -ApiKey
+API key used with Push.
 
 ```yaml
 Type: String
@@ -74,8 +49,9 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestDirectoryRefId
-Optional WiX directory reference id for generated harvest fragment.
+### -ConfigPath
+Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current
+directory and its parents for standard PowerForge plugin config names.
 
 ```yaml
 Type: String
@@ -90,8 +66,88 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestPath
-Optional harvest output path template.
+### -Configuration
+Optional configuration override.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Release, Debug
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExitCode
+Sets host exit code: 0 on success, 1 on failure.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Group
+Optional package group filter. When omitted, all catalog entries are selected.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: Groups
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeSymbols
+Includes symbol packages in the pack output.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NoBuild
+Skips the build step when running dotnet pack.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OutputRoot
+Optional output root override for packed NuGet packages.
 
 ```yaml
 Type: String
@@ -106,24 +162,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Id
-Installer identifier.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -InstallerProjectId
-Optional installer project catalog identifier.
+### -PackageVersion
+Optional package version override.
 
 ```yaml
 Type: String
@@ -138,8 +178,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -InstallerProjectPath
-Optional path to installer project file (*.wixproj).
+### -Plan
+Builds and emits the resolved package plan without executing dotnet pack.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectRoot
+Optional project root override for resolving plugin project paths.
 
 ```yaml
 Type: String
@@ -154,8 +210,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ManifestPath
-Optional manifest path template for MSI prepare output.
+### -Push
+Pushes packages after a successful pack run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Source
+Package source URL or name used with Push.
 
 ```yaml
 Type: String
@@ -170,75 +242,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -MsBuildProperties
-Optional installer-specific MSBuild properties passed to msi.build.
-
-```yaml
-Type: Hashtable
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PrepareFromTarget
-Source publish target name used for prepare/build.
+### -VersionSuffix
+Optional package version suffix override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Sign
-Optional MSI signing policy.
-
-```yaml
-Type: DotNetPublishSignOptions
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -StagingPath
-Optional staging path template for MSI payload.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Versioning
-Optional MSI version policy.
-
-```yaml
-Type: DotNetPublishMsiVersionOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -259,7 +267,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.DotNetPublishInstaller`
+- `System.Object`
 
 ## RELATED LINKS
 

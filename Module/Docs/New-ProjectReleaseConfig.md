@@ -4,35 +4,51 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ConfigurationDotNetInstaller
+# New-ProjectReleaseConfig
 ## SYNOPSIS
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Scaffolds a starter project release configuration file for PowerShell-authored project builds.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-InstallerProjectId <string>] [-InstallerProjectPath <string>] [-StagingPath <string>] [-ManifestPath <string>] [-Harvest <DotNetPublishMsiHarvestMode>] [-HarvestPath <string>] [-HarvestDirectoryRefId <string>] [-HarvestComponentGroupId <string>] [-Sign <DotNetPublishSignOptions>] [-Versioning <DotNetPublishMsiVersionOptions>] [-MsBuildProperties <hashtable>] [-ClientLicense <DotNetPublishMsiClientLicenseOptions>] [<CommonParameters>]
+New-ProjectReleaseConfig [-ProjectRoot <string>] [-ProjectPath <string>] [-Name <string>] [-TargetName <string>] [-Framework <string>] [-Runtimes <string[]>] [-Configuration <string>] [-OutputPath <string>] [-Force] [-Portable] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Scaffolds a starter project release configuration file for PowerShell-authored project builds.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationDotNetInstaller -Id 'service.msi' -PrepareFromTarget 'My.Service' -InstallerProjectPath 'Installer/My.Service.wixproj' -Harvest Auto
+New-ProjectReleaseConfig -ProjectRoot '.' -PassThru
 ```
 
 ## PARAMETERS
 
-### -ClientLicense
-Optional client-license injection policy.
+### -Configuration
+Release configuration value written into the starter config.
 
 ```yaml
-Type: DotNetPublishMsiClientLicenseOptions
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Release, Debug
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Force
+Overwrite an existing config file.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: Overwrite
 Possible values: 
 
 Required: False
@@ -42,24 +58,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Harvest
-Harvest behavior for payload tree.
-
-```yaml
-Type: DotNetPublishMsiHarvestMode
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: None, Auto
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -HarvestComponentGroupId
-Optional WiX component group id template for generated harvest fragment.
+### -Framework
+Optional framework override.
 
 ```yaml
 Type: String
@@ -74,8 +74,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestDirectoryRefId
-Optional WiX directory reference id for generated harvest fragment.
+### -Name
+Optional release name override.
 
 ```yaml
 Type: String
@@ -90,8 +90,56 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestPath
-Optional harvest output path template.
+### -OutputPath
+Output config path (default: Build\project.release.json).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Path, ConfigPath
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PassThru
+Returns detailed scaffold metadata instead of only the config path.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Portable
+Configure the starter file to request a portable bundle by default.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectPath
+Optional path to a specific project file.
 
 ```yaml
 Type: String
@@ -106,24 +154,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Id
-Installer identifier.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -InstallerProjectId
-Optional installer project catalog identifier.
+### -ProjectRoot
+Project root used to resolve relative paths.
 
 ```yaml
 Type: String
@@ -138,107 +170,27 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -InstallerProjectPath
-Optional path to installer project file (*.wixproj).
+### -Runtimes
+Optional runtime identifiers override.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: Runtime
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TargetName
+Optional target name override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ManifestPath
-Optional manifest path template for MSI prepare output.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -MsBuildProperties
-Optional installer-specific MSBuild properties passed to msi.build.
-
-```yaml
-Type: Hashtable
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PrepareFromTarget
-Source publish target name used for prepare/build.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Sign
-Optional MSI signing policy.
-
-```yaml
-Type: DotNetPublishSignOptions
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -StagingPath
-Optional staging path template for MSI payload.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Versioning
-Optional MSI version policy.
-
-```yaml
-Type: DotNetPublishMsiVersionOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -259,7 +211,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.DotNetPublishInstaller`
+- `System.String
+PowerForge.PowerForgeProjectConfigurationScaffoldResult`
 
 ## RELATED LINKS
 

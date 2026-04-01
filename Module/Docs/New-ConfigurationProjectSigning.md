@@ -4,62 +4,30 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ConfigurationDotNetInstaller
+# New-ConfigurationProjectSigning
 ## SYNOPSIS
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Creates signing defaults for a PowerShell-authored project build.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-InstallerProjectId <string>] [-InstallerProjectPath <string>] [-StagingPath <string>] [-ManifestPath <string>] [-Harvest <DotNetPublishMsiHarvestMode>] [-HarvestPath <string>] [-HarvestDirectoryRefId <string>] [-HarvestComponentGroupId <string>] [-Sign <DotNetPublishSignOptions>] [-Versioning <DotNetPublishMsiVersionOptions>] [-MsBuildProperties <hashtable>] [-ClientLicense <DotNetPublishMsiClientLicenseOptions>] [<CommonParameters>]
+New-ConfigurationProjectSigning [-Mode <ConfigurationProjectSigningMode>] [-ToolPath <string>] [-Thumbprint <string>] [-SubjectName <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnFailure <DotNetPublishPolicyMode>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Creates signing defaults for a PowerShell-authored project build.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationDotNetInstaller -Id 'service.msi' -PrepareFromTarget 'My.Service' -InstallerProjectPath 'Installer/My.Service.wixproj' -Harvest Auto
+New-ConfigurationProjectSigning -ToolPath 'C:\Path'
 ```
 
 ## PARAMETERS
 
-### -ClientLicense
-Optional client-license injection policy.
-
-```yaml
-Type: DotNetPublishMsiClientLicenseOptions
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Harvest
-Harvest behavior for payload tree.
-
-```yaml
-Type: DotNetPublishMsiHarvestMode
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: None, Auto
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -HarvestComponentGroupId
-Optional WiX component group id template for generated harvest fragment.
+### -Csp
+Optional CSP name.
 
 ```yaml
 Type: String
@@ -74,8 +42,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestDirectoryRefId
-Optional WiX directory reference id for generated harvest fragment.
+### -Description
+Optional signature description.
 
 ```yaml
 Type: String
@@ -90,8 +58,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -HarvestPath
-Optional harvest output path template.
+### -KeyContainer
+Optional key container name.
 
 ```yaml
 Type: String
@@ -106,30 +74,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Id
-Installer identifier.
+### -Mode
+Signing activation mode.
 
 ```yaml
-Type: String
+Type: ConfigurationProjectSigningMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -InstallerProjectId
-Optional installer project catalog identifier.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
+Possible values: Disabled, OnDemand, Enabled
 
 Required: False
 Position: named
@@ -138,14 +90,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -InstallerProjectPath
-Optional path to installer project file (*.wixproj).
+### -OnFailure
+Policy when signing a file fails.
 
 ```yaml
-Type: String
+Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values: Warn, Fail, Skip
 
 Required: False
 Position: named
@@ -154,14 +106,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ManifestPath
-Optional manifest path template for MSI prepare output.
+### -OnMissingTool
+Policy when the signing tool is missing.
 
 ```yaml
-Type: String
+Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: 
+Possible values: Warn, Fail, Skip
 
 Required: False
 Position: named
@@ -170,56 +122,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -MsBuildProperties
-Optional installer-specific MSBuild properties passed to msi.build.
-
-```yaml
-Type: Hashtable
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PrepareFromTarget
-Source publish target name used for prepare/build.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Sign
-Optional MSI signing policy.
-
-```yaml
-Type: DotNetPublishSignOptions
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: 
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -StagingPath
-Optional staging path template for MSI payload.
+### -SubjectName
+Optional certificate subject name.
 
 ```yaml
 Type: String
@@ -234,11 +138,59 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Versioning
-Optional MSI version policy.
+### -Thumbprint
+Optional certificate thumbprint.
 
 ```yaml
-Type: DotNetPublishMsiVersionOptions
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TimestampUrl
+Optional timestamp URL.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ToolPath
+Optional path to the signing tool.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Url
+Optional signature URL.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: 
@@ -259,7 +211,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.DotNetPublishInstaller`
+- `PowerForge.ConfigurationProjectSigning`
 
 ## RELATED LINKS
 
