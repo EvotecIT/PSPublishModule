@@ -243,6 +243,18 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? ManifestJsonPath { get; set; }
 
     /// <summary>
+    /// Allows DotNetPublish-backed outputs to resolve outside the configured project root.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AllowOutputOutsideProjectRoot { get; set; }
+
+    /// <summary>
+    /// Allows DotNetPublish-backed manifest/report paths to resolve outside the configured project root.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AllowManifestOutsideProjectRoot { get; set; }
+
+    /// <summary>
     /// Optional release checksums output path override.
     /// </summary>
     [Parameter]
@@ -606,6 +618,8 @@ public sealed class InvokePowerForgeReleaseCommand : PSCmdlet
             OutputRoot = NormalizeNullable(OutputRoot),
             StageRoot = NormalizeNullable(StageRoot),
             ManifestJsonPath = NormalizeNullable(ManifestJsonPath),
+            AllowOutputOutsideProjectRoot = AllowOutputOutsideProjectRoot.IsPresent,
+            AllowManifestOutsideProjectRoot = AllowManifestOutsideProjectRoot.IsPresent,
             ChecksumsPath = NormalizeNullable(ChecksumsPath),
             SignProfile = NormalizeNullable(SignProfile),
             SignToolPath = NormalizeNullable(SignToolPath),

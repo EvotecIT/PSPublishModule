@@ -42,6 +42,8 @@ internal static class PowerForgeReleaseRequestMapper
         request.OutputRoot = ChooseString(request.OutputRoot, options.OutputRoot);
         request.StageRoot = ChooseString(request.StageRoot, options.StageRoot);
         request.ManifestJsonPath = ChooseString(request.ManifestJsonPath, options.ManifestJsonPath);
+        request.AllowOutputOutsideProjectRoot = request.AllowOutputOutsideProjectRoot || options.AllowOutputOutsideProjectRoot;
+        request.AllowManifestOutsideProjectRoot = request.AllowManifestOutsideProjectRoot || options.AllowManifestOutsideProjectRoot;
         request.ChecksumsPath = ChooseString(request.ChecksumsPath, options.ChecksumsPath);
         request.SignProfile = ChooseString(request.SignProfile, options.SignProfile);
         request.SignToolPath = ChooseString(request.SignToolPath, options.SignToolPath);
@@ -118,6 +120,8 @@ internal static class PowerForgeReleaseRequestMapper
             OutputRoot = source.OutputRoot,
             StageRoot = source.StageRoot,
             ManifestJsonPath = source.ManifestJsonPath,
+            AllowOutputOutsideProjectRoot = source.AllowOutputOutsideProjectRoot,
+            AllowManifestOutsideProjectRoot = source.AllowManifestOutsideProjectRoot,
             ChecksumsPath = source.ChecksumsPath,
             SkipReleaseChecksums = source.SkipReleaseChecksums,
             KeepSymbols = source.KeepSymbols,

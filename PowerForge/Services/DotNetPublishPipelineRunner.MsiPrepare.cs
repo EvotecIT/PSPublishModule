@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -174,7 +175,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     : a.Category == DotNetPublishArtefactCategory.Bundle));
     }
 
-    private static string BuildWixHarvestFragment(
+    internal static string BuildWixHarvestFragment(
         string stagingPath,
         string directoryRefId,
         string componentGroupId)
@@ -183,6 +184,34 @@ public sealed partial class DotNetPublishPipelineRunner
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var root = new HarvestDirectoryNode(string.Empty, id: null);
+        foreach (var file in files)
+        {
+            var relativePath = GetRelativePathCompat(stagingPath, file);
+            var segments = relativePath
+                .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+            var current = root;
+            if (segments.Length > 1)
+            {
+                var pathSoFar = string.Empty;
+                for (var i = 0; i < segments.Length - 1; i++)
+                {
+                    var segment = segments[i];
+                    pathSoFar = pathSoFar.Length == 0 ? segment : Path.Combine(pathSoFar, segment);
+                    if (!current.Children.TryGetValue(segment, out var child))
+                    {
+                        child = new HarvestDirectoryNode(segment, BuildHarvestId("Dir", pathSoFar));
+                        current.Children.Add(segment, child);
+                    }
+
+                    current = child;
+                }
+            }
+
+            current.Files.Add(new HarvestFileNode(file, relativePath));
+        }
+
         var sb = new StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
         sb.AppendLine("<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">");
@@ -190,16 +219,42 @@ public sealed partial class DotNetPublishPipelineRunner
         sb.AppendLine($"    <DirectoryRef Id=\"{XmlEscape(directoryRefId)}\">");
 
         var componentIds = new List<string>(files.Length);
-        for (var i = 0; i < files.Length; i++)
-        {
-            var componentId = $"Cmp_{i + 1:D5}";
-            var fileId = $"Fil_{i + 1:D5}";
-            componentIds.Add(componentId);
 
-            sb.AppendLine($"      <Component Id=\"{componentId}\" Guid=\"*\">");
-            sb.AppendLine($"        <File Id=\"{fileId}\" Source=\"{XmlEscape(files[i])}\" KeyPath=\"yes\" />");
-            sb.AppendLine("      </Component>");
+        static void AppendFiles(
+            StringBuilder builder,
+            List<string> collectedComponentIds,
+            IEnumerable<HarvestFileNode> directoryFiles,
+            int indent)
+        {
+            foreach (var file in directoryFiles.OrderBy(entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase))
+            {
+                var componentId = BuildHarvestId("Cmp", file.RelativePath);
+                var fileId = BuildHarvestId("Fil", file.RelativePath);
+                collectedComponentIds.Add(componentId);
+
+                builder.AppendLine($"{new string(' ', indent)}<Component Id=\"{componentId}\" Guid=\"*\">");
+                builder.AppendLine($"{new string(' ', indent + 2)}<File Id=\"{fileId}\" Source=\"{XmlEscape(file.SourcePath)}\" KeyPath=\"yes\" />");
+                builder.AppendLine($"{new string(' ', indent)}</Component>");
+            }
         }
+
+        static void AppendDirectories(
+            StringBuilder builder,
+            List<string> collectedComponentIds,
+            HarvestDirectoryNode directory,
+            int indent)
+        {
+            foreach (var child in directory.Children.Values.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                builder.AppendLine($"{new string(' ', indent)}<Directory Id=\"{XmlEscape(child.Id!)}\" Name=\"{XmlEscape(child.Name)}\">");
+                AppendFiles(builder, collectedComponentIds, child.Files, indent + 2);
+                AppendDirectories(builder, collectedComponentIds, child, indent + 2);
+                builder.AppendLine($"{new string(' ', indent)}</Directory>");
+            }
+        }
+
+        AppendFiles(sb, componentIds, root.Files, indent: 6);
+        AppendDirectories(sb, componentIds, root, indent: 6);
 
         sb.AppendLine("    </DirectoryRef>");
         sb.AppendLine("  </Fragment>");
@@ -213,6 +268,18 @@ public sealed partial class DotNetPublishPipelineRunner
         return sb.ToString();
     }
 
+    private static string BuildHarvestId(string prefix, string value)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+        var hash = sha256.ComputeHash(bytes);
+        var builder = new StringBuilder(hash.Length * 2);
+        foreach (var item in hash)
+            builder.Append(item.ToString("X2"));
+        var suffix = builder.ToString().Substring(0, 16);
+        return $"{prefix}_{suffix}";
+    }
+
     private static string XmlEscape(string value)
     {
         return (value ?? string.Empty)
@@ -221,5 +288,55 @@ public sealed partial class DotNetPublishPipelineRunner
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
             .Replace("'", "&apos;");
+    }
+
+    private static string GetRelativePathCompat(string relativeTo, string path)
+    {
+#if NET472
+        var baseUri = new Uri(AppendDirectorySeparator(relativeTo), UriKind.Absolute);
+        var targetUri = new Uri(Path.GetFullPath(path), UriKind.Absolute);
+        var relativeUri = baseUri.MakeRelativeUri(targetUri);
+        return Uri.UnescapeDataString(relativeUri.ToString()).Replace('/', Path.DirectorySeparatorChar);
+#else
+        return Path.GetRelativePath(relativeTo, path);
+#endif
+    }
+
+    private static string AppendDirectorySeparator(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (fullPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+            fullPath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+        {
+            return fullPath;
+        }
+
+        return fullPath + Path.DirectorySeparatorChar;
+    }
+
+    private sealed class HarvestDirectoryNode
+    {
+        public HarvestDirectoryNode(string name, string? id)
+        {
+            Name = name;
+            Id = id;
+        }
+
+        public string Name { get; }
+        public string? Id { get; }
+        public Dictionary<string, HarvestDirectoryNode> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<HarvestFileNode> Files { get; } = new();
+    }
+
+    private sealed class HarvestFileNode
+    {
+        public HarvestFileNode(string sourcePath, string relativePath)
+        {
+            SourcePath = sourcePath;
+            RelativePath = relativePath;
+        }
+
+        public string SourcePath { get; }
+        public string RelativePath { get; }
     }
 }

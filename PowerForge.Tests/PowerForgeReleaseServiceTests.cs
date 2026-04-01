@@ -960,6 +960,120 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_OutputRootOverrideOutsideProjectRoot_RequiresExplicitAllowFlags()
+    {
+        var root = CreateSandbox();
+        var outsideRoot = Path.Combine(Path.GetTempPath(), "ixpf-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var projectPath = Path.Combine(root, "PowerForge.Cli.csproj");
+            File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>1.2.3</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var blocked = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            DotNet = new DotNetPublishDotNetOptions
+                            {
+                                ProjectRoot = ".",
+                                Configuration = "Release"
+                            },
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "PowerForge",
+                                    ProjectPath = "PowerForge.Cli.csproj",
+                                    Publish = new DotNetPublishPublishOptions
+                                    {
+                                        Framework = "net10.0",
+                                        Runtimes = new[] { "win-x64" },
+                                        Style = DotNetPublishStyle.PortableCompat
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true,
+                    ToolsOnly = true,
+                    OutputRoot = outsideRoot
+                }));
+            Assert.Contains("outside ProjectRoot", blocked.Message, StringComparison.OrdinalIgnoreCase);
+
+            var allowed = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec
+                        {
+                            DotNet = new DotNetPublishDotNetOptions
+                            {
+                                ProjectRoot = ".",
+                                Configuration = "Release"
+                            },
+                            Targets = new[]
+                            {
+                                new DotNetPublishTarget
+                                {
+                                    Name = "PowerForge",
+                                    ProjectPath = "PowerForge.Cli.csproj",
+                                    Publish = new DotNetPublishPublishOptions
+                                    {
+                                        Framework = "net10.0",
+                                        Runtimes = new[] { "win-x64" },
+                                        Style = DotNetPublishStyle.PortableCompat
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true,
+                    ToolsOnly = true,
+                    OutputRoot = outsideRoot,
+                    AllowOutputOutsideProjectRoot = true,
+                    AllowManifestOutsideProjectRoot = true
+                });
+
+            Assert.True(allowed.Success);
+            Assert.NotNull(allowed.DotNetToolPlan);
+            Assert.True(allowed.DotNetToolPlan!.AllowOutputOutsideProjectRoot);
+            Assert.True(allowed.DotNetToolPlan.AllowManifestOutsideProjectRoot);
+            Assert.Equal(Path.Combine(outsideRoot, "Artifacts", "DotNetPublish", "manifest.json"), allowed.DotNetToolPlan.Outputs.ManifestJsonPath);
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(outsideRoot);
+        }
+    }
+
+    [Fact]
     public void Execute_PublishesDotNetPublishAssetsToGitHub()
     {
         var zip = Path.GetTempFileName();
