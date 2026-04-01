@@ -52,6 +52,7 @@
     <EmbeddedResource Include="..\\Module\\Data\\Example-*.*"
                       Link="Templates\\ModuleScaffold\\%(Filename)%(Extension)"
                       LogicalName="PowerForge.Templates.ModuleScaffold.%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\PowerShellFailureLineFilter.cs" Link="Shared\PowerShellFailureLineFilter.cs" />
   </ItemGroup>
 
   <ItemGroup>

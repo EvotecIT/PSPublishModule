@@ -5,6 +5,7 @@ namespace PowerForge;
 
 public sealed class WorkspaceValidationService
 {
+    private const int MaxFailureDetailLines = 6;
     private readonly IProcessRunner _processRunner;
 
     public WorkspaceValidationService(IProcessRunner? processRunner = null)
@@ -176,7 +177,7 @@ public sealed class WorkspaceValidationService
         lines.Add($"Step '{step.Name}' failed with exit code {exitCode}.");
         lines.Add($"Command: {step.DisplayCommand}");
 
-        var detail = FirstNonEmptyLine(stdErr) ?? FirstNonEmptyLine(stdOut);
+        var detail = BuildFailureDetail(stdErr, stdOut);
         if (!string.IsNullOrWhiteSpace(detail))
             lines.Add($"Detail: {detail}");
 
@@ -186,16 +187,38 @@ public sealed class WorkspaceValidationService
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string? FirstNonEmptyLine(string? text)
+    private static string? BuildFailureDetail(string? stdErr, string? stdOut)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        var stderrLines = ExtractFailureLines(stdErr);
+        var stdoutLines = ExtractFailureLines(stdOut);
+        var detailLines = new List<string>();
+
+        if (stderrLines.Count > 0)
+            detailLines.AddRange(stderrLines);
+        else if (stdoutLines.Count > 0)
+            detailLines.AddRange(stdoutLines);
+
+        if (detailLines.Count == 0)
             return null;
 
-        var value = text!;
-        return value
+        // Cap the detail block so the summary stays readable in terminal output.
+        return string.Join(Environment.NewLine, detailLines.Take(MaxFailureDetailLines));
+    }
+
+    private static List<string> ExtractFailureLines(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new List<string>();
+
+        var lines = text!
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
-            .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Where(line => !PowerShellFailureLineFilter.ShouldSkip(line))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return lines;
     }
 
     private static WorkspaceValidationProfile ResolveProfile(WorkspaceValidationSpec spec, string? requestedProfile)

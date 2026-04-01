@@ -131,6 +131,58 @@ public sealed class WorkspaceValidationServiceTests
         }
     }
 
+    [Fact]
+    public async Task RunAsync_FailedStepPreservesStructuredFailureDetails()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Steps = new[]
+                {
+                    new WorkspaceValidationStep
+                    {
+                        Id = "ci-build",
+                        Name = "CI build",
+                        FailureContext = "Workspace validation failed.",
+                        FailureHint = "Review the build output.",
+                        Arguments = new[] { "build", "Repo.slnf", "-c", "{configuration}" }
+                    }
+                }
+            };
+
+            var runner = new StubProcessRunner(_ => new ProcessRunResult(
+                1,
+                "stdout first line" + Environment.NewLine + "stdout second line",
+                "error first line" + Environment.NewLine +
+                "At C:\\repo\\build.ps1:1 char:1" + Environment.NewLine +
+                "error second line",
+                "dotnet",
+                TimeSpan.Zero,
+                timedOut: false));
+
+            var service = new WorkspaceValidationService(runner);
+            var result = await service.RunAsync(spec, Path.Combine(root, "workspace.validation.json"), new WorkspaceValidationRequest
+            {
+                Configuration = "Release"
+            });
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("Workspace validation failed.", result.ErrorMessage);
+            Assert.Contains("Step 'CI build' failed with exit code 1.", result.ErrorMessage);
+            Assert.Contains("Detail: error first line", result.ErrorMessage);
+            Assert.Contains("error second line", result.ErrorMessage);
+            Assert.DoesNotContain("At C:\\repo\\build.ps1:1 char:1", result.ErrorMessage);
+            Assert.Contains("Hint: Review the build output.", result.ErrorMessage);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

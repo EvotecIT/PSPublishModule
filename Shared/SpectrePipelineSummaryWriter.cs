@@ -390,7 +390,7 @@ internal static class SpectrePipelineSummaryWriter
                 $"[red]Fail[/] [grey]signed {s.SignedTotal}, already {s.AlreadySignedOther} 3p/{s.AlreadySignedByThisCert} ours, failed {s.Failed}[/]");
         }
 
-        var message = NormalizeFailureMessage(error, maxLength: 220);
+        var message = NormalizeFailureMessage(error);
         if (!string.IsNullOrWhiteSpace(message))
             table.AddRow($"{(unicode ? "💥" : "*")} Error", Esc(message));
 
@@ -940,10 +940,11 @@ internal static class SpectrePipelineSummaryWriter
         return reasons;
     }
 
-    private static string NormalizeFailureMessage(Exception error, int maxLength = 140)
+    internal static string NormalizeFailureMessage(Exception error, int maxLength = 0)
     {
+        const int DefaultUnstructuredFailureMessageMaxLength = 2000;
+
         if (error is null) return string.Empty;
-        maxLength = Math.Max(40, maxLength);
 
         var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
         var lines = msg.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
@@ -951,16 +952,57 @@ internal static class SpectrePipelineSummaryWriter
             .Where(static line => !string.IsNullOrWhiteSpace(line))
             .ToArray();
 
-        var importHeader = lines.FirstOrDefault(static line => line.StartsWith("Import-Module failed", StringComparison.OrdinalIgnoreCase));
-        var cause = lines.FirstOrDefault(static line => line.StartsWith("Cause:", StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(importHeader) && !string.IsNullOrWhiteSpace(cause))
-            msg = importHeader + " " + cause;
-        else
-            msg = string.Join(" ", lines);
+        if (lines.Length == 0)
+            return string.Empty;
 
-        msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
-        if (msg.Length <= maxLength) return msg;
-        return msg.Substring(0, maxLength - 1) + "…";
+        var preferredPrefixes = new[]
+        {
+            "Import-Module failed",
+            "Cause:",
+            "Detail:",
+            "Loader:",
+            "PowerShell:",
+            "PSModulePath:",
+            "Manifest:",
+            "Executable:"
+        };
+
+        var structuredLines = new List<string>();
+        foreach (var prefix in preferredPrefixes)
+        {
+            foreach (var line in lines.Where(line => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!structuredLines.Contains(line, StringComparer.OrdinalIgnoreCase))
+                    structuredLines.Add(line);
+            }
+        }
+
+        if (structuredLines.Count == 0)
+        {
+            foreach (var line in lines)
+            {
+                if (PowerShellFailureLineFilter.ShouldSkip(line))
+                    continue;
+
+                if (!structuredLines.Contains(line, StringComparer.OrdinalIgnoreCase))
+                    structuredLines.Add(line);
+            }
+        }
+
+        msg = string.Join(Environment.NewLine, structuredLines);
+        if (structuredLines.Any(line => preferredPrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
+        {
+            if (maxLength > 0 && msg.Length > maxLength)
+                return msg.Substring(0, maxLength - 1) + "…";
+
+            return msg;
+        }
+
+        var effectiveMaxLength = maxLength > 0 ? maxLength : DefaultUnstructuredFailureMessageMaxLength;
+        if (msg.Length > effectiveMaxLength)
+            return msg.Substring(0, effectiveMaxLength - 1) + "…";
+
+        return msg;
     }
 
     private static string BuildHint(string message)

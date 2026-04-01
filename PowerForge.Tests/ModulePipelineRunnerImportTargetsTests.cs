@@ -7,12 +7,9 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineRunnerImportTargetsTests
 {
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_SkipsDesktop_WhenStagingHasNoDefaultPayload()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var stagingPath = CreateStagingPath();
         try
         {
@@ -29,12 +26,9 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetImportValidationTargets_UsesAvailableBinaryPayloads_WhenEditionsAreUnspecified()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         var stagingPath = CreateStagingPath();
         try
         {
@@ -44,6 +38,39 @@ public sealed class ModulePipelineRunnerImportTargetsTests
 
             var target = Assert.Single(targets);
             Assert.Equal("Desktop", target.PowerShellEdition);
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingPath);
+        }
+    }
+
+    [Fact]
+    public void GetImportValidationTargets_UsesCoreOnly_WhenCompatiblePSEditionsAreCoreOnly()
+    {
+        var targets = ModulePipelineRunner.GetImportValidationTargets(new[] { "Core" });
+
+        var target = Assert.Single(targets);
+        Assert.Equal("Core", target.PowerShellEdition);
+        Assert.True(target.PreferPwsh);
+    }
+
+    [WindowsFact]
+    public void GetImportValidationTargets_SkipsDesktop_WhenMinimumPowerShellVersionRequiresPwsh()
+    {
+        var stagingPath = CreateStagingPath();
+        try
+        {
+            CreateBinaryPayload(stagingPath, "Default");
+
+            var targets = ModulePipelineRunner.GetImportValidationTargets(
+                new[] { "Desktop", "Core" },
+                stagingPath,
+                minimumPowerShellVersion: "7.5");
+
+            var target = Assert.Single(targets);
+            Assert.Equal("Core", target.PowerShellEdition);
+            Assert.True(target.PreferPwsh);
         }
         finally
         {

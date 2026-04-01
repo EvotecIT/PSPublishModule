@@ -220,7 +220,10 @@ public sealed partial class ModulePipelineRunner
         };
 
         var script = BuildImportModulesScript();
-        foreach (var target in GetImportValidationTargets(plan.CompatiblePSEditions, buildResult.StagingPath))
+        foreach (var target in GetImportValidationTargets(
+            plan.CompatiblePSEditions,
+            buildResult.StagingPath,
+            plan.Manifest?.PowerShellVersion))
         {
             var result = RunScript(_powerShellRunner, script, args, TimeSpan.FromMinutes(5), preferPwsh: target.PreferPwsh);
             if (result.ExitCode != 0)
@@ -240,7 +243,10 @@ public sealed partial class ModulePipelineRunner
         if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
 
         var service = new BinaryDependencyPreflightService(_logger);
-        foreach (var target in GetImportValidationTargets(plan.CompatiblePSEditions, buildResult.StagingPath))
+        foreach (var target in GetImportValidationTargets(
+            plan.CompatiblePSEditions,
+            buildResult.StagingPath,
+            plan.Manifest?.PowerShellVersion))
         {
             var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition);
             if (result.HasIssues)
@@ -254,11 +260,18 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    internal static ImportValidationTarget[] GetImportValidationTargets(IReadOnlyList<string>? compatiblePSEditions, string? stagingPath = null)
+    internal static ImportValidationTarget[] GetImportValidationTargets(
+        IReadOnlyList<string>? compatiblePSEditions,
+        string? stagingPath = null,
+        string? minimumPowerShellVersion = null)
     {
         var compatible = compatiblePSEditions ?? Array.Empty<string>();
-        var hasDesktop = compatible.Any(static s => string.Equals(s, "Desktop", StringComparison.OrdinalIgnoreCase));
-        var hasCore = compatible.Any(static s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
+        var supportsDesktopByVersion = SupportsDesktopImportValidation(minimumPowerShellVersion);
+        var requiresCoreByVersion = RequiresCoreImportValidation(minimumPowerShellVersion);
+        var hasDesktop = supportsDesktopByVersion &&
+                         compatible.Any(static s => string.Equals(s, "Desktop", StringComparison.OrdinalIgnoreCase));
+        var hasCore = requiresCoreByVersion ||
+                      compatible.Any(static s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
         var hasDefaultPayload = HasBinaryPayload(stagingPath, "Default");
         var hasCorePayload = HasBinaryPayload(stagingPath, "Core") || HasBinaryPayload(stagingPath, "Standard");
         var hasAnyBinaryPayload = hasDefaultPayload || hasCorePayload;
@@ -270,16 +283,16 @@ public sealed partial class ModulePipelineRunner
 
         if (compatible.Count == 0 && hasAnyBinaryPayload)
         {
-            if (hasDefaultPayload)
+            if (supportsDesktopByVersion && hasDefaultPayload)
                 targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
-            if (hasCorePayload)
+            if (hasCorePayload || requiresCoreByVersion)
                 targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         }
         else
         {
             if (hasDesktop && (!hasAnyBinaryPayload || hasDefaultPayload))
                 targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
-            if (hasCore && (!hasAnyBinaryPayload || hasCorePayload))
+            if (hasCore && (!hasAnyBinaryPayload || hasCorePayload || requiresCoreByVersion))
                 targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         }
 
@@ -294,6 +307,31 @@ public sealed partial class ModulePipelineRunner
         }
 
         return targets.ToArray();
+    }
+
+    private static bool SupportsDesktopImportValidation(string? minimumPowerShellVersion)
+    {
+        var version = TryParseMinimumPowerShellVersion(minimumPowerShellVersion);
+        return version is null || version <= new Version(5, 1);
+    }
+
+    private static bool RequiresCoreImportValidation(string? minimumPowerShellVersion)
+    {
+        var version = TryParseMinimumPowerShellVersion(minimumPowerShellVersion);
+        return version is not null && version > new Version(5, 1);
+    }
+
+    private static Version? TryParseMinimumPowerShellVersion(string? minimumPowerShellVersion)
+    {
+        var normalized = minimumPowerShellVersion?.Trim();
+        if (normalized is null || normalized.Length == 0)
+            return null;
+
+        var prereleaseIndex = normalized.IndexOf('-');
+        if (prereleaseIndex > 0)
+            normalized = normalized.Substring(0, prereleaseIndex);
+
+        return Version.TryParse(normalized, out var parsed) ? parsed : null;
     }
 
     internal sealed class ImportValidationTarget
