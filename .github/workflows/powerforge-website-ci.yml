@@ -20,7 +20,7 @@ on:
       timeout_minutes:
         required: false
         type: number
-        default: 20
+        default: 40
       dotnet_version:
         required: false
         type: string
@@ -69,6 +69,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
   group: powerforge-website-ci-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}

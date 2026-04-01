@@ -557,7 +557,7 @@ public static class WebWebsiteRunner
             throw new InvalidOperationException($"tool lock sha256 must be 64 hex characters: '{expectedSha256}'.");
 
         using var stream = File.OpenRead(assetPath);
-        var actual = Convert.ToHexStringLower(SHA256.HashData(stream));
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         if (!actual.Equals(normalizedExpected, StringComparison.Ordinal))
             throw new InvalidOperationException($"Downloaded asset SHA-256 mismatch for '{Path.GetFileName(assetPath)}'. Expected {normalizedExpected} but got {actual}.");
     }
