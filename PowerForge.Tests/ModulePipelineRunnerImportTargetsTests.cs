@@ -45,7 +45,7 @@ public sealed class ModulePipelineRunnerImportTargetsTests
         }
     }
 
-    [WindowsFact]
+    [Fact]
     public void GetImportValidationTargets_UsesCoreOnly_WhenCompatiblePSEditionsAreCoreOnly()
     {
         var targets = ModulePipelineRunner.GetImportValidationTargets(new[] { "Core" });
