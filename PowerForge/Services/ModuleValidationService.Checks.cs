@@ -288,6 +288,16 @@ public sealed partial class ModuleValidationService
                 return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "failed");
             }
 
+            // Check PSSA-CONFLICT first: the more specific marker contains PSSA as a substring.
+            if (result.StdOut.Contains("PFVALID::SKIP::PSSA-CONFLICT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (settings.SkipIfUnavailable)
+                    return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "skipped (assembly conflict)");
+
+                issues.Add("PSScriptAnalyzer import conflicted with an assembly that was already loaded.");
+                return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "assembly conflict");
+            }
+
             if (result.StdOut.Contains("PFVALID::SKIP::PSSA", StringComparison.OrdinalIgnoreCase))
             {
                 if (settings.SkipIfUnavailable)

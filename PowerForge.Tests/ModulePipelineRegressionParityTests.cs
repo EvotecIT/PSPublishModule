@@ -57,7 +57,7 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
-    public void Plan_ExternalModulesMirrorIntoRequiredModules_AndInboxModulesAreIgnored()
+    public void Plan_TracksExternalModulesSeparately_AndInboxModulesAreIgnored()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -119,7 +119,7 @@ public sealed class ModulePipelineRegressionParityTests
             Assert.DoesNotContain("Microsoft.PowerShell.Management", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("Microsoft.PowerShell.Diagnostics", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
 
-            Assert.Contains(plan.RequiredModules, m => string.Equals(m.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModules, m => string.Equals(m.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
@@ -136,7 +136,7 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
-    public void Run_WritesNonInboxExternalModulesToRequiredModulesAndPsData()
+    public void Run_WritesNonInboxExternalModulesOnlyToPsData()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -198,10 +198,7 @@ public sealed class ModulePipelineRegressionParityTests
 
             Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
             Assert.NotNull(required);
-            Assert.Contains(required!, m => string.Equals(m.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(required!);
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var external));
             Assert.NotNull(external);
