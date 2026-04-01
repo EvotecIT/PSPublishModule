@@ -20,7 +20,7 @@ on:
       timeout_minutes:
         required: false
         type: number
-        default: 20
+        default: 40
       dotnet_version:
         required: false
         type: string
@@ -86,6 +86,9 @@ on:
         required: false
       cloudflare_zone_id:
         required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   website-run:
