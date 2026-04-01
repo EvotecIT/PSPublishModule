@@ -25,10 +25,6 @@
             ModuleName      = 'powershellget'
             ModuleVersion   = '2.2.5'
         }, @{
-            Guid            = 'd6245802-193d-4068-a631-8863a4342a18'
-            ModuleName      = 'PSScriptAnalyzer'
-            ModuleVersion   = '1.25.0'
-        }, @{
             Guid            = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName      = 'Pester'
             ModuleVersion   = '5.7.1'

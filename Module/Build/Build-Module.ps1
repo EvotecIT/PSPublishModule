@@ -145,7 +145,6 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     # Add standard module dependencies (directly, but can be used with loop as well)
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
     # Do not add inbox Microsoft.PowerShell.* modules as Required/External dependencies.

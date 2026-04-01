@@ -124,6 +124,8 @@ public sealed partial class ModulePipelineRunner
                 var requiredModuleName = module.ModuleName.Trim();
                 if (ShouldSkipManifestDependencyModule(requiredModuleName))
                     continue;
+                if (externalIndex.Contains(requiredModuleName))
+                    continue;
 
                 var draft = new RequiredModuleDraft(
                     moduleName: requiredModuleName,
@@ -277,21 +279,6 @@ public sealed partial class ModulePipelineRunner
                     {
                         if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
                             break;
-
-                        var externalDraft = new RequiredModuleDraft(
-                            moduleName: name,
-                            moduleVersion: md.ModuleVersion,
-                            minimumVersion: md.MinimumVersion,
-                            requiredVersion: md.RequiredVersion,
-                            guid: md.Guid);
-
-                        if (requiredIndex.TryGetValue(name, out var externalIdx))
-                            requiredModulesDraft[externalIdx] = externalDraft;
-                        else
-                        {
-                            requiredIndex[name] = requiredModulesDraft.Count;
-                            requiredModulesDraft.Add(externalDraft);
-                        }
                         break;
                     }
 

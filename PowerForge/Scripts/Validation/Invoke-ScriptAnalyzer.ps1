@@ -18,6 +18,13 @@ function DecodeLines([string]$b64) {
     }
 }
 
+function Test-PssaAssemblyConflict([string]$message) {
+    if ([string]::IsNullOrWhiteSpace($message)) { return $false }
+
+    return $message.IndexOf('PSScriptAnalyzer', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $message.IndexOf('already loaded', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
 try {
     $paths = DecodeLines $PathsB64
     $exclude = DecodeLines $ExcludeB64
@@ -28,7 +35,24 @@ try {
         exit 2
     }
 
-    Import-Module PSScriptAnalyzer -ErrorAction Stop
+    if (-not (Get-Command -Name Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)) {
+        try {
+            Import-Module PSScriptAnalyzer -ErrorAction Stop
+        } catch {
+            $message = if ($_.Exception) { $_.Exception.Message } else { "$_" }
+            $commandAvailable = $null -ne (Get-Command -Name Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)
+
+            if ($commandAvailable -and (Test-PssaAssemblyConflict $message)) {
+                # The analyzer command is already available from an existing load context.
+            } elseif (($SkipIfMissing -eq '1') -and (Test-PssaAssemblyConflict $message)) {
+                'PFVALID::SKIP::PSSA-CONFLICT'
+                exit 0
+            } else {
+                throw
+            }
+        }
+    }
+
     $issues = Invoke-ScriptAnalyzer -Path $paths -ExcludeRule $exclude -ErrorAction Continue
     if ($null -eq $issues) { $issues = @() }
     $json = if (@($issues).Count -eq 0) { '[]' } else { @($issues) | ConvertTo-Json -Depth 6 }
