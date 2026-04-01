@@ -196,14 +196,9 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var result = runner.Run(spec, plan);
 
-            if (ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required) &&
-                required is { Length: > 0 })
-            {
-                Assert.DoesNotContain(required, m => string.Equals(m.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
-                Assert.DoesNotContain(required, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
-                Assert.DoesNotContain(required, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
-                Assert.DoesNotContain(required, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
-            }
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
+            Assert.NotNull(required);
+            Assert.Empty(required!);
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var external));
             Assert.NotNull(external);

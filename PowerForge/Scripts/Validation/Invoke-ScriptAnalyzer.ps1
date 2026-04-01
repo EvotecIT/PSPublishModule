@@ -45,9 +45,11 @@ try {
             if ($commandAvailable -and (Test-PssaAssemblyConflict $message)) {
                 # The analyzer command is already available from an existing load context.
             } elseif (($SkipIfMissing -eq '1') -and (Test-PssaAssemblyConflict $message)) {
+                # Sentinel consumed by ModuleValidationService.Checks.cs.
                 'PFVALID::SKIP::PSSA-CONFLICT'
                 exit 0
             } else {
+                # Strict mode still fails when the analyzer command never became available.
                 throw
             }
         }

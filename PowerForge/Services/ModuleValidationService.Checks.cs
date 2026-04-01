@@ -288,6 +288,7 @@ public sealed partial class ModuleValidationService
                 return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "failed");
             }
 
+            // Check PSSA-CONFLICT first: the more specific marker contains PSSA as a substring.
             if (result.StdOut.Contains("PFVALID::SKIP::PSSA-CONFLICT", StringComparison.OrdinalIgnoreCase))
             {
                 if (settings.SkipIfUnavailable)
