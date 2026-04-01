@@ -34,7 +34,10 @@ public static partial class WebApiDocsGenerator
         var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
         var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
         var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
-        sb.AppendLine("    <article class=\"type-detail ev-page-body\">");
+        var detailClasses = isPowerShellCommand
+            ? "type-detail ev-page-body type-detail--powershell-command"
+            : "type-detail ev-page-body";
+        sb.AppendLine($"    <article class=\"{detailClasses}\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
         sb.AppendLine("      <nav class=\"breadcrumb\">");
         sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
