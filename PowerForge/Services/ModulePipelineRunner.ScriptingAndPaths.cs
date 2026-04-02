@@ -157,14 +157,12 @@ public sealed partial class ModulePipelineRunner
         if (delivery is null || !delivery.Enable)
             return;
 
-        var internalsPath = NormalizeConfiguredPathValue(delivery.InternalsPath);
-        if (string.IsNullOrWhiteSpace(internalsPath))
-            return;
+        var internalsPath = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery.InternalsPath);
 
-        var deliveryRoot = ResolveProjectRelativePath(projectRoot, internalsPath!);
+        var deliveryRoot = ResolveProjectRelativePath(projectRoot, internalsPath);
         var conflicts = new List<string>();
-        AddDeliveryExcludedDirectoryConflict(conflicts, projectRoot, deliveryRoot, internalsPath!, buildSpec.ExcludeDirectories);
-        AddDeliveryArtefactOverlapConflicts(conflicts, projectRoot, moduleName, moduleVersion, preRelease, deliveryRoot, internalsPath!, artefacts);
+        AddDeliveryExcludedDirectoryConflict(conflicts, projectRoot, deliveryRoot, internalsPath, buildSpec.ExcludeDirectories);
+        AddDeliveryArtefactOverlapConflicts(conflicts, projectRoot, moduleName, moduleVersion, preRelease, deliveryRoot, internalsPath, artefacts);
 
         if (conflicts.Count == 0)
             return;
@@ -190,6 +188,7 @@ public sealed partial class ModulePipelineRunner
         if (excluded.Count == 0)
             return;
 
+        // ModuleBuildPipeline excludes directories by folder name anywhere in the tree, not only at the root.
         var relativePath = IsSameOrChildPath(projectRoot, deliveryRoot)
             ? ProjectTextInspection.ComputeRelativePath(projectRoot, deliveryRoot)
             : configuredInternalsPath;
@@ -226,7 +225,7 @@ public sealed partial class ModulePipelineRunner
         foreach (var artefact in artefacts.Where(static item => item is not null))
         {
             var cfg = artefact.Configuration ?? new ArtefactConfiguration();
-            var outputRoot = ResolveArtefactOutputRootLikeBuilder(
+            var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
                 cfg.Path,
                 projectRoot,
                 moduleName,
@@ -245,7 +244,7 @@ public sealed partial class ModulePipelineRunner
             if (artefact.ArtefactType is not ArtefactType.Unpacked)
                 continue;
 
-            var requiredModulesRoot = ResolveRequiredModulesRootForUnpackedLikeBuilder(
+            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
                 cfg,
                 outputRoot,
                 moduleName,
@@ -260,7 +259,7 @@ public sealed partial class ModulePipelineRunner
                 requiredModulesRoot,
                 $"required modules root for '{artefact.ArtefactType}'");
 
-            var modulesRoot = ResolveModulesRootForUnpackedLikeBuilder(
+            var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(
                 cfg,
                 outputRoot,
                 requiredModulesRoot,
@@ -296,76 +295,6 @@ public sealed partial class ModulePipelineRunner
         conflicts.Add(
             $"Delivery.InternalsPath '{configuredInternalsPath}' resolves to '{deliveryRoot}' and overlaps {candidateLabel} '{Path.GetFullPath(candidatePath)}'. " +
             "Keep delivery source content and artefact outputs in separate trees to avoid packaging previous artefact outputs or clearing part of the same source tree during artefact creation.");
-    }
-
-    private static string ResolveArtefactOutputRootLikeBuilder(
-        string? configuredPath,
-        string projectRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease,
-        ArtefactType type)
-    {
-        if (string.IsNullOrWhiteSpace(configuredPath))
-            return Path.GetFullPath(Path.Combine(projectRoot, "Artefacts", type.ToString()));
-
-        var raw = BuildServices.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease)
-            .Trim()
-            .Trim('"');
-
-        if (string.IsNullOrWhiteSpace(raw))
-            return Path.GetFullPath(Path.Combine(projectRoot, "Artefacts", type.ToString()));
-
-        return Path.IsPathRooted(raw)
-            ? Path.GetFullPath(raw)
-            : Path.GetFullPath(Path.Combine(projectRoot, raw));
-    }
-
-    private static string ResolveRequiredModulesRootForUnpackedLikeBuilder(
-        ArtefactConfiguration cfg,
-        string outputRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease)
-    {
-        var path = cfg.RequiredModules.Path;
-        if (string.IsNullOrWhiteSpace(path))
-            return outputRoot;
-
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease)
-            .Trim()
-            .Trim('"');
-
-        if (string.IsNullOrWhiteSpace(replaced))
-            return outputRoot;
-
-        return Path.IsPathRooted(replaced)
-            ? Path.GetFullPath(replaced)
-            : Path.GetFullPath(Path.Combine(outputRoot, replaced));
-    }
-
-    private static string ResolveModulesRootForUnpackedLikeBuilder(
-        ArtefactConfiguration cfg,
-        string outputRoot,
-        string requiredModulesRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease)
-    {
-        var path = cfg.RequiredModules.ModulesPath;
-        if (string.IsNullOrWhiteSpace(path))
-            return requiredModulesRoot;
-
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease)
-            .Trim()
-            .Trim('"');
-
-        if (string.IsNullOrWhiteSpace(replaced))
-            return requiredModulesRoot;
-
-        return Path.IsPathRooted(replaced)
-            ? Path.GetFullPath(replaced)
-            : Path.GetFullPath(Path.Combine(outputRoot, replaced));
     }
 
     private static string ResolveProjectRelativePath(string projectRoot, string configuredPath)

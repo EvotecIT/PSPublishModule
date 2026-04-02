@@ -71,16 +71,45 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
             var logger = new BufferedLogger();
             var runner = new ModulePipelineRunner(logger);
 
-            runner.Plan(CreateSpec(
+            var error = Record.Exception(() => runner.Plan(CreateSpec(
                 root.FullName,
                 moduleName,
                 deliveryInternalsPath: "Internals",
                 artefactPath: "Artefacts\\Unpacked",
-                requiredModulesPath: "Modules"));
+                requiredModulesPath: "Modules")));
 
+            Assert.Null(error);
             Assert.DoesNotContain(
                 logger.Entries.Where(entry => entry.Level == "warn"),
                 entry => entry.Message.Contains("overlaps artefact output root", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DeliveryInternalsPathUnset_UsesDefaultInternalsAndFailsFastOnOverlap()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                runner.Plan(CreateSpec(
+                    root.FullName,
+                    moduleName,
+                    deliveryInternalsPath: string.Empty,
+                    artefactPath: "Internals\\Unpacked",
+                    requiredModulesPath: "Modules")));
+
+            Assert.Contains("Delivery.InternalsPath 'Internals'", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps artefact output root for 'Unpacked'", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

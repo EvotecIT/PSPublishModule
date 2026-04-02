@@ -16,6 +16,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class BinaryDependencyPreflightService
 {
+    private const string BundledModulesFolderName = "Modules";
+
     private static readonly string[] WellKnownFrameworkAssemblyNames =
     {
         "mscorlib",
@@ -175,8 +177,6 @@ public sealed class BinaryDependencyPreflightService
         }
 
         var providedByHost = new HashSet<string>(GetHostProvidedAssemblyNames(edition), StringComparer.OrdinalIgnoreCase);
-        foreach (var name in availableAssemblyNames.Keys)
-            providedByHost.Add(name);
 
         var issues = new List<BinaryDependencyPreflightIssue>();
         var seenIssues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -193,7 +193,6 @@ public sealed class BinaryDependencyPreflightService
             foreach (var reference in ReadAssemblyReferences(assemblyPath))
             {
                 if (string.IsNullOrWhiteSpace(reference.Name)) continue;
-                if (providedByHost.Contains(reference.Name)) continue;
 
                 if (availableAssemblyNames.TryGetValue(reference.Name, out var dependencyPath))
                 {
@@ -201,6 +200,8 @@ public sealed class BinaryDependencyPreflightService
                         queue.Enqueue(dependencyPath);
                     continue;
                 }
+
+                if (providedByHost.Contains(reference.Name)) continue;
 
                 var key = assemblyFileName + "->" + reference.Name;
                 if (!seenIssues.Add(key)) continue;
@@ -465,7 +466,9 @@ public sealed class BinaryDependencyPreflightService
 
     private static string[] ResolveRootScanExcludedPaths(string manifestPath)
     {
-        var list = new List<string> { "Modules" };
+        // Script-package layouts commonly stage bundled required modules under a top-level Modules folder.
+        // Those DLLs are copied for installation, not imported as part of the root module itself.
+        var list = new List<string> { BundledModulesFolderName };
         var internalsPath = TryReadDeliveryInternalsPath(manifestPath);
         if (!string.IsNullOrWhiteSpace(internalsPath))
             list.Add(internalsPath!);

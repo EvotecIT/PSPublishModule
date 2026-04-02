@@ -679,6 +679,8 @@ public sealed partial class ModulePipelineRunner
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
         }
 
+        // Run delivery validation after refresh-only pruning so artefact overlap checks reflect
+        // the operations that will actually execute for this plan.
         ValidateDeliveryPathConflicts(
             projectRoot,
             moduleName,
