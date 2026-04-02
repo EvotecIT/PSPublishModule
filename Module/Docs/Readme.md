@@ -250,3 +250,7 @@ Refreshes or repairs an Azure Artifacts private PowerShell module repository reg
 ### [Update-PrivateModule](Update-PrivateModule.md)
 Updates one or more modules from a private repository, optionally refreshing Azure Artifacts registration first.
 
+## About Topics
+
+### [about_ModuleDependencies](About/about_ModuleDependencies.md)
+

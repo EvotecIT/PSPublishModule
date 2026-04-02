@@ -30,12 +30,17 @@ steps, use -JsonOnly with -JsonPath.
 When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).
 
+Dependency behavior is composed from the configuration segments you emit. Typically this means:
+New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host
+should install missing ones, and New-ConfigurationArtefact decides whether required modules should be
+bundled into the output artefact.
+
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }
 ```
 
@@ -47,23 +52,32 @@ Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -JsonOnly -JsonPath 'C:
 ### EXAMPLE 3
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
-New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }
 ```
 
 ### EXAMPLE 4
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
--Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+    -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 ```
 
 ### EXAMPLE 5
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
--FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+    -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
+```
+
+### EXAMPLE 6
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+}
 ```
 
 ## PARAMETERS

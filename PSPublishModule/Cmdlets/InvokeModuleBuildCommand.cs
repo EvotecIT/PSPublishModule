@@ -25,6 +25,12 @@ namespace PSPublishModule;
 /// When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
 /// Redirect output or use <c>-Verbose</c> to force plain, line-by-line output (useful for CI logs).
 /// </para>
+/// <para>
+/// Dependency behavior is composed from the configuration segments you emit. Typically this means:
+/// <c>New-ConfigurationModule</c> declares dependencies, <c>New-ConfigurationBuild</c> decides whether the build host
+/// should install missing ones, and <c>New-ConfigurationArtefact</c> decides whether required modules should be
+/// bundled into the output artefact.
+/// </para>
 /// </remarks>
 /// <example>
 /// <summary>Build a module (DSL) and keep docs in sync</summary>
@@ -63,6 +69,16 @@ namespace PSPublishModule;
 /// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
 ///     -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
 ///     -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning
+/// </code>
+/// </example>
+/// <example>
+/// <summary>Install missing dependencies during the build and bundle required modules into the package</summary>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+///     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+///     New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
+///     New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+/// }
 /// </code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
