@@ -145,7 +145,8 @@ Current status:
 - Required-module resolution now runs through a core engine, while installed/repository discovery stays PowerShell-backed in `ModulePipelineRunner`.
 - `IModuleDependencyMetadataProvider` now separates required-module and binary-conflict metadata lookup from `ModulePipelineRunner`, with `PowerShellModuleDependencyMetadataProvider` in `PowerForge.PowerShell` as the current implementation seam.
 - `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
-- The next extraction target is the remaining execution context inside `ModulePipelineRunner*`, especially signing/import-module execution and the larger run-loop decomposition.
+- Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
+- The next extraction target is the remaining execution context inside `ModulePipelineRunner*`, especially the larger run-loop decomposition and any leftover PowerShell-runner/file-formatting coupling.
 
 ### Phase 4: Publish and validation decomposition
 

@@ -173,6 +173,23 @@ public sealed class ModulePipelineHostedOperationsTests
             IReadOnlyList<ArtefactBuildResult> artefactResults,
             bool includeScriptFolders)
             => throw new InvalidOperationException("Not used in this test.");
+
+        public void ValidateModuleImports(
+            string manifestPath,
+            ImportModuleEntry[] modules,
+            bool importRequired,
+            bool importSelf,
+            bool verbose,
+            ModuleImportValidationTarget[] targets)
+            => throw new InvalidOperationException("Not used in this test.");
+
+        public ModuleSigningResult SignModuleOutput(
+            string moduleName,
+            string rootPath,
+            string[] includePatterns,
+            string[] excludeSubstrings,
+            SigningOptionsConfiguration signing)
+            => throw new InvalidOperationException("Not used in this test.");
     }
 
     private sealed class ThrowingPowerShellRunner : IPowerShellRunner

@@ -35,4 +35,19 @@ internal interface IModulePipelineHostedOperations
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders);
+
+    void ValidateModuleImports(
+        string manifestPath,
+        ImportModuleEntry[] modules,
+        bool importRequired,
+        bool importSelf,
+        bool verbose,
+        ModuleImportValidationTarget[] targets);
+
+    ModuleSigningResult SignModuleOutput(
+        string moduleName,
+        string rootPath,
+        string[] includePatterns,
+        string[] excludeSubstrings,
+        SigningOptionsConfiguration signing);
 }
