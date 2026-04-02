@@ -248,7 +248,7 @@ public sealed partial class ModulePipelineRunner
             buildResult.StagingPath,
             plan.Manifest?.PowerShellVersion))
         {
-            var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition);
+            var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition, buildResult.ManifestPath);
             if (result.HasIssues)
             {
                 throw new InvalidOperationException(

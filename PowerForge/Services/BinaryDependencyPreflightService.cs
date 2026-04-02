@@ -55,6 +55,8 @@ public sealed class BinaryDependencyPreflightService
 
     /// <summary>
     /// Analyzes the module payload that would be used for the specified PowerShell edition.
+    /// Callers that have the module manifest path should prefer the manifest-aware overload so
+    /// root-level script-package payloads can scope analysis to import-relevant assemblies.
     /// </summary>
     public BinaryDependencyPreflightResult Analyze(string moduleRoot, string powerShellEdition)
         => Analyze(moduleRoot, powerShellEdition, manifestPath: null);
@@ -271,12 +273,17 @@ public sealed class BinaryDependencyPreflightService
     }
 
     private static IEnumerable<string> EnumerateCandidateAssemblies(string assemblyRoot)
-        => EnumerateCandidateAssemblies(assemblyRoot, excludedRelativePaths: null, explicitlyIncludedPaths: null);
+        => EnumerateCandidateAssemblies(
+            assemblyRoot,
+            excludedRelativePaths: null,
+            explicitlyIncludedPaths: null,
+            explicitlyIncludedDirectories: null);
 
     private static IEnumerable<string> EnumerateCandidateAssemblies(
         string assemblyRoot,
         IReadOnlyCollection<string>? excludedRelativePaths,
-        IReadOnlyCollection<string>? explicitlyIncludedPaths)
+        IReadOnlyCollection<string>? explicitlyIncludedPaths,
+        IReadOnlyCollection<string>? explicitlyIncludedDirectories)
     {
         IEnumerable<string> files;
         try
@@ -293,7 +300,7 @@ public sealed class BinaryDependencyPreflightService
             var fileName = Path.GetFileName(file);
             if (string.IsNullOrWhiteSpace(fileName)) continue;
             if (fileName.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase)) continue;
-            if (ShouldExcludeAssembly(file, assemblyRoot, excludedRelativePaths, explicitlyIncludedPaths)) continue;
+            if (ShouldExcludeAssembly(file, assemblyRoot, excludedRelativePaths, explicitlyIncludedPaths, explicitlyIncludedDirectories)) continue;
             yield return file;
         }
     }
@@ -302,14 +309,24 @@ public sealed class BinaryDependencyPreflightService
         string assemblyPath,
         string assemblyRoot,
         IReadOnlyCollection<string>? excludedRelativePaths,
-        IReadOnlyCollection<string>? explicitlyIncludedPaths)
+        IReadOnlyCollection<string>? explicitlyIncludedPaths,
+        IReadOnlyCollection<string>? explicitlyIncludedDirectories)
     {
-        if (explicitlyIncludedPaths is { Count: > 0 } &&
-            explicitlyIncludedPaths.Contains(Path.GetFullPath(assemblyPath), StringComparer.OrdinalIgnoreCase))
-            return false;
-
         if (excludedRelativePaths is not { Count: > 0 })
             return false;
+
+        var fullAssemblyPath = Path.GetFullPath(assemblyPath);
+        if (explicitlyIncludedPaths is { Count: > 0 } &&
+            explicitlyIncludedPaths.Contains(fullAssemblyPath, StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        if (explicitlyIncludedDirectories is { Count: > 0 })
+        {
+            var directory = Path.GetDirectoryName(fullAssemblyPath);
+            if (!string.IsNullOrWhiteSpace(directory) &&
+                explicitlyIncludedDirectories.Contains(Path.GetFullPath(directory), StringComparer.OrdinalIgnoreCase))
+                return false;
+        }
 
         var relative = FrameworkCompatibility.GetRelativePath(assemblyRoot, assemblyPath)
             .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
@@ -418,8 +435,18 @@ public sealed class BinaryDependencyPreflightService
             .ToArray();
 
         var explicitlyIncluded = new HashSet<string>(entryAssemblyPaths, StringComparer.OrdinalIgnoreCase);
+        var explicitlyIncludedDirectories = new HashSet<string>(
+            entryAssemblyPaths
+                .Select(Path.GetDirectoryName)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(static path => Path.GetFullPath(path!)),
+            StringComparer.OrdinalIgnoreCase);
         var excludedRelativePaths = ResolveRootScanExcludedPaths(manifestPath!);
-        var candidateAssemblyPaths = EnumerateCandidateAssemblies(moduleRoot, excludedRelativePaths, explicitlyIncluded)
+        var candidateAssemblyPaths = EnumerateCandidateAssemblies(
+                moduleRoot,
+                excludedRelativePaths,
+                explicitlyIncluded,
+                explicitlyIncludedDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

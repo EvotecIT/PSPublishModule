@@ -185,6 +185,49 @@ public sealed class BinaryDependencyPreflightServiceTests
     }
 
     [Fact]
+    public void Analyze_WithManifestScopedRequiredAssemblyInsideDefaultInternals_KeepsSiblingDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    RequiredAssemblies = @('Internals/Consumer.dll')
+    PrivateData = @{
+        PSData = @{
+            Delivery = @{
+                Enable = $true
+            }
+        }
+    }
+}
+""");
+
+            var internalsRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internalsRoot.FullName, "Consumer.dll"), overwrite: true);
+            File.Copy(paths.DependencyAssemblyPath, Path.Combine(internalsRoot.FullName, "Dependency.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.False(result.HasIssues);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_WithManifestScopedRootBinary_FindsMissingDependency()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
