@@ -74,69 +74,14 @@ public sealed partial class ModulePipelineRunner
         if (plan is null || buildResult is null) return;
 
         var psm1Path = Path.Combine(buildResult.StagingPath, $"{plan.ModuleName}.psm1");
-        if (!File.Exists(psm1Path)) return;
-
-        var moduleName = plan.ModuleName;
-        var moduleVersion = plan.ResolvedVersion;
-        var preRelease = plan.PreRelease;
-        var moduleVersionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
-            ? moduleVersion
-            : $"{moduleVersion}-{preRelease}";
-        var tagName = "v" + moduleVersion;
-        var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;
-
-        var replacements = new List<(string Find, string Replace)>();
-        if (plan.PlaceHolderOption?.SkipBuiltinReplacements != true)
-        {
-            replacements.Add(("{ModuleName}", moduleName));
-            replacements.Add(("<ModuleName>", moduleName));
-            replacements.Add(("{ModuleVersion}", moduleVersion));
-            replacements.Add(("<ModuleVersion>", moduleVersion));
-            replacements.Add(("{ModuleVersionWithPreRelease}", moduleVersionWithPreRelease));
-            replacements.Add(("<ModuleVersionWithPreRelease>", moduleVersionWithPreRelease));
-            replacements.Add(("{TagModuleVersionWithPreRelease}", tagModuleVersionWithPreRelease));
-            replacements.Add(("<TagModuleVersionWithPreRelease>", tagModuleVersionWithPreRelease));
-            replacements.Add(("{TagName}", tagName));
-            replacements.Add(("<TagName>", tagName));
-        }
-
-        if (plan.PlaceHolders is { Length: > 0 })
-        {
-            foreach (var entry in plan.PlaceHolders)
-            {
-                if (entry is null) continue;
-                if (string.IsNullOrWhiteSpace(entry.Find)) continue;
-                replacements.Add((entry.Find, entry.Replace ?? string.Empty));
-            }
-        }
-
-        if (replacements.Count == 0) return;
-
-        string content;
-        try { content = File.ReadAllText(psm1Path); }
-        catch (Exception ex)
-        {
-            _logger.Warn($"Failed to read PSM1 for placeholder replacement: {ex.Message}");
-            return;
-        }
-
-        var updated = content;
-        foreach (var item in replacements)
-        {
-            if (string.IsNullOrEmpty(item.Find)) continue;
-            updated = updated.Replace(item.Find, item.Replace ?? string.Empty);
-        }
-
-        if (string.Equals(content, updated, StringComparison.Ordinal)) return;
-
-        try
-        {
-            File.WriteAllText(psm1Path, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn($"Failed to write PSM1 after placeholder replacement: {ex.Message}");
-        }
+        ModulePsm1PlaceholderApplier.Apply(
+            _logger,
+            psm1Path,
+            plan.ModuleName,
+            plan.ResolvedVersion,
+            plan.PreRelease,
+            plan.PlaceHolders,
+            plan.PlaceHolderOption);
     }
 
     private void RunImportModules(ModulePipelinePlan plan, ModuleBuildResult buildResult)

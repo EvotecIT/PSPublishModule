@@ -151,11 +151,12 @@ Current status:
 - `IMissingFunctionAnalysisService` now separates runner-side missing-function analysis from the PowerShell AST implementation, with `PowerShellMissingFunctionAnalysisService` adapting the existing `MissingFunctionsAnalyzer` output to host-neutral `MissingFunctionAnalysisResult` and `MissingCommandReference` models.
 - Merge source discovery, merged-script composition, export-block shaping, and merged-PSM1 synchronization now flow through shared core helpers instead of staying embedded inside `ModulePipelineRunner`, and manifest export reads are now shared between the runner and `ModuleBuildPipeline`.
 - The merge write/decision path now also flows through a dedicated core helper, so `ModulePipelineRunner.ApplyMerge` is mostly coordinating analysis, validation, and result assembly rather than performing the file mutation steps inline.
+- PSM1 placeholder application now also flows through a dedicated core helper, which removes another block of token-replacement file mutation logic from `ModulePipelineRunner`.
 - Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
 - `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
 - The validation, test, packaging, publish, and install phases now run through dedicated runner helper methods backed by a shared run-state object, so `ModulePipelineRunner.Run` is acting more like an orchestrator than a giant mutable script.
 - The stage/build/manifest/docs/format/sign phases now also run through dedicated helpers, leaving `ModulePipelineRunner.Run` as a thin phase orchestrator with shared cleanup/failure handling.
-- The next extraction target is the remaining merge result-shaping surface in `ModulePipelineRunner`, plus eventual retirement of the legacy analyzer output models that now sit entirely behind the PowerShell adapter seam.
+- The next extraction target is the remaining bootstrapper/delivery result-shaping surface in `ModulePipelineRunner`, plus eventual retirement of the legacy analyzer output models that now sit entirely behind the PowerShell adapter seam.
 
 ### Phase 4: Publish and validation decomposition
 
