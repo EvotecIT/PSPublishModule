@@ -81,11 +81,29 @@ public sealed class ModulePsm1PlaceholderApplierTests
             var updated = File.ReadAllText(psm1Path);
             Assert.Contains("BuiltIn={ModuleName}", updated, StringComparison.Ordinal);
             Assert.Contains("Custom=done", updated, StringComparison.Ordinal);
+            Assert.Empty(logger.Warnings);
         }
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void Apply_ReturnsSilentlyWhenFileDoesNotExist()
+    {
+        var logger = new CollectingLogger();
+
+        ModulePsm1PlaceholderApplier.Apply(
+            logger,
+            psm1Path: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Missing.psm1"),
+            moduleName: "TestModule",
+            moduleVersion: "1.2.3",
+            preRelease: null,
+            replacements: null,
+            options: null);
+
+        Assert.Empty(logger.Warnings);
     }
 
     [Fact]
