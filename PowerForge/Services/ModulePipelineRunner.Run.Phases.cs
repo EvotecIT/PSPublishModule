@@ -6,6 +6,226 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private void ExecutePreparationAndBuildPhases(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        RequiredModuleReference[] manifestRequiredModules,
+        string[] manifestExternalModuleDependencies,
+        ModuleBuildPipeline pipeline,
+        ModulePipelineRunState state)
+    {
+        state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+        SyncSourceProjectVersionIfRequested(plan);
+
+        ModuleBuildPipeline.StagingResult staged;
+        session.Start(session.StageStep);
+        try
+        {
+            staged = pipeline.StageToStaging(plan.BuildSpec);
+            state.Staged = staged;
+            state.StagingPathForCleanup = staged.StagingPath;
+            session.Done(session.StageStep);
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.StageStep, ex);
+            state.StagingPathForCleanup ??= plan.BuildSpec.StagingPath;
+            throw;
+        }
+
+        ModuleBuildResult buildResult;
+        session.Start(session.BuildStep);
+        try
+        {
+            buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
+            state.BuildResult = buildResult;
+            session.Done(session.BuildStep);
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.BuildStep, ex);
+            throw;
+        }
+
+        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
+        if (!plan.BuildSpec.RefreshManifestOnly)
+            ApplyPlaceholders(plan, buildResult);
+
+        session.Start(session.ManifestStep);
+        try
+        {
+            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+
+            if (plan.Delivery is not null && plan.Delivery.Enable)
+            {
+                ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
+
+                if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
+                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.MergedScripts);
+            }
+
+            if (!state.MergedScripts && !plan.BuildSpec.RefreshManifestOnly)
+                TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
+
+            session.Done(session.ManifestStep);
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.ManifestStep, ex);
+            throw;
+        }
+    }
+
+    private void ExecuteDocumentationPhase(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        IModulePipelineProgressReporter reporter,
+        ModulePipelineRunState state)
+    {
+        var buildResult = state.RequireBuildResult();
+
+        if (plan.Documentation is null || plan.DocumentationBuild?.Enable != true)
+            return;
+
+        try
+        {
+            state.DocumentationResult = _hostedOperations.BuildDocumentation(
+                moduleName: plan.ModuleName,
+                stagingPath: buildResult.StagingPath,
+                moduleManifestPath: buildResult.ManifestPath,
+                documentation: plan.Documentation,
+                buildDocumentation: plan.DocumentationBuild,
+                progress: reporter,
+                extractStep: session.DocsExtractStep,
+                writeStep: session.DocsWriteStep,
+                externalHelpStep: session.DocsMamlStep);
+
+            if (state.DocumentationResult is not null && !state.DocumentationResult.Succeeded)
+                throw new InvalidOperationException($"Documentation generation failed. {state.DocumentationResult.ErrorMessage}");
+
+            if (state.DocumentationResult is not null &&
+                state.DocumentationResult.Succeeded &&
+                plan.DocumentationBuild.UpdateWhenNew)
+            {
+                try
+                {
+                    SyncGeneratedDocumentationToProjectRoot(plan, state.DocumentationResult);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"Failed to update project docs folder. Error: {ex.Message}");
+                    if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.DocsExtractStep, ex);
+            session.Fail(session.DocsWriteStep, ex);
+            session.Fail(session.DocsMamlStep, ex);
+            throw;
+        }
+    }
+
+    private void ExecuteFormattingAndSigningPhases(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        RequiredModuleReference[] manifestRequiredModules,
+        string[] manifestExternalModuleDependencies,
+        ModulePipelineRunState state)
+    {
+        var buildResult = state.RequireBuildResult();
+
+        if (plan.Formatting is not null)
+        {
+            var formattingPipeline = new FormattingPipeline(_logger);
+
+            session.Start(session.FormatStagingStep);
+            try
+            {
+                state.FormattingStagingResults = FormatPowerShellTree(
+                    rootPath: buildResult.StagingPath,
+                    moduleName: plan.ModuleName,
+                    manifestPath: buildResult.ManifestPath,
+                    includeMergeFormatting: true,
+                    formatting: plan.Formatting,
+                    pipeline: formattingPipeline);
+
+                var stagingFmt = FormattingSummary.FromResults(state.FormattingStagingResults);
+                if (stagingFmt.Status == CheckStatus.Fail)
+                {
+                    LogFormattingIssues(buildResult.StagingPath, state.FormattingStagingResults, "staging root");
+                    throw new InvalidOperationException(
+                        BuildFormattingFailureMessage("staging root", buildResult.StagingPath, stagingFmt, state.FormattingStagingResults));
+                }
+                session.Done(session.FormatStagingStep);
+            }
+            catch (Exception ex)
+            {
+                session.Fail(session.FormatStagingStep, ex);
+                throw;
+            }
+
+            if (plan.Formatting.Options.UpdateProjectRoot)
+            {
+                session.Start(session.FormatProjectStep);
+                try
+                {
+                    var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
+                    state.FormattingProjectResults = FormatPowerShellTree(
+                        rootPath: plan.ProjectRoot,
+                        moduleName: plan.ModuleName,
+                        manifestPath: projectManifest,
+                        includeMergeFormatting: false,
+                        formatting: plan.Formatting,
+                        pipeline: formattingPipeline);
+
+                    var projectFmt = FormattingSummary.FromResults(state.FormattingProjectResults);
+                    if (projectFmt.Status == CheckStatus.Fail)
+                    {
+                        LogFormattingIssues(plan.ProjectRoot, state.FormattingProjectResults, "project root");
+                        throw new InvalidOperationException(
+                            BuildFormattingFailureMessage("project root", plan.ProjectRoot, projectFmt, state.FormattingProjectResults));
+                    }
+                    session.Done(session.FormatProjectStep);
+                }
+                catch (Exception ex)
+                {
+                    session.Fail(session.FormatProjectStep, ex);
+                    throw;
+                }
+            }
+        }
+
+        try
+        {
+            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Post-format manifest patch failed. {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        }
+
+        if (plan.SignModule)
+        {
+            session.Start(session.SignStep);
+            try
+            {
+                state.SigningResult = SignBuiltModuleOutput(
+                    moduleName: plan.ModuleName,
+                    rootPath: buildResult.StagingPath,
+                    signing: plan.Signing);
+                session.Done(session.SignStep);
+            }
+            catch (Exception ex)
+            {
+                session.Fail(session.SignStep, ex);
+                throw;
+            }
+        }
+    }
+
     private void ExecuteValidationPhases(
         ModulePipelinePlan plan,
         ModulePipelineExecutionSession session,
@@ -491,6 +711,34 @@ public sealed partial class ModulePipelineRunner
                     catch (Exception ex) { _logger.Warn($"Failed to delete install package folder: {ex.Message}"); }
                 }
             }
+        }
+    }
+
+    private void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool mergedScripts)
+    {
+        var generator = new DeliveryCommandGenerator(_logger);
+        var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
+
+        if (generated.Length == 0)
+            return;
+
+        try
+        {
+            var publicFolder = Path.Combine(buildResult.StagingPath, "Public");
+            if (Directory.Exists(publicFolder))
+            {
+                var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
+                var functions = ScriptFunctionExportDetector.DetectScriptFunctions(scripts);
+                BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
+            }
+
+            if (mergedScripts)
+                SyncMergedPsm1WithGeneratedScripts(buildResult.ManifestPath, buildResult.StagingPath, plan.ModuleName, generated.Select(static g => g.ScriptPath));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to update manifest exports after generating delivery commands. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
     }
 }
