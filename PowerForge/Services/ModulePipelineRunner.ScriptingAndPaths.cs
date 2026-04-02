@@ -50,68 +50,6 @@ public sealed partial class ModulePipelineRunner
     private static string? EmptyToNull(string? s)
         => string.IsNullOrWhiteSpace(s) ? null : s;
 
-    private static string? TryResolveCsprojPath(string projectRoot, string moduleName, string? netProjectPath, string? netProjectName)
-    {
-        if (string.IsNullOrWhiteSpace(netProjectPath))
-            return null;
-
-        var projectName = string.IsNullOrWhiteSpace(netProjectName) ? moduleName : netProjectName!.Trim();
-        var rawPath = netProjectPath!.Trim().Trim('"');
-        var normalizedPath = rawPath
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar);
-
-        var basePath = Path.IsPathRooted(normalizedPath)
-            ? Path.GetFullPath(normalizedPath)
-            : Path.GetFullPath(Path.Combine(projectRoot, normalizedPath));
-
-        if (basePath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-            return basePath;
-
-        return Path.Combine(basePath, projectName + ".csproj");
-    }
-
-    private static string[] ResolveInstallRootsFromCompatiblePSEditions(string[] compatiblePSEditions)
-    {
-        var compatible = compatiblePSEditions ?? Array.Empty<string>();
-        if (compatible.Length == 0) return Array.Empty<string>();
-
-        var hasDesktop = compatible.Any(s => string.Equals(s, "Desktop", StringComparison.OrdinalIgnoreCase));
-        var hasCore = compatible.Any(s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
-
-        var roots = new List<string>();
-        if (Path.DirectorySeparatorChar == '\\')
-        {
-            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (string.IsNullOrWhiteSpace(docs))
-                docs = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-            if (!string.IsNullOrWhiteSpace(docs))
-            {
-                if (hasCore) roots.Add(Path.Combine(docs, "PowerShell", "Modules"));
-                if (hasDesktop) roots.Add(Path.Combine(docs, "WindowsPowerShell", "Modules"));
-            }
-        }
-        else
-        {
-            var home = Environment.GetEnvironmentVariable("HOME");
-            if (string.IsNullOrWhiteSpace(home))
-                home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-            var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-            var dataHome = !string.IsNullOrWhiteSpace(xdgDataHome)
-                ? xdgDataHome
-                : (!string.IsNullOrWhiteSpace(home)
-                    ? Path.Combine(home!, ".local", "share")
-                    : null);
-
-            if (!string.IsNullOrWhiteSpace(dataHome))
-                roots.Add(Path.Combine(dataHome!, "powershell", "Modules"));
-        }
-
-        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-    }
-
     private static string BuildArtefactsReportPath(string projectRoot, string? reportFileName, string fallbackFileName)
     {
         var name = string.IsNullOrWhiteSpace(reportFileName) ? fallbackFileName : reportFileName!.Trim();

@@ -30,17 +30,21 @@ internal static class ModuleManifestTextParser
     internal static bool TryGetPsDataStringValue(string manifestText, string key, out string? value)
     {
         value = null;
-        if (!TryReadAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
-            string.IsNullOrWhiteSpace(privateData))
+        if (!TryReadPsDataAssignedExpression(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
             return false;
 
-        var privateDataText = privateData!;
+        return TryParseQuotedStringExpression(expression!, out value);
+    }
 
-        if (!TryReadAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
-            string.IsNullOrWhiteSpace(psData))
+    internal static bool TryGetPsDataStringArrayValue(string manifestText, string key, out string[]? values)
+    {
+        values = null;
+        if (!TryReadPsDataAssignedExpression(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
             return false;
 
-        return TryGetHashtableStringValue(psData!, key, out value);
+        return TryParseStringArrayExpression(expression!, out values);
     }
 
     internal static bool TryGetRequiredModules(string manifestText, out RequiredModuleReference[]? modules)
@@ -59,6 +63,22 @@ internal static class ModuleManifestTextParser
         return true;
     }
 
+    internal static bool TryReadPsDataAssignedExpression(string manifestText, string key, out string? expression)
+    {
+        expression = null;
+        if (!TryReadAssignedExpressionByKey(manifestText, "PrivateData", out var privateData) ||
+            string.IsNullOrWhiteSpace(privateData))
+            return false;
+
+        var privateDataText = TrimCompositeWrapper(privateData!);
+        if (!TryReadAssignedExpressionByKey(privateDataText, "PSData", out var psData) ||
+            string.IsNullOrWhiteSpace(psData))
+            return false;
+
+        var psDataText = TrimCompositeWrapper(psData!);
+        return TryReadAssignedExpressionByKey(psDataText, key, out expression);
+    }
+
     internal static bool TryGetStringArrayValue(string manifestText, string key, out string[]? values)
     {
         values = null;
@@ -71,6 +91,33 @@ internal static class ModuleManifestTextParser
             .ToArray();
 
         values = parsed;
+        return true;
+    }
+
+    internal static bool TryParseStringArrayExpression(string expression, out string[]? values)
+    {
+        values = null;
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        var parsed = ParseStringArray(expression)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+
+        values = parsed;
+        return true;
+    }
+
+    internal static bool TryParseQuotedStringExpression(string expression, out string? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        if (!TryUnquote(expression, out var parsed) || string.IsNullOrWhiteSpace(parsed))
+            return false;
+
+        value = parsed;
         return true;
     }
 
@@ -148,6 +195,12 @@ internal static class ModuleManifestTextParser
     {
         var body = TrimCompositeWrapper(hashtableExpression);
         return TryGetQuotedStringValue(body, key, out value);
+    }
+
+    private static bool TryGetHashtableStringArrayValue(string hashtableExpression, string key, out string[]? values)
+    {
+        var body = TrimCompositeWrapper(hashtableExpression);
+        return TryGetStringArrayValue(body, key, out values);
     }
 
     private static bool TryReadAssignedExpressionByKey(string text, string key, out string? expression)

@@ -125,7 +125,8 @@ Current status:
 - `BinaryExportDetector` now lives in `PowerForge`, while `PowerShellScriptFunctionExportDetector` lives in `PowerForge.PowerShell`.
 - `ModuleBuilder` now uses both seams and compiles in `PowerForge`.
 - `ModuleBuildPipeline` now compiles in `PowerForge`, while `ModuleBuildPipelineFactory` in `PowerForge.PowerShell` provides the default AST-backed wiring.
-- The next blocker is no longer `ModuleBuildPipeline`; it is the remaining PowerShell-owned pipeline execution and validation surface.
+- Neutral manifest-baseline reading and planner support helpers now live in `PowerForge`.
+- The next blocker is no longer `ModuleBuildPipeline`; it is the remaining PowerShell-owned required-module resolution, execution, and validation surface.
 
 ### Phase 3: Move the reusable pipeline engine back to core
 
@@ -140,7 +141,8 @@ Current status:
 - `ModuleBuildPipeline` now lives in `PowerForge`.
 - It reads manifest version/export metadata via neutral text parsing in core.
 - PowerShell-specific default wiring lives behind `ModuleBuildPipelineFactory` in `PowerForge.PowerShell`.
-- The next extraction target is the reusable planning/execution context inside `ModulePipelineRunner*`.
+- Manifest-baseline reads and pure planning helpers are now factored into core support services.
+- The next extraction target is the reusable planning/execution context inside `ModulePipelineRunner*`, especially required-module resolution versus PowerShell-hosted execution.
 
 ### Phase 4: Publish and validation decomposition
 
@@ -160,4 +162,4 @@ The safest first PR after this document is:
 4. Update `PowerForge.PowerShell.csproj` to stop linking files that now belong to core.
 5. Keep namespaces stable in these early slices to avoid unnecessary downstream churn.
 
-That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModulePipelineRunner`, validation, and the remaining PowerShell-hosted execution helpers.
+That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModulePipelineRunner` required-module resolution, validation, and the remaining PowerShell-hosted execution helpers.
