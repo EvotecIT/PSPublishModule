@@ -59,6 +59,21 @@ internal static class ModuleManifestTextParser
         return true;
     }
 
+    internal static bool TryGetStringArrayValue(string manifestText, string key, out string[]? values)
+    {
+        values = null;
+        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        var parsed = ParseStringArray(expression!)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+
+        values = parsed;
+        return true;
+    }
+
     private static IEnumerable<RequiredModuleReference?> ParseRequiredModules(string expression)
     {
         var trimmed = expression.Trim();
@@ -103,6 +118,30 @@ internal static class ModuleManifestTextParser
         TryGetHashtableStringValue(trimmed, "Guid", out var guid);
 
         return new RequiredModuleReference(name!, moduleVersion, requiredVersion, maximumVersion, guid);
+    }
+
+    private static IEnumerable<string> ParseStringArray(string expression)
+    {
+        var trimmed = expression.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            yield break;
+
+        if (TryUnquote(trimmed, out var singleValue) && !string.IsNullOrWhiteSpace(singleValue))
+        {
+            yield return singleValue;
+            yield break;
+        }
+
+        if (!IsArrayExpression(trimmed))
+            yield break;
+
+        var body = TrimCompositeWrapper(trimmed);
+        var index = 0;
+        while (TryReadValueExpression(body, ref index, out var itemExpression))
+        {
+            if (TryUnquote(itemExpression, out var value) && !string.IsNullOrWhiteSpace(value))
+                yield return value;
+        }
     }
 
     private static bool TryGetHashtableStringValue(string hashtableExpression, string key, out string? value)

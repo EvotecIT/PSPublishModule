@@ -70,7 +70,7 @@ public sealed partial class ModulePipelineRunner
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
-        var pipeline = new ModuleBuildPipeline(_logger);
+        var pipeline = ModuleBuildPipelineFactory.Create(_logger);
         string? stagingPathForCleanup = plan.BuildSpec.StagingPath;
         Exception? pipelineFailure = null;
 
