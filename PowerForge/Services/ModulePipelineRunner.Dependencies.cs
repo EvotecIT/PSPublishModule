@@ -62,14 +62,13 @@ public sealed partial class ModulePipelineRunner
 
         _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
 
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), _logger);
-        var results = installer.EnsureInstalled(
+        var results = _hostedOperations.EnsureDependenciesInstalled(
             dependencies: deps,
-            skipModules: plan.ModuleSkip?.IgnoreModuleName,
             force: plan.InstallMissingModulesForce,
             repository: plan.InstallMissingModulesRepository,
             credential: plan.InstallMissingModulesCredential,
-            prerelease: plan.InstallMissingModulesPrerelease);
+            prerelease: plan.InstallMissingModulesPrerelease,
+            skipModules: plan.ModuleSkip);
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)

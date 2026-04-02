@@ -166,14 +166,12 @@ public sealed partial class ModulePipelineRunner
             {
                 try
                 {
-                    var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
-                    documentationResult = engine.BuildWithProgress(
+                    documentationResult = _hostedOperations.BuildDocumentation(
                         moduleName: plan.ModuleName,
                         stagingPath: buildResult.StagingPath,
                         moduleManifestPath: buildResult.ManifestPath,
                         documentation: plan.Documentation,
                         buildDocumentation: plan.DocumentationBuild!,
-                        timeout: null,
                         progress: reporter,
                         extractStep: docsExtractStep,
                         writeStep: docsWriteStep,
@@ -585,8 +583,7 @@ public sealed partial class ModulePipelineRunner
             SafeStart(reporter, startedKeys, moduleValidationStep);
             try
             {
-                var validator = new ModuleValidationService(_logger);
-                validationReport = validator.Run(new ModuleValidationSpec
+                validationReport = _hostedOperations.ValidateModule(new ModuleValidationSpec
                 {
                     ProjectRoot = plan.ProjectRoot,
                     StagingPath = buildResult.StagingPath,
@@ -658,7 +655,6 @@ public sealed partial class ModulePipelineRunner
 
         if (plan.TestsAfterMerge is { Length: > 0 })
         {
-            var testService = new ModuleTestSuiteService(new PowerShellRunner(), _logger);
             for (int i = 0; i < plan.TestsAfterMerge.Length; i++)
             {
                 var cfg = plan.TestsAfterMerge[i];
@@ -666,7 +662,7 @@ public sealed partial class ModulePipelineRunner
                 SafeStart(reporter, startedKeys, step);
                 try
                 {
-                    RunTestsAfterMerge(plan, buildResult, cfg, testService);
+                    RunTestsAfterMerge(plan, buildResult, cfg);
                     SafeDone(reporter, step);
                 }
                 catch (Exception ex)
@@ -711,14 +707,13 @@ public sealed partial class ModulePipelineRunner
         var publishResults = new List<ModulePublishResult>();
         if (plan.Publishes is { Length: > 0 })
         {
-            var publisher = new ModulePublisher(_logger);
             foreach (var publish in plan.Publishes)
             {
                 publishSteps.TryGetValue(publish, out var step);
                 SafeStart(reporter, startedKeys, step);
                 try
                 {
-                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults, includeScriptFolders: !mergedScripts));
+                    publishResults.Add(_hostedOperations.PublishModule(publish.Configuration, plan, buildResult, artefactResults, includeScriptFolders: !mergedScripts));
                     SafeDone(reporter, step);
                 }
                 catch (Exception ex)

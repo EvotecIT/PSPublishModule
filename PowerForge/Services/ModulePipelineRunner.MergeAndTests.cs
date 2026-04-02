@@ -242,21 +242,16 @@ public sealed partial class ModulePipelineRunner
         var cfg = plan.ImportModules;
         if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
 
-        var service = new BinaryDependencyPreflightService(_logger);
         foreach (var target in GetImportValidationTargets(
             plan.CompatiblePSEditions,
             buildResult.StagingPath,
             plan.Manifest?.PowerShellVersion))
         {
-            var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition);
-            if (result.HasIssues)
-            {
-                throw new InvalidOperationException(
-                    BinaryDependencyPreflightService.BuildFailureMessage(
-                        result,
-                        buildResult.ManifestPath,
-                        validationTarget: target.Label));
-            }
+            _hostedOperations.EnsureBinaryDependenciesValid(
+                buildResult.StagingPath,
+                target.PowerShellEdition,
+                buildResult.ManifestPath,
+                target.Label);
         }
     }
 
@@ -361,8 +356,7 @@ public sealed partial class ModulePipelineRunner
     private void RunTestsAfterMerge(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        TestConfiguration testConfiguration,
-        ModuleTestSuiteService service)
+        TestConfiguration testConfiguration)
     {
         if (plan is null || buildResult is null || testConfiguration is null) return;
 
@@ -400,7 +394,7 @@ public sealed partial class ModulePipelineRunner
             ImportModulesVerbose = importVerbose
         };
 
-        var result = service.Run(spec);
+        var result = _hostedOperations.RunModuleTestSuite(spec);
         if (result.FailedCount > 0)
         {
             if (testConfiguration.Force)

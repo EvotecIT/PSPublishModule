@@ -144,7 +144,8 @@ Current status:
 - Manifest-baseline reads and pure planning helpers are now factored into core support services.
 - Required-module resolution now runs through a core engine, while installed/repository discovery stays PowerShell-backed in `ModulePipelineRunner`.
 - `IModuleDependencyMetadataProvider` now separates required-module and binary-conflict metadata lookup from `ModulePipelineRunner`, with `PowerShellModuleDependencyMetadataProvider` in `PowerForge.PowerShell` as the current implementation seam.
-- The next extraction target is the reusable planning/execution context inside `ModulePipelineRunner*`, especially the remaining execution, validation, and other PowerShell-hosted service seams.
+- `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
+- The next extraction target is the remaining execution context inside `ModulePipelineRunner*`, especially signing/import-module execution and the larger run-loop decomposition.
 
 ### Phase 4: Publish and validation decomposition
 

@@ -40,6 +40,7 @@ public sealed partial class ModulePipelineRunner
     private readonly ILogger _logger;
     private readonly IPowerShellRunner _powerShellRunner;
     private readonly IModuleDependencyMetadataProvider _moduleDependencyMetadataProvider;
+    private readonly IModulePipelineHostedOperations _hostedOperations;
 
     private sealed class RequiredModuleDraft
     {
@@ -63,18 +64,20 @@ public sealed partial class ModulePipelineRunner
     /// Creates a new instance using the provided logger.
     /// </summary>
     public ModulePipelineRunner(ILogger logger, IPowerShellRunner? powerShellRunner = null)
-        : this(logger, powerShellRunner, moduleDependencyMetadataProvider: null)
+        : this(logger, powerShellRunner, moduleDependencyMetadataProvider: null, hostedOperations: null)
     {
     }
 
     internal ModulePipelineRunner(
         ILogger logger,
         IPowerShellRunner? powerShellRunner,
-        IModuleDependencyMetadataProvider? moduleDependencyMetadataProvider)
+        IModuleDependencyMetadataProvider? moduleDependencyMetadataProvider,
+        IModulePipelineHostedOperations? hostedOperations = null)
     {
         _logger = logger;
         _powerShellRunner = powerShellRunner ?? new PowerShellRunner();
         _moduleDependencyMetadataProvider = moduleDependencyMetadataProvider ?? new PowerShellModuleDependencyMetadataProvider(_powerShellRunner, _logger);
+        _hostedOperations = hostedOperations ?? new PowerShellModulePipelineHostedOperations(_logger);
     }
 
 }
