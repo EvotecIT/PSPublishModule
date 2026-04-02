@@ -8,11 +8,18 @@ namespace PowerForge;
 
 internal sealed class PowerShellModulePipelineHostedOperations : IModulePipelineHostedOperations
 {
+    private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
 
-    internal PowerShellModulePipelineHostedOperations(ILogger logger)
+    internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger)
     {
+        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? new NullLogger();
+    }
+
+    internal PowerShellModulePipelineHostedOperations(ILogger logger)
+        : this(new PowerShellRunner(), logger)
+    {
     }
 
     public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
@@ -23,7 +30,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         RepositoryCredential? credential,
         bool prerelease)
     {
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), _logger);
+        var installer = new ModuleDependencyInstaller(_runner, _logger);
         return installer.EnsureInstalled(
             dependencies: dependencies,
             skipModules: skipModules?.IgnoreModuleName,
@@ -44,7 +51,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         ModulePipelineStep? writeStep,
         ModulePipelineStep? externalHelpStep)
     {
-        var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
+        var engine = new DocumentationEngine(_runner, _logger);
         return engine.BuildWithProgress(
             moduleName: moduleName,
             stagingPath: stagingPath,
@@ -59,7 +66,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
     }
 
     public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
-        => new ModuleValidationService(_logger).Run(spec);
+        => new ModuleValidationService(_logger, _runner).Run(spec);
 
     public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
     {
@@ -76,7 +83,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
     }
 
     public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
-        => new ModuleTestSuiteService(new PowerShellRunner(), _logger).Run(spec);
+        => new ModuleTestSuiteService(_runner, _logger).Run(spec);
 
     public ModulePublishResult PublishModule(
         PublishConfiguration publish,
@@ -84,7 +91,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders)
-        => new ModulePublisher(_logger).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
+        => new ModulePublisher(_logger, _runner).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
 
     public void ValidateModuleImports(
         string manifestPath,
@@ -200,7 +207,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return new PowerShellRunner().Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh));
+            return _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh));
         }
         finally
         {
