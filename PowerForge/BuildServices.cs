@@ -22,6 +22,8 @@ namespace PowerForge;
 /// </example>
 public static class BuildServices
 {
+    private static readonly IModuleManifestMutator ManifestMutator = new AstModuleManifestMutator();
+
     /// <summary>Formats files using out-of-proc PSScriptAnalyzer with optional settings JSON.</summary>
     public static IList<FormatterResult> FormatFiles(IEnumerable<string> files, string? settingsJson = null, int timeoutSeconds = 120)
     {
@@ -82,7 +84,7 @@ public static class BuildServices
         var resolved = ModuleInstaller.ResolveTargetVersion(roots, moduleName, moduleVersion, strategy);
         if (updateManifestToResolvedVersion)
         {
-            try { ManifestEditor.TrySetTopLevelModuleVersion(System.IO.Path.Combine(stagingPath, $"{moduleName}.psd1"), resolved); } catch { }
+            try { ManifestMutator.TrySetTopLevelModuleVersion(System.IO.Path.Combine(stagingPath, $"{moduleName}.psd1"), resolved); } catch { }
         }
         var opts = new ModuleInstallerOptions(roots, InstallationStrategy.Exact, keepVersions);
         return installer.InstallFromStaging(stagingPath, moduleName, resolved, opts);
@@ -112,9 +114,9 @@ public static class BuildServices
     public static bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
     {
         bool changed = false;
-        if (functions != null) changed |= ManifestEditor.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
-        if (cmdlets != null) changed |= ManifestEditor.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
-        if (aliases != null) changed |= ManifestEditor.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
+        if (functions != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
+        if (cmdlets != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
+        if (aliases != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
         return changed;
     }
 
@@ -135,15 +137,15 @@ public static class BuildServices
 
     /// <summary>Sets the RootModule in the manifest.</summary>
     public static bool SetRootModule(string psd1Path, string rootModule)
-        => ManifestEditor.TrySetTopLevelString(psd1Path, "RootModule", rootModule);
+        => ManifestMutator.TrySetTopLevelString(psd1Path, "RootModule", rootModule);
 
     /// <summary>Sets PrivateData.PSData string entry.</summary>
     public static bool SetPsDataString(string psd1Path, string key, string value)
-        => ManifestEditor.TrySetPsDataString(psd1Path, key, value);
+        => ManifestMutator.TrySetPsDataString(psd1Path, key, value);
 
     /// <summary>Sets PrivateData.PSData string array entry.</summary>
     public static bool SetPsDataStringArray(string psd1Path, string key, IEnumerable<string> values)
-        => ManifestEditor.TrySetPsDataStringArray(psd1Path, key, values.ToArray());
+        => ManifestMutator.TrySetPsDataStringArray(psd1Path, key, values.ToArray());
 
     /// <summary>Sets PrivateData.PSData boolean entry.</summary>
     public static bool SetPsDataBool(string psd1Path, string key, bool value)
