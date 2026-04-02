@@ -679,6 +679,15 @@ public sealed partial class ModulePipelineRunner
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
         }
 
+        ValidateDeliveryPathConflicts(
+            projectRoot,
+            moduleName,
+            resolved,
+            preRelease,
+            buildSpec,
+            delivery,
+            enabledArtefacts);
+
         var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in commandDependencies)
         {

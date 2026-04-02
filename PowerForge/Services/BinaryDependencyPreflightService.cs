@@ -7,6 +7,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Management.Automation;
+using System.Management.Automation.Language;
 
 namespace PowerForge;
 
@@ -54,6 +55,14 @@ public sealed class BinaryDependencyPreflightService
     /// Analyzes the module payload that would be used for the specified PowerShell edition.
     /// </summary>
     public BinaryDependencyPreflightResult Analyze(string moduleRoot, string powerShellEdition)
+        => Analyze(moduleRoot, powerShellEdition, manifestPath: null);
+
+    /// <summary>
+    /// Analyzes the module payload that would be used for the specified PowerShell edition.
+    /// When <paramref name="manifestPath"/> is provided and the module has no <c>Lib</c> payload,
+    /// the analysis scopes root-level DLL checks to import-relevant assemblies and ignores delivery internals.
+    /// </summary>
+    public BinaryDependencyPreflightResult Analyze(string moduleRoot, string powerShellEdition, string? manifestPath)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot))
             throw new ArgumentException("Module root is required.", nameof(moduleRoot));
@@ -74,6 +83,10 @@ public sealed class BinaryDependencyPreflightService
                 Array.Empty<BinaryDependencyPreflightIssue>(),
                 summary: "no binary payload");
         }
+
+        var scopedRootAnalysis = TryCreateScopedRootAnalysis(root, assemblyRoot, manifestPath);
+        if (scopedRootAnalysis is not null)
+            return AnalyzeScopedRootGraph(edition, root, assemblyRoot, relativeAssemblyRoot, scopedRootAnalysis);
 
         var assemblyPaths = EnumerateCandidateAssemblies(assemblyRoot).ToArray();
         if (assemblyPaths.Length == 0)
@@ -133,6 +146,89 @@ public sealed class BinaryDependencyPreflightService
             summary);
     }
 
+    private BinaryDependencyPreflightResult AnalyzeScopedRootGraph(
+        string edition,
+        string moduleRoot,
+        string assemblyRoot,
+        string relativeAssemblyRoot,
+        ScopedRootAnalysis scoped)
+    {
+        if (scoped.EntryAssemblyPaths.Length == 0)
+        {
+            return new BinaryDependencyPreflightResult(
+                edition,
+                moduleRoot,
+                assemblyRoot,
+                relativeAssemblyRoot,
+                Array.Empty<BinaryDependencyPreflightIssue>(),
+                summary: "no declared binary assemblies");
+        }
+
+        var availableAssemblyNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assemblyPath in scoped.CandidateAssemblyPaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var name = GetSimpleAssemblyName(assemblyPath);
+            if (string.IsNullOrWhiteSpace(name) || availableAssemblyNames.ContainsKey(name))
+                continue;
+
+            availableAssemblyNames[name] = assemblyPath;
+        }
+
+        var providedByHost = new HashSet<string>(GetHostProvidedAssemblyNames(edition), StringComparer.OrdinalIgnoreCase);
+        foreach (var name in availableAssemblyNames.Keys)
+            providedByHost.Add(name);
+
+        var issues = new List<BinaryDependencyPreflightIssue>();
+        var seenIssues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>(scoped.EntryAssemblyPaths);
+
+        while (queue.Count > 0)
+        {
+            var assemblyPath = queue.Dequeue();
+            if (!visitedAssemblies.Add(assemblyPath))
+                continue;
+
+            var assemblyFileName = Path.GetFileName(assemblyPath);
+            foreach (var reference in ReadAssemblyReferences(assemblyPath))
+            {
+                if (string.IsNullOrWhiteSpace(reference.Name)) continue;
+                if (providedByHost.Contains(reference.Name)) continue;
+
+                if (availableAssemblyNames.TryGetValue(reference.Name, out var dependencyPath))
+                {
+                    if (!visitedAssemblies.Contains(dependencyPath))
+                        queue.Enqueue(dependencyPath);
+                    continue;
+                }
+
+                var key = assemblyFileName + "->" + reference.Name;
+                if (!seenIssues.Add(key)) continue;
+
+                issues.Add(new BinaryDependencyPreflightIssue(
+                    assemblyFileName,
+                    reference.Name,
+                    reference.Version?.ToString()));
+            }
+        }
+
+        var scannedCount = visitedAssemblies.Count;
+        var summary = issues.Count == 0
+            ? $"ok ({scannedCount} import assembly{(scannedCount == 1 ? string.Empty : "ies")})"
+            : $"{issues.Count} missing dependenc{(issues.Count == 1 ? "y" : "ies")} across {scannedCount} import assembly{(scannedCount == 1 ? string.Empty : "ies")}";
+
+        if (_logger.IsVerbose)
+            _logger.Verbose($"Binary dependency preflight ({edition}) scoped root scan '{assemblyRoot}' -> {summary}.");
+
+        return new BinaryDependencyPreflightResult(
+            edition,
+            moduleRoot,
+            assemblyRoot,
+            relativeAssemblyRoot,
+            issues.ToArray(),
+            summary);
+    }
+
     internal static string BuildFailureMessage(BinaryDependencyPreflightResult result, string? modulePath = null, string? validationTarget = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
@@ -174,6 +270,12 @@ public sealed class BinaryDependencyPreflightService
     }
 
     private static IEnumerable<string> EnumerateCandidateAssemblies(string assemblyRoot)
+        => EnumerateCandidateAssemblies(assemblyRoot, excludedRelativePaths: null, explicitlyIncludedPaths: null);
+
+    private static IEnumerable<string> EnumerateCandidateAssemblies(
+        string assemblyRoot,
+        IReadOnlyCollection<string>? excludedRelativePaths,
+        IReadOnlyCollection<string>? explicitlyIncludedPaths)
     {
         IEnumerable<string> files;
         try
@@ -190,8 +292,47 @@ public sealed class BinaryDependencyPreflightService
             var fileName = Path.GetFileName(file);
             if (string.IsNullOrWhiteSpace(fileName)) continue;
             if (fileName.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase)) continue;
+            if (ShouldExcludeAssembly(file, assemblyRoot, excludedRelativePaths, explicitlyIncludedPaths)) continue;
             yield return file;
         }
+    }
+
+    private static bool ShouldExcludeAssembly(
+        string assemblyPath,
+        string assemblyRoot,
+        IReadOnlyCollection<string>? excludedRelativePaths,
+        IReadOnlyCollection<string>? explicitlyIncludedPaths)
+    {
+        if (explicitlyIncludedPaths is { Count: > 0 } &&
+            explicitlyIncludedPaths.Contains(Path.GetFullPath(assemblyPath), StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        if (excludedRelativePaths is not { Count: > 0 })
+            return false;
+
+        var relative = FrameworkCompatibility.GetRelativePath(assemblyRoot, assemblyPath)
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        if (string.IsNullOrWhiteSpace(relative))
+            return false;
+
+        foreach (var excluded in excludedRelativePaths)
+        {
+            if (string.IsNullOrWhiteSpace(excluded)) continue;
+
+            var normalized = excluded.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .Trim()
+                .TrimStart(Path.DirectorySeparatorChar)
+                .TrimEnd(Path.DirectorySeparatorChar);
+            if (string.IsNullOrWhiteSpace(normalized)) continue;
+
+            if (relative.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+                relative.StartsWith(normalized + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static string ResolveAssemblyRoot(string moduleRoot, string edition, out string relativeAssemblyRoot)
@@ -258,6 +399,175 @@ public sealed class BinaryDependencyPreflightService
         relativeAssemblyRoot = Path.Combine("Lib", selected);
         return Path.Combine(libRoot, selected);
     }
+
+    private static ScopedRootAnalysis? TryCreateScopedRootAnalysis(string moduleRoot, string assemblyRoot, string? manifestPath)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            return null;
+
+        var normalizedModuleRoot = NormalizePathForComparison(moduleRoot);
+        var normalizedAssemblyRoot = NormalizePathForComparison(assemblyRoot);
+        if (!string.Equals(normalizedModuleRoot, normalizedAssemblyRoot, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var entryAssemblyPaths = ResolveManifestAssemblyPaths(moduleRoot, manifestPath!)
+            .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var explicitlyIncluded = new HashSet<string>(entryAssemblyPaths, StringComparer.OrdinalIgnoreCase);
+        var excludedRelativePaths = ResolveRootScanExcludedPaths(manifestPath!);
+        var candidateAssemblyPaths = EnumerateCandidateAssemblies(moduleRoot, excludedRelativePaths, explicitlyIncluded)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new ScopedRootAnalysis(candidateAssemblyPaths, entryAssemblyPaths);
+    }
+
+    private static string[] ResolveManifestAssemblyPaths(string moduleRoot, string manifestPath)
+    {
+        var list = new List<string>();
+
+        if (ManifestEditor.TryGetTopLevelString(manifestPath, "RootModule", out var root) &&
+            !string.IsNullOrWhiteSpace(root))
+        {
+            list.Add(ResolveModuleRelativePath(moduleRoot, root!));
+        }
+
+        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "NestedModules", out var nested) &&
+            nested is { Length: > 0 })
+        {
+            foreach (var entry in nested.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                list.Add(ResolveModuleRelativePath(moduleRoot, entry!));
+        }
+
+        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "RequiredAssemblies", out var assemblies) &&
+            assemblies is { Length: > 0 })
+        {
+            foreach (var entry in assemblies.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                list.Add(ResolveModuleRelativePath(moduleRoot, entry!));
+        }
+
+        return list
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string ResolveModuleRelativePath(string moduleRoot, string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return string.Empty;
+
+        return Path.GetFullPath(Path.IsPathRooted(trimmed) ? trimmed : Path.Combine(moduleRoot, trimmed));
+    }
+
+    private static string[] ResolveRootScanExcludedPaths(string manifestPath)
+    {
+        var list = new List<string> { "Modules" };
+        var internalsPath = TryReadDeliveryInternalsPath(manifestPath);
+        if (!string.IsNullOrWhiteSpace(internalsPath))
+            list.Add(internalsPath!);
+
+        return list
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => path.Trim())
+            .Select(static path => path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar))
+            .Select(static path => path.TrimStart(Path.DirectorySeparatorChar))
+            .Select(static path => path.TrimEnd(Path.DirectorySeparatorChar))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? TryReadDeliveryInternalsPath(string manifestPath)
+    {
+        try
+        {
+            Token[] tokens;
+            ParseError[] errors;
+            var ast = Parser.ParseFile(manifestPath, out tokens, out errors);
+            if (errors is { Length: > 0 })
+                return null;
+
+            var top = (HashtableAst?)ast.Find(static node => node is HashtableAst, searchNestedScriptBlocks: true);
+            if (top is null)
+                return null;
+
+            var privateData = FindChildHashtable(top, "PrivateData");
+            var psData = privateData is null ? null : FindChildHashtable(privateData, "PSData");
+            var delivery = psData is null ? null : FindChildHashtable(psData, "Delivery");
+            if (delivery is null)
+                return null;
+
+            foreach (var kv in delivery.KeyValuePairs)
+            {
+                var key = GetHashtableKeyName(kv.Item1);
+                if (!string.Equals(key, "InternalsPath", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var expr = UnwrapExpression(kv.Item2);
+                switch (expr)
+                {
+                    case StringConstantExpressionAst s when !string.IsNullOrWhiteSpace(s.Value):
+                        return s.Value.Trim();
+                    case ConstantExpressionAst c when c.Value is string str && !string.IsNullOrWhiteSpace(str):
+                        return str.Trim();
+                }
+
+                return null;
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static HashtableAst? FindChildHashtable(HashtableAst parent, string key)
+    {
+        foreach (var kv in parent.KeyValuePairs)
+        {
+            var name = GetHashtableKeyName(kv.Item1);
+            if (!string.Equals(name, key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var expr = UnwrapExpression(kv.Item2);
+            if (expr is HashtableAst hashtable)
+                return hashtable;
+        }
+
+        return null;
+    }
+
+    private static ExpressionAst? UnwrapExpression(StatementAst? statement)
+    {
+        if (statement is PipelineAst pipeline &&
+            pipeline.PipelineElements.Count == 1 &&
+            pipeline.PipelineElements[0] is CommandExpressionAst commandExpression)
+        {
+            return commandExpression.Expression;
+        }
+
+        return null;
+    }
+
+    private static string? GetHashtableKeyName(Ast? keyAst)
+    {
+        return keyAst switch
+        {
+            StringConstantExpressionAst s => s.Value,
+            ConstantExpressionAst c when c.Value is string str => str,
+            _ => null
+        };
+    }
+
+    private static string NormalizePathForComparison(string path)
+        => Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static string NormalizeEdition(string? powerShellEdition)
         => string.Equals(powerShellEdition, "Desktop", StringComparison.OrdinalIgnoreCase) ? "Desktop" : "Core";
@@ -397,6 +707,18 @@ public sealed class BinaryDependencyPreflightService
         {
             Name = name;
             Version = version;
+        }
+    }
+
+    private sealed class ScopedRootAnalysis
+    {
+        public string[] CandidateAssemblyPaths { get; }
+        public string[] EntryAssemblyPaths { get; }
+
+        public ScopedRootAnalysis(string[] candidateAssemblyPaths, string[] entryAssemblyPaths)
+        {
+            CandidateAssemblyPaths = candidateAssemblyPaths ?? Array.Empty<string>();
+            EntryAssemblyPaths = entryAssemblyPaths ?? Array.Empty<string>();
         }
     }
 }
