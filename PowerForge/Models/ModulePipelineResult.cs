@@ -11,7 +11,7 @@ public sealed class ModulePipelineResult
     public ModulePipelinePlan Plan { get; }
 
     /// <summary>
-    /// Build result produced by <see cref="ModuleBuildPipeline.BuildToStaging"/>.
+    /// Build result produced by the module build pipeline staging step.
     /// </summary>
     public ModuleBuildResult BuildResult { get; }
 
