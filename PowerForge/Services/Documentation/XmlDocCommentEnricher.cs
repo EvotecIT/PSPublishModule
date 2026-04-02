@@ -236,7 +236,7 @@ internal sealed class XmlDocCommentEnricher
                 if (string.IsNullOrWhiteSpace(title)) title = $"EXAMPLE {i + 1}";
 
                 var prefix = ExtractParagraphText(ex.Element("prefix"));
-                var code = ExtractParagraphText(ex.Element("code"));
+                var code = ExtractCodeText(ex.Element("code"));
                 var fullCode = CombinePrefixAndCode(prefix, code);
 
                 var remarks = string.Join(
@@ -297,6 +297,48 @@ internal sealed class XmlDocCommentEnricher
             }
 
             return NormalizeText(ExtractInlineText(element));
+        }
+
+        private static string ExtractCodeText(XElement? element)
+        {
+            if (element is null) return string.Empty;
+
+            var value = element.Value.Replace("\r\n", "\n");
+            var lines = value.Split('\n').ToList();
+
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0]))
+                lines.RemoveAt(0);
+
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[lines.Count - 1]))
+                lines.RemoveAt(lines.Count - 1);
+
+            var commonIndent = lines
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Select(GetLeadingWhitespaceWidth)
+                .DefaultIfEmpty(0)
+                .Min();
+
+            if (commonIndent > 0)
+            {
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    var line = lines[i];
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    lines[i] = line.Length >= commonIndent ? line.Substring(commonIndent) : line.TrimStart();
+                }
+            }
+
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static int GetLeadingWhitespaceWidth(string value)
+        {
+            var count = 0;
+            while (count < value.Length && char.IsWhiteSpace(value[count]) && value[count] is not '\r' and not '\n')
+                count++;
+            return count;
         }
 
         private static string ExtractInlineText(XElement element)

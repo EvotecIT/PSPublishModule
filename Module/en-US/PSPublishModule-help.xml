@@ -3971,8 +3971,8 @@ PowerForge.DotNetPublishResult</maml:name>
       <command:example>
         <maml:title>Generate DotNet publish JSON from DSL without execution</maml:title>
         <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {
-New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
-New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6106,7 +6106,7 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:example>
         <maml:title>Build a module (DSL) and keep docs in sync</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6122,8 +6122,8 @@ New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -
       <command:example>
         <maml:title>Enforce consistency and compatibility during build (fail CI on issues)</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
-New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6132,8 +6132,8 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       <command:example>
         <maml:title>Publish a .NET project into the module as part of the build</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
--Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+    -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -6141,8 +6141,8 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       <command:example>
         <maml:title>Fail CI only on new diagnostics compared to a committed baseline</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
--FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+    -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -6150,9 +6150,9 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       <command:example>
         <maml:title>Install missing dependencies during the build and bundle required modules into the package</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
-New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
-New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -16613,7 +16613,7 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
       <command:example>
         <maml:title>Create a basic DotNet publish spec from DSL</maml:title>
         <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {
-New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
