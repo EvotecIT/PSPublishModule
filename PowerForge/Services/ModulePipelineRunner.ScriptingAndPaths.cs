@@ -145,7 +145,7 @@ public sealed partial class ModulePipelineRunner
         return set.ToArray();
     }
 
-    private void ValidateDeliveryPathConflicts(
+    private static void ValidateDeliveryPathConflicts(
         string projectRoot,
         string moduleName,
         string moduleVersion,
@@ -317,6 +317,8 @@ public sealed partial class ModulePipelineRunner
             .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
             .Trim();
 
+        // Paths are normalized through Path.GetFullPath before we compute a relative path,
+        // so dot-dot segments are already resolved away when this helper runs.
         return normalized
             .Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
             .Where(static segment => !string.Equals(segment, ".", StringComparison.Ordinal))

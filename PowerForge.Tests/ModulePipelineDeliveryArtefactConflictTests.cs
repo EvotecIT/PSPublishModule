@@ -46,7 +46,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
                     root.FullName,
                     moduleName,
                     deliveryInternalsPath: "PackageFiles",
-                    artefactPath: "PackageFiles\\Unpacked",
+                    artefactPath: Path.Combine("PackageFiles", "Unpacked"),
                     requiredModulesPath: "Modules")));
 
             Assert.Contains("Delivery configuration is unsafe", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -75,7 +75,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
                 root.FullName,
                 moduleName,
                 deliveryInternalsPath: "Internals",
-                artefactPath: "Artefacts\\Unpacked",
+                artefactPath: Path.Combine("Artefacts", "Unpacked"),
                 requiredModulesPath: "Modules")));
 
             Assert.Null(error);
@@ -105,7 +105,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
                     root.FullName,
                     moduleName,
                     deliveryInternalsPath: string.Empty,
-                    artefactPath: "Internals\\Unpacked",
+                    artefactPath: Path.Combine("Internals", "Unpacked"),
                     requiredModulesPath: "Modules")));
 
             Assert.Contains("Delivery.InternalsPath 'Internals'", ex.Message, StringComparison.OrdinalIgnoreCase);

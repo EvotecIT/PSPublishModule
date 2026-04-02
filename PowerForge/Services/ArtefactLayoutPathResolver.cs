@@ -15,7 +15,9 @@ internal static class ArtefactLayoutPathResolver
         string? preRelease,
         ArtefactType type)
     {
-        var raw = BuildServices.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath, moduleName, moduleVersion, preRelease);
+        raw = raw.Trim();
+        raw = raw.Trim('"');
         if (string.IsNullOrWhiteSpace(raw))
             return Path.GetFullPath(Path.Combine(projectRoot, "Artefacts", type.ToString()));
 
@@ -33,7 +35,9 @@ internal static class ArtefactLayoutPathResolver
         if (string.IsNullOrWhiteSpace(path))
             return outputRoot;
 
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
+        replaced = replaced.Trim();
+        replaced = replaced.Trim('"');
         if (string.IsNullOrWhiteSpace(replaced))
             return outputRoot;
 
@@ -53,7 +57,9 @@ internal static class ArtefactLayoutPathResolver
         if (string.IsNullOrWhiteSpace(path))
             return requiredModulesRoot;
 
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
+        replaced = replaced.Trim();
+        replaced = replaced.Trim('"');
         if (string.IsNullOrWhiteSpace(replaced))
             return requiredModulesRoot;
 

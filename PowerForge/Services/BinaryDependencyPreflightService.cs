@@ -468,6 +468,8 @@ public sealed class BinaryDependencyPreflightService
     {
         // Script-package layouts commonly stage bundled required modules under a top-level Modules folder.
         // Those DLLs are copied for installation, not imported as part of the root module itself.
+        // If a package genuinely imports assemblies from that folder, they should be declared through
+        // RootModule, NestedModules, or RequiredAssemblies so scoped analysis includes them explicitly.
         var list = new List<string> { BundledModulesFolderName };
         var internalsPath = TryReadDeliveryInternalsPath(manifestPath);
         if (!string.IsNullOrWhiteSpace(internalsPath))
@@ -522,7 +524,7 @@ public sealed class BinaryDependencyPreflightService
                 return null;
             }
         }
-        catch
+        catch (Exception)
         {
             return null;
         }
