@@ -677,7 +677,7 @@ public sealed class ModulePipelineRegressionParityTests
     private static MissingFunctionAnalysisResult CreateMissingFunctionAnalysisResult(params string[] commandNames)
     {
         return new MissingFunctionAnalysisResult(
-            summary: (commandNames ?? Array.Empty<string>())
+            summary: commandNames
                 .Select(static name => new MissingCommandReference(name, string.Empty, string.Empty, false, false, string.Empty))
                 .ToArray(),
             summaryFiltered: Array.Empty<MissingCommandReference>(),

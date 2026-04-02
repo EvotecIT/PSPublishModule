@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 
 namespace PowerForge;
@@ -12,13 +13,13 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
         return new MissingFunctionAnalysisResult(
             summary: Map(report.Summary),
             summaryFiltered: Map(report.SummaryFiltered),
-            functions: report.Functions ?? System.Array.Empty<string>(),
-            functionsTopLevelOnly: report.FunctionsTopLevelOnly ?? System.Array.Empty<string>());
+            functions: report.Functions ?? Array.Empty<string>(),
+            functionsTopLevelOnly: report.FunctionsTopLevelOnly ?? Array.Empty<string>());
     }
 
     private static MissingCommandReference[] Map(MissingFunctionCommand[]? commands)
     {
-        return (commands ?? System.Array.Empty<MissingFunctionCommand>())
+        return (commands ?? Array.Empty<MissingFunctionCommand>())
             .Select(static command => new MissingCommandReference(
                 command.Name,
                 command.Source,
