@@ -12,10 +12,10 @@ Clean up the current `PowerForge` vs `PowerForge.PowerShell` ownership split so 
 
 ## Current State
 
-- [`PowerForge.csproj`](C:\Support\GitHub\PSPublishModule\PowerForge\PowerForge.csproj) removes the module pipeline files from the core assembly with `Compile Remove`.
-- [`PowerForge.PowerShell.csproj`](C:\Support\GitHub\PSPublishModule\PowerForge.PowerShell\PowerForge.PowerShell.csproj) then compiles those same files via linked includes from `..\PowerForge\...`.
-- [`PowerForge.Cli.csproj`](C:\Support\GitHub\PSPublishModule\PowerForge.Cli\PowerForge.Cli.csproj) references both `PowerForge` and `PowerForge.PowerShell`, which means the CLI currently needs the PowerShell-owned assembly for build/pipeline features.
-- [`PowerForgeStudio.Orchestrator.csproj`](C:\Support\GitHub\PSPublishModule\PowerForgeStudio.Orchestrator\PowerForgeStudio.Orchestrator.csproj) references `PowerForge` only. That is the strongest reason to make the reusable pipeline surface live in core again.
+- `PowerForge/PowerForge.csproj` removes the module pipeline files from the core assembly with `Compile Remove`.
+- `PowerForge.PowerShell/PowerForge.PowerShell.csproj` then compiles those same files via linked includes from `..\PowerForge\...`.
+- `PowerForge.Cli/PowerForge.Cli.csproj` references both `PowerForge` and `PowerForge.PowerShell`, which means the CLI currently needs the PowerShell-owned assembly for build/pipeline features.
+- `PowerForgeStudio.Orchestrator/PowerForgeStudio.Orchestrator.csproj` references `PowerForge` only. That is the strongest reason to make the reusable pipeline surface live in core again.
 
 ## Classification
 

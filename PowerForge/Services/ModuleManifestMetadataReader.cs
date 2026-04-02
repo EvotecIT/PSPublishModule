@@ -36,13 +36,22 @@ public sealed class ModuleManifestMetadataReader
             moduleVersion = version!;
         }
 
-        if (ModuleManifestTextParser.TryGetPsDataStringValue(content, "Prerelease", out var psDataPrerelease) &&
-            !string.IsNullOrWhiteSpace(psDataPrerelease))
+        try
         {
-            preRelease = psDataPrerelease;
+            if (ModuleManifestTextParser.TryGetPsDataStringValue(content, "Prerelease", out var psDataPrerelease) &&
+                !string.IsNullOrWhiteSpace(psDataPrerelease))
+            {
+                preRelease = psDataPrerelease;
+            }
         }
-        else if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "Prerelease", out var manifestPrerelease) &&
-                 !string.IsNullOrWhiteSpace(manifestPrerelease))
+        catch
+        {
+            // Best-effort: a nested parser issue should not hide the core manifest metadata.
+        }
+
+        if (preRelease is null &&
+            ModuleManifestTextParser.TryGetQuotedStringValue(content, "Prerelease", out var manifestPrerelease) &&
+            !string.IsNullOrWhiteSpace(manifestPrerelease))
         {
             preRelease = manifestPrerelease;
         }

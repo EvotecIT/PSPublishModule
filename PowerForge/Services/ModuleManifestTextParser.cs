@@ -4,6 +4,12 @@ namespace PowerForge;
 
 internal static class ModuleManifestTextParser
 {
+    private const RegexOptions ManifestRegexOptions =
+        RegexOptions.IgnoreCase |
+        RegexOptions.Multiline |
+        RegexOptions.CultureInvariant |
+        RegexOptions.Compiled;
+
     internal static bool TryGetQuotedStringValue(string manifestText, string key, out string? value)
     {
         value = null;
@@ -12,7 +18,8 @@ internal static class ModuleManifestTextParser
 
         var match = Regex.Match(
             manifestText,
-            $@"(?im)(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=\s*(?<value>'(?:[^']|'')*'|""(?:[^""]|"""")*"")");
+            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=\s*(?<value>'(?:[^']|'')*'|""(?:[^""]|"""")*"")",
+            ManifestRegexOptions);
         if (!match.Success)
             return false;
 
@@ -110,7 +117,10 @@ internal static class ModuleManifestTextParser
         if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
             return false;
 
-        var match = Regex.Match(text, $@"(?im)(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=");
+        var match = Regex.Match(
+            text,
+            $@"(?:^|[\r\n{{;])\s*{Regex.Escape(key)}\s*=",
+            ManifestRegexOptions);
         if (!match.Success)
             return false;
 
@@ -246,7 +256,7 @@ internal static class ModuleManifestTextParser
             if (TryGetCompositeStart(text, i, out var nestedIndex, out var nestedCloser))
             {
                 stack.Push(nestedCloser);
-                i = nestedIndex - 1;
+                i = nestedIndex;
                 continue;
             }
 
@@ -276,14 +286,14 @@ internal static class ModuleManifestTextParser
         {
             if (text[index + 1] == '(')
             {
-                currentIndex = index + 1;
+                currentIndex = index + 2;
                 closer = ')';
                 return true;
             }
 
             if (text[index + 1] == '{')
             {
-                currentIndex = index + 1;
+                currentIndex = index + 2;
                 closer = '}';
                 return true;
             }
@@ -291,12 +301,14 @@ internal static class ModuleManifestTextParser
 
         if (text[index] == '(')
         {
+            currentIndex = index + 1;
             closer = ')';
             return true;
         }
 
         if (text[index] == '{')
         {
+            currentIndex = index + 1;
             closer = '}';
             return true;
         }
