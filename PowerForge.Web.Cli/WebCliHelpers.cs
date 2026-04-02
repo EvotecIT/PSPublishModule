@@ -63,7 +63,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
         Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban]");
-        Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--output json]");
+        Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--starter-profile standard|multi-project-api-suite]");
+        Console.WriteLine("                     [--suite-project-slug <slug>] [--suite-project-name <name>] [--suite-project-surface powershell|dotnet] [--output json]");
         Console.WriteLine("  powerforge-web engine-lock [--config <site.json>] [--path <file>] [--mode show|verify|update]");
         Console.WriteLine("                     [--repository <owner/repo>] [--ref <sha|tag|branch>] [--channel <name>] [--use-env]");
         Console.WriteLine("                     [--require-immutable-ref|--require-sha]");
@@ -83,7 +84,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--legacy-alias-mode noindex|redirect|omit]");
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
         Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
-        Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
+        Console.WriteLine("                     [--ps-examples <file|dir>] [--related-content-manifest <file>] [--related-content-manifests <list>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
+        Console.WriteLine("                     [--suite-title <text>] [--suite-current-id <id>] [--suite-home-url <url>] [--suite-home-label <text>] [--suite-search-url <url>] [--suite-xref-map-url <url>] [--suite-coverage-url <url>] [--suite-entry <id|label|href|summary|order>]");
         Console.WriteLine("                     [--validate-ps-examples] [--ps-example-validation-timeout <n>] [--fail-on-ps-example-validation]");
         Console.WriteLine("                     [--execute-ps-examples] [--ps-example-execution-timeout <n>] [--fail-on-ps-example-execution]");
         Console.WriteLine("                     [--git-freshness] [--git-freshness-new-days <n>] [--git-freshness-updated-days <n>]");
@@ -243,6 +245,117 @@ internal static class WebCliHelpers
             .Distinct()
             .OrderBy(v => v)
             .ToArray();
+    }
+
+    internal static List<WebApiDocsSuiteEntry> ParseApiSuiteEntries(IEnumerable<string> values)
+    {
+        var results = new List<WebApiDocsSuiteEntry>();
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var trimmed = value.Trim();
+            if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
+            {
+                using var document = JsonDocument.Parse(trimmed);
+                var root = document.RootElement;
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in root.EnumerateArray())
+                    {
+                        results.Add(ParseApiSuiteEntryElement(item));
+                    }
+                }
+                else
+                {
+                    results.Add(ParseApiSuiteEntryElement(root));
+                }
+
+                continue;
+            }
+
+            results.Add(ParseApiSuiteEntryPipeSyntax(trimmed));
+        }
+
+        return results
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+            .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static entry => entry.Order ?? int.MaxValue)
+            .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static WebApiDocsSuiteEntry ParseApiSuiteEntryPipeSyntax(string value)
+    {
+        var parts = value.Split('|');
+        if (parts.Length < 3)
+        {
+            throw new InvalidOperationException(
+                $"Invalid --suite-entry value '{value}'. Expected 'id|label|href|summary|order' or a JSON object.");
+        }
+
+        int? order = null;
+        if (parts.Length >= 5 &&
+            int.TryParse(parts[4].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedOrder))
+        {
+            order = parsedOrder;
+        }
+
+        return new WebApiDocsSuiteEntry
+        {
+            Id = parts[0].Trim(),
+            Label = parts[1].Trim(),
+            Href = parts[2].Trim(),
+            Summary = parts.Length >= 4 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3].Trim() : null,
+            Order = order
+        };
+    }
+
+    private static WebApiDocsSuiteEntry ParseApiSuiteEntryElement(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Suite entry JSON values must be objects.");
+
+        return new WebApiDocsSuiteEntry
+        {
+            Id = GetJsonString(element, "id") ?? string.Empty,
+            Label = GetJsonString(element, "label") ?? GetJsonString(element, "name") ?? string.Empty,
+            Href = GetJsonString(element, "href") ?? GetJsonString(element, "url") ?? string.Empty,
+            Summary = GetJsonString(element, "summary") ?? GetJsonString(element, "description"),
+            Order = GetJsonInt(element, "order")
+        };
+    }
+
+    private static string? GetJsonString(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return property.Value.ValueKind == JsonValueKind.String
+                ? property.Value.GetString()
+                : property.Value.ToString();
+        }
+
+        return null;
+    }
+
+    private static int? GetJsonInt(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out var value))
+                return value;
+            if (property.Value.ValueKind == JsonValueKind.String &&
+                int.TryParse(property.Value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                return value;
+        }
+
+        return null;
     }
 
     internal static string? ResolveSummaryPath(bool summaryEnabled, string? summaryPath)

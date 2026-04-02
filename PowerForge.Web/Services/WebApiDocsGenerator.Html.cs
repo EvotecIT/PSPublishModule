@@ -15,12 +15,18 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static void GenerateHtml(string outputPath, WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, List<string> warnings)
+    private static void GenerateHtml(
+        string outputPath,
+        WebApiDocsOptions options,
+        IReadOnlyList<ApiTypeModel> types,
+        IReadOnlyDictionary<string, ApiTypeUsageModel> typeUsageMap,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
+        List<string> warnings)
     {
         var template = (options.Template ?? string.Empty).Trim().ToLowerInvariant();
         if (template is "docs" or "sidebar")
         {
-            GenerateDocsHtml(outputPath, options, types, warnings);
+            GenerateDocsHtml(outputPath, options, types, typeUsageMap, typeRelatedContentMap, warnings);
             return;
         }
 
@@ -111,7 +117,13 @@ public static partial class WebApiDocsGenerator
         GenerateApiSitemap(sitemapPath, options.BaseUrl, types);
     }
 
-    private static void GenerateDocsHtml(string outputPath, WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, List<string> warnings)
+    private static void GenerateDocsHtml(
+        string outputPath,
+        WebApiDocsOptions options,
+        IReadOnlyList<ApiTypeModel> types,
+        IReadOnlyDictionary<string, ApiTypeUsageModel> typeUsageMap,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
+        List<string> warnings)
     {
         var head = GetApiDocsResolvedHeadHtml(options);
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
@@ -127,6 +139,7 @@ public static partial class WebApiDocsGenerator
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
+        var suite = BuildApiSuiteContext(options, baseUrl);
         var docsScript = JoinHtmlFragments(
             WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath)),
             prismScripts);
@@ -134,9 +147,9 @@ public static partial class WebApiDocsGenerator
         var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
-        var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
+        var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames, suite);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
-        var overviewHtml = BuildDocsOverview(options, types, baseUrl, typeDisplayNames);
+        var overviewHtml = BuildDocsOverview(options, types, baseUrl, typeDisplayNames, suite);
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
         var derivedMap = BuildDerivedTypeMap(types, typeIndex);
@@ -162,10 +175,12 @@ public static partial class WebApiDocsGenerator
 
         foreach (var type in types)
         {
-            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames);
+            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames, suite);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, codeLanguage, displayName);
+            typeUsageMap.TryGetValue(type.FullName, out var usage);
+            typeRelatedContentMap.TryGetValue(type.FullName, out var relatedContent);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, usage, relatedContent, codeLanguage, displayName);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{displayName} - {options.Title}";
             var typeRoute = $"{NormalizeApiRoute(baseUrl).TrimEnd('/')}/{type.Slug}/";
@@ -891,7 +906,8 @@ $@"<!doctype html>
         string baseUrl,
         string activeSlug,
         string docsHomeUrl,
-        IReadOnlyDictionary<string, string> typeDisplayNames)
+        IReadOnlyDictionary<string, string> typeDisplayNames,
+        ApiSuiteContext? suite)
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
@@ -916,6 +932,7 @@ $@"<!doctype html>
         sb.AppendLine("        <span>API Reference</span>");
         sb.AppendLine("      </a>");
         sb.AppendLine("    </div>");
+          AppendApiSuiteSidebar(sb, suite, indexUrl);
           var totalTypes = types.Count;
           sb.AppendLine("    <div class=\"sidebar-search\">");
           sb.AppendLine("      <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
@@ -1047,7 +1064,8 @@ $@"<!doctype html>
         WebApiDocsOptions options,
         IReadOnlyList<ApiTypeModel> types,
         string baseUrl,
-        IReadOnlyDictionary<string, string> typeDisplayNames)
+        IReadOnlyDictionary<string, string> typeDisplayNames,
+        ApiSuiteContext? suite)
     {
         var sb = new StringBuilder();
         var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
@@ -1064,6 +1082,7 @@ $@"<!doctype html>
         sb.AppendLine("        <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
         sb.AppendLine("      </header>");
         sb.AppendLine("      <div class=\"api-overview-main api-overview-main--full\">");
+        AppendApiSuiteOverview(sb, suite, EnsureTrailingSlash(baseUrl));
 
         var mainTypes = GetMainTypes(types, options);
         if (mainTypes.Count > 0)

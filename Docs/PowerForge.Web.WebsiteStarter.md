@@ -103,6 +103,137 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
    - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
 
+## Multi-Project API Suite Starter
+
+If a site publishes APIs for multiple related projects or modules, prefer one engine-owned suite portal over several disconnected API roots.
+
+PowerForge now scaffolds this shape directly:
+
+```powershell
+powerforge-web scaffold --out .\Website --engine scriban --starter-profile multi-project-api-suite
+```
+
+To promote the starter into a real first project immediately:
+
+```powershell
+powerforge-web scaffold --out .\Website --engine scriban --starter-profile multi-project-api-suite --suite-project-slug testimox --suite-project-name "TestimoX" --suite-project-surface powershell
+```
+
+That seeded project also gets source staging that matches `project-apidocs` discovery:
+
+- PowerShell seed: `projects-sources/<slug>/powershell/` plus `examples/`
+- .NET seed: `projects-sources/<slug>/dotnet/`
+
+To avoid false-positive discovery, scaffolded starter files live under `templates/` and use non-discoverable names until you replace them with real inputs.
+
+The scaffold also adds promotion helpers inside the seeded source folder:
+
+- PowerShell: `promote-from-templates.ps1`
+- .NET: `promote-from-build.ps1`
+
+That starter creates:
+
+- `data/projects/catalog.json`
+- `data/projects/catalog.project-template.json`
+- `data/projects/api-suite-narrative.json`
+- `data/projects/sample-project-api-guides.json`
+- `content/docs/projects/api-guide-template.md`
+- `projects-sources/README.md`
+- `themes/<theme>/partials/api-header.html`
+- `themes/<theme>/partials/api-footer.html`
+- `themes/<theme>/assets/api.css`
+- a placeholder `/projects/api-suite/` page that `project-apidocs` can replace once real APIs are generated
+
+Starter adoption note:
+
+- `project-apidocs` now emits `[PFWEB.APIDOCS.SUITE]` recommendations when the suite scaffold is still untouched or when sample placeholders like `sample-project` / `sample-project-api-guides.json` leak into the real catalog.
+
+Recommended contract:
+
+- In `pipeline.json`, use `project-apidocs`.
+- Add `suiteTitle`.
+- Add `suiteNarrativeManifest` (or `suiteNarrativeManifests`) so the generated `api-suite/` portal has a `Start Here` section.
+- In project catalog entries, add `apiDocs.quickStartTypes` for the main entry points of each project.
+- In project catalog entries, add `apiDocs.relatedContentManifest` / `relatedContentManifests` so curated guides/samples can be attached per project.
+- In CI, add:
+  - `suiteCoverage` + `suiteFailOnCoverage`
+  - `suiteNarrative` + `suiteFailOnNarrative`
+
+Minimal pipeline example:
+
+```json
+{
+  "steps": [
+    {
+      "task": "project-apidocs",
+      "catalog": "./data/projects/catalog.json",
+      "sourcesRoot": "./projects-sources",
+      "outRoot": "./_site/projects",
+      "template": "docs",
+      "format": "both",
+      "suiteTitle": "Project APIs",
+      "suiteNarrativeManifest": "./data/projects/api-suite-narrative.json",
+      "suiteCoverage": {
+        "minQuickStartRelatedContentPercent": 80,
+        "maxQuickStartMissingRelatedContentCount": 1
+      },
+      "suiteFailOnCoverage": true,
+      "suiteNarrative": {
+        "requireSummary": true,
+        "minSectionCount": 1,
+        "minSuiteEntryCoveragePercent": 100
+      },
+      "suiteFailOnNarrative": true
+    }
+  ]
+}
+```
+
+Minimal catalog example:
+
+```json
+{
+  "projects": [
+    {
+      "slug": "testimox",
+      "name": "TestimoX",
+      "hubPath": "/projects/testimox/",
+      "surfaces": {
+        "apiPowerShell": true
+      },
+      "apiDocs": {
+        "quickStartTypes": "Invoke-TestimoXAction",
+        "relatedContentManifest": "./data/projects/testimox-api-guides.json"
+      }
+    }
+  ]
+}
+```
+
+Minimal suite narrative example:
+
+```json
+{
+  "summary": "Use this suite portal to choose the right API and follow the main onboarding flow.",
+  "sections": [
+    {
+      "title": "Start Here",
+      "summary": "Begin with the primary automation project, then move into supporting APIs.",
+      "items": [
+        {
+          "title": "Open the TestimoX quick start",
+          "url": "/projects/testimox/docs/quick-start/",
+          "kind": "workflow",
+          "audience": "New maintainers",
+          "estimatedTime": "10 min",
+          "projects": [ "testimox" ]
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Repo Sources (Optional, Recommended When You Depend On Other Repos)
 
 If your site needs content/projects from other repositories (public or private), declare them in `site.json` under `Sources` and sync them as part of your build.

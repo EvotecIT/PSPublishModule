@@ -75,6 +75,26 @@ public sealed class WebApiDocsOptions
     public string? CriticalCssPath { get; set; }
     /// <summary>Optional path to additional HTML injected into the &lt;head&gt; of generated API pages.</summary>
     public string? HeadHtmlPath { get; set; }
+    /// <summary>Optional title for a multi-project API suite that contains the current API.</summary>
+    public string? ApiSuiteTitle { get; set; }
+    /// <summary>Optional current suite entry identifier for the current API.</summary>
+    public string? ApiSuiteCurrentId { get; set; }
+    /// <summary>Optional suite home URL shown in switchers and JSON metadata.</summary>
+    public string? ApiSuiteHomeUrl { get; set; }
+    /// <summary>Optional suite home label shown in switchers and JSON metadata.</summary>
+    public string? ApiSuiteHomeLabel { get; set; }
+    /// <summary>Optional suite-wide search artifact URL used for cross-project API search.</summary>
+    public string? ApiSuiteSearchUrl { get; set; }
+    /// <summary>Optional suite-wide xref map URL for downstream tooling.</summary>
+    public string? ApiSuiteXrefMapUrl { get; set; }
+    /// <summary>Optional suite-wide coverage report URL for downstream tooling.</summary>
+    public string? ApiSuiteCoverageUrl { get; set; }
+    /// <summary>Optional suite-wide curated related-content index URL for portal experiences.</summary>
+    public string? ApiSuiteRelatedContentUrl { get; set; }
+    /// <summary>Optional suite-wide narrative/index URL for guided onboarding and workflow portals.</summary>
+    public string? ApiSuiteNarrativeUrl { get; set; }
+    /// <summary>Optional suite entries for project/module switching inside generated API docs.</summary>
+    public List<WebApiDocsSuiteEntry> ApiSuiteEntries { get; } = new();
     /// <summary>Optional path to header HTML fragment.</summary>
     public string? HeaderHtmlPath { get; set; }
     /// <summary>Optional path to footer HTML fragment.</summary>
@@ -218,6 +238,10 @@ public sealed class WebApiDocsOptions
     /// </summary>
     public string? PowerShellExamplesPath { get; set; }
     /// <summary>
+    /// Optional curated guide/sample manifest paths used to attach authored content to API types and members.
+    /// </summary>
+    public List<string> RelatedContentManifestPaths { get; } = new();
+    /// <summary>
     /// Optional PowerShell example validation result used to enrich imported examples with execution media.
     /// </summary>
     public WebApiDocsPowerShellExampleValidationResult? PowerShellExampleValidationResult { get; set; }
@@ -246,6 +270,21 @@ public sealed class WebApiDocsSourceUrlMapping
     /// When true, trims <see cref="PathPrefix"/> from <c>{path}</c> for this rule.
     /// </summary>
     public bool StripPathPrefix { get; set; }
+}
+
+/// <summary>One project/module entry inside a multi-project API suite.</summary>
+public sealed class WebApiDocsSuiteEntry
+{
+    /// <summary>Stable suite entry identifier.</summary>
+    public string Id { get; set; } = string.Empty;
+    /// <summary>Visible project/module label.</summary>
+    public string Label { get; set; } = string.Empty;
+    /// <summary>Root URL for this API entry.</summary>
+    public string Href { get; set; } = string.Empty;
+    /// <summary>Optional short description shown in suite UI.</summary>
+    public string? Summary { get; set; }
+    /// <summary>Ordering hint for rendered switchers.</summary>
+    public int? Order { get; set; }
 }
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
@@ -293,6 +332,36 @@ public static partial class WebApiDocsGenerator
         ".type-toc",
         ".type-toc-header",
         ".type-toc-toggle",
+        ".api-suite-switcher",
+        ".api-suite-list",
+        ".api-suite-item",
+        ".api-suite-overview",
+        ".api-suite-grid",
+        ".api-suite-card",
+        ".api-suite-search",
+        ".api-suite-search-filter",
+        ".api-suite-search-input",
+        ".api-suite-search-results",
+        ".api-suite-search-result",
+        ".api-suite-coverage-summary",
+        ".api-suite-coverage-card",
+        ".api-suite-artifact",
+        ".api-suite-narrative",
+        ".api-suite-narrative-section",
+        ".api-suite-narrative-item",
+        ".api-suite-narrative-kind",
+        ".api-suite-related-content",
+        ".api-suite-related-content-list",
+        ".api-suite-related-content-item",
+        ".api-suite-related-content-kind",
+        ".type-usage",
+        ".usage-group",
+        ".usage-list",
+        ".type-related-content",
+        ".related-content-list",
+        ".related-content-item",
+        ".related-content-kind",
+        ".member-related-content",
         ".filter-button",
         ".member-card",
         ".member-signature",
@@ -390,6 +459,9 @@ public static partial class WebApiDocsGenerator
             .ToList();
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
+        var typeUsageMap = BuildTypeUsageMap(types);
+        var typeRelatedContentMap = BuildTypeRelatedContentMap(types, options, warnings);
+        var suiteJson = BuildApiSuiteJson(options, options.BaseUrl);
 
         ValidateSourceUrlPatternConsistency(options, types, warnings);
         ValidateConfiguredQuickStartTypes(types, options, warnings);
@@ -400,6 +472,7 @@ public static partial class WebApiDocsGenerator
         {
             ["title"] = options.Title,
             ["generatedAtUtc"] = DateTime.UtcNow.ToString("O"),
+            ["suite"] = suiteJson,
             ["assembly"] = new Dictionary<string, object?>
             {
                 ["assemblyName"] = assemblyName ?? string.Empty,
@@ -439,6 +512,7 @@ public static partial class WebApiDocsGenerator
             var aliases = GetTypeAliases(t, displayName, typeAliasMap);
             return new Dictionary<string, object?>
             {
+                ["suite"] = suiteJson,
                 ["title"] = t.FullName,
                 ["displayName"] = displayName,
                 ["aliases"] = aliases,
@@ -460,6 +534,8 @@ public static partial class WebApiDocsGenerator
         {
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
             var aliases = GetTypeAliases(type, displayName, typeAliasMap);
+            typeUsageMap.TryGetValue(type.FullName, out var usage);
+            typeRelatedContentMap.TryGetValue(type.FullName, out var relatedContent);
             var typeModel = new Dictionary<string, object?>
             {
                 ["name"] = type.Name,
@@ -478,6 +554,7 @@ public static partial class WebApiDocsGenerator
                 ["attributes"] = type.Attributes,
                 ["kind"] = type.Kind,
                 ["slug"] = type.Slug,
+                ["suite"] = suiteJson,
                 ["isStatic"] = type.IsStatic,
                 ["isAbstract"] = type.IsAbstract,
                 ["isSealed"] = type.IsSealed,
@@ -488,6 +565,8 @@ public static partial class WebApiDocsGenerator
                     ["name"] = tp.Name,
                     ["summary"] = tp.Summary
                 }).ToList(),
+                ["usage"] = BuildUsageJson(usage, options.BaseUrl, typeDisplayNames),
+                ["relatedContent"] = BuildRelatedContentJson(relatedContent),
                 ["examples"] = SerializeExamples(type.Examples),
                 ["seeAlso"] = type.SeeAlso,
                 ["methods"] = type.Methods.Select(m => new Dictionary<string, object?>
@@ -517,6 +596,9 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(m, out var methodRelatedContent)
+                        ? SerializeRelatedContentEntries(methodRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -561,6 +643,9 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(m, out var constructorRelatedContent)
+                        ? SerializeRelatedContentEntries(constructorRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -596,6 +681,9 @@ public static partial class WebApiDocsGenerator
                     ["access"] = p.Access,
                     ["modifiers"] = p.Modifiers,
                     ["valueSummary"] = p.ValueSummary,
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(p, out var propertyRelatedContent)
+                        ? SerializeRelatedContentEntries(propertyRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(p.Examples),
                     ["exceptions"] = p.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -620,6 +708,9 @@ public static partial class WebApiDocsGenerator
                     ["modifiers"] = f.Modifiers,
                     ["value"] = f.Value,
                     ["valueSummary"] = f.ValueSummary,
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(f, out var fieldRelatedContent)
+                        ? SerializeRelatedContentEntries(fieldRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(f.Examples),
                     ["exceptions"] = f.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -642,6 +733,9 @@ public static partial class WebApiDocsGenerator
                     ["isStatic"] = e.IsStatic,
                     ["access"] = e.Access,
                     ["modifiers"] = e.Modifiers,
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(e, out var eventRelatedContent)
+                        ? SerializeRelatedContentEntries(eventRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(e.Examples),
                     ["exceptions"] = e.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -675,6 +769,9 @@ public static partial class WebApiDocsGenerator
                         ["name"] = tp.Name,
                         ["summary"] = tp.Summary
                     }).ToList(),
+                    ["relatedContent"] = relatedContent is not null && relatedContent.MemberEntries.TryGetValue(m, out var extensionRelatedContent)
+                        ? SerializeRelatedContentEntries(extensionRelatedContent)
+                        : new List<Dictionary<string, object?>>(),
                     ["examples"] = SerializeExamples(m.Examples),
                     ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
                     {
@@ -704,13 +801,14 @@ public static partial class WebApiDocsGenerator
         var format = (options.Format ?? "json").Trim().ToLowerInvariant();
         if (format is "hybrid" or "html" or "both")
         {
-            GenerateHtml(outputPath, options, types, warnings);
+            GenerateHtml(outputPath, options, types, typeUsageMap, typeRelatedContentMap, warnings);
             ValidateCssContract(outputPath, options, warnings);
         }
 
         AppendSourceCoverageWarnings(types, warnings);
+        AppendRelatedContentCoverageWarnings(types, options, typeRelatedContentMap, warnings);
         AppendPowerShellExampleQualityWarnings(types, warnings);
-        var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+        var coveragePath = WriteCoverageReport(outputPath, options, types, typeRelatedContentMap, assemblyName, assemblyVersion, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var powerShellExampleMediaManifestPath = WritePowerShellExampleMediaManifest(outputPath, options, types, warnings);
 
@@ -804,6 +902,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.COVERAGE] " + warning;
         if (trimmed.StartsWith("API docs xref:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.XREF] " + warning;
+        if (trimmed.StartsWith("API docs related content:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.RELATED] " + warning;
 
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;

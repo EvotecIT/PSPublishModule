@@ -146,6 +146,48 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ApiDocsPreflight_FailsWhenRelatedContentManifestIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-preflight-related-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "failOnWarnings": true,
+                      "relatedContentManifests": [ "./missing-related-content.json" ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("[PFWEB.APIDOCS.RELATED]", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("manifest was not found", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ApiDocsPreflight_FailsWhenSourceRootLooksOneLevelAboveGitHubRepo()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-preflight-root-" + Guid.NewGuid().ToString("N"));
@@ -522,6 +564,854 @@ public class WebPipelineRunnerApiDocsPreflightTests
             Assert.False(result.Steps[0].Success);
             Assert.Contains("PowerShell imported-script playback media without poster count", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("exceeds allowed 0", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenQuickStartTypesLackCuratedRelatedContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-related-threshold-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath,
+                """
+                <doc>
+                  <assembly><name>RelatedCoveragePipeline</name></assembly>
+                  <members>
+                    <member name="T:MyNamespace.Alpha">
+                      <summary>Alpha docs.</summary>
+                    </member>
+                    <member name="T:MyNamespace.Beta">
+                      <summary>Beta docs.</summary>
+                    </member>
+                  </members>
+                </doc>
+                """);
+
+            var manifestPath = Path.Combine(root, "related-content.json");
+            File.WriteAllText(manifestPath,
+                """
+                {
+                  "entries": [
+                    {
+                      "title": "Alpha guide",
+                      "url": "/docs/alpha/",
+                      "kind": "guide",
+                      "targets": [ "T:MyNamespace.Alpha" ]
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "relatedContentManifest": "./related-content.json",
+                      "quickStartTypes": "Alpha,Beta",
+                      "failOnCoverage": true,
+                      "minQuickStartRelatedContentPercent": 100,
+                      "maxQuickStartMissingRelatedContentCount": 0
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("Quick start curated related-content coverage", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("below required 100%", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ApiDocsBatch_InfersSuiteEntriesAcrossInputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-suite-batch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "testimox.xml"),
+                """
+                <doc>
+                  <assembly><name>TestimoX</name></assembly>
+                  <members>
+                    <member name="T:SuiteNamespace.TestimoXType">
+                      <summary>TestimoX type.</summary>
+                    </member>
+                  </members>
+                </doc>
+                """);
+            File.WriteAllText(Path.Combine(root, "adplayground.xml"),
+                """
+                <doc>
+                  <assembly><name>ADPlayground</name></assembly>
+                  <members>
+                    <member name="T:SuiteNamespace.ADPlaygroundType">
+                      <summary>ADPlayground type.</summary>
+                    </member>
+                  </members>
+                </doc>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "template": "docs",
+                      "format": "both",
+                      "suiteTitle": "Project APIs",
+                      "suiteHomeUrl": "/projects/",
+                      "inputs": [
+                        {
+                          "id": "testimox",
+                          "title": "TestimoX API",
+                          "type": "CSharp",
+                          "xml": "./testimox.xml",
+                          "out": "./_site/projects/testimox/api",
+                          "baseUrl": "/projects/testimox/api"
+                        },
+                        {
+                          "id": "adplayground",
+                          "title": "ADPlayground API",
+                          "type": "CSharp",
+                          "xml": "./adplayground.xml",
+                          "out": "./_site/projects/adplayground/api",
+                          "baseUrl": "/projects/adplayground/api"
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            var indexJsonPath = Path.Combine(root, "_site", "projects", "testimox", "api", "index.json");
+            using var indexJson = JsonDocument.Parse(File.ReadAllText(indexJsonPath));
+            var suite = indexJson.RootElement.GetProperty("suite");
+            Assert.Equal("Project APIs", suite.GetProperty("title").GetString());
+            Assert.Equal("testimox", suite.GetProperty("currentId").GetString());
+            Assert.Equal(2, suite.GetProperty("entries").GetArrayLength());
+
+            var indexHtmlPath = Path.Combine(root, "_site", "projects", "testimox", "api", "index.html");
+            var indexHtml = File.ReadAllText(indexHtmlPath);
+            Assert.Contains("api-suite-switcher", indexHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/projects/adplayground/api", indexHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_WritesSuiteManifestAndInjectsSwitchers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "testimox", "TestimoX.Module-help.xml", "TestimoX.Module.psd1", "TestimoX.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "adplayground", "ADPlayground.Module-help.xml", "ADPlayground.Module.psd1", "ADPlayground.Module.psm1");
+
+            var manifestsRoot = Path.Combine(root, "manifests");
+            Directory.CreateDirectory(manifestsRoot);
+            File.WriteAllText(Path.Combine(manifestsRoot, "testimox-related.json"),
+                """
+                {
+                  "entries": [
+                    {
+                      "title": "TestimoX onboarding guide",
+                      "url": "/projects/testimox/docs/onboarding/",
+                      "summary": "Walk through the main validation workflow.",
+                      "kind": "guide",
+                      "targets": [ "Invoke-TestimoXAction" ]
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(manifestsRoot, "suite-narrative.json"),
+                """
+                {
+                  "summary": "Use this suite portal to choose the right API and follow the core onboarding flow.",
+                  "sections": [
+                    {
+                      "title": "Start with the main automation path",
+                      "summary": "Begin with the project most users touch first, then branch into supporting APIs.",
+                      "items": [
+                        {
+                          "title": "Open the TestimoX quick start",
+                          "url": "/projects/testimox/docs/quick-start/",
+                          "summary": "Learn the main validation workflow before exploring command reference.",
+                          "kind": "workflow",
+                          "audience": "New maintainers",
+                          "estimatedTime": "10 min",
+                          "projects": [ "testimox" ]
+                        },
+                        {
+                          "title": "Review the ADPlayground lab guide",
+                          "url": "/projects/adplayground/docs/labs/",
+                          "summary": "Use the playground API after the core automation flow is familiar.",
+                          "kind": "lab",
+                          "estimatedTime": "15 min",
+                          "projects": [ "adplayground" ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "description": "Validation automation APIs.",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "relatedContentManifest": "./manifests/testimox-related.json"
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "description": "Directory lab APIs.",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "template": "docs",
+                      "format": "both",
+                      "suiteTitle": "Project APIs",
+                      "suiteNarrativeManifest": "./manifests/suite-narrative.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("suite=api-suite.json", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("suite-search=api-suite-search.json", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("suite-xref=api-suite-xrefmap.json", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("suite-coverage=api-suite-coverage.json", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("suite-landing=api-suite/", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            var suiteManifestPath = Path.Combine(root, "_site", "projects", "api-suite.json");
+            Assert.True(File.Exists(suiteManifestPath));
+            using var suiteManifest = JsonDocument.Parse(File.ReadAllText(suiteManifestPath));
+            Assert.Equal("Project APIs", suiteManifest.RootElement.GetProperty("title").GetString());
+            Assert.Equal("/projects/api-suite/", suiteManifest.RootElement.GetProperty("homeUrl").GetString());
+            Assert.Equal(2, suiteManifest.RootElement.GetProperty("entries").GetArrayLength());
+            Assert.Equal("./api-suite/index.html", suiteManifest.RootElement.GetProperty("landingPath").GetString());
+            Assert.Equal("/projects/api-suite/", suiteManifest.RootElement.GetProperty("landingUrl").GetString());
+            Assert.Equal("./api-suite-search.json", suiteManifest.RootElement.GetProperty("artifacts").GetProperty("searchPath").GetString());
+            Assert.Equal("./api-suite-xrefmap.json", suiteManifest.RootElement.GetProperty("artifacts").GetProperty("xrefMapPath").GetString());
+            Assert.Equal("./api-suite-coverage.json", suiteManifest.RootElement.GetProperty("artifacts").GetProperty("coveragePath").GetString());
+            Assert.Equal("./api-suite-related-content.json", suiteManifest.RootElement.GetProperty("artifacts").GetProperty("relatedContentPath").GetString());
+            Assert.Equal("./api-suite-narrative.json", suiteManifest.RootElement.GetProperty("artifacts").GetProperty("narrativePath").GetString());
+
+            var suiteLandingIndexPath = Path.Combine(root, "_site", "projects", "api-suite", "index.html");
+            Assert.True(File.Exists(suiteLandingIndexPath));
+            var suiteLandingHtml = File.ReadAllText(suiteLandingIndexPath);
+            Assert.Contains("api-suite-search", suiteLandingHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("api-suite-search-filter", suiteLandingHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("api-suite-narrative", suiteLandingHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Start Here", suiteLandingHtml, StringComparison.Ordinal);
+            Assert.Contains("api-suite-coverage-summary", suiteLandingHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("api-suite-related-content", suiteLandingHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("../api-suite-search.json", suiteLandingHtml, StringComparison.Ordinal);
+            Assert.Contains("../api-suite-narrative.json", suiteLandingHtml, StringComparison.Ordinal);
+            Assert.Contains("../api-suite-coverage.json", suiteLandingHtml, StringComparison.Ordinal);
+            Assert.Contains("../api-suite-related-content.json", suiteLandingHtml, StringComparison.Ordinal);
+            Assert.Contains("/projects/testimox/api/", suiteLandingHtml, StringComparison.Ordinal);
+
+            var suiteSearchPath = Path.Combine(root, "_site", "projects", "api-suite-search.json");
+            Assert.True(File.Exists(suiteSearchPath));
+            using var suiteSearch = JsonDocument.Parse(File.ReadAllText(suiteSearchPath));
+            Assert.Equal(2, suiteSearch.RootElement.GetProperty("itemCount").GetInt32());
+            Assert.Equal(2, suiteSearch.RootElement.GetProperty("items").GetArrayLength());
+            using var projectIndexJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "_site", "projects", "testimox", "api", "index.json")));
+            Assert.Equal("../../api-suite-search.json", projectIndexJson.RootElement.GetProperty("suite").GetProperty("searchUrl").GetString());
+            Assert.Equal("/projects/api-suite/", projectIndexJson.RootElement.GetProperty("suite").GetProperty("homeUrl").GetString());
+
+            var suiteXrefPath = Path.Combine(root, "_site", "projects", "api-suite-xrefmap.json");
+            Assert.True(File.Exists(suiteXrefPath));
+            using var suiteXref = JsonDocument.Parse(File.ReadAllText(suiteXrefPath));
+            Assert.True(suiteXref.RootElement.GetProperty("referenceCount").GetInt32() >= 2);
+
+            var suiteCoveragePath = Path.Combine(root, "_site", "projects", "api-suite-coverage.json");
+            Assert.True(File.Exists(suiteCoveragePath));
+            using var suiteCoverage = JsonDocument.Parse(File.ReadAllText(suiteCoveragePath));
+            Assert.Equal(2, suiteCoverage.RootElement.GetProperty("projectCount").GetInt32());
+            Assert.Equal(2, suiteCoverage.RootElement.GetProperty("types").GetProperty("count").GetInt32());
+            Assert.Equal(2, suiteCoverage.RootElement.GetProperty("powershell").GetProperty("commandCount").GetInt32());
+
+            var suiteNarrativePath = Path.Combine(root, "_site", "projects", "api-suite-narrative.json");
+            Assert.True(File.Exists(suiteNarrativePath));
+            using var suiteNarrative = JsonDocument.Parse(File.ReadAllText(suiteNarrativePath));
+            Assert.Equal(1, suiteNarrative.RootElement.GetProperty("sectionCount").GetInt32());
+            Assert.Equal(2, suiteNarrative.RootElement.GetProperty("itemCount").GetInt32());
+            Assert.Equal(
+                "Use this suite portal to choose the right API and follow the core onboarding flow.",
+                suiteNarrative.RootElement.GetProperty("summary").GetString());
+            Assert.True(suiteNarrative.RootElement.GetProperty("content").GetProperty("summaryPresent").GetBoolean());
+            Assert.Equal(100d, suiteNarrative.RootElement.GetProperty("coverage").GetProperty("suiteEntries").GetProperty("percent").GetDouble());
+            Assert.Equal(0, suiteNarrative.RootElement.GetProperty("coverage").GetProperty("suiteEntries").GetProperty("uncoveredCount").GetInt32());
+            var narrativeItem = suiteNarrative.RootElement.GetProperty("sections")[0].GetProperty("items")[0];
+            Assert.Equal("workflow", narrativeItem.GetProperty("kind").GetString());
+            Assert.Equal("New maintainers", narrativeItem.GetProperty("audience").GetString());
+            Assert.Contains(
+                "TestimoX",
+                narrativeItem.GetProperty("suiteEntryLabels").EnumerateArray().Select(static item => item.GetString()).Where(static item => !string.IsNullOrWhiteSpace(item)));
+
+            var suiteRelatedContentPath = Path.Combine(root, "_site", "projects", "api-suite-related-content.json");
+            Assert.True(File.Exists(suiteRelatedContentPath));
+            using var suiteRelatedContent = JsonDocument.Parse(File.ReadAllText(suiteRelatedContentPath));
+            Assert.Equal(1, suiteRelatedContent.RootElement.GetProperty("itemCount").GetInt32());
+            var relatedItem = suiteRelatedContent.RootElement.GetProperty("items")[0];
+            Assert.Equal("testimox", relatedItem.GetProperty("suiteEntryId").GetString());
+            Assert.Equal("TestimoX", relatedItem.GetProperty("suiteEntryLabel").GetString());
+            Assert.Equal("/projects/testimox/docs/onboarding/", relatedItem.GetProperty("url").GetString());
+
+            var apiIndexPath = Path.Combine(root, "_site", "projects", "testimox", "api", "index.html");
+            var html = File.ReadAllText(apiIndexPath);
+            Assert.Contains("api-suite-switcher", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/projects/adplayground/api/", html, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Equal("../../api-suite-related-content.json", projectIndexJson.RootElement.GetProperty("suite").GetProperty("relatedContentUrl").GetString());
+            Assert.Equal("../../api-suite-narrative.json", projectIndexJson.RootElement.GetProperty("suite").GetProperty("narrativeUrl").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_WritesSuiteCoverageFromCatalogApiDocsOverrides()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-overrides-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(
+                sourcesRoot,
+                "testimox",
+                "TestimoX.Module-help.xml",
+                "TestimoX.Module.psd1",
+                "TestimoX.Module.psm1",
+                "Invoke-TestimoXAction");
+            WriteProjectApiPowerShellSource(
+                sourcesRoot,
+                "adplayground",
+                "ADPlayground.Module-help.xml",
+                "ADPlayground.Module.psd1",
+                "ADPlayground.Module.psm1",
+                "Invoke-ADPlaygroundAction");
+
+            var manifestsRoot = Path.Combine(root, "manifests");
+            Directory.CreateDirectory(manifestsRoot);
+            File.WriteAllText(Path.Combine(manifestsRoot, "testimox-related.json"),
+                """
+                {
+                  "entries": [
+                    {
+                      "title": "TestimoX quick start",
+                      "url": "/projects/testimox/docs/quick-start/",
+                      "kind": "guide",
+                      "targets": [ "Invoke-TestimoXAction" ]
+                    }
+                  ]
+                }
+                """);
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "description": "Validation automation APIs.",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-TestimoXAction",
+                        "relatedContentManifest": "./manifests/testimox-related.json"
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "description": "Directory lab APIs.",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-ADPlaygroundAction"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "template": "docs",
+                      "format": "json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            var suiteCoveragePath = Path.Combine(root, "_site", "projects", "api-suite-coverage.json");
+            Assert.True(File.Exists(suiteCoveragePath));
+            using var suiteCoverage = JsonDocument.Parse(File.ReadAllText(suiteCoveragePath));
+            var types = suiteCoverage.RootElement.GetProperty("types");
+            Assert.Equal(2, types.GetProperty("quickStartRelatedContent").GetProperty("total").GetInt32());
+            Assert.Equal(1, types.GetProperty("quickStartRelatedContent").GetProperty("covered").GetInt32());
+            Assert.Equal(50d, types.GetProperty("quickStartRelatedContent").GetProperty("percent").GetDouble());
+            Assert.Equal(1, types.GetProperty("quickStartMissingRelatedContent").GetProperty("count").GetInt32());
+            Assert.Contains(
+                "Invoke-ADPlaygroundAction",
+                types.GetProperty("quickStartMissingRelatedContent").GetProperty("types").EnumerateArray().Select(static item => item.GetString()).Where(static item => !string.IsNullOrWhiteSpace(item)));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_ReportsSuiteStarterRecommendationsWhenGuidanceIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-recommendations-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "testimox", "TestimoX.Module-help.xml", "TestimoX.Module.psd1", "TestimoX.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "adplayground", "ADPlayground.Module-help.xml", "ADPlayground.Module.psd1", "ADPlayground.Module.psm1");
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "format": "json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("suite-guidance-recommendations=3", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_ReportsStarterTemplateRecommendationsWhenSuiteScaffoldIsStillUntouched()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-starter-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "data", "projects"));
+            Directory.CreateDirectory(Path.Combine(root, "content", "docs", "projects"));
+            File.WriteAllText(Path.Combine(root, "data", "projects", "catalog.json"), """{ "projects": [] }""");
+            File.WriteAllText(Path.Combine(root, "data", "projects", "catalog.project-template.json"), """{ "slug": "sample-project" }""");
+            File.WriteAllText(Path.Combine(root, "data", "projects", "sample-project-api-guides.json"), """{ "entries": [] }""");
+            File.WriteAllText(Path.Combine(root, "content", "docs", "projects", "api-guide-template.md"), "# Sample");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "format": "json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("generated=0", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("suite-guidance-recommendations=1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_ReportsStarterTemplateRecommendationsWhenSampleProjectPlaceholdersLeakIntoCatalog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-starter-sample-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "sample-project", "Sample.Module-help.xml", "Sample.Module.psd1", "Sample.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "real-project", "Real.Module-help.xml", "Real.Module.psd1", "Real.Module.psm1");
+
+            Directory.CreateDirectory(Path.Combine(root, "data", "projects"));
+            Directory.CreateDirectory(Path.Combine(root, "content", "docs", "projects"));
+            File.WriteAllText(Path.Combine(root, "data", "projects", "catalog.project-template.json"), """{ "slug": "sample-project" }""");
+            File.WriteAllText(Path.Combine(root, "data", "projects", "sample-project-api-guides.json"), """{ "entries": [] }""");
+            File.WriteAllText(Path.Combine(root, "content", "docs", "projects", "api-guide-template.md"), "# Sample");
+            File.WriteAllText(Path.Combine(root, "data", "projects", "catalog.json"),
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "sample-project",
+                      "name": "Sample Project",
+                      "hubPath": "/projects/sample-project/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-SampleProjectAction",
+                        "relatedContentManifest": "./data/projects/sample-project-api-guides.json"
+                      }
+                    },
+                    {
+                      "slug": "real-project",
+                      "name": "Real Project",
+                      "hubPath": "/projects/real-project/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-RealProjectAction"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "format": "json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("suite-guidance-recommendations=4", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_FailsWhenSuiteCoverageThresholdsAreViolated()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-thresholds-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "testimox", "TestimoX.Module-help.xml", "TestimoX.Module.psd1", "TestimoX.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "adplayground", "ADPlayground.Module-help.xml", "ADPlayground.Module.psd1", "ADPlayground.Module.psm1");
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-SampleFunction"
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      },
+                      "apiDocs": {
+                        "quickStartTypes": "Invoke-SampleFunction"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "format": "json",
+                      "suiteFailOnCoverage": true,
+                      "suiteCoverage": {
+                        "maxQuickStartMissingRelatedContentCount": 1
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("Quick start types missing curated related content count", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exceeds allowed 1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_FailsWhenSuiteNarrativeThresholdsAreViolated()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-narrative-thresholds-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "testimox", "TestimoX.Module-help.xml", "TestimoX.Module.psd1", "TestimoX.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "adplayground", "ADPlayground.Module-help.xml", "ADPlayground.Module.psd1", "ADPlayground.Module.psm1");
+
+            var manifestsRoot = Path.Combine(root, "manifests");
+            Directory.CreateDirectory(manifestsRoot);
+            File.WriteAllText(Path.Combine(manifestsRoot, "suite-narrative.json"),
+                """
+                {
+                  "sections": [
+                    {
+                      "title": "Only one project is covered",
+                      "items": [
+                        {
+                          "title": "TestimoX quick start",
+                          "url": "/projects/testimox/docs/quick-start/",
+                          "kind": "workflow",
+                          "projects": [ "testimox" ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "format": "json",
+                      "suiteNarrativeManifest": "./manifests/suite-narrative.json",
+                      "suiteFailOnNarrative": true,
+                      "suiteNarrative": {
+                        "requireSummary": true,
+                        "minSuiteEntryCoveragePercent": 100,
+                        "maxUncoveredSuiteEntryCount": 0
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("Suite narrative summary is required", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1158,6 +2048,10 @@ public class WebPipelineRunnerApiDocsPreflightTests
             """;
     }
 
+    private static string BuildMinimalPowerShellHelpWithoutExamples(string commandName)
+        => BuildMinimalPowerShellHelpWithoutExamples()
+            .Replace("Invoke-SampleFunction", commandName, StringComparison.Ordinal);
+
     private static string BuildMinimalPowerShellHelpForValidation()
     {
         return
@@ -1202,6 +2096,37 @@ public class WebPipelineRunnerApiDocsPreflightTests
         {
             // ignore cleanup failures in tests
         }
+    }
+
+    private static void WriteProjectApiPowerShellSource(
+        string sourcesRoot,
+        string slug,
+        string helpFileName,
+        string manifestFileName,
+        string moduleFileName)
+        => WriteProjectApiPowerShellSource(sourcesRoot, slug, helpFileName, manifestFileName, moduleFileName, "Invoke-SampleFunction");
+
+    private static void WriteProjectApiPowerShellSource(
+        string sourcesRoot,
+        string slug,
+        string helpFileName,
+        string manifestFileName,
+        string moduleFileName,
+        string commandName)
+    {
+        var apiRoot = Path.Combine(sourcesRoot, slug, "WebsiteArtifacts", "apidocs", "powershell");
+        Directory.CreateDirectory(apiRoot);
+        File.WriteAllText(Path.Combine(apiRoot, helpFileName), BuildMinimalPowerShellHelpWithoutExamples(commandName));
+        File.WriteAllText(Path.Combine(apiRoot, manifestFileName),
+            $$"""
+            @{
+                CmdletsToExport = @()
+                FunctionsToExport = @('{{commandName}}')
+                AliasesToExport = @()
+                RootModule = 'Sample.Module.psm1'
+            }
+            """);
+        File.WriteAllText(Path.Combine(apiRoot, moduleFileName), $"function {commandName} {{ param([string]$Name) $Name }}");
     }
 
     private static bool IsGitAvailable()

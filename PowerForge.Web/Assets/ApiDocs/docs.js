@@ -21,6 +21,21 @@
   var tocToggle = document.querySelector('.type-toc-toggle');
   var memberSectionToggles = Array.prototype.slice.call(document.querySelectorAll('.member-section-toggle'));
   var overviewGroupToggles = Array.prototype.slice.call(document.querySelectorAll('[data-overview-group-toggle]'));
+  var suiteSearchRoot = document.querySelector('.api-suite-search[data-suite-search-url]');
+  var suiteSearchInput = suiteSearchRoot ? suiteSearchRoot.querySelector('.api-suite-search-input') : null;
+  var suiteSearchResults = suiteSearchRoot ? suiteSearchRoot.querySelector('.api-suite-search-results') : null;
+  var suiteSearchStatus = suiteSearchRoot ? suiteSearchRoot.querySelector('.api-suite-search-status') : null;
+  var suiteSearchFilterButtons = suiteSearchRoot ? Array.prototype.slice.call(suiteSearchRoot.querySelectorAll('.api-suite-search-filter')) : [];
+  var suiteCoverageRoot = document.querySelector('.api-suite-coverage-summary[data-suite-coverage-url]');
+  var suiteCoverageGrid = suiteCoverageRoot ? suiteCoverageRoot.querySelector('.api-suite-coverage-grid') : null;
+  var suiteCoverageStatus = suiteCoverageRoot ? suiteCoverageRoot.querySelector('.api-suite-coverage-status') : null;
+  var suiteNarrativeRoot = document.querySelector('.api-suite-narrative[data-suite-narrative-url]');
+  var suiteNarrativeSummary = suiteNarrativeRoot ? suiteNarrativeRoot.querySelector('.api-suite-narrative-summary') : null;
+  var suiteNarrativeSections = suiteNarrativeRoot ? suiteNarrativeRoot.querySelector('.api-suite-narrative-sections') : null;
+  var suiteNarrativeStatus = suiteNarrativeRoot ? suiteNarrativeRoot.querySelector('.api-suite-narrative-status') : null;
+  var suiteRelatedContentRoot = document.querySelector('.api-suite-related-content[data-suite-related-content-url]');
+  var suiteRelatedContentList = suiteRelatedContentRoot ? suiteRelatedContentRoot.querySelector('.api-suite-related-content-list') : null;
+  var suiteRelatedContentStatus = suiteRelatedContentRoot ? suiteRelatedContentRoot.querySelector('.api-suite-related-content-status') : null;
 
   function setSidebar(open) {
     if (!sidebar || !overlay) return;
@@ -84,6 +99,332 @@
     var n = parseInt(value, 10);
     if (!Number.isFinite(n)) return '0';
     return n.toLocaleString();
+  }
+
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function readMetricNumber(root, path) {
+    if (!root || !path) return 0;
+    var current = root;
+    var parts = String(path).split('.');
+    for (var i = 0; i < parts.length; i++) {
+      if (!current || typeof current !== 'object' || !(parts[i] in current)) return 0;
+      current = current[parts[i]];
+    }
+    var n = Number(current);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function renderSuiteCoverageSummary() {
+    if (!suiteCoverageRoot || !suiteCoverageGrid || !suiteCoverageStatus) return;
+    var coverageUrl = suiteCoverageRoot.getAttribute('data-suite-coverage-url');
+    if (!coverageUrl) return;
+
+    suiteCoverageStatus.textContent = 'Loading suite coverage summary...';
+    fetch(coverageUrl)
+      .then(function(response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function(payload) {
+        var cards = [
+          {
+            label: 'Projects',
+            value: formatCount(readMetricNumber(payload, 'projectCount')),
+            note: 'APIs included in this suite portal.'
+          },
+          {
+            label: 'Types',
+            value: formatCount(readMetricNumber(payload, 'types.count')),
+            note: 'Public symbols merged across all project APIs.'
+          },
+          {
+            label: 'Commands',
+            value: formatCount(readMetricNumber(payload, 'powershell.commandCount')),
+            note: 'PowerShell commands currently represented in the suite.'
+          },
+          {
+            label: 'Quick Start Coverage',
+            value: readMetricNumber(payload, 'types.quickStartRelatedContent.percent').toFixed(0) + '%',
+            note: 'Configured quick-start symbols with curated guidance attached.'
+          },
+          {
+            label: 'Missing Quick Starts',
+            value: formatCount(readMetricNumber(payload, 'types.quickStartMissingRelatedContent.count')),
+            note: 'Important suite entry points still missing curated walkthroughs.'
+          }
+        ];
+
+        suiteCoverageGrid.hidden = false;
+        suiteCoverageGrid.innerHTML = cards.map(function(card) {
+          return '<div class="api-suite-coverage-card">' +
+            '<strong>' + escapeHtml(card.value) + '</strong>' +
+            '<em>' + escapeHtml(card.label) + '</em>' +
+            '<span>' + escapeHtml(card.note) + '</span>' +
+            '</div>';
+        }).join('');
+        suiteCoverageStatus.textContent = 'Suite coverage summary loaded.';
+      })
+      .catch(function() {
+        suiteCoverageStatus.textContent = 'Suite coverage summary is unavailable right now.';
+      });
+  }
+
+  function renderSuiteNarrative() {
+    if (!suiteNarrativeRoot || !suiteNarrativeSummary || !suiteNarrativeSections || !suiteNarrativeStatus) return;
+    var narrativeUrl = suiteNarrativeRoot.getAttribute('data-suite-narrative-url');
+    if (!narrativeUrl) return;
+
+    suiteNarrativeStatus.textContent = 'Loading suite guidance...';
+    fetch(narrativeUrl)
+      .then(function(response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function(payload) {
+        var sections = Array.isArray(payload.sections) ? payload.sections : [];
+        if (!sections.length) {
+          suiteNarrativeStatus.textContent = 'No suite onboarding guidance has been attached yet.';
+          return;
+        }
+
+        var intro = payload.summary || payload.description || '';
+        if (intro) {
+          suiteNarrativeSummary.hidden = false;
+          suiteNarrativeSummary.textContent = intro;
+        } else {
+          suiteNarrativeSummary.hidden = true;
+          suiteNarrativeSummary.textContent = '';
+        }
+
+        suiteNarrativeSections.hidden = false;
+        suiteNarrativeSections.innerHTML = sections.map(function(section) {
+          var sectionTitle = escapeHtml(section.title || 'Section');
+          var sectionSummary = section.summary ? '<p>' + escapeHtml(section.summary) + '</p>' : '';
+          var items = Array.isArray(section.items) ? section.items : [];
+          var cards = items.map(function(item) {
+            var title = escapeHtml(item.title || 'Guide');
+            var href = escapeHtml(item.url || '#');
+            var summary = item.summary ? '<span>' + escapeHtml(item.summary) + '</span>' : '';
+            var kind = escapeHtml(item.kind || 'guide');
+            var metaParts = [];
+            if (Array.isArray(item.suiteEntryLabels) && item.suiteEntryLabels.length) {
+              metaParts.push(item.suiteEntryLabels.join(', '));
+            }
+            if (item.audience) {
+              metaParts.push(item.audience);
+            }
+            if (item.estimatedTime) {
+              metaParts.push(item.estimatedTime);
+            }
+            var meta = metaParts.length
+              ? '<div class="api-suite-narrative-meta">' + escapeHtml(metaParts.join(' · ')) + '</div>'
+              : '';
+            return '<a class="api-suite-narrative-item" href="' + href + '">' +
+              '<strong>' + title + '</strong>' +
+              '<em class="api-suite-narrative-kind">' + kind + '</em>' +
+              meta +
+              summary +
+              '</a>';
+          }).join('');
+          return '<section class="api-suite-narrative-section">' +
+            '<div class="api-suite-narrative-section-head">' +
+            '<h3>' + sectionTitle + '</h3>' +
+            sectionSummary +
+            '</div>' +
+            '<div class="api-suite-narrative-items">' + cards + '</div>' +
+            '</section>';
+        }).join('');
+        suiteNarrativeStatus.textContent = 'Showing ' + formatCount(sections.length) + ' suite guidance section' + (sections.length === 1 ? '' : 's') + '.';
+      })
+      .catch(function() {
+        suiteNarrativeStatus.textContent = 'Suite guidance is unavailable right now.';
+      });
+  }
+
+  function renderSuiteRelatedContent() {
+    if (!suiteRelatedContentRoot || !suiteRelatedContentList || !suiteRelatedContentStatus) return;
+    var relatedUrl = suiteRelatedContentRoot.getAttribute('data-suite-related-content-url');
+    if (!relatedUrl) return;
+
+    suiteRelatedContentStatus.textContent = 'Loading curated guides...';
+    fetch(relatedUrl)
+      .then(function(response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function(payload) {
+        var items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
+        items = items.slice(0, 8);
+        if (!items.length) {
+          suiteRelatedContentStatus.textContent = 'No curated suite guides have been attached yet.';
+          return;
+        }
+
+        suiteRelatedContentList.hidden = false;
+        suiteRelatedContentList.innerHTML = items.map(function(item) {
+          var title = escapeHtml(item.title || 'Guide');
+          var summary = item.summary ? '<span>' + escapeHtml(item.summary) + '</span>' : '';
+          var href = escapeHtml(item.url || '#');
+          var suiteLabel = escapeHtml(item.suiteEntryLabel || item.suiteEntryId || 'API');
+          var kind = escapeHtml(item.kind || 'guide');
+          return '<a class="api-suite-related-content-item" href="' + href + '">' +
+            '<strong>' + title + '</strong>' +
+            '<em class="api-suite-related-content-kind">' + kind + '</em>' +
+            '<div class="api-suite-related-content-meta">' + suiteLabel + '</div>' +
+            summary +
+            '</a>';
+        }).join('');
+        suiteRelatedContentStatus.textContent = 'Showing ' + formatCount(items.length) + ' curated suite guide' + (items.length === 1 ? '' : 's') + '.';
+      })
+      .catch(function() {
+        suiteRelatedContentStatus.textContent = 'Curated suite guides are unavailable right now.';
+      });
+  }
+
+  function initSuiteSearch() {
+    if (!suiteSearchRoot || !suiteSearchInput || !suiteSearchResults || !suiteSearchStatus) return;
+    var searchUrl = suiteSearchRoot.getAttribute('data-suite-search-url');
+    if (!searchUrl) return;
+
+    var suiteItems = null;
+    var loading = false;
+    var loaded = false;
+    var lastQuery = '';
+    var activeSuiteFilter = '';
+
+    function setStatus(text) {
+      suiteSearchStatus.textContent = text || '';
+    }
+
+    function getActiveFilterLabel() {
+      for (var i = 0; i < suiteSearchFilterButtons.length; i++) {
+        if (suiteSearchFilterButtons[i].classList.contains('active')) {
+          return suiteSearchFilterButtons[i].textContent || '';
+        }
+      }
+      return 'All APIs';
+    }
+
+    function setActiveFilter(value) {
+      activeSuiteFilter = value || '';
+      suiteSearchFilterButtons.forEach(function(button) {
+        var isActive = (button.getAttribute('data-suite-search-filter') || '') === activeSuiteFilter;
+        button.classList.toggle('active', isActive);
+      });
+    }
+
+    function renderSuiteResults(query) {
+      var q = normalize(query);
+      if (!q) {
+        suiteSearchResults.hidden = true;
+        suiteSearchResults.innerHTML = '';
+        if (activeSuiteFilter) {
+          setStatus('Filter set to ' + getActiveFilterLabel() + '. Start typing to search.');
+        } else {
+          setStatus('Start typing to search across the full API suite.');
+        }
+        return;
+      }
+
+      var items = (suiteItems || []).filter(function(item) {
+        if (activeSuiteFilter && normalize(item.suiteEntryId) !== normalize(activeSuiteFilter)) {
+          return false;
+        }
+        var haystack = normalize([
+          item.title,
+          item.displayName,
+          item.summary,
+          item.kind,
+          item.namespace,
+          item.suiteEntryLabel,
+          item.suiteEntryId,
+          Array.isArray(item.aliases) ? item.aliases.join(' ') : ''
+        ].join(' '));
+        return haystack.indexOf(q) !== -1;
+      }).slice(0, 8);
+
+      if (!items.length) {
+        suiteSearchResults.hidden = false;
+        suiteSearchResults.innerHTML = '<div class="api-suite-search-empty">No suite matches found.</div>';
+        setStatus('No matching symbols found' + (activeSuiteFilter ? ' in ' + getActiveFilterLabel() : ' across this API suite') + '.');
+        return;
+      }
+
+      suiteSearchResults.hidden = false;
+      suiteSearchResults.innerHTML = items.map(function(item) {
+        var title = escapeHtml(item.displayName || item.title || item.slug || 'Result');
+        var label = escapeHtml(item.suiteEntryLabel || item.suiteEntryId || 'API');
+        var summary = item.summary ? '<span>' + escapeHtml(item.summary) + '</span>' : '';
+        var href = escapeHtml(item.url || '#');
+        return '<a class="api-suite-search-result" href="' + href + '">' +
+          '<strong>' + title + '</strong>' +
+          '<em>' + label + '</em>' +
+          summary +
+          '</a>';
+      }).join('');
+      setStatus('Showing ' + formatCount(items.length) + ' suite result' + (items.length === 1 ? '' : 's') + (activeSuiteFilter ? ' in ' + getActiveFilterLabel() : '') + '.');
+    }
+
+    function loadSuiteItems() {
+      if (loaded || loading) return;
+      loading = true;
+      setStatus('Loading suite search index...');
+      fetch(searchUrl)
+        .then(function(response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        })
+        .then(function(payload) {
+          suiteItems = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
+          loaded = true;
+          loading = false;
+          if (!suiteItems.length) {
+            setStatus('Suite search index is available but has no items yet.');
+            return;
+          }
+          renderSuiteResults(lastQuery);
+        })
+        .catch(function() {
+          loading = false;
+          setStatus('Suite search is unavailable right now.');
+        });
+    }
+
+    suiteSearchInput.addEventListener('focus', loadSuiteItems, { once: true });
+    suiteSearchFilterButtons.forEach(function(button) {
+      button.addEventListener('click', function() {
+        setActiveFilter(button.getAttribute('data-suite-search-filter') || '');
+        renderSuiteResults(lastQuery);
+      });
+    });
+    suiteSearchInput.addEventListener('input', function() {
+      lastQuery = suiteSearchInput.value || '';
+      if (!loaded) {
+        loadSuiteItems();
+      }
+      if (loaded) {
+        renderSuiteResults(lastQuery);
+      } else if (lastQuery) {
+        setStatus('Loading suite search index...');
+      } else {
+        if (activeSuiteFilter) {
+          setStatus('Filter set to ' + getActiveFilterLabel() + '. Start typing to search.');
+        } else {
+          setStatus('Start typing to search across the full API suite.');
+        }
+      }
+    });
+
+    setActiveFilter('');
+    setStatus('Start typing to search across the full API suite.');
   }
 
   var activeKind = '';
@@ -643,6 +984,10 @@
     var activeMemberBtn = memberKindButtons.find(function(b) { return (b.dataset.memberKind || '') === activeMemberKind; });
     (activeMemberBtn || memberKindButtons[0]).classList.add('active');
   }
+  initSuiteSearch();
+  renderSuiteNarrative();
+  renderSuiteCoverageSummary();
+  renderSuiteRelatedContent();
   initNavDropdowns();
   applyFilter(filterInput ? filterInput.value : '');
   applyMemberFilter();

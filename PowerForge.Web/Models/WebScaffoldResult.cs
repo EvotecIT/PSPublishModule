@@ -15,4 +15,10 @@ public sealed class WebScaffoldResult
     public string SiteName { get; set; } = string.Empty;
     /// <summary>Base URL used during scaffolding.</summary>
     public string BaseUrl { get; set; } = string.Empty;
+    /// <summary>Starter profile used during scaffolding.</summary>
+    public string StarterProfile { get; set; } = string.Empty;
+    /// <summary>Optional first suite project slug materialized by the scaffold.</summary>
+    public string? FirstSuiteProjectSlug { get; set; }
+    /// <summary>Optional first suite project surface materialized by the scaffold.</summary>
+    public string? FirstSuiteProjectSurface { get; set; }
 }

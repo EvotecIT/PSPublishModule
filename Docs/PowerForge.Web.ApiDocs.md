@@ -213,6 +213,18 @@ Member layout:
 - `.inheritance-current` – current type within inheritance list
 - `.type-derived` – derived types section
 - `.derived-list` – derived types list
+- `.type-usage` – reverse usage section for inferred API relationships
+- `.type-usage-summary` – reverse usage lead paragraph
+- `.usage-group` – reverse usage category card
+- `.usage-list` – reverse usage list
+- `.usage-item` – reverse usage entry
+- `.usage-kind` – reverse usage relationship badge
+- `.usage-link` – reverse usage member link
+- `.type-related-content` – curated guides/samples section on a type page
+- `.related-content-list` – curated guides/samples list
+- `.related-content-item` – curated guides/samples card
+- `.related-content-kind` – curated guides/samples badge
+- `.member-related-content` – curated guides/samples block inside a member card
 - `.type-parameters` – type parameter section
 - `.type-examples` – example section
 - `.example-media` – example media figure wrapper
@@ -243,6 +255,13 @@ When assembly reflection is available, the generator emits:
 - base type + implemented interfaces
 - static/abstract/sealed flags
 - attributes for types and members
+- reverse usage relationships for documented types (`usage` in JSON and `Usage` in docs pages), grouped into:
+  - `returnedOrExposedBy` for methods/properties/fields/events that surface the type
+  - `acceptedByParameters` for constructors/methods/syntax entries that accept the type
+- curated related content (`relatedContent` in JSON and `Guides & Samples` in docs-template HTML) from manifest entries that target:
+  - type ids like `T:Namespace.Type`
+  - member ids like `M:Namespace.Type.Run(System.String)` or `P:Namespace.Type.Name`
+  - xref-style aliases that already resolve through the generated symbol map
 - extension methods (shown under "Extension Methods")
 - constructors are rendered in their own section and overloads are grouped by name
 - optional source links (when `sourceRoot` + `sourceUrl` are set and PDBs exist)
@@ -384,6 +403,40 @@ Notes:
   - Use the generated map from website builds via `site.json -> Xref.MapFiles`.
   - C# xref maps now include member-level entries (methods/properties/fields/events) with deep links to rendered member anchors.
   - PowerShell xref maps now include parameter-level entries (`parameter:<Command>.<Parameter>`) that deep-link to command syntax cards.
+- Curated related-content manifests can attach authored guides/samples to API types and members:
+  - CLI: `--related-content-manifest <file>` or `--related-content-manifests <list>`
+  - Pipeline: `relatedContentManifest`, `related-content-manifest`, `relatedContentManifests`, or `related-content-manifests`
+  - matching prefers stable xref-style ids like `T:Namespace.Type` and `M:Namespace.Type.Run(System.String)`
+  - aliases from generated xref maps also work, but explicit ids are the most future-proof option
+  - unresolved manifest paths or unresolved targets emit `[PFWEB.APIDOCS.RELATED]` warnings
+
+### Curated related-content manifest
+
+Use a JSON manifest when examples/guides live outside XML docs or PowerShell help but should still be discoverable from API detail pages.
+
+```json
+{
+  "entries": [
+    {
+      "title": "Styling axis titles",
+      "url": "/docs/charts/axis-titles/",
+      "summary": "Walkthrough for configuring [[cref:T:HtmlForgeX.ApexAxisTitle]].",
+      "kind": "guide",
+      "targets": [
+        "T:HtmlForgeX.ApexAxisTitle",
+        "M:HtmlForgeX.ApexAxisTitle.SetText(System.String)"
+      ]
+    }
+  ]
+}
+```
+
+Notes:
+- Supported root shapes: top-level array, or object with `entries` / `items`.
+- Supported entry aliases: `title`/`name`, `url`/`href`, `target`/`targets`, `uid`/`uids`, `xref`/`xrefs`.
+- Supported kinds are open-ended; PowerForge normalizes common values like `guide`, `sample`, `tutorial`, `walkthrough`, `reference`, and `recipe`.
+- In docs-template output, type-level matches render as `Guides & Samples`; member-level matches render inside the relevant member card.
+- In per-type JSON, matches are emitted under `relatedContent.entries[]` and `relatedContent.members[]`, with member copies also repeated on the matching member object for easier client consumption.
 - Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
   - `sourceUrlMappings` prefixes that never match discovered source paths
   - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
@@ -431,6 +484,105 @@ Notes:
 - Coverage reports also track playback asset-health issues via `importedScriptPlaybackMediaUnsupportedSidecars`, `importedScriptPlaybackMediaOversizedAssets`, and `importedScriptPlaybackMediaStaleAssets`, with matching command lists so CI can flag rough media curation precisely.
 - API generation emits `[PFWEB.APIDOCS.POWERSHELL]` warnings when imported playback media exists without matching poster art, so teams can catch rough terminal embeds before publish.
 - API generation also emits `[PFWEB.APIDOCS.POWERSHELL]` warnings for unhealthy playback assets, but those issues are now measurable in coverage too instead of living only in console warnings.
+- Reverse usage is intentionally inferential, not prescriptive:
+  - it answers “where does this type show up in the public surface?”
+  - it does not replace authored conceptual docs or curated examples for “when should I choose this pattern?”
+- For fluent/configuration-heavy libraries, usage plus examples are complementary:
+  - usage helps a reader discover owning/related types and entry points
+  - examples/remarks explain intent and sequence
+- Coverage reports now also track curated related-content relevance:
+  - `types.relatedContent`
+  - `members.relatedContent`
+  - `types.quickStartRelatedContent`
+  - `types.quickStartMissingRelatedContent`
+- Pipeline coverage thresholds can now gate curated related-content quality with:
+  - `minTypeRelatedContentPercent`
+  - `minMemberRelatedContentPercent`
+  - `minQuickStartRelatedContentPercent`
+  - `maxQuickStartMissingRelatedContentCount`
+- When `quickStartTypes` are configured and some of those types still lack curated related content, API generation emits `[PFWEB.APIDOCS.RELATED]` warnings so CI can flag “important API, but no walkthrough” gaps early.
+- API docs now support first-class suite metadata for multi-project API portals:
+  - generator options / pipeline fields:
+    - `suiteTitle`
+    - `suiteCurrentId`
+    - `suiteHomeUrl`
+    - `suiteHomeLabel`
+    - `suiteSearchUrl`
+    - `suiteXrefMapUrl`
+    - `suiteCoverageUrl`
+    - `suiteEntries`
+  - per-type and index JSON now emit `suite` metadata, and docs-template HTML renders project/module switchers when more than one suite entry exists.
+  - when `suiteSearchUrl` is present, docs-template overview pages now render a built-in “Search across suite” experience powered by the shared suite search artifact.
+- Batch `apidocs` can infer suite entries automatically when a step contains multiple `inputs`/`entries` with distinct `baseUrl` values.
+  - optional parent-step overrides like `suiteTitle` and `suiteHomeUrl` are then applied consistently to every generated API.
+- `project-apidocs` now auto-injects suite entries across all prepared project APIs and writes `api-suite.json` under the `outRoot` by default.
+  - this gives sites like TestimoX one reusable API-suite manifest plus in-API project switching without maintaining a second hand-authored registry.
+- `project-apidocs` now also emits suite-root aggregate artifacts by default when more than one project API is generated:
+  - `api-suite-search.json`
+  - `api-suite-xrefmap.json`
+  - `api-suite-coverage.json`
+  - `api-suite-related-content.json`
+  - `api-suite-narrative.json`
+  - `api-suite/index.html`
+  - `api-suite/index.json`
+  - `api-suite.json` includes an `artifacts` object with relative paths to those files when they were produced.
+  - merged suite search items also carry `suiteEntryId` / `suiteEntryLabel` so future suite search UIs can group/filter by project.
+  - generated per-project APIs also get relative suite artifact URLs injected automatically, so the built-in suite search widget works without site-specific scripting.
+  - the generated `api-suite/` route gives the suite a real landing/search page instead of only embedding suite search inside each project API.
+  - when `suiteNarrativeManifest` / `suiteNarrativeManifests` are configured on `project-apidocs`, PowerForge now normalizes those manifests into `api-suite-narrative.json`.
+  - generated per-project APIs and the suite portal receive `suiteNarrativeUrl` / `narrativeUrl` metadata so sites can treat suite onboarding guidance as a first-class artifact, not a theme-specific convention.
+  - the generated suite portal now reads `api-suite-narrative.json` and renders a built-in `Start Here` section for ordered onboarding/workflow links across projects.
+  - the built-in suite search UI now also supports filtering by project/module directly in the portal.
+  - the generated suite portal now reads `api-suite-coverage.json` and surfaces a coverage summary widget for quick-start guidance gaps and top-level counts.
+  - the generated suite portal now also reads `api-suite-related-content.json` and renders a built-in `Guides & Samples` section so the suite can surface curated onboarding or walkthrough content across projects.
+  - when `suiteHomeUrl` is omitted, `project-apidocs` now uses the generated suite landing route as the default suite home link.
+- `project-apidocs` can now also consume project-specific API-doc relevance hints from catalog entries via an `apiDocs` / `api-docs` object.
+  - supported fields:
+    - `quickStartTypes`
+    - `relatedContentManifest`
+    - `relatedContentManifests`
+  - those overrides are applied per generated project API before suite aggregation, so multi-project portals can define “important entry points” and curated guides per project instead of forcing one global list across every API.
+- `project-apidocs` now supports explicit suite-level coverage gating through a `suiteCoverage` object plus `suiteFailOnCoverage`.
+  - the nested `suiteCoverage` object uses the same threshold names as `apidocs` coverage gating, for example:
+    - `minQuickStartRelatedContentPercent`
+    - `maxQuickStartMissingRelatedContentCount`
+    - `minTypeRelatedContentPercent`
+  - this evaluates the merged `api-suite-coverage.json`, not the individual per-project `coverage.json` files.
+  - `project-apidocs` also supports:
+    - `generateSuiteLandingPage`
+    - `suiteLandingUrl`
+    - `suiteNarrativeManifest`
+    - `suiteNarrativeManifests`
+  - the landing page is generated under `outRoot/api-suite/` by default and reuses the built-in API docs styles/scripts.
+- `project-apidocs` can now also gate suite onboarding quality through a `suiteNarrative` object plus `suiteFailOnNarrative`.
+  - supported thresholds:
+    - `minSectionCount`
+    - `minItemCount`
+    - `requireSummary`
+    - `minSuiteEntryCoveragePercent`
+    - `maxUncoveredSuiteEntryCount`
+  - this evaluates the normalized `api-suite-narrative.json` artifact, so CI checks authored suite guidance the same way the portal consumes it.
+- When `project-apidocs` generates a multi-project suite without the recommended starter wiring, it now emits `[PFWEB.APIDOCS.SUITE]` recommendations and summarizes them in the step message.
+  - current recommendations focus on:
+    - missing `suiteNarrativeManifest(s)`
+    - missing or partial project-level `apiDocs.quickStartTypes`
+    - missing or partial project-level `apiDocs.relatedContentManifest(s)`
+    - untouched suite scaffold state (empty catalog with scaffold starter templates still present)
+    - leaked scaffold placeholders such as `sample-project` or `sample-project-api-guides.json`
+  - this is intentionally advisory, not failing, so teams can adopt the suite contract incrementally.
+- `powerforge-web scaffold --starter-profile multi-project-api-suite` now creates the recommended starter shape directly:
+  - `data/projects/catalog.json`
+  - `data/projects/catalog.project-template.json`
+  - `data/projects/api-suite-narrative.json`
+  - `data/projects/sample-project-api-guides.json`
+  - `content/docs/projects/api-guide-template.md`
+  - `projects-sources/README.md`
+  - theme `api-header` / `api-footer` partials plus `assets/api.css`
+  - a placeholder `/projects/api-suite/` page that `project-apidocs` can replace once real project APIs exist
+  - optional `--suite-project-slug` / `--suite-project-name` / `--suite-project-surface` can now materialize a real first project entry, guide page, related-content manifest, and project source staging folder during scaffold time
+  - seeded projects now also get surface-specific source folders that match `project-apidocs` discovery (`projects-sources/<slug>/powershell/` or `projects-sources/<slug>/dotnet/`)
+  - seeded source folders now include safe `templates/` handoff files whose names intentionally do not match real discovery patterns, so maintainers can copy/replace them without accidentally generating placeholder APIs
+  - seeded source folders now also include promotion helpers (`promote-from-templates.ps1` for PowerShell, `promote-from-build.ps1` for .NET) so teams have an engine-shaped path from starter files to real inputs
 - Pipeline coverage thresholds can also gate provenance-specific example quality via `minPowerShellAuthoredHelpCodeExamplesPercent` and `minPowerShellImportedScriptCodeExamplesPercent`.
 - Pipeline coverage thresholds can also gate playback richness via `minPowerShellImportedScriptPlaybackMediaPercent`, `minPowerShellImportedScriptPlaybackMediaWithPosterPercent`, and `maxPowerShellImportedScriptPlaybackMediaWithoutPosterCount`.
 - Pipeline coverage thresholds can also gate playback asset health via `maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount`, `maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount`, and `maxPowerShellImportedScriptPlaybackMediaStaleAssetCount`.

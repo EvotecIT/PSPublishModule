@@ -67,6 +67,21 @@ public sealed class WebApiDocsResult
     public string[] Warnings { get; set; } = Array.Empty<string>();
 }
 
+/// <summary>Result payload for standalone API suite portal generation.</summary>
+public sealed class WebApiDocsSuitePortalResult
+{
+    /// <summary>Path to the suite portal output root.</summary>
+    public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Path to the suite portal index HTML file.</summary>
+    public string IndexPath { get; set; } = string.Empty;
+    /// <summary>Path to the suite portal index JSON file.</summary>
+    public string JsonPath { get; set; } = string.Empty;
+    /// <summary>Number of suite entries rendered.</summary>
+    public int EntryCount { get; set; }
+    /// <summary>Warnings emitted during generation.</summary>
+    public string[] Warnings { get; set; } = Array.Empty<string>();
+}
+
 /// <summary>Result payload for xref map merge.</summary>
 public sealed class WebXrefMergeResult
 {

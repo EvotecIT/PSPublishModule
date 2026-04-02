@@ -106,7 +106,7 @@ public static partial class WebApiDocsGenerator
             : new List<ApiTypeModel>();
     }
 
-    private static List<(string id, string label)> BuildTypeToc(ApiTypeModel type, bool hasInheritance, bool hasDerived)
+    private static List<(string id, string label)> BuildTypeToc(ApiTypeModel type, bool hasInheritance, bool hasDerived, bool hasUsage, bool hasRelatedContent)
     {
         var isPowerShellCommand = IsPowerShellCommandType(type);
         var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
@@ -122,6 +122,10 @@ public static partial class WebApiDocsGenerator
             list.Add(("derived-types", "Derived Types"));
         if (!string.IsNullOrWhiteSpace(type.Remarks))
             list.Add(("remarks", "Remarks"));
+        if (hasUsage)
+            list.Add(("usage", "Usage"));
+        if (hasRelatedContent)
+            list.Add(("guides-and-samples", "Guides & Samples"));
         if (type.TypeParameters.Count > 0)
             list.Add(("type-parameters", "Type Parameters"));
         if (type.Examples.Count > 0)

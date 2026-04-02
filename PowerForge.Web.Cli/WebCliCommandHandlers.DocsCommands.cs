@@ -63,6 +63,22 @@ internal static partial class WebCliCommandHandlers
         var memberXrefKinds = ReadOptionList(subArgs, "--member-xref-kind", "--member-xref-kinds");
         var memberXrefMaxPerType = ParseIntOption(TryGetOptionValue(subArgs, "--member-xref-max-per-type"), 0);
         var powerShellExamplesPath = TryGetOptionValue(subArgs, "--ps-examples") ?? TryGetOptionValue(subArgs, "--powershell-examples");
+        var relatedContentManifestPaths = ReadOptionList(
+            subArgs,
+            "--related-content-manifest",
+            "--related-content-manifests",
+            "--example-manifest",
+            "--example-manifests");
+        var suiteTitle = TryGetOptionValue(subArgs, "--suite-title") ?? TryGetOptionValue(subArgs, "--api-suite-title");
+        var suiteCurrentId = TryGetOptionValue(subArgs, "--suite-current-id") ?? TryGetOptionValue(subArgs, "--api-suite-current-id");
+        var suiteHomeUrl = TryGetOptionValue(subArgs, "--suite-home-url") ?? TryGetOptionValue(subArgs, "--api-suite-home-url");
+        var suiteHomeLabel = TryGetOptionValue(subArgs, "--suite-home-label") ?? TryGetOptionValue(subArgs, "--api-suite-home-label");
+        var suiteSearchUrl = TryGetOptionValue(subArgs, "--suite-search-url") ?? TryGetOptionValue(subArgs, "--api-suite-search-url");
+        var suiteXrefMapUrl = TryGetOptionValue(subArgs, "--suite-xref-url") ?? TryGetOptionValue(subArgs, "--suite-xref-map-url") ?? TryGetOptionValue(subArgs, "--api-suite-xref-map-url");
+        var suiteCoverageUrl = TryGetOptionValue(subArgs, "--suite-coverage-url") ?? TryGetOptionValue(subArgs, "--api-suite-coverage-url");
+        var suiteRelatedContentUrl = TryGetOptionValue(subArgs, "--suite-related-content-url") ?? TryGetOptionValue(subArgs, "--api-suite-related-content-url");
+        var suiteNarrativeUrl = TryGetOptionValue(subArgs, "--suite-narrative-url") ?? TryGetOptionValue(subArgs, "--api-suite-narrative-url");
+        var suiteEntryValues = GetOptionValues(subArgs, "--suite-entry");
         var generatePowerShellFallbackExamples = !HasOption(subArgs, "--no-ps-fallback-examples");
         if (HasOption(subArgs, "--ps-fallback-examples-off"))
             generatePowerShellFallbackExamples = false;
@@ -179,12 +195,25 @@ internal static partial class WebCliCommandHandlers
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
             PowerShellExamplesPath = powerShellExamplesPath,
             PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2,
+            ApiSuiteTitle = suiteTitle,
+            ApiSuiteCurrentId = suiteCurrentId,
+            ApiSuiteHomeUrl = suiteHomeUrl,
+            ApiSuiteHomeLabel = suiteHomeLabel,
+            ApiSuiteSearchUrl = suiteSearchUrl,
+            ApiSuiteXrefMapUrl = suiteXrefMapUrl,
+            ApiSuiteCoverageUrl = suiteCoverageUrl,
+            ApiSuiteRelatedContentUrl = suiteRelatedContentUrl,
+            ApiSuiteNarrativeUrl = suiteNarrativeUrl,
             GenerateGitFreshness = generateGitFreshness,
             GitFreshnessNewDays = gitFreshnessNewDays,
             GitFreshnessUpdatedDays = gitFreshnessUpdatedDays
         };
+        if (suiteEntryValues.Count > 0)
+            options.ApiSuiteEntries.AddRange(ParseApiSuiteEntries(suiteEntryValues));
         if (memberXrefKinds.Count > 0)
             options.MemberXrefKinds.AddRange(memberXrefKinds);
+        if (relatedContentManifestPaths.Count > 0)
+            options.RelatedContentManifestPaths.AddRange(relatedContentManifestPaths);
         foreach (var sourceMapValue in sourceMapValues)
         {
             if (!TryParseApiDocsSourceMap(sourceMapValue, out var mapping))
@@ -213,7 +242,8 @@ internal static partial class WebCliCommandHandlers
             navJson,
             navSurface,
             navContextPath: null,
-            powerShellExamplesPath);
+            powerShellExamplesPath,
+            relatedContentManifestPaths);
         var filteredPreflightWarnings = WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings);
 
         if (!outputJson && filteredPreflightWarnings.Length > 0)

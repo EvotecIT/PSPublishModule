@@ -45,6 +45,7 @@ Notes:
 | `PFWEB.APIDOCS.MEMBER.SIGNATURES` | Duplicate/ambiguous member signature grouping warnings. |
 | `PFWEB.APIDOCS.COVERAGE` | Coverage threshold/report warnings. |
 | `PFWEB.APIDOCS.XREF` | API docs xref generation warnings. |
+| `PFWEB.APIDOCS.SUITE` | Multi-project API suite guidance/recommendation warnings, including missing suite onboarding/curation and untouched scaffold starter placeholders. |
 | `PFWEB.APIDOCS.INPUT.*` | Input validation warnings (`INPUT.XML`, `INPUT.HELP`, `INPUT.ASSEMBLY`). |
 | `PFWEB.APIDOCS.REFLECTION` | Assembly reflection/enrichment warnings. |
 | `PFWEB.APIDOCS.SOURCE` | Source link/source mapping warnings. |

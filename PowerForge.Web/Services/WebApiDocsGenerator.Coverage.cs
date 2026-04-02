@@ -6,6 +6,7 @@ public static partial class WebApiDocsGenerator
         string outputPath,
         WebApiDocsOptions options,
         IReadOnlyList<ApiTypeModel> types,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
         string? assemblyName,
         string? assemblyVersion,
         List<string> warnings)
@@ -22,7 +23,7 @@ public static partial class WebApiDocsGenerator
 
         try
         {
-            var payload = BuildCoveragePayload(types, assemblyName, assemblyVersion);
+            var payload = BuildCoveragePayload(types, options, typeRelatedContentMap, assemblyName, assemblyVersion);
             var parent = Path.GetDirectoryName(reportPath);
             if (!string.IsNullOrWhiteSpace(parent))
                 Directory.CreateDirectory(parent);
@@ -120,8 +121,40 @@ public static partial class WebApiDocsGenerator
             $"Add matching .png/.jpg/.jpeg/.webp sidecars for better docs quality (samples: {posterPreview}{posterMore}).");
     }
 
+    private static void AppendRelatedContentCoverageWarnings(
+        IReadOnlyList<ApiTypeModel> types,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
+        List<string> warnings)
+    {
+        if (types is null || options is null || warnings is null)
+            return;
+        if (options.QuickStartTypeNames.Count == 0)
+            return;
+
+        var configuredQuickStartTypes = GetConfiguredQuickStartTypes(types, options);
+        if (configuredQuickStartTypes.Count == 0)
+            return;
+
+        var missing = configuredQuickStartTypes
+            .Where(type => !TypeHasRelatedContent(type, typeRelatedContentMap))
+            .Select(static type => type.FullName)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missing.Length == 0)
+            return;
+
+        var preview = string.Join(", ", missing.Take(6));
+        var suffix = missing.Length > 6 ? $" (+{missing.Length - 6} more)" : string.Empty;
+        warnings.Add(
+            $"API docs related content: {missing.Length} configured quickStart type(s) do not have curated guides or samples attached. " +
+            $"Add related-content manifests for better entry-point guidance (samples: {preview}{suffix}).");
+    }
+
     private static Dictionary<string, object?> BuildCoveragePayload(
         IReadOnlyList<ApiTypeModel> types,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
         string? assemblyName,
         string? assemblyVersion)
     {
@@ -132,6 +165,7 @@ public static partial class WebApiDocsGenerator
         var typesWithCodeExamples = safeTypes.Count(static t => t.Examples.Any(static ex =>
             ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(ex.Text)));
+        var typesWithRelatedContent = safeTypes.Count(type => TypeHasRelatedContent(type, typeRelatedContentMap));
 
         var totalMembers = safeTypes.Sum(static t => t.Methods.Count + t.Constructors.Count + t.Properties.Count + t.Fields.Count + t.Events.Count + t.ExtensionMethods.Count);
         var allMembers = safeTypes
@@ -146,6 +180,7 @@ public static partial class WebApiDocsGenerator
         var membersWithCodeExamples = allMembers.Count(static m => m.Examples.Any(static ex =>
             ex.Kind.Equals("code", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(ex.Text)));
+        var membersWithRelatedContent = allMembers.Count(member => MemberHasRelatedContent(member, typeRelatedContentMap));
         var typeSourceCoverage = AnalyzeSourceCoverage(safeTypes.Select(static t => t.Source));
         var memberSourceCoverage = AnalyzeSourceCoverage(allMembers.Select(static m => m.Source));
 
@@ -240,6 +275,14 @@ public static partial class WebApiDocsGenerator
             .ToArray();
         var commandParameterCount = commandParameterCoverage.Sum(static x => x.Parameters.Length);
         var commandParametersWithSummary = commandParameterCoverage.Sum(static x => x.Parameters.Count(static p => !string.IsNullOrWhiteSpace(p.Summary)));
+        var configuredQuickStartTypes = GetConfiguredQuickStartTypes(safeTypes, options);
+        var quickStartTypesWithRelatedContent = configuredQuickStartTypes.Count(type => TypeHasRelatedContent(type, typeRelatedContentMap));
+        var quickStartTypesMissingRelatedContent = configuredQuickStartTypes
+            .Where(type => !TypeHasRelatedContent(type, typeRelatedContentMap))
+            .Select(static type => type.FullName)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .Take(100)
+            .ToArray();
 
         static Dictionary<string, object?> MakeCoverage(int total, int covered)
         {
@@ -266,13 +309,21 @@ public static partial class WebApiDocsGenerator
                 ["byKind"] = kinds,
                 ["summary"] = MakeCoverage(typeCount, typesWithSummary),
                 ["remarks"] = MakeCoverage(typeCount, typesWithRemarks),
-                ["codeExamples"] = MakeCoverage(typeCount, typesWithCodeExamples)
+                ["codeExamples"] = MakeCoverage(typeCount, typesWithCodeExamples),
+                ["relatedContent"] = MakeCoverage(typeCount, typesWithRelatedContent),
+                ["quickStartRelatedContent"] = MakeCoverage(configuredQuickStartTypes.Count, quickStartTypesWithRelatedContent),
+                ["quickStartMissingRelatedContent"] = new Dictionary<string, object?>
+                {
+                    ["count"] = quickStartTypesMissingRelatedContent.Length,
+                    ["types"] = quickStartTypesMissingRelatedContent
+                }
             },
             ["members"] = new Dictionary<string, object?>
             {
                 ["count"] = totalMembers,
                 ["summary"] = MakeCoverage(totalMembers, membersWithSummary),
-                ["codeExamples"] = MakeCoverage(totalMembers, membersWithCodeExamples)
+                ["codeExamples"] = MakeCoverage(totalMembers, membersWithCodeExamples),
+                ["relatedContent"] = MakeCoverage(totalMembers, membersWithRelatedContent)
             },
             ["source"] = new Dictionary<string, object?>
             {
@@ -309,6 +360,50 @@ public static partial class WebApiDocsGenerator
                 ["commandsUsingImportedScriptPlaybackMediaStaleAssets"] = commandsUsingImportedScriptPlaybackMediaStaleAssets
             }
         };
+    }
+
+    private static bool TypeHasRelatedContent(
+        ApiTypeModel type,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap)
+    {
+        if (type is null || typeRelatedContentMap is null)
+            return false;
+
+        return typeRelatedContentMap.TryGetValue(type.FullName, out var relatedContent) &&
+               relatedContent is not null &&
+               relatedContent.HasEntries;
+    }
+
+    private static bool MemberHasRelatedContent(
+        ApiMemberModel member,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap)
+    {
+        if (member is null || typeRelatedContentMap is null)
+            return false;
+
+        foreach (var relatedContent in typeRelatedContentMap.Values)
+        {
+            if (relatedContent?.MemberEntries is null)
+                continue;
+
+            if (relatedContent.MemberEntries.TryGetValue(member, out var entries) && entries.Count > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyList<ApiTypeModel> GetConfiguredQuickStartTypes(
+        IReadOnlyList<ApiTypeModel> types,
+        WebApiDocsOptions options)
+    {
+        if (types is null || types.Count == 0 || options is null || options.QuickStartTypeNames.Count == 0)
+            return Array.Empty<ApiTypeModel>();
+
+        var results = new List<ApiTypeModel>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddMainTypeMatches(results, seen, types, options.QuickStartTypeNames);
+        return results;
     }
 
     private static void AppendSourceCoverageWarning(
