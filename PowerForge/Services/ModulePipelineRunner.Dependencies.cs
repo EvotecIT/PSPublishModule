@@ -18,11 +18,11 @@ public sealed partial class ModulePipelineRunner
         if (required.Length == 0)
         {
             var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-            if (File.Exists(manifestPath) &&
-                ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? fromManifest) &&
-                fromManifest is not null)
+            if (File.Exists(manifestPath))
             {
-                required = fromManifest;
+                var fromManifest = ModuleManifestValueReader.ReadRequiredModules(manifestPath);
+                if (fromManifest.Length > 0)
+                    required = fromManifest;
             }
         }
 
@@ -89,27 +89,6 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
-    private static string? ResolveAutoOrLatest(string? value, string? installedVersion)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        var trimmed = value!.Trim();
-        if (trimmed.Equals("Latest", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-        {
-            return string.IsNullOrWhiteSpace(installedVersion) ? null : installedVersion;
-        }
-        return trimmed;
-    }
-
-    private static string? ResolveAutoGuid(string? value, string? installedGuid)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        var trimmed = value!.Trim();
-        if (trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-            return string.IsNullOrWhiteSpace(installedGuid) ? null : installedGuid;
-        return trimmed;
-    }
-
     private Dictionary<string, InstalledModuleReference> TryGetLatestInstalledModuleInfo(IReadOnlyList<string> names)
     {
         var list = (names ?? Array.Empty<string>())
@@ -174,7 +153,7 @@ public sealed partial class ModulePipelineRunner
             var psrg = new PSResourceGetClient(_powerShellRunner, _logger);
             var opts = new PSResourceFindOptions(list, version: null, prerelease: prerelease, repositories: repos, credential: credential);
             items = psrg.Find(opts, timeout: TimeSpan.FromMinutes(2));
-            resolved = SelectLatestVersions(items, prerelease);
+            resolved = RequiredModuleResolutionEngine.SelectLatestVersions(items, prerelease);
             if (resolved.Count > 0) return resolved;
         }
         catch (PowerShellToolNotAvailableException)
@@ -192,7 +171,7 @@ public sealed partial class ModulePipelineRunner
             var useRepos = repos.Length == 0 ? new[] { "PSGallery" } : repos;
             var opts = new PowerShellGetFindOptions(list, prerelease: prerelease, repositories: useRepos, credential: credential);
             items = psg.Find(opts, timeout: TimeSpan.FromMinutes(2));
-            resolved = SelectLatestVersions(items, prerelease);
+            resolved = RequiredModuleResolutionEngine.SelectLatestVersions(items, prerelease);
         }
         catch (PowerShellToolNotAvailableException ex)
         {
@@ -216,70 +195,6 @@ public sealed partial class ModulePipelineRunner
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
-
-    private static Dictionary<string, (string? Version, string? Guid)> SelectLatestVersions(IEnumerable<PSResourceInfo> items, bool allowPrerelease)
-    {
-        var map = new Dictionary<string, (Version Version, string? Pre, string Raw, string? Guid)>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in items ?? Array.Empty<PSResourceInfo>())
-        {
-            if (item is null || string.IsNullOrWhiteSpace(item.Name) || string.IsNullOrWhiteSpace(item.Version))
-                continue;
-
-            if (!TryParseVersionParts(item.Version, out var version, out var pre))
-                continue;
-
-            if (!allowPrerelease && !string.IsNullOrWhiteSpace(pre))
-                continue;
-
-            if (!map.TryGetValue(item.Name, out var current))
-            {
-                map[item.Name] = (version, pre, item.Version, item.Guid);
-                continue;
-            }
-
-            if (CompareVersionParts(version, pre, current.Version, current.Pre) > 0)
-                map[item.Name] = (version, pre, item.Version, item.Guid);
-        }
-
-        var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in map)
-            result[kvp.Key] = (kvp.Value.Raw, kvp.Value.Guid);
-        return result;
-    }
-
-    private static bool TryParseVersionParts(string text, out Version version, out string? preRelease)
-    {
-        preRelease = null;
-        version = new Version(0, 0, 0, 0);
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        var trimmed = text.Trim();
-        var parts = trimmed.Split(new[] { '-' }, 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return false;
-        if (!Version.TryParse(parts[0], out var parsed) || parsed is null) return false;
-        version = parsed;
-        if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
-            preRelease = parts[1].Trim();
-        return true;
-    }
-
-    private static int CompareVersionParts(Version a, string? preA, Version b, string? preB)
-    {
-        var cmp = a.CompareTo(b);
-        if (cmp != 0) return cmp;
-
-        var hasPreA = !string.IsNullOrWhiteSpace(preA);
-        var hasPreB = !string.IsNullOrWhiteSpace(preB);
-        if (hasPreA == hasPreB)
-        {
-            if (!hasPreA) return 0;
-            return string.Compare(preA, preB, StringComparison.OrdinalIgnoreCase);
-        }
-
-        // Release > prerelease when same core version
-        return hasPreA ? -1 : 1;
     }
 
 }
