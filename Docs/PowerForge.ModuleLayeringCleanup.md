@@ -146,6 +146,7 @@ Current status:
 - `IModuleDependencyMetadataProvider` now separates required-module and binary-conflict metadata lookup from `ModulePipelineRunner`, with `PowerShellModuleDependencyMetadataProvider` in `PowerForge.PowerShell` as the current implementation seam.
 - `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
 - Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
+- `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
 - The next extraction target is the remaining execution context inside `ModulePipelineRunner*`, especially the larger run-loop decomposition and any leftover PowerShell-runner/file-formatting coupling.
 
 ### Phase 4: Publish and validation decomposition
@@ -166,4 +167,4 @@ The safest first PR after this document is:
 4. Update `PowerForge.PowerShell.csproj` to stop linking files that now belong to core.
 5. Keep namespaces stable in these early slices to avoid unnecessary downstream churn.
 
-That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModulePipelineRunner` metadata discovery, validation, and the remaining PowerShell-hosted execution helpers.
+That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModulePipelineRunner` run-loop decomposition, publish/validation coordination, and the remaining PowerShell-hosted execution helpers.

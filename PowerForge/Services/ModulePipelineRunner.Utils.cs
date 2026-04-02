@@ -172,16 +172,4 @@ public sealed partial class ModulePipelineRunner
             File.Copy(full, target, overwrite: true);
         }
     }
-
-    private sealed class NullModulePipelineProgressReporter : IModulePipelineProgressReporter
-    {
-        public static readonly NullModulePipelineProgressReporter Instance = new();
-
-        private NullModulePipelineProgressReporter() { }
-
-        public void StepStarting(ModulePipelineStep step) { }
-        public void StepCompleted(ModulePipelineStep step) { }
-        public void StepFailed(ModulePipelineStep step, Exception error) { }
-    }
-
 }
