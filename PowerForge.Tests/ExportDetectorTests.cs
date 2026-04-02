@@ -9,7 +9,7 @@ public sealed class ExportDetectorTests
     public void DetectBinaryCmdlets_finds_CmdletAttribute()
     {
         var path = typeof(GetExampleCommand).Assembly.Location;
-        var cmdlets = ExportDetector.DetectBinaryCmdlets(new[] { path });
+        var cmdlets = BinaryExportDetector.DetectBinaryCmdlets(new[] { path });
 
         Assert.Contains("Get-Example", cmdlets);
     }
@@ -18,7 +18,7 @@ public sealed class ExportDetectorTests
     public void DetectBinaryAliases_finds_AliasAttribute()
     {
         var path = typeof(GetExampleCommand).Assembly.Location;
-        var aliases = ExportDetector.DetectBinaryAliases(new[] { path });
+        var aliases = BinaryExportDetector.DetectBinaryAliases(new[] { path });
 
         Assert.Contains("gex", aliases);
         Assert.Contains("Get-ExampleAlias", aliases);
@@ -42,7 +42,7 @@ function Install-Example {
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-            var functions = ExportDetector.DetectScriptFunctions(new[] { scriptPath });
+            var functions = new PowerShellScriptFunctionExportDetector().DetectScriptFunctions(new[] { scriptPath });
 
             Assert.Contains("Install-Example", functions);
             Assert.DoesNotContain("Write-DeliveryError", functions);

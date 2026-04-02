@@ -2,43 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation.Language;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
 namespace PowerForge;
 
 /// <summary>
-/// Detects public functions from scripts and cmdlets/aliases from binaries for manifest export lists.
+/// Detects cmdlets and aliases from binary assemblies for manifest export lists.
 /// </summary>
-public static class ExportDetector
+public static class BinaryExportDetector
 {
-    /// <summary>Detects function names defined in the provided PowerShell script files.</summary>
-    public static IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in scriptFiles ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrWhiteSpace(file) || !File.Exists(file)) continue;
-            try
-            {
-                Token[] tokens; ParseError[] errors;
-                var ast = Parser.ParseFile(file, out tokens, out errors);
-                if (errors != null && errors.Length > 0) continue;
-                var funcs = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false).Cast<FunctionDefinitionAst>();
-                foreach (var f in funcs)
-                {
-                    // Use the declared function name; skip private helper names starting with '_' by convention
-                    var name = f.Name;
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-                    result.Add(name);
-                }
-            }
-            catch { /* ignore */ }
-        }
-        return result.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToArray();
-    }
-
     /// <summary>Detects cmdlet names from the provided assemblies by scanning for CmdletAttribute.</summary>
     public static IReadOnlyList<string> DetectBinaryCmdlets(IEnumerable<string> assemblyPaths)
     {

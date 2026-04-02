@@ -10,6 +10,8 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private static readonly IScriptFunctionExportDetector ScriptFunctionExportDetector = new PowerShellScriptFunctionExportDetector();
+
     /// <summary>
     /// Executes the pipeline described by <paramref name="spec"/>.
     /// </summary>
@@ -132,7 +134,7 @@ public sealed partial class ModulePipelineRunner
                                 if (Directory.Exists(publicFolder))
                                 {
                                     var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
-                                    var functions = ExportDetector.DetectScriptFunctions(scripts);
+                                    var functions = ScriptFunctionExportDetector.DetectScriptFunctions(scripts);
                                     BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
                                 }
 

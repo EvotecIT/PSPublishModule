@@ -14,23 +14,20 @@ public sealed class ModuleBuilder
 {
     private readonly ILogger _logger;
     private readonly IModuleManifestMutator _manifestMutator;
-
-    /// <summary>
-    /// Creates a new module builder that logs progress via <paramref name="logger"/>.
-    /// </summary>
-    public ModuleBuilder(ILogger logger)
-        : this(logger, new AstModuleManifestMutator())
-    {
-    }
+    private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
 
     /// <summary>
     /// Creates a new module builder that logs progress via <paramref name="logger"/> and mutates manifests via
-    /// <paramref name="manifestMutator"/>.
+    /// <paramref name="manifestMutator"/> while detecting script exports via <paramref name="scriptFunctionExportDetector"/>.
     /// </summary>
-    public ModuleBuilder(ILogger logger, IModuleManifestMutator manifestMutator)
+    public ModuleBuilder(
+        ILogger logger,
+        IModuleManifestMutator manifestMutator,
+        IScriptFunctionExportDetector scriptFunctionExportDetector)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _manifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        _scriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
     }
 
     /// <summary>
@@ -259,7 +256,7 @@ public sealed class ModuleBuilder
         }
 
         if (scripts.Length > 0)
-            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
+            functionsToSet = _scriptFunctionExportDetector.DetectScriptFunctions(scripts);
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
@@ -272,8 +269,8 @@ public sealed class ModuleBuilder
             }
             else
             {
-                var detectedCmdlets = ExportDetector.DetectBinaryCmdlets(exportDlls);
-                var detectedAliases = ExportDetector.DetectBinaryAliases(exportDlls);
+                var detectedCmdlets = BinaryExportDetector.DetectBinaryCmdlets(exportDlls);
+                var detectedAliases = BinaryExportDetector.DetectBinaryAliases(exportDlls);
 
                 if (detectedCmdlets.Count == 0 && detectedAliases.Count == 0)
                 {
