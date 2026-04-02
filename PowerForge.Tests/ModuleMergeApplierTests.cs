@@ -7,6 +7,32 @@ namespace PowerForge.Tests;
 public sealed class ModuleMergeApplierTests
 {
     [Fact]
+    public void Apply_WarnsAndReturnsWithoutMerge_WhenNoScriptsOrPsm1Exist()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var logger = new CollectingLogger();
+            var plan = CreatePlan(root.FullName, mergeModule: true, mergeMissing: false);
+            var mergeSources = new ModuleMergeSources(
+                psm1Path: Path.Combine(root.FullName, "Missing.psm1"),
+                scriptFiles: Array.Empty<string>(),
+                mergedScriptContent: string.Empty,
+                hasLib: false);
+
+            var outcome = ModuleMergeApplier.Apply(logger, plan, mergeSources, missingReport: null);
+
+            Assert.False(outcome.MergedModule);
+            Assert.False(outcome.UsedExistingPsm1);
+            Assert.Contains(logger.Warnings, static warning => warning.Contains("no script sources or PSM1 file were found", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Apply_WarnsAndKeepsBootstrapper_WhenBinaryOutputsAreDetected()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

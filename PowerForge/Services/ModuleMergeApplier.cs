@@ -4,16 +4,6 @@ namespace PowerForge;
 
 internal sealed class ModuleMergeApplicationOutcome
 {
-    internal static readonly ModuleMergeApplicationOutcome None = new(
-        mergedModule: false,
-        usedExistingPsm1: false,
-        retainedBootstrapperBecauseBinaryOutputsDetected: false,
-        topLevelInlinedFunctions: 0,
-        totalInlinedFunctions: 0,
-        scriptFilesDetected: 0,
-        hasBinaryOutputs: false,
-        hasScriptSources: false);
-
     internal ModuleMergeApplicationOutcome(
         bool mergedModule,
         bool usedExistingPsm1,

@@ -21,6 +21,21 @@ public sealed partial class ModulePipelineRunner
             plan.Information,
             buildResult.Exports,
             fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths);
+        if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
+        {
+            return new MergeExecutionResult(
+                mergedModule: false,
+                usedExistingPsm1: false,
+                retainedBootstrapperBecauseBinaryOutputsDetected: false,
+                requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
+                approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
+                dependentModules: Array.Empty<string>(),
+                topLevelInlinedFunctions: 0,
+                totalInlinedFunctions: 0,
+                scriptFilesDetected: 0,
+                hasBinaryOutputs: mergeInfo.HasLib,
+                hasScriptSources: false);
+        }
         string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
         string? analysisPath = mergeInfo.HasScripts ? null : mergeInfo.Psm1Path;
 
