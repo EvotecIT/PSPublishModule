@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -148,6 +149,40 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
         }
     }
 
+    [Fact]
+    public void MissingAnalysis_ResolvesDependentModules_UsingInjectedDependencyMetadataProvider()
+    {
+        var provider = new FakeModuleDependencyMetadataProvider(
+            installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+            onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+            installedRequiredModules: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Alpha.Tools"] = new[] { "Beta.Tools", "Gamma.Tools" },
+                ["Beta.Tools"] = new[] { "Gamma.Tools", "Delta.Tools" },
+                ["Gamma.Tools"] = Array.Empty<string>(),
+                ["Delta.Tools"] = Array.Empty<string>()
+            });
+
+        var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+        var method = typeof(ModulePipelineRunner).GetMethod("ResolveDependentRequiredModules", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.True(method is not null, "ResolveDependentRequiredModules method signature may have changed.");
+
+        var dependencies = (string[])method!.Invoke(
+            runner,
+            new object?[]
+            {
+                new[] { "Alpha.Tools" },
+                Array.Empty<string>()
+            })!;
+
+        Assert.Equal(3, dependencies.Length);
+        Assert.Contains("Beta.Tools", dependencies);
+        Assert.Contains("Gamma.Tools", dependencies);
+        Assert.Contains("Delta.Tools", dependencies);
+        Assert.Equal(4, provider.RequiredModuleLookups);
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -222,16 +257,20 @@ public sealed class Marker
     {
         private readonly IReadOnlyDictionary<string, InstalledModuleMetadata> _installedModules;
         private readonly IReadOnlyDictionary<string, (string? Version, string? Guid)> _onlineModules;
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> _installedRequiredModules;
 
         internal int InstalledLookups { get; private set; }
         internal int OnlineLookups { get; private set; }
+        internal int RequiredModuleLookups { get; private set; }
 
         internal FakeModuleDependencyMetadataProvider(
             IReadOnlyDictionary<string, InstalledModuleMetadata> installedModules,
-            IReadOnlyDictionary<string, (string? Version, string? Guid)> onlineModules)
+            IReadOnlyDictionary<string, (string? Version, string? Guid)> onlineModules,
+            IReadOnlyDictionary<string, IReadOnlyList<string>>? installedRequiredModules = null)
         {
             _installedModules = installedModules;
             _onlineModules = onlineModules;
+            _installedRequiredModules = installedRequiredModules ?? new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         }
 
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
@@ -247,6 +286,17 @@ public sealed class Marker
             }
 
             return result;
+        }
+
+        public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
+        {
+            RequiredModuleLookups++;
+            if (string.IsNullOrWhiteSpace(moduleName))
+                return Array.Empty<string>();
+
+            return _installedRequiredModules.TryGetValue(moduleName, out var modules)
+                ? modules
+                : Array.Empty<string>();
         }
 
         public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(

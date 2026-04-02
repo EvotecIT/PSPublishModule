@@ -65,6 +65,37 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         return map;
     }
 
+    public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName))
+            return Array.Empty<string>();
+
+        try
+        {
+            var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
+            var result = RunScript(script, new[] { moduleName.Trim() }, TimeSpan.FromMinutes(1));
+            if (result.ExitCode != 0)
+            {
+                _logger.Warn($"Failed to resolve required modules for '{moduleName}'.");
+                if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+                if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+                return Array.Empty<string>();
+            }
+
+            return SplitLines(result.StdOut)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return Array.Empty<string>();
+        }
+    }
+
     public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
         IReadOnlyCollection<string> names,
         string? repository,

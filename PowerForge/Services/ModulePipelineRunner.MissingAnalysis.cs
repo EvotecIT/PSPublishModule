@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
-using System.Management.Automation.Runspaces;
 using System.Text;
 using System.Text.Json;
 
@@ -10,20 +8,19 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private MissingFunctionsReport? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
+    private MissingFunctionAnalysisResult? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
     {
         if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(code))
             return null;
 
         var approved = plan.ApprovedModules ?? Array.Empty<string>();
-        var analyzer = new MissingFunctionsAnalyzer();
         var options = new MissingFunctionsOptions(
             approvedModules: approved,
             ignoreFunctions: Array.Empty<string>(),
             includeFunctionsRecursively: true);
         try
         {
-            return analyzer.Analyze(filePath, code, options);
+            return _missingFunctionAnalysisService.Analyze(filePath, code, options);
         }
         catch (Exception ex)
         {
@@ -45,7 +42,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private void ValidateMissingFunctions(
-        MissingFunctionsReport report,
+        MissingFunctionAnalysisResult report,
         ModulePipelinePlan plan,
         IReadOnlyCollection<string>? dependentModules)
     {
@@ -278,8 +275,8 @@ public sealed partial class ModulePipelineRunner
 
     private void LogMergeSummary(
         ModulePipelinePlan plan,
-        MergeSourceInfo mergeInfo,
-        MissingFunctionsReport? missingReport,
+        ModuleMergeSources mergeInfo,
+        MissingFunctionAnalysisResult? missingReport,
         IReadOnlyCollection<string>? dependentModules)
     {
         if (plan is null) return;
@@ -408,7 +405,7 @@ public sealed partial class ModulePipelineRunner
         if (!visited.Add(moduleName))
             return;
 
-        var required = GetRequiredModulesFromInstalledModule(moduleName);
+        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName);
         foreach (var dep in required)
         {
             if (string.IsNullOrWhiteSpace(dep))
@@ -416,39 +413,6 @@ public sealed partial class ModulePipelineRunner
             if (output.Add(dep))
                 CollectModuleDependencies(dep, visited, output);
         }
-    }
-
-    private string[] GetRequiredModulesFromInstalledModule(string moduleName)
-    {
-        try
-        {
-            using var ps = CreatePowerShell();
-            var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
-            ps.AddScript(script).AddArgument(moduleName);
-            var results = ps.Invoke();
-            if (ps.HadErrors || results is null)
-                return Array.Empty<string>();
-
-            return results
-                .Select(r => r?.BaseObject?.ToString())
-                .Where(n => !string.IsNullOrWhiteSpace(n))
-                .Select(n => n!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
-            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-            return Array.Empty<string>();
-        }
-    }
-
-    private static PowerShell CreatePowerShell()
-    {
-        if (Runspace.DefaultRunspace is null)
-            return PowerShell.Create();
-        return PowerShell.Create(RunspaceMode.CurrentRunspace);
     }
 
     private static bool IsBuiltInModule(string moduleName)
@@ -512,23 +476,6 @@ public sealed partial class ModulePipelineRunner
 
     private static bool IsBuiltInCommand(string name)
         => BuiltInCommandNames.Contains(name);
-
-    private sealed class MergeSourceInfo
-    {
-        public MergeSourceInfo(string psm1Path, string[] scriptFiles, string mergedScriptContent, bool hasLib)
-        {
-            Psm1Path = psm1Path;
-            ScriptFiles = scriptFiles ?? Array.Empty<string>();
-            MergedScriptContent = mergedScriptContent ?? string.Empty;
-            HasLib = hasLib;
-        }
-
-        public string Psm1Path { get; }
-        public string[] ScriptFiles { get; }
-        public string MergedScriptContent { get; }
-        public bool HasLib { get; }
-        public bool HasScripts => ScriptFiles.Length > 0;
-    }
 
     private sealed class MergeExecutionResult
     {

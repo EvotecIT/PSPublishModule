@@ -729,7 +729,7 @@ public sealed partial class ModulePipelineRunner
             {
                 var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
                 var functions = ScriptFunctionExportDetector.DetectScriptFunctions(scripts);
-                BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
+                _manifestMutator.TrySetManifestExports(buildResult.ManifestPath, functions.ToArray(), cmdlets: null, aliases: null);
             }
 
             if (mergedScripts)

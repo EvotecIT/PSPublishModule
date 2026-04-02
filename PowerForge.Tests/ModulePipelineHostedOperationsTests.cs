@@ -3,12 +3,27 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class ModulePipelineHostedOperationsTests
 {
+    [Fact]
+    public void DefaultRunnerServices_ReuseProvidedPowerShellRunner()
+    {
+        var powerShellRunner = new RecordingPowerShellRunner(_ => new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh"));
+
+        var services = ModulePipelineRunnerDefaults.Create(new NullLogger(), powerShellRunner, null, null, null, null);
+
+        Assert.Same(powerShellRunner, services.PowerShellRunner);
+        Assert.IsType<PowerShellModuleDependencyMetadataProvider>(services.ModuleDependencyMetadataProvider);
+        Assert.IsType<PowerShellModulePipelineHostedOperations>(services.HostedOperations);
+        Assert.IsType<PowerShellMissingFunctionAnalysisService>(services.MissingFunctionAnalysisService);
+    }
+
     [Fact]
     public void EnsureBuildDependenciesInstalledIfNeeded_UsesInjectedHostedOperations()
     {
@@ -69,6 +84,68 @@ public sealed class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Fact]
+    public void ValidateModuleImports_UsesInjectedPowerShellRunner()
+    {
+        var requests = new List<PowerShellRunRequest>();
+        var runner = new RecordingPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+        });
+
+        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger());
+        operations.ValidateModuleImports(
+            manifestPath: @"C:\Temp\TestModule\TestModule.psd1",
+            modules: Array.Empty<ImportModuleEntry>(),
+            importRequired: true,
+            importSelf: false,
+            verbose: true,
+            targets: new[]
+            {
+                new ModuleImportValidationTarget("pwsh", "Core", preferPwsh: true)
+            });
+
+        var request = Assert.Single(requests);
+        Assert.Equal(PowerShellInvocationMode.File, request.InvocationMode);
+        Assert.True(request.PreferPwsh);
+        Assert.EndsWith(".ps1", request.ScriptPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SignModuleOutput_UsesInjectedPowerShellRunner()
+    {
+        var requests = new List<PowerShellRunRequest>();
+        var summary = new ModuleSigningResult
+        {
+            TotalMatched = 1,
+            TotalAfterExclude = 1,
+            Attempted = 1,
+            SignedNew = 1,
+            Resigned = 0,
+            Failed = 0
+        };
+        var stdout = "PFSIGN::SUMMARY::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(summary)));
+        var runner = new RecordingPowerShellRunner(request =>
+        {
+            requests.Add(request);
+            return new PowerShellRunResult(0, stdout, string.Empty, "pwsh");
+        });
+
+        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger());
+        var result = operations.SignModuleOutput(
+            moduleName: "TestModule",
+            rootPath: @"C:\Temp\TestModule",
+            includePatterns: new[] { "*.psm1" },
+            excludeSubstrings: Array.Empty<string>(),
+            signing: new SigningOptionsConfiguration());
+
+        var request = Assert.Single(requests);
+        Assert.Equal(PowerShellInvocationMode.File, request.InvocationMode);
+        Assert.True(request.PreferPwsh);
+        Assert.Equal(1, result.SignedNew);
+    }
+
     private static ModuleDependencyInstallResult[] InvokeEnsureBuildDependenciesInstalledIfNeeded(ModulePipelineRunner runner, ModulePipelinePlan plan)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -104,6 +181,9 @@ public sealed class ModulePipelineHostedOperationsTests
                     static name => name,
                     static name => new InstalledModuleMetadata(name, null, null, null),
                     StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<string>();
 
         public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
             IReadOnlyCollection<string> names,
@@ -196,5 +276,18 @@ public sealed class ModulePipelineHostedOperationsTests
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => throw new InvalidOperationException("PowerShell runner should not be used in this test.");
+    }
+
+    private sealed class RecordingPowerShellRunner : IPowerShellRunner
+    {
+        private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
+
+        public RecordingPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> run)
+        {
+            _run = run;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _run(request);
     }
 }

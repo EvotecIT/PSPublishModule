@@ -399,7 +399,7 @@ public sealed partial class ModulePipelineRunner
         return value > max ? max : value;
     }
 
-    private static void ApplyDeliveryMetadata(string manifestPath, DeliveryOptionsConfiguration delivery)
+    private void ApplyDeliveryMetadata(string manifestPath, DeliveryOptionsConfiguration delivery)
     {
         if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath)) return;
         if (delivery is null || !delivery.Enable) return;
@@ -412,20 +412,20 @@ public sealed partial class ModulePipelineRunner
 
             void ApplyTo(string parentKey)
             {
-                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "Schema", delivery.Schema ?? "1.4");
-                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "Enable", delivery.Enable);
-                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "InternalsPath", internals);
-                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootReadme", delivery.IncludeRootReadme);
-                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootChangelog", delivery.IncludeRootChangelog);
-                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootLicense", delivery.IncludeRootLicense);
-                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "ReadmeDestination", delivery.ReadmeDestination.ToString());
-                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "ChangelogDestination", delivery.ChangelogDestination.ToString());
-                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "LicenseDestination", delivery.LicenseDestination.ToString());
+                _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "Schema", delivery.Schema ?? "1.4");
+                _manifestMutator.TrySetPsDataSubBool(manifestPath, parentKey, "Enable", delivery.Enable);
+                _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "InternalsPath", internals);
+                _manifestMutator.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootReadme", delivery.IncludeRootReadme);
+                _manifestMutator.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootChangelog", delivery.IncludeRootChangelog);
+                _manifestMutator.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootLicense", delivery.IncludeRootLicense);
+                _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "ReadmeDestination", delivery.ReadmeDestination.ToString());
+                _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "ChangelogDestination", delivery.ChangelogDestination.ToString());
+                _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "LicenseDestination", delivery.LicenseDestination.ToString());
 
                 if (!string.IsNullOrWhiteSpace(delivery.IntroFile))
-                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "IntroFile", delivery.IntroFile!.Trim());
+                    _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "IntroFile", delivery.IntroFile!.Trim());
                 if (!string.IsNullOrWhiteSpace(delivery.UpgradeFile))
-                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "UpgradeFile", delivery.UpgradeFile!.Trim());
+                    _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "UpgradeFile", delivery.UpgradeFile!.Trim());
 
                 if (delivery.DocumentationOrder is { Length: > 0 })
                 {
@@ -434,7 +434,7 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (ordered.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "DocumentationOrder", ordered);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "DocumentationOrder", ordered);
                 }
 
                 if (delivery.RepositoryPaths is { Length: > 0 })
@@ -444,7 +444,7 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (repoPaths.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "RepositoryPaths", repoPaths);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "RepositoryPaths", repoPaths);
                 }
 
                 if (delivery.PreservePaths is { Length: > 0 })
@@ -454,7 +454,7 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (preserve.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "PreservePaths", preserve);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "PreservePaths", preserve);
                 }
 
                 if (delivery.OverwritePaths is { Length: > 0 })
@@ -464,11 +464,11 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (overwrite.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "OverwritePaths", overwrite);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "OverwritePaths", overwrite);
                 }
 
                 if (!string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
-                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "RepositoryBranch", delivery.RepositoryBranch!.Trim());
+                    _manifestMutator.TrySetPsDataSubString(manifestPath, parentKey, "RepositoryBranch", delivery.RepositoryBranch!.Trim());
 
                 if (delivery.IntroText is { Length: > 0 })
                 {
@@ -477,7 +477,7 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (intro.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "IntroText", intro);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "IntroText", intro);
                 }
 
                 if (delivery.UpgradeText is { Length: > 0 })
@@ -487,7 +487,7 @@ public sealed partial class ModulePipelineRunner
                         .Select(s => s.Trim())
                         .ToArray();
                     if (upgrade.Length > 0)
-                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "UpgradeText", upgrade);
+                        _manifestMutator.TrySetPsDataSubStringArray(manifestPath, parentKey, "UpgradeText", upgrade);
                 }
 
                 if (delivery.ImportantLinks is { Length: > 0 })
@@ -502,7 +502,7 @@ public sealed partial class ModulePipelineRunner
                         .ToArray();
 
                     if (items.Length > 0)
-                        ManifestEditor.TrySetPsDataSubHashtableArray(manifestPath, parentKey, "ImportantLinks", items);
+                        _manifestMutator.TrySetPsDataSubHashtableArray(manifestPath, parentKey, "ImportantLinks", items);
                 }
             }
 
@@ -510,7 +510,7 @@ public sealed partial class ModulePipelineRunner
 
             if (delivery.RepositoryPaths is { Length: > 0 } || !string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
             {
-                BuildServices.SetRepository(
+                _manifestMutator.TrySetRepository(
                     manifestPath,
                     branch: string.IsNullOrWhiteSpace(delivery.RepositoryBranch) ? null : delivery.RepositoryBranch!.Trim(),
                     paths: delivery.RepositoryPaths);

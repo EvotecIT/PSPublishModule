@@ -1,9 +1,5 @@
-using System.Collections.Generic;
+using System;
 using System.IO;
-using System.Linq;
-using System.Management.Automation;
-using System.Management.Automation.Runspaces;
-using System.Text;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -41,6 +37,8 @@ public sealed partial class ModulePipelineRunner
     private readonly IPowerShellRunner _powerShellRunner;
     private readonly IModuleDependencyMetadataProvider _moduleDependencyMetadataProvider;
     private readonly IModulePipelineHostedOperations _hostedOperations;
+    private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IMissingFunctionAnalysisService _missingFunctionAnalysisService;
 
     private sealed class RequiredModuleDraft
     {
@@ -64,7 +62,7 @@ public sealed partial class ModulePipelineRunner
     /// Creates a new instance using the provided logger.
     /// </summary>
     public ModulePipelineRunner(ILogger logger, IPowerShellRunner? powerShellRunner = null)
-        : this(logger, powerShellRunner, moduleDependencyMetadataProvider: null, hostedOperations: null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider: null, hostedOperations: null, manifestMutator: null, missingFunctionAnalysisService: null))
     {
     }
 
@@ -72,12 +70,24 @@ public sealed partial class ModulePipelineRunner
         ILogger logger,
         IPowerShellRunner? powerShellRunner,
         IModuleDependencyMetadataProvider? moduleDependencyMetadataProvider,
-        IModulePipelineHostedOperations? hostedOperations = null)
+        IModulePipelineHostedOperations? hostedOperations = null,
+        IModuleManifestMutator? manifestMutator = null,
+        IMissingFunctionAnalysisService? missingFunctionAnalysisService = null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService))
     {
-        _logger = logger;
-        _powerShellRunner = powerShellRunner ?? new PowerShellRunner();
-        _moduleDependencyMetadataProvider = moduleDependencyMetadataProvider ?? new PowerShellModuleDependencyMetadataProvider(_powerShellRunner, _logger);
-        _hostedOperations = hostedOperations ?? new PowerShellModulePipelineHostedOperations(_logger);
+    }
+
+    private ModulePipelineRunner(ILogger logger, ModulePipelineRunnerServices services)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        if (services is null)
+            throw new ArgumentNullException(nameof(services));
+
+        _powerShellRunner = services.PowerShellRunner;
+        _moduleDependencyMetadataProvider = services.ModuleDependencyMetadataProvider;
+        _hostedOperations = services.HostedOperations;
+        _manifestMutator = services.ManifestMutator;
+        _missingFunctionAnalysisService = services.MissingFunctionAnalysisService;
     }
 
 }
