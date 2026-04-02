@@ -108,6 +108,10 @@ public static partial class WebApiDocsGenerator
                 }
             }
 
+            var sourceLink = BuildPowerShellCommandSourceLink(command);
+            if (sourceLink is not null)
+                hints.CommandSources[commandName] = sourceLink;
+
             if (command.Aliases is null)
                 continue;
 
@@ -405,10 +409,11 @@ public static partial class WebApiDocsGenerator
         public HashSet<string> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> CommandKinds { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, HashSet<string>> CommandAliases { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, ApiSourceLink> CommandSources { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool CmdletsWildcard { get; set; }
         public bool FunctionsWildcard { get; set; }
         public bool AliasesWildcard { get; set; }
-        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CommandKinds.Count > 0 || CommandAliases.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
+        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CommandKinds.Count > 0 || CommandAliases.Count > 0 || CommandSources.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
 
         public IReadOnlyList<string> GetAliasesForCommand(string commandName)
         {
@@ -417,6 +422,22 @@ public static partial class WebApiDocsGenerator
             return CommandAliases.TryGetValue(commandName, out var aliases)
                 ? aliases.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray()
                 : Array.Empty<string>();
+        }
+
+        public ApiSourceLink? GetSourceForCommand(string commandName)
+        {
+            if (string.IsNullOrWhiteSpace(commandName))
+                return null;
+
+            if (!CommandSources.TryGetValue(commandName, out var source))
+                return null;
+
+            return new ApiSourceLink
+            {
+                Path = source.Path,
+                Line = source.Line,
+                Url = source.Url
+            };
         }
     }
 
@@ -432,5 +453,26 @@ public static partial class WebApiDocsGenerator
         public string? CommandType { get; set; }
         public string? Type { get; set; }
         public List<string>? Aliases { get; set; }
+        public string? SourcePath { get; set; }
+        public int? SourceLine { get; set; }
+        public string? SourceUrl { get; set; }
+    }
+
+    private static ApiSourceLink? BuildPowerShellCommandSourceLink(PowerShellCommandMetadataEntry command)
+    {
+        if (command is null)
+            return null;
+
+        var path = command.SourcePath?.Trim();
+        var url = command.SourceUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(path) && string.IsNullOrWhiteSpace(url))
+            return null;
+
+        return new ApiSourceLink
+        {
+            Path = string.IsNullOrWhiteSpace(path) ? url ?? string.Empty : path,
+            Line = command.SourceLine.GetValueOrDefault(),
+            Url = string.IsNullOrWhiteSpace(url) ? null : url
+        };
     }
 }
