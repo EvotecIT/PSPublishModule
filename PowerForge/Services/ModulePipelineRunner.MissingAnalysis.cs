@@ -8,20 +8,19 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private MissingFunctionsReport? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
+    private MissingFunctionAnalysisResult? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
     {
         if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(code))
             return null;
 
         var approved = plan.ApprovedModules ?? Array.Empty<string>();
-        var analyzer = new MissingFunctionsAnalyzer();
         var options = new MissingFunctionsOptions(
             approvedModules: approved,
             ignoreFunctions: Array.Empty<string>(),
             includeFunctionsRecursively: true);
         try
         {
-            return analyzer.Analyze(filePath, code, options);
+            return _missingFunctionAnalysisService.Analyze(filePath, code, options);
         }
         catch (Exception ex)
         {
@@ -43,7 +42,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private void ValidateMissingFunctions(
-        MissingFunctionsReport report,
+        MissingFunctionAnalysisResult report,
         ModulePipelinePlan plan,
         IReadOnlyCollection<string>? dependentModules)
     {
@@ -277,7 +276,7 @@ public sealed partial class ModulePipelineRunner
     private void LogMergeSummary(
         ModulePipelinePlan plan,
         MergeSourceInfo mergeInfo,
-        MissingFunctionsReport? missingReport,
+        MissingFunctionAnalysisResult? missingReport,
         IReadOnlyCollection<string>? dependentModules)
     {
         if (plan is null) return;

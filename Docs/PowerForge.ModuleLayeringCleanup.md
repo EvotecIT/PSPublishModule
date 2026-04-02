@@ -53,8 +53,8 @@ These directly depend on SMA/runspaces/PowerShell cmdlets or are explicitly Powe
 | File(s) | Target | Why | Keep / change |
 |---|---|---|---|
 | `BuildServices.cs` | `PowerForge.PowerShell` | Explicitly designed for PowerShell build scripts and uses `PowerShellRunner`/PSSA helpers. | Keep in `.PowerShell`; consider renaming namespace/type later so ownership is obvious. |
-| `Models\Analysis\MissingFunctionCommand.cs` | `PowerForge.PowerShell` | Carries `ScriptBlock`, so it is a PowerShell runtime model today. | Keep until analysis models are redesigned. |
-| `Models\Analysis\MissingFunctionsReport.cs` | `PowerForge.PowerShell` | Report shape is tied to `MissingFunctionCommand`. | Keep until analysis models are redesigned. |
+| `Models\Analysis\MissingFunctionCommand.cs` | `PowerForge.PowerShell` | Carries `ScriptBlock`, so it is a PowerShell runtime model today. | Keep as the legacy analyzer output behind the new host-neutral missing-analysis seam. |
+| `Models\Analysis\MissingFunctionsReport.cs` | `PowerForge.PowerShell` | Report shape is tied to `MissingFunctionCommand`. | Keep as the legacy analyzer output behind the new host-neutral missing-analysis seam. |
 | `Services\AuthenticodeSigningService.cs` | `PowerForge.PowerShell` | Uses `PSObject`, runspaces, and PowerShell signing commands. | Keep in `.PowerShell`. |
 | `Services\DocumentationEngine.cs` | `PowerForge.PowerShell` | Uses `Get-Help` extraction and PowerShell import/help semantics through `IPowerShellRunner`. | Keep in `.PowerShell` for now. |
 | `Services\LegacySegmentAdapter.cs` | `PowerForge.PowerShell` | Consumes `ScriptBlock`, `PSObject`, and legacy DSL outputs from PowerShell. | Keep in `.PowerShell`. |
@@ -148,11 +148,12 @@ Current status:
 - `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
 - Default `ModulePipelineRunner` service construction now flows through a dedicated PowerShell-owned defaults builder, and `PowerShellModulePipelineHostedOperations` reuses the injected `IPowerShellRunner` instead of creating fresh runner instances for each hosted step.
 - `ModulePipelineRunner` manifest refresh, delivery metadata, generated-delivery export updates, and bootstrapper export reads now flow through `IModuleManifestMutator` plus neutral manifest readers instead of calling `ManifestEditor` and `BuildServices` directly from runner partials.
+- `IMissingFunctionAnalysisService` now separates runner-side missing-function analysis from the PowerShell AST implementation, with `PowerShellMissingFunctionAnalysisService` adapting the existing `MissingFunctionsAnalyzer` output to host-neutral `MissingFunctionAnalysisResult` and `MissingCommandReference` models.
 - Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
 - `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
 - The validation, test, packaging, publish, and install phases now run through dedicated runner helper methods backed by a shared run-state object, so `ModulePipelineRunner.Run` is acting more like an orchestrator than a giant mutable script.
 - The stage/build/manifest/docs/format/sign phases now also run through dedicated helpers, leaving `ModulePipelineRunner.Run` as a thin phase orchestrator with shared cleanup/failure handling.
-- The next extraction target is the remaining PowerShell-owned merge/missing-analysis and scripting helpers inside `ModulePipelineRunner`, which now represent the main blockers before the runner boundary can move again.
+- The next extraction target is the remaining PowerShell-owned merge helpers and any legacy analyzer-model cleanup inside `ModulePipelineRunner`, which now represent the main blockers before the runner boundary can move again.
 
 ### Phase 4: Publish and validation decomposition
 
