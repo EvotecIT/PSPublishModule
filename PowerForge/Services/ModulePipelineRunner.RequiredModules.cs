@@ -40,7 +40,7 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<RequiredModuleReference>();
 
         var moduleNames = list.Select(static d => d.ModuleName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var installed = TryGetLatestInstalledModuleInfo(moduleNames);
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(moduleNames);
         var installedMetadata = installed.ToDictionary(
             static kvp => kvp.Key,
             static kvp => (kvp.Value.Version, kvp.Value.Guid),
@@ -49,7 +49,7 @@ public sealed partial class ModulePipelineRunner
         Func<IReadOnlyCollection<string>, IReadOnlyDictionary<string, (string? Version, string? Guid)>>? onlineLookup = null;
         if (resolveMissingModulesOnline || warnIfRequiredModulesOutdated)
         {
-            onlineLookup = candidates => TryResolveLatestOnlineVersions(candidates, repository, credential, prerelease);
+            onlineLookup = candidates => _moduleDependencyMetadataProvider.ResolveLatestOnlineVersions(candidates, repository, credential, prerelease);
         }
 
         var resolver = new RequiredModuleResolutionEngine(_logger);

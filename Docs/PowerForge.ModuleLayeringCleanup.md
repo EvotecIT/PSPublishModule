@@ -143,7 +143,8 @@ Current status:
 - PowerShell-specific default wiring lives behind `ModuleBuildPipelineFactory` in `PowerForge.PowerShell`.
 - Manifest-baseline reads and pure planning helpers are now factored into core support services.
 - Required-module resolution now runs through a core engine, while installed/repository discovery stays PowerShell-backed in `ModulePipelineRunner`.
-- The next extraction target is the reusable planning/execution context inside `ModulePipelineRunner*`, especially the remaining metadata discovery and PowerShell-hosted execution seams.
+- `IModuleDependencyMetadataProvider` now separates required-module and binary-conflict metadata lookup from `ModulePipelineRunner`, with `PowerShellModuleDependencyMetadataProvider` in `PowerForge.PowerShell` as the current implementation seam.
+- The next extraction target is the reusable planning/execution context inside `ModulePipelineRunner*`, especially the remaining execution, validation, and other PowerShell-hosted service seams.
 
 ### Phase 4: Publish and validation decomposition
 

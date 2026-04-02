@@ -26,11 +26,6 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private static string BuildGetInstalledModuleInfoScript()
-    {
-        return EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
-    }
-
     private static IEnumerable<string> SplitLines(string? text)
         => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -46,9 +41,6 @@ public sealed partial class ModulePipelineRunner
         try { return Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
         catch { return string.Empty; }
     }
-
-    private static string? EmptyToNull(string? s)
-        => string.IsNullOrWhiteSpace(s) ? null : s;
 
     private static string BuildArtefactsReportPath(string projectRoot, string? reportFileName, string fallbackFileName)
     {
