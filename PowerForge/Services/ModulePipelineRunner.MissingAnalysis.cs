@@ -275,7 +275,7 @@ public sealed partial class ModulePipelineRunner
 
     private void LogMergeSummary(
         ModulePipelinePlan plan,
-        MergeSourceInfo mergeInfo,
+        ModuleMergeSources mergeInfo,
         MissingFunctionAnalysisResult? missingReport,
         IReadOnlyCollection<string>? dependentModules)
     {
@@ -476,23 +476,6 @@ public sealed partial class ModulePipelineRunner
 
     private static bool IsBuiltInCommand(string name)
         => BuiltInCommandNames.Contains(name);
-
-    private sealed class MergeSourceInfo
-    {
-        public MergeSourceInfo(string psm1Path, string[] scriptFiles, string mergedScriptContent, bool hasLib)
-        {
-            Psm1Path = psm1Path;
-            ScriptFiles = scriptFiles ?? Array.Empty<string>();
-            MergedScriptContent = mergedScriptContent ?? string.Empty;
-            HasLib = hasLib;
-        }
-
-        public string Psm1Path { get; }
-        public string[] ScriptFiles { get; }
-        public string MergedScriptContent { get; }
-        public bool HasLib { get; }
-        public bool HasScripts => ScriptFiles.Length > 0;
-    }
 
     private sealed class MergeExecutionResult
     {

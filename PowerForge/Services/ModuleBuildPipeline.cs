@@ -148,7 +148,7 @@ public sealed class ModuleBuildPipeline
         if (!File.Exists(psd1))
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
-        var exports = ReadExportsFromManifest(psd1);
+        var exports = ModuleManifestExportReader.ReadExports(psd1);
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
@@ -294,11 +294,6 @@ public sealed class ModuleBuildPipeline
         return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ExportSet ReadExportsFromManifest(string psd1Path)
-        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
-            ReadStringOrArray(psd1Path, "CmdletsToExport"),
-            ReadStringOrArray(psd1Path, "AliasesToExport"));
-
     private (int Converted, int Errors) NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {
         try
@@ -341,7 +336,4 @@ public sealed class ModuleBuildPipeline
             return (0, 1);
         }
     }
-
-    private static string[] ReadStringOrArray(string psd1Path, string key)
-        => ModuleManifestValueReader.ReadTopLevelStringOrArray(psd1Path, key);
 }
