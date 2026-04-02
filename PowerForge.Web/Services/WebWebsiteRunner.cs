@@ -539,11 +539,13 @@ public static class WebWebsiteRunner
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
+        var basicToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"x-access-token:{token.Trim()}"));
+
         return new Dictionary<string, string?>
         {
             ["GIT_CONFIG_COUNT"] = "1",
             ["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader",
-            ["GIT_CONFIG_VALUE_0"] = $"AUTHORIZATION: bearer {token.Trim()}"
+            ["GIT_CONFIG_VALUE_0"] = $"AUTHORIZATION: basic {basicToken}"
         };
     }
 
