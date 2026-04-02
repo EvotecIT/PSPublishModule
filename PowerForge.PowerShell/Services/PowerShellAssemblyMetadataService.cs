@@ -20,10 +20,10 @@ public sealed class PowerShellAssemblyMetadataService
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Assembly not found: {fullPath}", fullPath);
 
-        var cmdlets = ExportDetector.DetectBinaryCmdlets(new[] { fullPath })
+        var cmdlets = BinaryExportDetector.DetectBinaryCmdlets(new[] { fullPath })
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var aliases = ExportDetector.DetectBinaryAliases(new[] { fullPath })
+        var aliases = BinaryExportDetector.DetectBinaryAliases(new[] { fullPath })
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

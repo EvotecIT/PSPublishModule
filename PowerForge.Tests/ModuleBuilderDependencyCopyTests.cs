@@ -141,7 +141,7 @@ public sealed class ModuleBuilderDependencyCopyTests
                                         }
                                         """);
 
-            var builder = new ModuleBuilder(new NullLogger());
+            var builder = ModuleBuilderTestDependencies.Create();
             var copyMethod = typeof(ModuleBuilder).GetMethod(
                 "CopyPublishOutputBinaries",
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -244,7 +244,7 @@ public sealed class ModuleBuilderDependencyCopyTests
                                         }
                                         """);
 
-            var builder = new ModuleBuilder(new NullLogger());
+            var builder = ModuleBuilderTestDependencies.Create();
             var copyMethod = typeof(ModuleBuilder).GetMethod(
                 "CopyPublishOutputBinaries",
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -294,7 +294,7 @@ public sealed class ModuleBuilderDependencyCopyTests
             File.WriteAllText(Path.Combine(libDefault.FullName, "Existing.Binary.dll"), "placeholder");
 
             var logger = new CollectingLogger();
-            var builder = new ModuleBuilder(logger);
+            var builder = ModuleBuilderTestDependencies.Create(logger);
             builder.BuildInPlace(new ModuleBuilder.Options
             {
                 ProjectRoot = root,
@@ -355,7 +355,7 @@ public sealed class ModuleBuilderDependencyCopyTests
                                         }
                                         """);
 
-            var builder = new ModuleBuilder(new NullLogger());
+            var builder = ModuleBuilderTestDependencies.Create();
             var copyMethod = typeof(ModuleBuilder).GetMethod(
                 "CopyPublishOutputBinaries",
                 BindingFlags.Instance | BindingFlags.NonPublic);

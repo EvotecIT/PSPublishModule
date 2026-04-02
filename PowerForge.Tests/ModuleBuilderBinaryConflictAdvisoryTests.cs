@@ -86,7 +86,7 @@ public sealed class ModuleBuilderBinaryConflictAdvisoryTests
 
         try
         {
-            var builder = new ModuleBuilder(new NullLogger());
+            var builder = ModuleBuilderTestDependencies.Create();
             var reportPath = builder.WriteBinaryConflictReport(reportsRoot.FullName, advisory, result);
 
             Assert.False(string.IsNullOrWhiteSpace(reportPath));
