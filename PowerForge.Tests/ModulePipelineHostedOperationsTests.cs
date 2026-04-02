@@ -16,11 +16,12 @@ public sealed class ModulePipelineHostedOperationsTests
     {
         var powerShellRunner = new RecordingPowerShellRunner(_ => new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh"));
 
-        var services = ModulePipelineRunnerDefaults.Create(new NullLogger(), powerShellRunner, null, null, null);
+        var services = ModulePipelineRunnerDefaults.Create(new NullLogger(), powerShellRunner, null, null, null, null);
 
         Assert.Same(powerShellRunner, services.PowerShellRunner);
         Assert.IsType<PowerShellModuleDependencyMetadataProvider>(services.ModuleDependencyMetadataProvider);
         Assert.IsType<PowerShellModulePipelineHostedOperations>(services.HostedOperations);
+        Assert.IsType<PowerShellMissingFunctionAnalysisService>(services.MissingFunctionAnalysisService);
     }
 
     [Fact]

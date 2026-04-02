@@ -38,6 +38,7 @@ public sealed partial class ModulePipelineRunner
     private readonly IModuleDependencyMetadataProvider _moduleDependencyMetadataProvider;
     private readonly IModulePipelineHostedOperations _hostedOperations;
     private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IMissingFunctionAnalysisService _missingFunctionAnalysisService;
 
     private sealed class RequiredModuleDraft
     {
@@ -61,7 +62,7 @@ public sealed partial class ModulePipelineRunner
     /// Creates a new instance using the provided logger.
     /// </summary>
     public ModulePipelineRunner(ILogger logger, IPowerShellRunner? powerShellRunner = null)
-        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider: null, hostedOperations: null, manifestMutator: null))
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider: null, hostedOperations: null, manifestMutator: null, missingFunctionAnalysisService: null))
     {
     }
 
@@ -70,8 +71,9 @@ public sealed partial class ModulePipelineRunner
         IPowerShellRunner? powerShellRunner,
         IModuleDependencyMetadataProvider? moduleDependencyMetadataProvider,
         IModulePipelineHostedOperations? hostedOperations = null,
-        IModuleManifestMutator? manifestMutator = null)
-        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator))
+        IModuleManifestMutator? manifestMutator = null,
+        IMissingFunctionAnalysisService? missingFunctionAnalysisService = null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService))
     {
     }
 
@@ -85,6 +87,7 @@ public sealed partial class ModulePipelineRunner
         _moduleDependencyMetadataProvider = services.ModuleDependencyMetadataProvider;
         _hostedOperations = services.HostedOperations;
         _manifestMutator = services.ManifestMutator;
+        _missingFunctionAnalysisService = services.MissingFunctionAnalysisService;
     }
 
 }

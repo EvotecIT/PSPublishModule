@@ -41,7 +41,7 @@ public sealed partial class ModulePipelineRunner
         string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
         string? analysisPath = mergeInfo.HasScripts ? null : mergeInfo.Psm1Path;
 
-        MissingFunctionsReport? missingReport = null;
+        MissingFunctionAnalysisResult? missingReport = null;
         string[] dependentRequiredModules = Array.Empty<string>();
         if (plan.MergeModule || plan.MergeMissing)
         {

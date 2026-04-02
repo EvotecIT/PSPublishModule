@@ -9,7 +9,8 @@ internal static class ModulePipelineRunnerDefaults
         IPowerShellRunner? powerShellRunner,
         IModuleDependencyMetadataProvider? moduleDependencyMetadataProvider,
         IModulePipelineHostedOperations? hostedOperations,
-        IModuleManifestMutator? manifestMutator)
+        IModuleManifestMutator? manifestMutator,
+        IMissingFunctionAnalysisService? missingFunctionAnalysisService)
     {
         if (logger is null)
             throw new ArgumentNullException(nameof(logger));
@@ -19,7 +20,8 @@ internal static class ModulePipelineRunnerDefaults
             resolvedRunner,
             moduleDependencyMetadataProvider ?? new PowerShellModuleDependencyMetadataProvider(resolvedRunner, logger),
             hostedOperations ?? new PowerShellModulePipelineHostedOperations(resolvedRunner, logger),
-            manifestMutator ?? new AstModuleManifestMutator());
+            manifestMutator ?? new AstModuleManifestMutator(),
+            missingFunctionAnalysisService ?? new PowerShellMissingFunctionAnalysisService());
     }
 }
 
@@ -29,16 +31,19 @@ internal sealed class ModulePipelineRunnerServices
         IPowerShellRunner powerShellRunner,
         IModuleDependencyMetadataProvider moduleDependencyMetadataProvider,
         IModulePipelineHostedOperations hostedOperations,
-        IModuleManifestMutator manifestMutator)
+        IModuleManifestMutator manifestMutator,
+        IMissingFunctionAnalysisService missingFunctionAnalysisService)
     {
         PowerShellRunner = powerShellRunner ?? throw new ArgumentNullException(nameof(powerShellRunner));
         ModuleDependencyMetadataProvider = moduleDependencyMetadataProvider ?? throw new ArgumentNullException(nameof(moduleDependencyMetadataProvider));
         HostedOperations = hostedOperations ?? throw new ArgumentNullException(nameof(hostedOperations));
         ManifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        MissingFunctionAnalysisService = missingFunctionAnalysisService ?? throw new ArgumentNullException(nameof(missingFunctionAnalysisService));
     }
 
     internal IPowerShellRunner PowerShellRunner { get; }
     internal IModuleDependencyMetadataProvider ModuleDependencyMetadataProvider { get; }
     internal IModulePipelineHostedOperations HostedOperations { get; }
     internal IModuleManifestMutator ManifestMutator { get; }
+    internal IMissingFunctionAnalysisService MissingFunctionAnalysisService { get; }
 }
