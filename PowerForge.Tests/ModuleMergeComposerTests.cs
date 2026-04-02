@@ -111,6 +111,17 @@ public sealed class ModuleMergeComposerTests
         }
     }
 
+    [Fact]
+    public void PrependFunctions_PrependsFunctionsBeforeExistingContent()
+    {
+        var merged = ModuleMergeComposer.PrependFunctions(
+            new[] { "function Get-Helper { 'helper' }", string.Empty },
+            "function Get-TestExample { 'ok' }");
+
+        Assert.StartsWith("function Get-Helper", merged, StringComparison.Ordinal);
+        Assert.Contains(Environment.NewLine + Environment.NewLine + "function Get-TestExample", merged, StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string content, string value)
     {
         var count = 0;

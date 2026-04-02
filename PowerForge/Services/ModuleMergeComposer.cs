@@ -275,6 +275,8 @@ internal static class ModuleMergeComposer
             return line ?? string.Empty;
 
         var updated = line;
+        // Legacy merged modules historically normalized both literal and evaluated parent-root references back to the
+        // merged module root so inline script assets still resolve after the original folder hierarchy disappears.
         updated = updated.Replace("$PSScriptRoot\\..\\..\\", "$PSScriptRoot\\");
         updated = updated.Replace("$PSScriptRoot\\..\\", "$PSScriptRoot\\");
         updated = updated.Replace("$PSScriptRoot/../../", "$PSScriptRoot/");
@@ -294,6 +296,8 @@ internal static class ModuleMergeComposer
             return content ?? string.Empty;
 
         var normalized = content.Replace("\r\n", "\n");
+        // The generated export block is expected to be the tail of the merged PSM1, so syncing generated scripts
+        // replaces that trailing block wholesale before appending a fresh one from the manifest.
         var exportStart = normalized.LastIndexOf("\n$FunctionsToExport = ", System.StringComparison.Ordinal);
         if (exportStart < 0 && normalized.StartsWith("$FunctionsToExport = ", System.StringComparison.Ordinal))
             exportStart = 0;
