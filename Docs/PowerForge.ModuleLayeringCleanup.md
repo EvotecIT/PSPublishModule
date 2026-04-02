@@ -68,7 +68,7 @@ These mostly represent reusable workflow, but they currently depend on PowerShel
 | File(s) | Target after split | Why it is mixed today | First split |
 |---|---|---|---|
 | `Services\ManifestEditor*.cs` | Mostly `PowerForge.PowerShell`, with a future neutral manifest abstraction in `PowerForge` | Uses `System.Management.Automation.Language` AST editing. The behavior is reusable, but the implementation is PowerShell-language-specific. | Introduce a neutral manifest mutator contract in core. Keep AST-backed implementation in `.PowerShell`. |
-| `Services\ModuleBuildPipeline.cs` | `PowerForge` | Core staging/install orchestration, but depends on `ModuleBuilder` and `ManifestEditor`-backed version patching. | Move after `ModuleBuilder` and manifest abstractions are split. |
+| `Services\ModuleBuildPipeline.cs` | `PowerForge` | Core staging/install orchestration, but it previously depended on `ModuleBuilder` and `ManifestEditor`-backed version patching. | Move after `ModuleBuilder` and manifest abstractions are split. |
 | `Services\BinaryDependencyPreflightService.cs` | `PowerForge` | Assembly analysis is core, but host assembly discovery currently relies on PowerShell runtime knowledge and `PSObject` assembly location. | Separate pure assembly graph scan from edition-specific host assembly catalogs. |
 | `Services\ModuleTestFailureAnalyzer.cs` | Split: XML/core in `PowerForge`, Pester-object analysis in `PowerForge.PowerShell` | NUnit XML analysis is core, but Pester result-object inspection uses `PSObject`. | Split analyzers by input source. |
 | `Services\ModuleTestFailureWorkflowService.cs` | `PowerForge` after analyzer split | Workflow/path resolution is core, but it currently depends on the mixed analyzer. | Move after `ModuleTestFailureAnalyzer` is split. |
@@ -124,7 +124,9 @@ Current status:
 - `IScriptFunctionExportDetector` now exists in `PowerForge`.
 - `BinaryExportDetector` now lives in `PowerForge`, while `PowerShellScriptFunctionExportDetector` lives in `PowerForge.PowerShell`.
 - `ModuleBuilder` now uses both seams and compiles in `PowerForge`.
-- The next blocker is no longer `ModuleBuilder`; it is the remaining PowerShell-owned pipeline execution and validation surface.
+- `ModuleBuildPipeline` now compiles in `PowerForge`, while `ModuleBuildPipelineFactory` in `PowerForge.PowerShell` provides the default AST-backed wiring.
+- Neutral manifest-baseline reading and planner support helpers now live in `PowerForge`.
+- The required-module resolution engine now lives in `PowerForge`; the remaining PowerShell-owned piece is metadata discovery from installed/repository tooling plus execution and validation.
 
 ### Phase 3: Move the reusable pipeline engine back to core
 
@@ -133,6 +135,20 @@ After the helper splits:
 - Move `ModuleBuildPipeline`
 - Move the plan/result portions of `ModulePipelineRunner`
 - Keep PowerShell execution adapters, dependency install, help extraction, Pester execution, and signing in `PowerForge.PowerShell`
+
+Current status:
+
+- `ModuleBuildPipeline` now lives in `PowerForge`.
+- It reads manifest version/export metadata via neutral text parsing in core.
+- PowerShell-specific default wiring lives behind `ModuleBuildPipelineFactory` in `PowerForge.PowerShell`.
+- Manifest-baseline reads and pure planning helpers are now factored into core support services.
+- Required-module resolution now runs through a core engine, while installed/repository discovery stays PowerShell-backed in `ModulePipelineRunner`.
+- `IModuleDependencyMetadataProvider` now separates required-module and binary-conflict metadata lookup from `ModulePipelineRunner`, with `PowerShellModuleDependencyMetadataProvider` in `PowerForge.PowerShell` as the current implementation seam.
+- `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
+- Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
+- `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
+- The validation, test, packaging, publish, and install phases now run through dedicated runner helper methods backed by a shared run-state object, so `ModulePipelineRunner.Run` is acting more like an orchestrator than a giant mutable script.
+- The next extraction target is the remaining execution context inside `ModulePipelineRunner*`, especially the larger run-loop decomposition and any leftover PowerShell-runner/file-formatting coupling.
 
 ### Phase 4: Publish and validation decomposition
 
@@ -152,4 +168,4 @@ The safest first PR after this document is:
 4. Update `PowerForge.PowerShell.csproj` to stop linking files that now belong to core.
 5. Keep namespaces stable in these early slices to avoid unnecessary downstream churn.
 
-That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModuleBuildPipeline`, validation, and PowerShell-hosted execution in `ModulePipelineRunner`.
+That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around `ModulePipelineRunner` run-loop decomposition, publish/validation coordination, and the remaining PowerShell-hosted execution helpers.

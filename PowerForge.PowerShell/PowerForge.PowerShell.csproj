@@ -47,7 +47,6 @@
     <Compile Include="..\PowerForge\Services\LegacySegmentAdapter.cs" Link="Services\LegacySegmentAdapter.cs" />
     <Compile Include="..\PowerForge\Services\ManifestEditor*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\MissingFunctionsAnalyzer.cs" Link="Services\MissingFunctionsAnalyzer.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleBuildPipeline.cs" Link="Services\ModuleBuildPipeline.cs" />
     <Compile Include="..\PowerForge\Services\ModulePipelineRunner*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\ModulePublisher.cs" Link="Services\ModulePublisher.cs" />
     <Compile Include="..\PowerForge\Services\ModuleTestFailureAnalyzer.cs" Link="Services\ModuleTestFailureAnalyzer.cs" />

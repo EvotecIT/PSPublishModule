@@ -65,7 +65,6 @@
     <Compile Remove="Services\\LegacySegmentAdapter.cs" />
     <Compile Remove="Services\\ManifestEditor*.cs" />
     <Compile Remove="Services\\MissingFunctionsAnalyzer.cs" />
-    <Compile Remove="Services\\ModuleBuildPipeline.cs" />
     <Compile Remove="Services\\ModulePipelineRunner*.cs" />
     <Compile Remove="Services\\ModulePublisher.cs" />
     <Compile Remove="Services\\ModuleTestFailureAnalyzer.cs" />

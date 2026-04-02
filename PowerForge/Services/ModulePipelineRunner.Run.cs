@@ -1,10 +1,5 @@
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
-using System.Management.Automation.Runspaces;
-using System.Text;
-using System.Text.Json;
 
 namespace PowerForge;
 
@@ -33,86 +28,63 @@ public sealed partial class ModulePipelineRunner
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
         var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
-        var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
-        var steps = ModulePipelineStep.Create(plan);
-        var reporterV2 = reporter as IModulePipelineProgressReporterV2;
-        var startedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var session = ModulePipelineExecutionSession.Create(plan, progress);
+        var reporter = session.Reporter;
+        var stageStep = session.StageStep;
+        var buildStep = session.BuildStep;
+        var manifestStep = session.ManifestStep;
+        var docsExtractStep = session.DocsExtractStep;
+        var docsWriteStep = session.DocsWriteStep;
+        var docsMamlStep = session.DocsMamlStep;
+        var formatStagingStep = session.FormatStagingStep;
+        var formatProjectStep = session.FormatProjectStep;
+        var signStep = session.SignStep;
+        var cleanupStep = session.CleanupStep;
 
-        var artefactSteps = steps
-            .Where(s => s.ArtefactSegment is not null)
-            .ToDictionary(s => s.ArtefactSegment!, s => s);
-        var publishSteps = steps
-            .Where(s => s.PublishSegment is not null)
-            .ToDictionary(s => s.PublishSegment!, s => s);
-
-        var stageStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:stage", StringComparison.OrdinalIgnoreCase));
-        var buildStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:build", StringComparison.OrdinalIgnoreCase));
-        var manifestStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:manifest", StringComparison.OrdinalIgnoreCase));
-
-        var docsExtractStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:extract", StringComparison.OrdinalIgnoreCase));
-        var docsWriteStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:write", StringComparison.OrdinalIgnoreCase));
-        var docsMamlStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:maml", StringComparison.OrdinalIgnoreCase));
-        var formatStagingStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:staging", StringComparison.OrdinalIgnoreCase));
-        var formatProjectStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:project", StringComparison.OrdinalIgnoreCase));
-        var signStep = steps.FirstOrDefault(s => string.Equals(s.Key, "sign", StringComparison.OrdinalIgnoreCase));
-        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
-        var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
-        var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
-        var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
-        var binaryConflictAnalysisStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:binary-conflicts", StringComparison.OrdinalIgnoreCase));
-        var binaryDependenciesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:binary-dependencies", StringComparison.OrdinalIgnoreCase));
-        var importModulesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase));
-        var testSteps = steps
-            .Where(s => s.Kind == ModulePipelineStepKind.Tests &&
-                        s.Key.StartsWith("tests:", StringComparison.OrdinalIgnoreCase) &&
-                        s.Key.EndsWith(":aftermerge", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
-        var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
-
-        var pipeline = new ModuleBuildPipeline(_logger);
-        string? stagingPathForCleanup = plan.BuildSpec.StagingPath;
-        Exception? pipelineFailure = null;
+        var pipeline = ModuleBuildPipelineFactory.Create(_logger);
+        var state = new ModulePipelineRunState(plan.BuildSpec.StagingPath);
 
         try
         {
-            var dependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+            state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
             SyncSourceProjectVersionIfRequested(plan);
 
             ModuleBuildPipeline.StagingResult staged;
-            SafeStart(reporter, startedKeys, stageStep);
+            session.Start(stageStep);
             try
             {
                 staged = pipeline.StageToStaging(plan.BuildSpec);
-                stagingPathForCleanup = staged.StagingPath;
-                SafeDone(reporter, stageStep);
+                state.Staged = staged;
+                state.StagingPathForCleanup = staged.StagingPath;
+                session.Done(stageStep);
             }
             catch (Exception ex)
             {
-                SafeFail(reporter, stageStep, ex);
-                stagingPathForCleanup ??= plan.BuildSpec.StagingPath;
+                session.Fail(stageStep, ex);
+                state.StagingPathForCleanup ??= plan.BuildSpec.StagingPath;
                 throw;
             }
 
             ModuleBuildResult buildResult;
-            SafeStart(reporter, startedKeys, buildStep);
+            session.Start(buildStep);
             try
             {
                 buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
-                SafeDone(reporter, buildStep);
+                state.BuildResult = buildResult;
+                session.Done(buildStep);
             }
             catch (Exception ex)
             {
-                SafeFail(reporter, buildStep, ex);
+                session.Fail(buildStep, ex);
                 throw;
             }
 
-            var mergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
-            var mergedScripts = mergeExecution.MergedModule;
+            state.MergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
+            var mergedScripts = state.MergedScripts;
             if (!plan.BuildSpec.RefreshManifestOnly)
                 ApplyPlaceholders(plan, buildResult);
 
-            SafeStart(reporter, startedKeys, manifestStep);
+            session.Start(manifestStep);
             try
             {
                 RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
@@ -153,44 +125,41 @@ public sealed partial class ModulePipelineRunner
                 if (!mergedScripts && !plan.BuildSpec.RefreshManifestOnly)
                     TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
-                SafeDone(reporter, manifestStep);
+                session.Done(manifestStep);
             }
             catch (Exception ex)
             {
-                SafeFail(reporter, manifestStep, ex);
+                session.Fail(manifestStep, ex);
                 throw;
             }
 
-            DocumentationBuildResult? documentationResult = null;
             if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
             {
                 try
                 {
-                    var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
-                    documentationResult = engine.BuildWithProgress(
+                    state.DocumentationResult = _hostedOperations.BuildDocumentation(
                         moduleName: plan.ModuleName,
                         stagingPath: buildResult.StagingPath,
                         moduleManifestPath: buildResult.ManifestPath,
                         documentation: plan.Documentation,
                         buildDocumentation: plan.DocumentationBuild!,
-                        timeout: null,
                         progress: reporter,
                         extractStep: docsExtractStep,
                         writeStep: docsWriteStep,
                         externalHelpStep: docsMamlStep);
 
-                    if (documentationResult is not null && !documentationResult.Succeeded)
-                        throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
+                    if (state.DocumentationResult is not null && !state.DocumentationResult.Succeeded)
+                        throw new InvalidOperationException($"Documentation generation failed. {state.DocumentationResult.ErrorMessage}");
 
                     // Legacy: "UpdateWhenNew" historically updated documentation in the project folder.
                     // When enabled, keep the repo Docs/Readme.md and external help in sync (not just staging).
-                    if (documentationResult is not null &&
-                        documentationResult.Succeeded &&
+                    if (state.DocumentationResult is not null &&
+                        state.DocumentationResult.Succeeded &&
                         plan.DocumentationBuild?.UpdateWhenNew == true)
                     {
                         try
                         {
-                            SyncGeneratedDocumentationToProjectRoot(plan, documentationResult);
+                            SyncGeneratedDocumentationToProjectRoot(plan, state.DocumentationResult);
                         }
                         catch (Exception ex)
                         {
@@ -201,27 +170,21 @@ public sealed partial class ModulePipelineRunner
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(reporter, docsExtractStep, ex);
-                    SafeFail(reporter, docsWriteStep, ex);
-                    SafeFail(reporter, docsMamlStep, ex);
+                    session.Fail(docsExtractStep, ex);
+                    session.Fail(docsWriteStep, ex);
+                    session.Fail(docsMamlStep, ex);
                     throw;
                 }
             }
-
-            FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
-            FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
-            ModuleSigningResult? signingResult = null;
-            ModuleValidationReport? validationReport = null;
-            BuildDiagnostic[] automaticBinaryConflictDiagnostics = Array.Empty<BuildDiagnostic>();
 
             if (plan.Formatting is not null)
             {
                 var formattingPipeline = new FormattingPipeline(_logger);       
 
-                SafeStart(reporter, startedKeys, formatStagingStep);
+                session.Start(formatStagingStep);
                 try
                 {
-                    formattingStagingResults = FormatPowerShellTree(
+                    state.FormattingStagingResults = FormatPowerShellTree(
                         rootPath: buildResult.StagingPath,
                         moduleName: plan.ModuleName,
                         manifestPath: buildResult.ManifestPath,
@@ -229,28 +192,28 @@ public sealed partial class ModulePipelineRunner
                         formatting: plan.Formatting,
                         pipeline: formattingPipeline);
 
-                    var stagingFmt = FormattingSummary.FromResults(formattingStagingResults);
+                    var stagingFmt = FormattingSummary.FromResults(state.FormattingStagingResults);
                     if (stagingFmt.Status == CheckStatus.Fail)
                     {
-                        LogFormattingIssues(buildResult.StagingPath, formattingStagingResults, "staging root");
+                        LogFormattingIssues(buildResult.StagingPath, state.FormattingStagingResults, "staging root");
                         throw new InvalidOperationException(
-                            BuildFormattingFailureMessage("staging root", buildResult.StagingPath, stagingFmt, formattingStagingResults));
+                            BuildFormattingFailureMessage("staging root", buildResult.StagingPath, stagingFmt, state.FormattingStagingResults));
                     }
-                    SafeDone(reporter, formatStagingStep);
+                    session.Done(formatStagingStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(reporter, formatStagingStep, ex);
+                    session.Fail(formatStagingStep, ex);
                     throw;
                 }
 
                 if (plan.Formatting.Options.UpdateProjectRoot)
                 {
-                    SafeStart(reporter, startedKeys, formatProjectStep);
+                    session.Start(formatProjectStep);
                     try
                     {
                         var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-                        formattingProjectResults = FormatPowerShellTree(        
+                        state.FormattingProjectResults = FormatPowerShellTree(
                             rootPath: plan.ProjectRoot,
                             moduleName: plan.ModuleName,
                             manifestPath: projectManifest,
@@ -258,18 +221,18 @@ public sealed partial class ModulePipelineRunner
                             formatting: plan.Formatting,
                             pipeline: formattingPipeline);
 
-                        var projectFmt = FormattingSummary.FromResults(formattingProjectResults);
+                        var projectFmt = FormattingSummary.FromResults(state.FormattingProjectResults);
                         if (projectFmt.Status == CheckStatus.Fail)
                         {
-                            LogFormattingIssues(plan.ProjectRoot, formattingProjectResults, "project root");
+                            LogFormattingIssues(plan.ProjectRoot, state.FormattingProjectResults, "project root");
                             throw new InvalidOperationException(
-                                BuildFormattingFailureMessage("project root", plan.ProjectRoot, projectFmt, formattingProjectResults));
+                                BuildFormattingFailureMessage("project root", plan.ProjectRoot, projectFmt, state.FormattingProjectResults));
                         }
-                        SafeDone(reporter, formatProjectStep);
+                        session.Done(formatProjectStep);
                     }
                     catch (Exception ex)
                     {
-                        SafeFail(reporter, formatProjectStep, ex);
+                        session.Fail(formatProjectStep, ex);
                         throw;
                     }
                 }
@@ -287,542 +250,47 @@ public sealed partial class ModulePipelineRunner
 
             if (plan.SignModule)
             {
-                SafeStart(reporter, startedKeys, signStep);
+                session.Start(signStep);
                 try
                 {
-                    signingResult = SignBuiltModuleOutput(
+                    state.SigningResult = SignBuiltModuleOutput(
                         moduleName: plan.ModuleName,
                         rootPath: buildResult.StagingPath,
                         signing: plan.Signing);
-                    SafeDone(reporter, signStep);
+                    session.Done(signStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(reporter, signStep, ex);
+                    session.Fail(signStep, ex);
                     throw;
                 }
             }
 
-        ProjectConsistencyReport? fileConsistencyReport = null;
-        CheckStatus? fileConsistencyStatus = null;
-        ProjectConversionResult? fileConsistencyEncodingFix = null;
-        ProjectConversionResult? fileConsistencyLineEndingFix = null;
-        ProjectConsistencyReport? projectFileConsistencyReport = null;
-        CheckStatus? projectFileConsistencyStatus = null;
-        ProjectConversionResult? projectFileConsistencyEncodingFix = null;
-        ProjectConversionResult? projectFileConsistencyLineEndingFix = null;
-        PowerShellCompatibilityReport? compatibilityReport = null;        
+            ExecuteValidationPhases(plan, session, state);
+            ExecuteTestPhases(plan, session, state);
+            ExecutePackagingPublishAndInstallPhases(spec, plan, session, packagingRequiredModules, pipeline, state);
 
-        if (plan.FileConsistencySettings?.Enable == true)
-        {
-            var s = plan.FileConsistencySettings;
-            var scope = s.ResolveScope();
-            var runStaging = scope != FileConsistencyScope.ProjectOnly;
-            var runProject = scope != FileConsistencyScope.StagingOnly;
+            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
 
-            var fileConsistencySeverity = ResolveFileConsistencySeverity(s);
-
-            if (runStaging)
-            {
-                SafeStart(reporter, startedKeys, fileConsistencyStep);
-                try
-                {
-                    var excludeDirs = MergeExcludeDirectories(
-                        s.ExcludeDirectories,
-                        new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
-                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
-                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
-                    var includePatterns = s.IncludePatterns is { Length: > 0 }
-                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
-                        : null;
-
-                    var enumeration = new ProjectEnumeration(
-                        rootPath: buildResult.StagingPath,
-                        kind: kind,
-                        customExtensions: includePatterns,
-                        excludeDirectories: excludeDirs,
-                        excludeFiles: excludeFiles);
-
-                    var encodingOverrides = s.EncodingOverrides;
-                    var lineEndingOverrides = s.LineEndingOverrides;
-                    var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
-                    var exportPath = s.ExportReport
-                        ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "FileConsistencyReport.csv")
-                        : null;
-
-                    var analyzer = new ProjectConsistencyAnalyzer(_logger);
-                    fileConsistencyReport = analyzer.Analyze(
-                        enumeration: enumeration,
-                        projectType: kind.ToString(),
-                        recommendedEncoding: recommendedEncoding,
-                        recommendedLineEnding: s.RequiredLineEnding,
-                        includeDetails: false,
-                        exportPath: exportPath,
-                        encodingOverrides: encodingOverrides,
-                        lineEndingOverrides: lineEndingOverrides);
-
-                    if (s.AutoFix)
-                    {
-                        var enc = new EncodingConverter();
-                        var encOptions = new EncodingConversionOptions(
-                            enumeration: enumeration,
-                            sourceEncoding: TextEncodingKind.Any,
-                            targetEncoding: recommendedEncoding,
-                            createBackups: s.CreateBackups,
-                            backupDirectory: null,
-                            force: false,
-                            noRollbackOnMismatch: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-                        if (encodingOverrides is { Count: > 0 })
-                        {
-                            encOptions.TargetEncodingResolver = path =>
-                            {
-                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                                var overrideEncoding = FileConsistencyOverrideResolver.ResolveEncodingOverride(rel, encodingOverrides);
-                                return overrideEncoding?.ToTextEncodingKind();
-                            };
-                        }
-                        fileConsistencyEncodingFix = enc.Convert(encOptions);
-
-                        var le = new LineEndingConverter();
-                        var target = s.RequiredLineEnding.ToLineEnding();
-                        var lineEndingOptions = new LineEndingConversionOptions(
-                            enumeration: enumeration,
-                            target: target,
-                            createBackups: s.CreateBackups,
-                            backupDirectory: null,
-                            force: false,
-                            onlyMixed: false,
-                            ensureFinalNewline: s.CheckMissingFinalNewline,
-                            onlyMissingNewline: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-                        if (lineEndingOverrides is { Count: > 0 })
-                        {
-                            lineEndingOptions.TargetResolver = path =>
-                            {
-                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
-                                return overrideLineEnding?.ToLineEnding();
-                            };
-                        }
-                        fileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
-
-                        fileConsistencyReport = analyzer.Analyze(
-                            enumeration: enumeration,
-                            projectType: kind.ToString(),
-                            recommendedEncoding: recommendedEncoding,
-                            recommendedLineEnding: s.RequiredLineEnding,
-                            includeDetails: false,
-                            exportPath: exportPath,
-                            encodingOverrides: encodingOverrides,
-                            lineEndingOverrides: lineEndingOverrides);
-                    }
-
-                    var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
-                    fileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
-                    if (fileConsistencySeverity != ValidationSeverity.Off)
-                        LogFileConsistencyIssues(finalReport, s, "staging", fileConsistencyStatus ?? CheckStatus.Warning);
-                    if (fileConsistencySeverity == ValidationSeverity.Error && fileConsistencyStatus == CheckStatus.Fail)
-                        throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
-
-                    SafeDone(reporter, fileConsistencyStep);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, fileConsistencyStep, ex);
-                    throw;
-                }
-            }
-
-            if (runProject)
-            {
-                SafeStart(reporter, startedKeys, projectFileConsistencyStep);
-                try
-                {
-                    var excludeDirs = MergeExcludeDirectories(
-                        s.ExcludeDirectories,
-                        new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
-                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
-                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
-                    var includePatterns = s.IncludePatterns is { Length: > 0 }
-                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
-                        : null;
-
-                    var enumeration = new ProjectEnumeration(
-                        rootPath: plan.ProjectRoot,
-                        kind: kind,
-                        customExtensions: includePatterns,
-                        excludeDirectories: excludeDirs,
-                        excludeFiles: excludeFiles);
-
-                    var encodingOverrides = s.EncodingOverrides;
-                    var lineEndingOverrides = s.LineEndingOverrides;
-                    var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
-                    var exportPath = s.ExportReport
-                        ? BuildArtefactsReportPath(plan.ProjectRoot, AddFileNameSuffix(s.ReportFileName, "Project"), fallbackFileName: "FileConsistencyReport.Project.csv")
-                        : null;
-
-                    var analyzer = new ProjectConsistencyAnalyzer(_logger);
-                    projectFileConsistencyReport = analyzer.Analyze(
-                        enumeration: enumeration,
-                        projectType: kind.ToString(),
-                        recommendedEncoding: recommendedEncoding,
-                        recommendedLineEnding: s.RequiredLineEnding,
-                        includeDetails: false,
-                        exportPath: exportPath,
-                        encodingOverrides: encodingOverrides,
-                        lineEndingOverrides: lineEndingOverrides);
-
-                    if (s.AutoFix)
-                    {
-                        var enc = new EncodingConverter();
-                        var encOptions = new EncodingConversionOptions(
-                            enumeration: enumeration,
-                            sourceEncoding: TextEncodingKind.Any,
-                            targetEncoding: recommendedEncoding,
-                            createBackups: s.CreateBackups,
-                            backupDirectory: null,
-                            force: false,
-                            noRollbackOnMismatch: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-                        if (encodingOverrides is { Count: > 0 })
-                        {
-                            encOptions.TargetEncodingResolver = path =>
-                            {
-                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                                var overrideEncoding = FileConsistencyOverrideResolver.ResolveEncodingOverride(rel, encodingOverrides);
-                                return overrideEncoding?.ToTextEncodingKind();
-                            };
-                        }
-                        projectFileConsistencyEncodingFix = enc.Convert(encOptions);
-
-                        var le = new LineEndingConverter();
-                        var target = s.RequiredLineEnding.ToLineEnding();
-                        var lineEndingOptions = new LineEndingConversionOptions(
-                            enumeration: enumeration,
-                            target: target,
-                            createBackups: s.CreateBackups,
-                            backupDirectory: null,
-                            force: false,
-                            onlyMixed: false,
-                            ensureFinalNewline: s.CheckMissingFinalNewline,
-                            onlyMissingNewline: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
-                        if (lineEndingOverrides is { Count: > 0 })
-                        {
-                            lineEndingOptions.TargetResolver = path =>
-                            {
-                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
-                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
-                                return overrideLineEnding?.ToLineEnding();
-                            };
-                        }
-                        projectFileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
-
-                        projectFileConsistencyReport = analyzer.Analyze(
-                            enumeration: enumeration,
-                            projectType: kind.ToString(),
-                            recommendedEncoding: recommendedEncoding,
-                            recommendedLineEnding: s.RequiredLineEnding,
-                            includeDetails: false,
-                            exportPath: exportPath,
-                            encodingOverrides: encodingOverrides,
-                            lineEndingOverrides: lineEndingOverrides);
-                    }
-
-                    var finalReport = projectFileConsistencyReport ?? throw new InvalidOperationException("Project-root file consistency analysis produced no report.");
-                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
-                    if (fileConsistencySeverity != ValidationSeverity.Off)
-                        LogFileConsistencyIssues(finalReport, s, "project", projectFileConsistencyStatus ?? CheckStatus.Warning);
-                    if (fileConsistencySeverity == ValidationSeverity.Error && projectFileConsistencyStatus == CheckStatus.Fail)
-                        throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
-
-                    SafeDone(reporter, projectFileConsistencyStep);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, projectFileConsistencyStep, ex);
-                    throw;
-                }
-            }
-        }
-
-        if (plan.CompatibilitySettings?.Enable == true)
-        {
-            SafeStart(reporter, startedKeys, compatibilityStep);
-            try
-            {
-                var s = plan.CompatibilitySettings;
-                var compatibilitySeverity = ResolveCompatibilitySeverity(s);
-                var excludeDirs = MergeExcludeDirectories(
-                    s.ExcludeDirectories,
-                    new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
-
-                var exportPath = s.ExportReport
-                    ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "PowerShellCompatibilityReport.csv")
-                    : null;
-
-                var analyzer = new PowerShellCompatibilityAnalyzer(_logger);
-                var specCompat = new PowerShellCompatibilitySpec(buildResult.StagingPath, recurse: true, excludeDirectories: excludeDirs);
-                var raw = analyzer.Analyze(specCompat, progress: null, exportPath: exportPath);
-                var adjusted = ApplyCompatibilitySettings(raw, s, compatibilitySeverity);
-                compatibilityReport = adjusted;
-
-                if (compatibilitySeverity == ValidationSeverity.Error && adjusted.Summary.Status == CheckStatus.Fail)
-                    throw new InvalidOperationException($"PowerShell compatibility check failed. {adjusted.Summary.Message}");
-
-                SafeDone(reporter, compatibilityStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(reporter, compatibilityStep, ex);
-                throw;
-            }
-        }
-
-        if (plan.ValidationSettings?.Enable == true)
-        {
-            SafeStart(reporter, startedKeys, moduleValidationStep);
-            try
-            {
-                var validator = new ModuleValidationService(_logger);
-                validationReport = validator.Run(new ModuleValidationSpec
-                {
-                    ProjectRoot = plan.ProjectRoot,
-                    StagingPath = buildResult.StagingPath,
-                    ModuleName = plan.ModuleName,
-                    ManifestPath = buildResult.ManifestPath,
-                    BuildSpec = plan.BuildSpec,
-                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings()
-                });
-
-                if (validationReport.Status == CheckStatus.Fail)
-                    throw new InvalidOperationException($"Module validation failed ({validationReport.Summary}).");
-
-                SafeDone(reporter, moduleValidationStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(reporter, moduleValidationStep, ex);
-                throw;
-            }
-        }
-
-        if (plan.ImportModules is not null &&
-            (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
-        {
-            if (plan.ImportModules.RequiredModules == true &&
-                ShouldAnalyzeBinaryConflicts(plan.ImportModules, importRequired: true))
-            {
-                SafeStart(reporter, startedKeys, binaryConflictAnalysisStep);
-                try
-                {
-                    automaticBinaryConflictDiagnostics = AnalyzeAutomaticBinaryConflicts(plan, buildResult);
-                    LogAutomaticBinaryConflictDiagnostics(automaticBinaryConflictDiagnostics);
-                    SafeDone(reporter, binaryConflictAnalysisStep);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, binaryConflictAnalysisStep, ex);
-                    throw;
-                }
-            }
-
-            if (plan.ImportModules.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true)
-            {
-                SafeStart(reporter, startedKeys, binaryDependenciesStep);
-                try
-                {
-                    RunBinaryDependencyPreflight(plan, buildResult);
-                    SafeDone(reporter, binaryDependenciesStep);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, binaryDependenciesStep, ex);
-                    throw;
-                }
-            }
-
-            SafeStart(reporter, startedKeys, importModulesStep);
-            try
-            {
-                RunImportModules(plan, buildResult);
-                SafeDone(reporter, importModulesStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(reporter, importModulesStep, ex);
-                throw;
-            }
-        }
-
-        if (plan.TestsAfterMerge is { Length: > 0 })
-        {
-            var testService = new ModuleTestSuiteService(new PowerShellRunner(), _logger);
-            for (int i = 0; i < plan.TestsAfterMerge.Length; i++)
-            {
-                var cfg = plan.TestsAfterMerge[i];
-                var step = testSteps.Length > i ? testSteps[i] : null;
-                SafeStart(reporter, startedKeys, step);
-                try
-                {
-                    RunTestsAfterMerge(plan, buildResult, cfg, testService);
-                    SafeDone(reporter, step);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, step, ex);
-                    throw;
-                }
-            }
-        }
-
-        var artefactResults = new List<ArtefactBuildResult>();
-        if (plan.Artefacts is { Length: > 0 })
-        {
-            var builder = new ArtefactBuilder(_logger);
-            foreach (var artefact in plan.Artefacts)
-            {
-                artefactSteps.TryGetValue(artefact, out var step);
-                SafeStart(reporter, startedKeys, step);
-                try
-                {
-                    artefactResults.Add(builder.Build(
-                        segment: artefact,
-                        projectRoot: plan.ProjectRoot,
-                        stagingPath: buildResult.StagingPath,
-                        moduleName: plan.ModuleName,
-                        moduleVersion: plan.ResolvedVersion,
-                        preRelease: plan.PreRelease,
-                        requiredModules: packagingRequiredModules,
-                        information: plan.Information,
-                        delivery: plan.Delivery,
-                        includeScriptFolders: !mergedScripts));
-                    SafeDone(reporter, step);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, step, ex);
-                    throw;
-                }
-            }
-        }
-
-        var publishResults = new List<ModulePublishResult>();
-        if (plan.Publishes is { Length: > 0 })
-        {
-            var publisher = new ModulePublisher(_logger);
-            foreach (var publish in plan.Publishes)
-            {
-                publishSteps.TryGetValue(publish, out var step);
-                SafeStart(reporter, startedKeys, step);
-                try
-                {
-                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults, includeScriptFolders: !mergedScripts));
-                    SafeDone(reporter, step);
-                }
-                catch (Exception ex)
-                {
-                    SafeFail(reporter, step, ex);
-                    throw;
-                }
-            }
-        }
-
-        ModuleInstallerResult? installResult = null;
-            if (plan.InstallEnabled)
-            {
-                SafeStart(reporter, startedKeys, installStep);
-            string? installPackagePath = null;
-            try
-            {
-                // Install should reflect the packaged module layout (not the full staged repo copy).
-                // This prevents shipping repo metadata (e.g., .github/.editorconfig/Sources) to end users.
-                installPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "install", $"{plan.ModuleName}_{Guid.NewGuid():N}");
-                Directory.CreateDirectory(installPackagePath);
-                ArtefactBuilder.CopyModulePackageForInstall(
-                    buildResult.StagingPath,
-                    installPackagePath,
-                    plan.Information,
-                    plan.Delivery,
-                    includeScriptFolders: !mergedScripts);
-
-                var installSpec = new ModuleInstallSpec
-                {
-                    Name = plan.ModuleName,
-                    Version = plan.ResolvedVersion,
-                    StagingPath = installPackagePath,
-                    Strategy = plan.InstallStrategy,
-                    KeepVersions = plan.InstallKeepVersions,
-                    Roots = plan.InstallRoots,
-                    UpdateManifestToResolvedVersion = spec.Install?.UpdateManifestToResolvedVersion ?? true,
-                    LegacyFlatHandling = plan.InstallLegacyFlatHandling,
-                    PreserveVersions = plan.InstallPreserveVersions
-                };
-                installResult = pipeline.InstallFromStaging(installSpec);
-                SafeDone(reporter, installStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(reporter, installStep, ex);
-                throw;
-            }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(installPackagePath))
-                {
-                    try { DeleteDirectoryWithRetries(installPackagePath); }
-                    catch (Exception ex) { _logger.Warn($"Failed to delete install package folder: {ex.Message}"); }
-                }
-            }
-        }
-
-        var projectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
-
-        return BuildPipelineResult(
-            spec,
-            plan,
-            buildResult,
-            automaticBinaryConflictDiagnostics,
-            installResult,
-            documentationResult,
-            fileConsistencyReport,
-            fileConsistencyStatus,
-            fileConsistencyEncodingFix,
-            fileConsistencyLineEndingFix,
-            compatibilityReport,
-            validationReport,
-            publishResults.ToArray(),
-            artefactResults.ToArray(),
-            formattingStagingResults,
-            formattingProjectResults,
-            projectFileConsistencyReport,
-            projectFileConsistencyStatus,
-            projectFileConsistencyEncodingFix,
-            projectFileConsistencyLineEndingFix,
-            signingResult,
-            dependencyInstallResults,
-            staged,
-            mergeExecution,
-            projectManifestSyncMessage);
+            return BuildPipelineResult(spec, plan, state);
         }
         catch (Exception ex)
         {
-            pipelineFailure = ex;
+            state.PipelineFailure = ex;
             throw;
         }
         finally
         {
             if (plan.DeleteGeneratedStagingAfterRun)
             {
-                SafeStart(reporter, startedKeys, cleanupStep);
-                try { DeleteDirectoryWithRetries(stagingPathForCleanup); }
+                session.Start(cleanupStep);
+                try { DeleteDirectoryWithRetries(state.StagingPathForCleanup); }
                 catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
-                SafeDone(reporter, cleanupStep);
+                session.Done(cleanupStep);
             }
 
-            if (pipelineFailure is not null)
-                NotifySkippedStepsOnFailure(reporterV2, steps, startedKeys);
+            if (state.PipelineFailure is not null)
+                session.NotifySkippedOnFailure();
         }
     }
 
