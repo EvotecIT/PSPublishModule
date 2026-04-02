@@ -67,7 +67,7 @@ These mostly represent reusable workflow, but they currently depend on PowerShel
 
 | File(s) | Target after split | Why it is mixed today | First split |
 |---|---|---|---|
-| `Services\ManifestEditor*.cs` | Mostly `PowerForge.PowerShell`, with a future neutral manifest abstraction in `PowerForge` | Uses `System.Management.Automation.Language` AST editing. The behavior is reusable, but the implementation is PowerShell-language-specific. | Introduce a neutral `IModuleManifestReader`/`IModuleManifestWriter` contract in core. Keep AST-backed implementation in `.PowerShell`. |
+| `Services\ManifestEditor*.cs` | Mostly `PowerForge.PowerShell`, with a future neutral manifest abstraction in `PowerForge` | Uses `System.Management.Automation.Language` AST editing. The behavior is reusable, but the implementation is PowerShell-language-specific. | Introduce a neutral manifest mutator contract in core. Keep AST-backed implementation in `.PowerShell`. |
 | `Services\ExportDetector.cs` | Split: binary metadata scanning in `PowerForge`, script-function detection in `PowerForge.PowerShell` | Binary cmdlet/alias scanning is metadata-only, but script export detection uses PowerShell AST. | Split into `BinaryExportDetector` and `ScriptExportDetector`. |
 | `Services\ModuleBuilder.cs` | `PowerForge` | Most of the workflow is core build/publish/copy logic, but export detection and manifest patching currently come from PowerShell-bound helpers. | Extract manifest/export operations behind interfaces; then move builder back to core. |
 | `Services\ModuleBuildPipeline.cs` | `PowerForge` | Core staging/install orchestration, but depends on `ModuleBuilder` and `ManifestEditor`-backed version patching. | Move after `ModuleBuilder` and manifest abstractions are split. |
@@ -119,6 +119,13 @@ Do these before touching `ModulePipelineRunner` ownership:
 - Split `ModuleTestFailureAnalyzer` into XML/core and Pester-object/PowerShell parts.
 - Separate reusable manifest mutation from AST-backed manifest editing.
 
+Current status:
+
+- `IModuleManifestMutator` now exists in `PowerForge`.
+- `AstModuleManifestMutator` now lives in `PowerForge.PowerShell`.
+- `ModuleBuilder` now uses the manifest mutator seam and the core `ModuleInstaller`.
+- The remaining blocker for moving `ModuleBuilder` into core is export detection, especially `DetectScriptFunctions`.
+
 ### Phase 3: Move the reusable pipeline engine back to core
 
 After the helper splits:
@@ -147,4 +154,4 @@ The safest first PR after this document is:
 4. Update `PowerForge.PowerShell.csproj` to stop linking files that now belong to core.
 5. Keep namespaces stable in these early slices to avoid unnecessary downstream churn.
 
-That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around manifest mutation, export detection, validation, and PowerShell-hosted execution in `ModulePipelineRunner`.
+That gives us an immediate architecture improvement without forcing the big refactor in the same change. The next boundary pressure is now concentrated around export detection, validation, and PowerShell-hosted execution in `ModulePipelineRunner`.
