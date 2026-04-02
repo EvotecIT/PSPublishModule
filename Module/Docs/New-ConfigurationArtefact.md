@@ -21,7 +21,17 @@ Unpacked (folder) for inspection or offline installation.
 When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
 when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.
 
+Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are
+intentionally excluded because they represent dependencies that should remain separately installed on the target
+machine.
+
+RequiredModulesSource controls the packaging strategy: Installed means local-only copy,
+Auto means prefer local and download when missing, and Download means always download. When omitted,
+the default is Installed.
+
 Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.
+
+For a broader dependency workflow explanation, see about_ModuleDependencies.
 
 ## EXAMPLES
 
@@ -35,10 +45,25 @@ New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Pac
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
 
+### EXAMPLE 3
+```powershell
+New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'
+```
+
+Use this when you want packaging to ignore whatever is already installed on the build machine.
+
+### EXAMPLE 4
+```powershell
+New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto
+```
+
+This is a good default for developer machines that may already have some dependencies installed.
+
 ## PARAMETERS
 
 ### -AddRequiredModules
-Add required modules to artefact by copying them over.
+Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include
+ExternalModule dependencies.
 
 ```yaml
 Type: SwitchParameter
@@ -342,7 +367,8 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesPath
-Path where required modules will be copied to.
+Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under
+the artefact output.
 
 ```yaml
 Type: String
@@ -358,7 +384,8 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesRepository
-Repository name used when downloading required modules (Save-PSResource / Save-Module).
+Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this
+when packaging should resolve from a specific gallery or private feed.
 
 ```yaml
 Type: String
@@ -374,7 +401,9 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesSource
-Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).
+Source used when resolving required modules (Auto / Installed / Download). When omitted,
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the
+machine.
 
 ```yaml
 Type: RequiredModulesSource
@@ -390,7 +419,8 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredModulesTool
-Tool used when downloading required modules (Save-PSResource / Save-Module).
+Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers
+PSResourceGet and falls back to PowerShellGet when necessary.
 
 ```yaml
 Type: ModuleSaveTool
