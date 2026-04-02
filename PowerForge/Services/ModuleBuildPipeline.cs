@@ -105,7 +105,10 @@ public sealed class ModuleBuildPipeline
         var staging = Path.GetFullPath(stagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
-        var builder = new ModuleBuilder(_logger);
+        var builder = new ModuleBuilder(
+            _logger,
+            new AstModuleManifestMutator(),
+            new PowerShellScriptFunctionExportDetector());
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
         var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
         {

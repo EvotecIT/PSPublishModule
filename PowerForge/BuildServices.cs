@@ -25,6 +25,7 @@ public static class BuildServices
     // BuildServices intentionally stays script-first and static. If we later need to unit-test
     // alternate manifest mutation strategies here, extract a dedicated host service instead.
     private static readonly IModuleManifestMutator ManifestMutator = new AstModuleManifestMutator();
+    private static readonly IScriptFunctionExportDetector ScriptFunctionExportDetector = new PowerShellScriptFunctionExportDetector();
 
     /// <summary>Formats files using out-of-proc PSScriptAnalyzer with optional settings JSON.</summary>
     public static IList<FormatterResult> FormatFiles(IEnumerable<string> files, string? settingsJson = null, int timeoutSeconds = 120)
@@ -103,15 +104,15 @@ public static class BuildServices
 
     /// <summary>Detects function names in PowerShell script files.</summary>
     public static IList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
-        => ExportDetector.DetectScriptFunctions(scriptFiles ?? Array.Empty<string>()).ToList();
+        => ScriptFunctionExportDetector.DetectScriptFunctions(scriptFiles ?? Array.Empty<string>()).ToList();
 
     /// <summary>Detects cmdlet names (Verb-Noun) in binary assemblies.</summary>
     public static IList<string> DetectBinaryCmdlets(IEnumerable<string> assemblies)
-        => ExportDetector.DetectBinaryCmdlets(assemblies ?? Array.Empty<string>()).ToList();
+        => BinaryExportDetector.DetectBinaryCmdlets(assemblies ?? Array.Empty<string>()).ToList();
 
     /// <summary>Detects aliases in binary assemblies.</summary>
     public static IList<string> DetectBinaryAliases(IEnumerable<string> assemblies)
-        => ExportDetector.DetectBinaryAliases(assemblies ?? Array.Empty<string>()).ToList();
+        => BinaryExportDetector.DetectBinaryAliases(assemblies ?? Array.Empty<string>()).ToList();
 
     /// <summary>Sets FunctionsToExport/CmdletsToExport/AliasesToExport in a PSD1 manifest.</summary>
     public static bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
@@ -131,10 +132,10 @@ public static class BuildServices
         {
             try { scripts.AddRange(System.IO.Directory.GetFiles(publicFolderPath, "*.ps1", System.IO.SearchOption.AllDirectories)); } catch { }
         }
-        var funcs = ExportDetector.DetectScriptFunctions(scripts);
+        var funcs = ScriptFunctionExportDetector.DetectScriptFunctions(scripts);
         var asmUnique = (assemblies ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var cmds  = ExportDetector.DetectBinaryCmdlets(asmUnique);
-        var alis  = ExportDetector.DetectBinaryAliases(asmUnique);
+        var cmds  = BinaryExportDetector.DetectBinaryCmdlets(asmUnique);
+        var alis  = BinaryExportDetector.DetectBinaryAliases(asmUnique);
         return new ExportSet(funcs.ToArray(), cmds.ToArray(), alis.ToArray());
     }
 

@@ -44,12 +44,10 @@
     <Compile Include="..\PowerForge\Services\AuthenticodeSigningService.cs" Link="Services\AuthenticodeSigningService.cs" />
     <Compile Include="..\PowerForge\Services\BinaryDependencyPreflightService.cs" Link="Services\BinaryDependencyPreflightService.cs" />
     <Compile Include="..\PowerForge\Services\DocumentationEngine.cs" Link="Services\DocumentationEngine.cs" />
-    <Compile Include="..\PowerForge\Services\ExportDetector.cs" Link="Services\ExportDetector.cs" />
     <Compile Include="..\PowerForge\Services\LegacySegmentAdapter.cs" Link="Services\LegacySegmentAdapter.cs" />
     <Compile Include="..\PowerForge\Services\ManifestEditor*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\MissingFunctionsAnalyzer.cs" Link="Services\MissingFunctionsAnalyzer.cs" />
     <Compile Include="..\PowerForge\Services\ModuleBuildPipeline.cs" Link="Services\ModuleBuildPipeline.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleBuilder.cs" Link="Services\ModuleBuilder.cs" />
     <Compile Include="..\PowerForge\Services\ModulePipelineRunner*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\ModulePublisher.cs" Link="Services\ModulePublisher.cs" />
     <Compile Include="..\PowerForge\Services\ModuleTestFailureAnalyzer.cs" Link="Services\ModuleTestFailureAnalyzer.cs" />

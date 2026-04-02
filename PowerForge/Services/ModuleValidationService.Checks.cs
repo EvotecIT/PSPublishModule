@@ -523,8 +523,8 @@ public sealed partial class ModuleValidationService
 
         if (settings.ValidateManifestExports)
         {
-            var detectedCmdlets = ExportDetector.DetectBinaryCmdlets(existingAssemblies);
-            var detectedAliases = ExportDetector.DetectBinaryAliases(existingAssemblies);
+            var detectedCmdlets = BinaryExportDetector.DetectBinaryCmdlets(existingAssemblies);
+            var detectedAliases = BinaryExportDetector.DetectBinaryAliases(existingAssemblies);
 
             var (manifestCmdlets, cmdletWildcard) = GetManifestStringArray(manifestPath, "CmdletsToExport");
             var (manifestAliases, aliasWildcard) = GetManifestStringArray(manifestPath, "AliasesToExport");

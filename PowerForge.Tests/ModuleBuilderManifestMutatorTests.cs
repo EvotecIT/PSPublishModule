@@ -18,9 +18,12 @@ public sealed class ModuleBuilderManifestMutatorTests
             const string moduleName = "TestModule";
             File.WriteAllText(Path.Combine(root, $"{moduleName}.psd1"), "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
             File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            Directory.CreateDirectory(Path.Combine(root, "Public"));
+            File.WriteAllText(Path.Combine(root, "Public", "Install-TestModule.ps1"), "function Install-TestModule { }");
 
             var mutator = new RecordingManifestMutator();
-            var builder = new ModuleBuilder(new NullLogger(), mutator);
+            var scriptDetector = new RecordingScriptFunctionExportDetector("Install-TestModule");
+            var builder = new ModuleBuilder(new NullLogger(), mutator, scriptDetector);
 
             builder.BuildInPlace(new ModuleBuilder.Options
             {
@@ -98,5 +101,18 @@ public sealed class ModuleBuilderManifestMutatorTests
             PsDataStringArrayWrites.Add((filePath, key, values ?? Array.Empty<string>()));
             return true;
         }
+    }
+
+    private sealed class RecordingScriptFunctionExportDetector : IScriptFunctionExportDetector
+    {
+        private readonly string[] _functions;
+
+        public RecordingScriptFunctionExportDetector(params string[] functions)
+        {
+            _functions = functions ?? Array.Empty<string>();
+        }
+
+        public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
+            => _functions;
     }
 }
