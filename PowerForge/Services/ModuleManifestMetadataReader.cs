@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 /// <summary>
@@ -7,10 +5,6 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleManifestMetadataReader
 {
-    private static readonly Regex RootModuleRegex = new(@"(?im)^\s*RootModule\s*=\s*['""](?<value>[^'""]+)['""]", RegexOptions.Compiled);
-    private static readonly Regex ModuleVersionRegex = new(@"(?im)^\s*ModuleVersion\s*=\s*['""](?<value>[^'""]+)['""]", RegexOptions.Compiled);
-    private static readonly Regex PreReleaseRegex = new(@"(?im)^\s*Prerelease\s*=\s*['""](?<value>[^'""]+)['""]", RegexOptions.Compiled);
-
     /// <summary>
     /// Reads module name, version, and prerelease metadata from the specified manifest.
     /// </summary>
@@ -25,22 +19,33 @@ public sealed class ModuleManifestMetadataReader
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Manifest file was not found: {fullPath}", fullPath);
 
+        var content = File.ReadAllText(fullPath);
         var moduleName = Path.GetFileNameWithoutExtension(fullPath) ?? string.Empty;
         var moduleVersion = "0.0.0";
         string? preRelease = null;
-        var content = File.ReadAllText(fullPath);
 
-        var rootModuleMatch = RootModuleRegex.Match(content);
-        if (rootModuleMatch.Success)
-            moduleName = Path.GetFileNameWithoutExtension(rootModuleMatch.Groups["value"].Value);
+        if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "RootModule", out var rootModule) &&
+            !string.IsNullOrWhiteSpace(rootModule))
+        {
+            moduleName = Path.GetFileNameWithoutExtension(rootModule);
+        }
 
-        var versionMatch = ModuleVersionRegex.Match(content);
-        if (versionMatch.Success)
-            moduleVersion = versionMatch.Groups["value"].Value;
+        if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var version) &&
+            !string.IsNullOrWhiteSpace(version))
+        {
+            moduleVersion = version!;
+        }
 
-        var preReleaseMatch = PreReleaseRegex.Match(content);
-        if (preReleaseMatch.Success)
-            preRelease = preReleaseMatch.Groups["value"].Value;
+        if (ModuleManifestTextParser.TryGetPsDataStringValue(content, "Prerelease", out var psDataPrerelease) &&
+            !string.IsNullOrWhiteSpace(psDataPrerelease))
+        {
+            preRelease = psDataPrerelease;
+        }
+        else if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "Prerelease", out var manifestPrerelease) &&
+                 !string.IsNullOrWhiteSpace(manifestPrerelease))
+        {
+            preRelease = manifestPrerelease;
+        }
 
         return new ModuleManifestMetadata(moduleName, moduleVersion, preRelease);
     }
