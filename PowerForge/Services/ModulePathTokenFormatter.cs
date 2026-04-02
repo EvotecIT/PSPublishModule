@@ -10,9 +10,6 @@ internal static class ModulePathTokenFormatter
         if (replacementPath is null)
             return string.Empty;
 
-        moduleName ??= string.Empty;
-        moduleVersion ??= string.Empty;
-
         var tagName = "v" + moduleVersion;
         var moduleVersionWithPreRelease = FormatVersionWithPreRelease(moduleVersion, preRelease);
         var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;

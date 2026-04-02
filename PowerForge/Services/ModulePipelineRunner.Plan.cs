@@ -686,7 +686,7 @@ public sealed partial class ModulePipelineRunner
             moduleName,
             resolved,
             preRelease,
-            buildSpec,
+            buildSpec.ExcludeDirectories,
             delivery,
             enabledArtefacts);
 

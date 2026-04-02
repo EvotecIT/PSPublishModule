@@ -496,7 +496,7 @@ public sealed class BinaryDependencyPreflightService
             if (errors is { Length: > 0 })
                 return null;
 
-            var top = (HashtableAst?)ast.Find(static node => node is HashtableAst, searchNestedScriptBlocks: true);
+            var top = TryGetTopLevelManifestHashtable(ast);
             if (top is null)
                 return null;
 
@@ -506,13 +506,33 @@ public sealed class BinaryDependencyPreflightService
             if (delivery is null)
                 return null;
 
+            var deliveryEnabled = true;
             foreach (var kv in delivery.KeyValuePairs)
             {
                 var key = GetHashtableKeyName(kv.Item1);
+                var expr = UnwrapExpression(kv.Item2);
+
+                if (string.Equals(key, "Enable", StringComparison.OrdinalIgnoreCase))
+                {
+                    switch (expr)
+                    {
+                        case ConstantExpressionAst c when c.Value is bool value:
+                            deliveryEnabled = value;
+                            break;
+                        case VariableExpressionAst v when string.Equals(v.VariablePath.UserPath, "true", StringComparison.OrdinalIgnoreCase):
+                            deliveryEnabled = true;
+                            break;
+                        case VariableExpressionAst v when string.Equals(v.VariablePath.UserPath, "false", StringComparison.OrdinalIgnoreCase):
+                            deliveryEnabled = false;
+                            break;
+                    }
+
+                    continue;
+                }
+
                 if (!string.Equals(key, "InternalsPath", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var expr = UnwrapExpression(kv.Item2);
                 switch (expr)
                 {
                     case StringConstantExpressionAst s when !string.IsNullOrWhiteSpace(s.Value):
@@ -521,15 +541,31 @@ public sealed class BinaryDependencyPreflightService
                         return str.Trim();
                 }
 
-                return null;
+                return deliveryEnabled ? "Internals" : null;
             }
+
+            return deliveryEnabled ? "Internals" : null;
         }
         catch (Exception)
         {
             return null;
         }
+    }
 
-        return null;
+    private static HashtableAst? TryGetTopLevelManifestHashtable(Ast ast)
+    {
+        if (ast is ScriptBlockAst scriptBlock &&
+            scriptBlock.EndBlock is not null)
+        {
+            foreach (var statement in scriptBlock.EndBlock.Statements)
+            {
+                var expr = UnwrapExpression(statement);
+                if (expr is HashtableAst hashtable)
+                    return hashtable;
+            }
+        }
+
+        return (HashtableAst?)ast.Find(static node => node is HashtableAst, searchNestedScriptBlocks: false);
     }
 
     private static HashtableAst? FindChildHashtable(HashtableAst parent, string key)

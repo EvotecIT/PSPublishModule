@@ -117,13 +117,52 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         }
     }
 
+    [Fact]
+    public void Plan_ExternalDeliveryPath_DoesNotTripExcludedDirectoryCheck()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var externalDelivery = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "Artefacts", Guid.NewGuid().ToString("N"), "Delivery"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var error = Record.Exception(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: externalDelivery.FullName,
+                excludedDirectories: new[] { "Artefacts" })));
+
+            Assert.Null(error);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { externalDelivery.Parent?.Parent?.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(
         string root,
         string moduleName,
         string deliveryInternalsPath,
         string? artefactPath = null,
-        string? requiredModulesPath = null)
+        string? requiredModulesPath = null,
+        string[]? excludedDirectories = null)
     {
+        var build = new ModuleBuildSpec
+        {
+            Name = moduleName,
+            SourcePath = root,
+            Version = "1.0.0",
+            KeepStaging = true
+        };
+
+        if (excludedDirectories is not null)
+            build.ExcludeDirectories = excludedDirectories;
+
         var segments = new System.Collections.Generic.List<IConfigurationSegment>
         {
             new ConfigurationOptionsSegment
@@ -158,13 +197,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
 
         return new ModulePipelineSpec
         {
-            Build = new ModuleBuildSpec
-            {
-                Name = moduleName,
-                SourcePath = root,
-                Version = "1.0.0",
-                KeepStaging = true
-            },
+            Build = build,
             Install = new ModulePipelineInstallOptions
             {
                 Enabled = false

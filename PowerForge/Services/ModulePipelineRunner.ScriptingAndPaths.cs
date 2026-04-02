@@ -150,7 +150,7 @@ public sealed partial class ModulePipelineRunner
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        ModuleBuildSpec buildSpec,
+        IEnumerable<string>? excludedDirectories,
         DeliveryOptionsConfiguration? delivery,
         IReadOnlyList<ConfigurationArtefactSegment>? artefacts)
     {
@@ -161,7 +161,7 @@ public sealed partial class ModulePipelineRunner
 
         var deliveryRoot = ResolveProjectRelativePath(projectRoot, internalsPath);
         var conflicts = new List<string>();
-        AddDeliveryExcludedDirectoryConflict(conflicts, projectRoot, deliveryRoot, internalsPath, buildSpec.ExcludeDirectories);
+        AddDeliveryExcludedDirectoryConflict(conflicts, projectRoot, deliveryRoot, internalsPath, excludedDirectories);
         AddDeliveryArtefactOverlapConflicts(conflicts, projectRoot, moduleName, moduleVersion, preRelease, deliveryRoot, internalsPath, artefacts);
 
         if (conflicts.Count == 0)
@@ -188,10 +188,11 @@ public sealed partial class ModulePipelineRunner
         if (excluded.Count == 0)
             return;
 
+        if (!IsSameOrChildPath(projectRoot, deliveryRoot))
+            return;
+
         // ModuleBuildPipeline excludes directories by folder name anywhere in the tree, not only at the root.
-        var relativePath = IsSameOrChildPath(projectRoot, deliveryRoot)
-            ? ProjectTextInspection.ComputeRelativePath(projectRoot, deliveryRoot)
-            : configuredInternalsPath;
+        var relativePath = ProjectTextInspection.ComputeRelativePath(projectRoot, deliveryRoot);
 
         var conflictingSegments = GetPathSegments(relativePath)
             .Where(excluded.Contains)
