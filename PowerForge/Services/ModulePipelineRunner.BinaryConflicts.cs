@@ -120,7 +120,7 @@ public sealed partial class ModulePipelineRunner
 
     private BuildDiagnostic[] CreateRequiredModuleOrderDiagnostics(
         RequiredModuleReference[] requiredModules,
-        InstalledModuleReference[] installedModules,
+        InstalledModuleMetadata[] installedModules,
         string[] editions,
         bool preferConflictOrder)
     {
@@ -157,7 +157,7 @@ public sealed partial class ModulePipelineRunner
     }
 
     private BuildDiagnostic[] CreateRequiredModuleBinaryConflictDiagnostics(
-        InstalledModuleReference[] installedModules,
+        InstalledModuleMetadata[] installedModules,
         string[] editions)
     {
         if (installedModules.Length < 2)
@@ -215,7 +215,7 @@ public sealed partial class ModulePipelineRunner
     private BuildDiagnostic[] CreateBuiltModuleBinaryConflictDiagnostics(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        InstalledModuleReference[] installedModules,
+        InstalledModuleMetadata[] installedModules,
         string[] editions)
     {
         var detector = new BinaryConflictDetectionService(_logger);
@@ -261,7 +261,7 @@ public sealed partial class ModulePipelineRunner
 
     private string[] BuildPreferredRequiredModuleOrder(
         IReadOnlyList<string> declaredOrder,
-        InstalledModuleReference[] installedModules,
+        InstalledModuleMetadata[] installedModules,
         string[] editions)
     {
         if (declaredOrder is null || declaredOrder.Count == 0)
@@ -283,10 +283,10 @@ public sealed partial class ModulePipelineRunner
     }
 
     private Dictionary<string, int> ScoreRequiredModuleConflictOrder(
-        InstalledModuleReference[] installedModules,
+        InstalledModuleMetadata[] installedModules,
         string[] editions)
     {
-        var modules = installedModules ?? Array.Empty<InstalledModuleReference>();
+        var modules = installedModules ?? Array.Empty<InstalledModuleMetadata>();
         var detector = new BinaryConflictDetectionService(_logger);
         var scores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -318,7 +318,7 @@ public sealed partial class ModulePipelineRunner
         return scores;
     }
 
-    private InstalledModuleReference[] ResolveInstalledRequiredModuleReferences(IReadOnlyList<RequiredModuleReference> requiredModules)
+    private InstalledModuleMetadata[] ResolveInstalledRequiredModuleReferences(IReadOnlyList<RequiredModuleReference> requiredModules)
     {
         var names = (requiredModules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
@@ -326,10 +326,10 @@ public sealed partial class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (names.Length == 0)
-            return Array.Empty<InstalledModuleReference>();
+            return Array.Empty<InstalledModuleMetadata>();
 
-        var installed = TryGetLatestInstalledModuleInfo(names);
-        var resolved = new List<InstalledModuleReference>(names.Length);
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(names);
+        var resolved = new List<InstalledModuleMetadata>(names.Length);
         var missing = new List<string>();
         foreach (var name in names)
         {

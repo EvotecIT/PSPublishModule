@@ -18,6 +18,16 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
 This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.
 It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.
 
+Dependency-related options in this cmdlet affect the build machine, not artefact packaging. Use
+InstallMissingModules when the build host needs missing RequiredModule or
+ExternalModule dependencies installed before merge/import/test steps run.
+
+If you want dependencies copied into ZIP/unpacked artefacts, configure that separately with
+New-ConfigurationArtefact -AddRequiredModules. Build-time installation and artefact packaging are designed
+as separate decisions because many teams want one without the other.
+
+For a broader dependency workflow explanation, see about_ModuleDependencies.
+
 ## EXAMPLES
 
 ### EXAMPLE 1
@@ -29,6 +39,27 @@ New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedIn
 ```powershell
 New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce
 ```
+
+### EXAMPLE 3
+```powershell
+New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'PSGallery'
+```
+
+Use this when the build host does not already have the declared RequiredModule or ExternalModule dependencies installed.
+
+### EXAMPLE 4
+```powershell
+New-ConfigurationBuild -Enable -ResolveMissingModulesOnline -WarnIfRequiredModulesOutdated
+```
+
+Useful in CI or on clean machines when dependency versions should come from the repository rather than the local module cache.
+
+### EXAMPLE 5
+```powershell
+New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'MyPrivateFeed' -InstallMissingModulesCredentialUserName 'build' -InstallMissingModulesCredentialSecretFilePath '.secrets\feed-token.txt'
+```
+
+Use the credential parameters only when the repository requires authentication.
 
 ## PARAMETERS
 
@@ -193,7 +224,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModules
-Install missing module dependencies (Required/External) before build.
+Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects
+the build host only; it does not bundle modules into artefacts.
 
 ```yaml
 Type: SwitchParameter
@@ -209,7 +241,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesCredentialSecret
-Credential secret/token for dependency installation.
+Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want
+the secret value embedded directly in scripts.
 
 ```yaml
 Type: String
@@ -225,7 +258,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesCredentialSecretFilePath
-Path to a file containing the credential secret/token.
+Path to a file containing the credential secret or token. This is often the safest option for automation and
+CI agents.
 
 ```yaml
 Type: String
@@ -241,7 +275,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesCredentialUserName
-Credential user name for dependency installation.
+Credential user name for dependency installation. This is usually paired with
+InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFilePath.
 
 ```yaml
 Type: String
@@ -257,7 +292,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesForce
-Force re-install even if dependencies are already installed.
+Force re-install or update even if dependencies are already installed. Useful when you want the build host to
+re-sync against the repository instead of accepting the current local state.
 
 ```yaml
 Type: SwitchParameter
@@ -273,7 +309,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesPrerelease
-Allow prerelease versions when installing dependencies.
+Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and
+repository policy intentionally allow prerelease packages.
 
 ```yaml
 Type: SwitchParameter
@@ -289,7 +326,8 @@ Accept wildcard characters: True
 ```
 
 ### -InstallMissingModulesRepository
-Repository name used for dependency installation (defaults to PSGallery).
+Repository name used for dependency installation (defaults to PSGallery). Set this when your build
+should resolve dependencies from a named private feed or alternate gallery.
 
 ```yaml
 Type: String
@@ -948,7 +986,8 @@ Accept wildcard characters: True
 ```
 
 ### -WarnIfRequiredModulesOutdated
-Warn if RequiredModules are older than the latest available in the repository.
+Warn if RequiredModule entries are older than the latest version available in the repository. This is a
+reporting hint and does not change the manifest or install anything by itself.
 
 ```yaml
 Type: SwitchParameter

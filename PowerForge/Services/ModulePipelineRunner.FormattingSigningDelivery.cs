@@ -138,56 +138,7 @@ public sealed partial class ModulePipelineRunner
 
         var include = BuildSigningIncludePatterns(signing);
         var exclude = BuildSigningExcludeSubstrings(signing);
-
-        var args = new List<string>(8)
-        {
-            rootPath,
-            EncodeLines(include),
-            EncodeLines(exclude),
-            signing.CertificateThumbprint ?? string.Empty,
-            signing.CertificatePFXPath ?? string.Empty,
-            signing.CertificatePFXBase64 ?? string.Empty,
-            signing.CertificatePFXPassword ?? string.Empty,
-            signing.OverwriteSigned == true ? "1" : "0"
-        };
-
-        var runner = new PowerShellRunner();
-        var script = BuildSignModuleScript();
-        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(10));
-
-        var summary = TryExtractSigningSummary(result.StdOut);
-        if (result.ExitCode != 0 || (summary?.Failed ?? 0) > 0)
-        {
-            var msg = TryExtractSigningError(result.StdOut) ?? result.StdErr;
-            var extra = summary is null ? string.Empty : $" {FormatSigningSummary(summary)}";
-            var full = $"Signing failed (exit {result.ExitCode}). {msg}{extra}".Trim();
-
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
-
-            throw new ModuleSigningException(full, summary);
-        }
-
-        summary ??= new ModuleSigningResult
-        {
-            Attempted = ParseSignedCount(result.StdOut),
-            SignedNew = ParseSignedCount(result.StdOut)
-        };
-
-        if (summary.SignedTotal > 0)
-        {
-            _logger.Success(
-                $"Signed {summary.SignedNew} new file(s), re-signed {summary.Resigned} file(s) for '{moduleName}'. " +
-                $"(Already signed: {summary.AlreadySignedOther} third-party, {summary.AlreadySignedByThisCert} by this cert)");
-        }
-        else
-        {
-            _logger.Info(
-                $"No files required signing for '{moduleName}'. " +
-                $"(Already signed: {summary.AlreadySignedOther} third-party, {summary.AlreadySignedByThisCert} by this cert)");
-        }
-
-        return summary;
+        return _hostedOperations.SignModuleOutput(moduleName, rootPath, include, exclude, signing);
     }
 
     internal static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
@@ -290,58 +241,6 @@ public sealed partial class ModulePipelineRunner
 
         return normalized.Equals(trimmedInternals, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static int ParseSignedCount(string stdout)
-    {
-        foreach (var line in SplitLines(stdout))
-        {
-            if (!line.StartsWith("PFSIGN::COUNT::", StringComparison.Ordinal)) continue;
-            var val = line.Substring("PFSIGN::COUNT::".Length);
-            if (int.TryParse(val, out var n)) return n;
-        }
-        return 0;
-    }
-
-    private static string? TryExtractSigningError(string stdout)
-    {
-        foreach (var line in SplitLines(stdout))
-        {
-            if (!line.StartsWith("PFSIGN::ERROR::", StringComparison.Ordinal)) continue;
-            var b64 = line.Substring("PFSIGN::ERROR::".Length);
-            var decoded = Decode(b64);
-            return string.IsNullOrWhiteSpace(decoded) ? null : decoded;
-        }
-        return null;
-    }
-
-    private static ModuleSigningResult? TryExtractSigningSummary(string stdout)
-    {
-        foreach (var line in SplitLines(stdout))
-        {
-            if (!line.StartsWith("PFSIGN::SUMMARY::", StringComparison.Ordinal)) continue;
-            var b64 = line.Substring("PFSIGN::SUMMARY::".Length);
-            var decoded = Decode(b64);
-            if (string.IsNullOrWhiteSpace(decoded)) return null;
-
-            try
-            {
-                return JsonSerializer.Deserialize<ModuleSigningResult>(decoded,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch
-            {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private static string FormatSigningSummary(ModuleSigningResult s)
-        => $"matched {s.TotalAfterExclude}, signed {s.SignedNew} new, re-signed {s.Resigned}, " +
-           $"already signed {s.AlreadySignedOther} third-party/{s.AlreadySignedByThisCert} by this cert, failed {s.Failed}.";
-
-    private static string BuildSignModuleScript()
-        => EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
 
     private static FormatOptions BuildFormatOptions(FormatCodeOptions formatCode)
         => new()

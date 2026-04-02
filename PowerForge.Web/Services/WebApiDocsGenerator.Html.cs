@@ -913,6 +913,8 @@ $@"<!doctype html>
         var sb = new StringBuilder();
         sb.AppendLine("    <div class=\"ev-docs-menu api-sidebar-shell\">");
         var primaryKindLabel = ResolvePrimaryKindLabel(types);
+        var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
+        var primaryKindFilterLabel = ResolvePrimaryKindFilterLabel(types);
         sb.AppendLine("    <div class=\"sidebar-project-indicator ev-docs-project-indicator\">");
         sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link sidebar-back-link ev-docs-project-back\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
@@ -939,7 +941,7 @@ $@"<!doctype html>
           sb.AppendLine("        <circle cx=\"11\" cy=\"11\" r=\"8\"/>");
           sb.AppendLine("        <path d=\"M21 21l-4.35-4.35\"/>");
           sb.AppendLine("      </svg>");
-          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindLabel.ToLowerInvariant()} ({totalTypes})...\" />");
+          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindPluralLabel} ({totalTypes})...\" />");
           sb.AppendLine("      <button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
           sb.AppendLine("        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
           sb.AppendLine("          <path d=\"M18 6L6 18M6 6l12 12\"/>");
@@ -951,7 +953,7 @@ $@"<!doctype html>
           if (kindFilters.Count > 0)
           {
               sb.AppendLine("    <div class=\"sidebar-filters\">");
-              sb.AppendLine($"      <div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindLabel)} filters</div>");
+              sb.AppendLine($"      <div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindFilterLabel)} filters</div>");
               sb.AppendLine("      <div class=\"filter-buttons\">");
               sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
               foreach (var kind in kindFilters)
@@ -982,7 +984,7 @@ $@"<!doctype html>
               sb.AppendLine("      </div>");
               sb.AppendLine("    </div>");
           }
-          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} types</div>");
+          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
           sb.AppendLine("    <div class=\"sidebar-tools\">");
           sb.AppendLine("      <button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
           sb.AppendLine("      <button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
@@ -1034,7 +1036,7 @@ $@"<!doctype html>
         }
 
           sb.AppendLine("    </nav>");
-          sb.AppendLine("    <div class=\"sidebar-empty\" hidden>No matching types.</div>");
+          sb.AppendLine($"    <div class=\"sidebar-empty\" hidden>No matching {primaryKindPluralLabel}.</div>");
           sb.AppendLine("    </div>");
         return sb.ToString().TrimEnd();
     }
@@ -1074,6 +1076,7 @@ $@"<!doctype html>
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var primaryKindLabel = ResolvePrimaryKindLabel(types);
+        var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
 
         sb.AppendLine("    <div class=\"api-overview ev-page-body\">");
         sb.AppendLine("      <header class=\"ev-docs-header api-overview-header\">");
@@ -1118,7 +1121,7 @@ $@"<!doctype html>
 
         sb.AppendLine("      <section class=\"all-namespaces\">");
         sb.AppendLine("        <h2>All Namespaces</h2>");
-        sb.AppendLine($"        <p class=\"section-desc\">Browse all {types.Count} {primaryKindLabel.ToLowerInvariant()}s organized by namespace.</p>");
+        sb.AppendLine($"        <p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
         foreach (var group in namespaceGroups)
         {
             AppendOverviewNamespaceGroup(sb, group, baseUrl, typeDisplayNames);
@@ -1241,6 +1244,66 @@ $@"<!doctype html>
         return distinctKinds[0].Equals("function", StringComparison.OrdinalIgnoreCase)
             ? "Function"
             : GetKindLabel(distinctKinds[0], 0).Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+    }
+
+    private static string ResolvePrimaryKindFilterLabel(IReadOnlyList<ApiTypeModel> types)
+    {
+        if (types is null || types.Count == 0)
+            return "Type";
+
+        var distinctKinds = types
+            .Select(static type => NormalizeKind(type.Kind))
+            .Where(static kind => !string.IsNullOrWhiteSpace(kind))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (distinctKinds.Length != 1)
+            return "Type";
+
+        return distinctKinds[0].ToLowerInvariant() switch
+        {
+            "class" => "Class",
+            "struct" => "Struct",
+            "interface" => "Interface",
+            "enum" => "Enum",
+            "delegate" => "Delegate",
+            "cmdlet" => "Cmdlet",
+            "function" => "Function",
+            "alias" => "Alias",
+            "about" => "About",
+            "command" => "Command",
+            _ => "Type"
+        };
+    }
+
+    private static string ResolvePrimaryKindPluralLabel(IReadOnlyList<ApiTypeModel> types)
+    {
+        if (types is null || types.Count == 0)
+            return "types";
+
+        var distinctKinds = types
+            .Select(static type => NormalizeKind(type.Kind))
+            .Where(static kind => !string.IsNullOrWhiteSpace(kind))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (distinctKinds.Length != 1)
+            return "types";
+
+        return distinctKinds[0].ToLowerInvariant() switch
+        {
+            "class" => "classes",
+            "struct" => "structs",
+            "interface" => "interfaces",
+            "enum" => "enums",
+            "delegate" => "delegates",
+            "cmdlet" => "cmdlets",
+            "function" => "functions",
+            "alias" => "aliases",
+            "about" => "about topics",
+            "command" => "commands",
+            _ => "types"
+        };
     }
 
     private static string BuildFreshnessBadgeHtml(ApiFreshnessModel? freshness, string cssClass)

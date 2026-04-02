@@ -13,11 +13,22 @@ namespace PowerForge;
 public sealed class ModuleBuilder
 {
     private readonly ILogger _logger;
+    private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
 
     /// <summary>
-    /// Creates a new module builder that logs progress via <paramref name="logger"/>.
+    /// Creates a new module builder that logs progress via <paramref name="logger"/> and mutates manifests via
+    /// <paramref name="manifestMutator"/> while detecting script exports via <paramref name="scriptFunctionExportDetector"/>.
     /// </summary>
-    public ModuleBuilder(ILogger logger) => _logger = logger;
+    public ModuleBuilder(
+        ILogger logger,
+        IModuleManifestMutator manifestMutator,
+        IScriptFunctionExportDetector scriptFunctionExportDetector)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _manifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        _scriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
+    }
 
     /// <summary>
     /// Options controlling module build behavior.
@@ -201,13 +212,13 @@ public sealed class ModuleBuilder
         if (File.Exists(psd1))
         {
             // Preserve existing manifest metadata (GUID, RequiredModules, etc.) and patch only the key fields.
-            ManifestEditor.TrySetTopLevelModuleVersion(psd1, opts.ModuleVersion);
-            ManifestEditor.TrySetTopLevelString(psd1, "RootModule", rootModule);
-            if (!string.IsNullOrWhiteSpace(opts.Author)) ManifestEditor.TrySetTopLevelString(psd1, "Author", opts.Author!);
-            if (!string.IsNullOrWhiteSpace(opts.CompanyName)) ManifestEditor.TrySetTopLevelString(psd1, "CompanyName", opts.CompanyName!);
-            if (!string.IsNullOrWhiteSpace(opts.Description)) ManifestEditor.TrySetTopLevelString(psd1, "Description", opts.Description!);
+            _manifestMutator.TrySetTopLevelModuleVersion(psd1, opts.ModuleVersion);
+            _manifestMutator.TrySetTopLevelString(psd1, "RootModule", rootModule);
+            if (!string.IsNullOrWhiteSpace(opts.Author)) _manifestMutator.TrySetTopLevelString(psd1, "Author", opts.Author!);
+            if (!string.IsNullOrWhiteSpace(opts.CompanyName)) _manifestMutator.TrySetTopLevelString(psd1, "CompanyName", opts.CompanyName!);
+            if (!string.IsNullOrWhiteSpace(opts.Description)) _manifestMutator.TrySetTopLevelString(psd1, "Description", opts.Description!);
             if (opts.CompatiblePSEditions.Count > 0)
-                ManifestEditor.TrySetTopLevelStringArray(psd1, "CompatiblePSEditions", opts.CompatiblePSEditions.ToArray());
+                _manifestMutator.TrySetTopLevelStringArray(psd1, "CompatiblePSEditions", opts.CompatiblePSEditions.ToArray());
         }
         else
         {
@@ -223,9 +234,9 @@ public sealed class ModuleBuilder
                 scriptsToProcess: Array.Empty<string>());
         }
 
-        if (opts.Tags.Count > 0) BuildServices.SetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
-        if (!string.IsNullOrWhiteSpace(opts.IconUri)) BuildServices.SetPsDataString(psd1, "IconUri", opts.IconUri!);
-        if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) BuildServices.SetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
+        if (opts.Tags.Count > 0) _manifestMutator.TrySetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
+        if (!string.IsNullOrWhiteSpace(opts.IconUri)) _manifestMutator.TrySetPsDataString(psd1, "IconUri", opts.IconUri!);
+        if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) _manifestMutator.TrySetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
 
         // 3) Exports
         IEnumerable<string>? functionsToSet = null;
@@ -245,7 +256,7 @@ public sealed class ModuleBuilder
         }
 
         if (scripts.Length > 0)
-            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
+            functionsToSet = _scriptFunctionExportDetector.DetectScriptFunctions(scripts);
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
@@ -258,8 +269,8 @@ public sealed class ModuleBuilder
             }
             else
             {
-                var detectedCmdlets = ExportDetector.DetectBinaryCmdlets(exportDlls);
-                var detectedAliases = ExportDetector.DetectBinaryAliases(exportDlls);
+                var detectedCmdlets = BinaryExportDetector.DetectBinaryCmdlets(exportDlls);
+                var detectedAliases = BinaryExportDetector.DetectBinaryAliases(exportDlls);
 
                 if (detectedCmdlets.Count == 0 && detectedAliases.Count == 0)
                 {
@@ -273,7 +284,7 @@ public sealed class ModuleBuilder
             }
         }
 
-        BuildServices.SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
+        SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
         return buildNotes;
     }
 
@@ -285,14 +296,31 @@ public sealed class ModuleBuilder
     public ModuleInstallerResult Build(Options opts)
     {
         _ = BuildInPlace(opts);
-        return BuildServices.InstallVersioned(
-            stagingPath: opts.ProjectRoot,
-            moduleName: opts.ModuleName,
-            moduleVersion: opts.ModuleVersion,
-            strategy: opts.Strategy,
-            keepVersions: opts.KeepVersions,
-            roots: opts.InstallRoots,
-            updateManifestToResolvedVersion: true);
+        var resolved = ModuleInstaller.ResolveTargetVersion(opts.InstallRoots, opts.ModuleName, opts.ModuleVersion, opts.Strategy);
+        try
+        {
+            _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1"), resolved);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Manifest version patch failed before install: {ex.Message}");
+        }
+
+        var installer = new ModuleInstaller(_logger);
+        var installOptions = new ModuleInstallerOptions(opts.InstallRoots, InstallationStrategy.Exact, opts.KeepVersions);
+        return installer.InstallFromStaging(opts.ProjectRoot, opts.ModuleName, resolved, installOptions);
+    }
+
+    private bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
+    {
+        var changed = false;
+        if (functions is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
+        if (cmdlets is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
+        if (aliases is not null)
+            changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
+        return changed;
     }
 
     private static bool IsCore(string tfm)

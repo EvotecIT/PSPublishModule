@@ -38,7 +38,7 @@ public sealed class ModulePipelinePlan
     public ManifestConfiguration? Manifest { get; }
 
     /// <summary>
-    /// Final build spec used for <see cref="ModuleBuildPipeline.BuildToStaging"/>.
+    /// Final build spec used by the module build pipeline staging step.
     /// </summary>
     public ModuleBuildSpec BuildSpec { get; }
 

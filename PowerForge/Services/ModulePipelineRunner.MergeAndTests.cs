@@ -209,32 +209,18 @@ public sealed partial class ModulePipelineRunner
                 .ToArray()
             : Array.Empty<ImportModuleEntry>();
 
-        var modulesB64 = EncodeImportModules(modules);
-        var args = new List<string>(5)
-        {
-            modulesB64,
-            importRequired ? "1" : "0",
-            importSelf ? "1" : "0",
-            buildResult.ManifestPath,
-            cfg.Verbose == true ? "1" : "0"
-        };
-
-        var script = BuildImportModulesScript();
-        foreach (var target in GetImportValidationTargets(
+        var targets = GetImportValidationTargets(
             plan.CompatiblePSEditions,
             buildResult.StagingPath,
-            plan.Manifest?.PowerShellVersion))
-        {
-            var result = RunScript(_powerShellRunner, script, args, TimeSpan.FromMinutes(5), preferPwsh: target.PreferPwsh);
-            if (result.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    ModuleImportFailureFormatter.BuildFailureMessage(
-                        result,
-                        buildResult.ManifestPath,
-                        validationTarget: target.Label));
-            }
-        }
+            plan.Manifest?.PowerShellVersion);
+
+        _hostedOperations.ValidateModuleImports(
+            buildResult.ManifestPath,
+            modules,
+            importRequired,
+            importSelf,
+            cfg.Verbose == true,
+            targets);
     }
 
     private void RunBinaryDependencyPreflight(ModulePipelinePlan plan, ModuleBuildResult buildResult)
@@ -242,25 +228,20 @@ public sealed partial class ModulePipelineRunner
         var cfg = plan.ImportModules;
         if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
 
-        var service = new BinaryDependencyPreflightService(_logger);
         foreach (var target in GetImportValidationTargets(
             plan.CompatiblePSEditions,
             buildResult.StagingPath,
             plan.Manifest?.PowerShellVersion))
         {
-            var result = service.Analyze(buildResult.StagingPath, target.PowerShellEdition);
-            if (result.HasIssues)
-            {
-                throw new InvalidOperationException(
-                    BinaryDependencyPreflightService.BuildFailureMessage(
-                        result,
-                        buildResult.ManifestPath,
-                        validationTarget: target.Label));
-            }
+            _hostedOperations.EnsureBinaryDependenciesValid(
+                buildResult.StagingPath,
+                target.PowerShellEdition,
+                buildResult.ManifestPath,
+                target.Label);
         }
     }
 
-    internal static ImportValidationTarget[] GetImportValidationTargets(
+    internal static ModuleImportValidationTarget[] GetImportValidationTargets(
         IReadOnlyList<string>? compatiblePSEditions,
         string? stagingPath = null,
         string? minimumPowerShellVersion = null)
@@ -277,33 +258,33 @@ public sealed partial class ModulePipelineRunner
         var hasAnyBinaryPayload = hasDefaultPayload || hasCorePayload;
 
         if (Path.DirectorySeparatorChar != '\\')
-            return new[] { new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true) };
+            return new[] { new ModuleImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true) };
 
-        var targets = new List<ImportValidationTarget>(2);
+        var targets = new List<ModuleImportValidationTarget>(2);
 
         if (compatible.Count == 0 && hasAnyBinaryPayload)
         {
             if (supportsDesktopByVersion && hasDefaultPayload)
-                targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
+                targets.Add(new ModuleImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
             if (hasCorePayload || requiresCoreByVersion)
-                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+                targets.Add(new ModuleImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         }
         else
         {
             if (hasDesktop && (!hasAnyBinaryPayload || hasDefaultPayload))
-                targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
+                targets.Add(new ModuleImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
             if (hasCore && (!hasAnyBinaryPayload || hasCorePayload || requiresCoreByVersion))
-                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+                targets.Add(new ModuleImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         }
 
         if (targets.Count == 0)
         {
             if (hasDesktop)
-                targets.Add(new ImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
+                targets.Add(new ModuleImportValidationTarget("Windows PowerShell/Desktop", "Desktop", preferPwsh: false));
             if (hasCore)
-                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+                targets.Add(new ModuleImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
             if (targets.Count == 0)
-                targets.Add(new ImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
+                targets.Add(new ModuleImportValidationTarget("PowerShell/Core", "Core", preferPwsh: true));
         }
 
         return targets.ToArray();
@@ -334,20 +315,6 @@ public sealed partial class ModulePipelineRunner
         return Version.TryParse(normalized, out var parsed) ? parsed : null;
     }
 
-    internal sealed class ImportValidationTarget
-    {
-        public string Label { get; }
-        public string PowerShellEdition { get; }
-        public bool PreferPwsh { get; }
-
-        public ImportValidationTarget(string label, string powerShellEdition, bool preferPwsh)
-        {
-            Label = label;
-            PowerShellEdition = powerShellEdition;
-            PreferPwsh = preferPwsh;
-        }
-    }
-
     private static bool HasBinaryPayload(string? stagingPath, string folderName)
     {
         if (string.IsNullOrWhiteSpace(stagingPath) || string.IsNullOrWhiteSpace(folderName))
@@ -361,8 +328,7 @@ public sealed partial class ModulePipelineRunner
     private void RunTestsAfterMerge(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        TestConfiguration testConfiguration,
-        ModuleTestSuiteService service)
+        TestConfiguration testConfiguration)
     {
         if (plan is null || buildResult is null || testConfiguration is null) return;
 
@@ -400,7 +366,7 @@ public sealed partial class ModulePipelineRunner
             ImportModulesVerbose = importVerbose
         };
 
-        var result = service.Run(spec);
+        var result = _hostedOperations.RunModuleTestSuite(spec);
         if (result.FailedCount > 0)
         {
             if (testConfiguration.Force)
@@ -413,27 +379,6 @@ public sealed partial class ModulePipelineRunner
             }
         }
     }
-
-    private static string BuildImportModulesScript()
-    {
-        return EmbeddedScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");
-    }
-
-    private static string EncodeImportModules(IEnumerable<ImportModuleEntry> modules)
-    {
-        var list = modules?.Where(m => m is not null && !string.IsNullOrWhiteSpace(m.Name)).ToArray() ?? Array.Empty<ImportModuleEntry>();
-        if (list.Length == 0) return string.Empty;
-        var json = JsonSerializer.Serialize(list);
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
-    }
-
-    private sealed class ImportModuleEntry
-    {
-        public string Name { get; set; } = string.Empty;
-        public string? MinimumVersion { get; set; }
-        public string? RequiredVersion { get; set; }
-    }
-
 
     private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports, bool fixRelativePaths)
     {

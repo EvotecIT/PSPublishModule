@@ -281,6 +281,8 @@ public static partial class WebApiDocsGenerator
             .Where(type => !TypeHasRelatedContent(type, typeRelatedContentMap))
             .Select(static type => type.FullName)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var quickStartTypesMissingRelatedContentPreview = quickStartTypesMissingRelatedContent
             .Take(100)
             .ToArray();
 
@@ -315,7 +317,7 @@ public static partial class WebApiDocsGenerator
                 ["quickStartMissingRelatedContent"] = new Dictionary<string, object?>
                 {
                     ["count"] = quickStartTypesMissingRelatedContent.Length,
-                    ["types"] = quickStartTypesMissingRelatedContent
+                    ["types"] = quickStartTypesMissingRelatedContentPreview
                 }
             },
             ["members"] = new Dictionary<string, object?>

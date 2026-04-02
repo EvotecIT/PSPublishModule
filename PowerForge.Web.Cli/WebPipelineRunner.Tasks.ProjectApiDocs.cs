@@ -2420,19 +2420,19 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<WebApiDocsSuiteEntry> suiteEntries)
     {
         if (!string.IsNullOrWhiteSpace(explicitLandingUrl))
-            return EnsureProjectRouteTrailingSlash(explicitLandingUrl);
+            return EnsureProjectSuiteLandingRoute(explicitLandingUrl);
 
         if (!string.IsNullOrWhiteSpace(suiteHomeUrl))
         {
             if (Uri.TryCreate(suiteHomeUrl, UriKind.Absolute, out var absolute))
             {
                 var builder = new UriBuilder(absolute);
-                builder.Path = EnsureProjectRouteTrailingSlash(builder.Path) + "api-suite/";
+                builder.Path = EnsureProjectSuiteLandingRoute(builder.Path);
                 return builder.Uri.ToString();
             }
 
             if (suiteHomeUrl.StartsWith("/", StringComparison.Ordinal))
-                return EnsureProjectRouteTrailingSlash(suiteHomeUrl) + "api-suite/";
+                return EnsureProjectSuiteLandingRoute(suiteHomeUrl);
         }
 
         if (!string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(outRoot))
@@ -2447,9 +2447,17 @@ internal static partial class WebPipelineRunner
 
         var suiteBaseUrl = BuildProjectApiSuiteBaseUrlFromEntries(suiteEntries);
         if (!string.IsNullOrWhiteSpace(suiteBaseUrl))
-            return EnsureProjectRouteTrailingSlash(suiteBaseUrl) + "api-suite/";
+            return EnsureProjectSuiteLandingRoute(suiteBaseUrl);
 
         return "/api-suite/";
+    }
+
+    private static string EnsureProjectSuiteLandingRoute(string path)
+    {
+        var normalized = EnsureProjectRouteTrailingSlash(path);
+        return normalized.EndsWith("/api-suite/", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : normalized + "api-suite/";
     }
 
     private static string? BuildProjectApiSuiteBaseUrlFromEntries(IReadOnlyList<WebApiDocsSuiteEntry> suiteEntries)

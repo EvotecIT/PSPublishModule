@@ -84,7 +84,7 @@ public sealed partial class ArtefactBuilder
 
     private static string ResolveOutputRoot(string? configuredPath, string projectRoot, string moduleName, string moduleVersion, string? preRelease, ArtefactType type)
     {
-        var raw = BuildServices.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(raw))
         {
             // Default: <ProjectRoot>\Artefacts\<Type>
@@ -97,9 +97,9 @@ public sealed partial class ArtefactBuilder
     private static string ResolveArtefactFileName(ArtefactConfiguration cfg, string moduleName, string moduleVersion, string? preRelease)
     {
         if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
-            return BuildServices.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
+            return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
 
-        var tagWithPre = BuildServices.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
+        var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
         return cfg.IncludeTagName == true
             ? $"{moduleName}.{tagWithPre}.zip"
             : $"{moduleName}.zip";
@@ -231,7 +231,7 @@ public sealed partial class ArtefactBuilder
 
     private static string ResolveInputPath(string value, string projectRoot, string moduleName, string moduleVersion, string? preRelease)
     {
-        var raw = BuildServices.ReplacePathTokens(value ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(value ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(raw)) throw new ArgumentException("Copy mapping source path is empty.", nameof(value));
         return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(projectRoot, raw));
     }
@@ -245,7 +245,7 @@ public sealed partial class ArtefactBuilder
         string moduleVersion,
         string? preRelease)
     {
-        var raw = BuildServices.ReplacePathTokens(value ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(value ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(raw)) throw new ArgumentException("Copy mapping destination path is empty.", nameof(value));
 
         if (enforceRelativeDestination && Path.IsPathRooted(raw))
@@ -269,7 +269,7 @@ public sealed partial class ArtefactBuilder
         if (string.IsNullOrWhiteSpace(path))
             return outputRoot;
 
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(replaced)) return outputRoot;
 
         var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
@@ -292,7 +292,7 @@ public sealed partial class ArtefactBuilder
             return requiredModulesRoot;
         }
 
-        var replaced = BuildServices.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(replaced)) return requiredModulesRoot;
 
         var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
@@ -345,7 +345,7 @@ public sealed partial class ArtefactBuilder
         string moduleVersion,
         string? preRelease)
     {
-        var raw = BuildServices.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
+        var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
         if (string.IsNullOrWhiteSpace(raw))
             return defaultRoot;
 

@@ -17,7 +17,20 @@ namespace PSPublishModule;
 /// when configured, downloaded (via <c>Save-PSResource</c>/<c>Save-Module</c>) before being copied into the artefact.
 /// </para>
 /// <para>
+/// Only <c>RequiredModule</c> dependencies participate in artefact bundling. <c>ExternalModule</c> dependencies are
+/// intentionally excluded because they represent dependencies that should remain separately installed on the target
+/// machine.
+/// </para>
+/// <para>
+/// <c>RequiredModulesSource</c> controls the packaging strategy: <c>Installed</c> means local-only copy,
+/// <c>Auto</c> means prefer local and download when missing, and <c>Download</c> means always download. When omitted,
+/// the default is <c>Installed</c>.
+/// </para>
+/// <para>
 /// Use <c>-ID</c> to link an artefact to a publish step (<c>New-ConfigurationPublish</c>) and publish only a specific artefact.
+/// </para>
+/// <para>
+/// For a broader dependency workflow explanation, see <c>about_ModuleDependencies</c>.
 /// </para>
 /// </remarks>
 /// <example>
@@ -27,6 +40,16 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Create an unpacked artefact including required modules</summary>
 /// <code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'</code>
+/// </example>
+/// <example>
+/// <summary>Always download required modules into a packed artefact</summary>
+/// <code>New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'</code>
+/// <para>Use this when you want packaging to ignore whatever is already installed on the build machine.</para>
+/// </example>
+/// <example>
+/// <summary>Prefer local modules and download only when a dependency is missing</summary>
+/// <code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto</code>
+/// <para>This is a good default for developer machines that may already have some dependencies installed.</para>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationArtefact")]
 public sealed class NewConfigurationArtefactCommand : PSCmdlet
@@ -55,7 +78,10 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Parameter]
     public string? Path { get; set; }
 
-    /// <summary>Add required modules to artefact by copying them over.</summary>
+    /// <summary>
+    /// Add <c>RequiredModule</c> dependencies to the artefact by copying or downloading them. This does not include
+    /// <c>ExternalModule</c> dependencies.
+    /// </summary>
     [Parameter]
     [Alias("RequiredModules")]
     public SwitchParameter AddRequiredModules { get; set; }
@@ -64,19 +90,32 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Parameter]
     public string? ModulesPath { get; set; }
 
-    /// <summary>Path where required modules will be copied to.</summary>
+    /// <summary>
+    /// Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under
+    /// the artefact output.
+    /// </summary>
     [Parameter]
     public string? RequiredModulesPath { get; set; }
 
-    /// <summary>Repository name used when downloading required modules (Save-PSResource / Save-Module).</summary>
+    /// <summary>
+    /// Repository name used when downloading required modules (<c>Save-PSResource</c> / <c>Save-Module</c>). Set this
+    /// when packaging should resolve from a specific gallery or private feed.
+    /// </summary>
     [Parameter]
     public string? RequiredModulesRepository { get; set; }
 
-    /// <summary>Tool used when downloading required modules (Save-PSResource / Save-Module).</summary>
+    /// <summary>
+    /// Tool used when downloading required modules (<c>Save-PSResource</c> / <c>Save-Module</c>). <c>Auto</c> prefers
+    /// PSResourceGet and falls back to PowerShellGet when necessary.
+    /// </summary>
     [Parameter]
     public ModuleSaveTool RequiredModulesTool { get; set; }
 
-    /// <summary>Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).</summary>
+    /// <summary>
+    /// Source used when resolving required modules (<c>Auto</c> / <c>Installed</c> / <c>Download</c>). When omitted,
+    /// PowerForge defaults to <c>Installed</c>, which means packaging expects the dependency to already exist on the
+    /// machine.
+    /// </summary>
     [Parameter]
     public RequiredModulesSource RequiredModulesSource { get; set; }
 

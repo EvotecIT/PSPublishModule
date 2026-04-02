@@ -157,6 +157,7 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            type.Source = kindHints.GetSourceForCommand(name!);
             type.OriginFiles.Add(resolved);
             foreach (var alias in commandAliases)
                 type.Aliases.Add(alias);

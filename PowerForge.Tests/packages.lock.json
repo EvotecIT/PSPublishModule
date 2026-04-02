@@ -416,8 +416,8 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "0.5.2",
-        "contentHash": "+IS8x7YBs89NEHaJ9z+1ayVrfb1y0Z3xGVeNCK5eu9EmUd2CWtppBwn8RUmn7x95EurfJR1oxv2/UuwnGONV0A=="
+        "resolved": "0.6.7",
+        "contentHash": "YlmytY2evEQf+nNg0Lw2Jb5J2lYx41XGUI11hpdIbNVzX5JxkNsUKxA1DpjdzaxKI9XpZQIBC8qxKOymx/k/yA=="
       },
       "PreMailer.Net": {
         "type": "Transitive",
@@ -849,7 +849,7 @@
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
           "Magick.NET-Q8-AnyCPU": "[14.11.1, )",
-          "OfficeIMO.Markdown": "[0.5.2, )",
+          "OfficeIMO.Markdown": "[0.6.7, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[7.0.0, )",
           "YamlDotNet": "[15.1.2, )"

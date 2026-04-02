@@ -212,6 +212,58 @@ public class WebApiDocsGeneratorRelatedContentTests
         }
     }
 
+    [Fact]
+    public void Generate_CoverageCountsAllMissingQuickStartTypes_EvenWhenPreviewIsTruncated()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-related-coverage-many-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const int typeCount = 105;
+            var xmlPath = Path.Combine(root, "docs.xml");
+            var members = string.Join(Environment.NewLine,
+                Enumerable.Range(1, typeCount)
+                    .Select(index =>
+                        $$"""
+                            <member name="T:ManyQuickStartType{{index}}">
+                              <summary>Type {{index}} docs.</summary>
+                            </member>
+                        """));
+            File.WriteAllText(xmlPath,
+                $$"""
+                <doc>
+                  <assembly><name>RelatedContentCoverageManyTests</name></assembly>
+                  <members>
+                {{members}}
+                  </members>
+                </doc>
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.CSharp,
+                XmlPath = xmlPath,
+                OutputPath = outputPath,
+                BaseUrl = "/api",
+                Format = "json",
+                CoverageReportPath = "reports/api-coverage.json"
+            };
+            options.QuickStartTypeNames.AddRange(Enumerable.Range(1, typeCount).Select(static index => $"ManyQuickStartType{index}"));
+            var result = WebApiDocsGenerator.Generate(options);
+
+            using var coverage = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var missing = coverage.RootElement.GetProperty("types").GetProperty("quickStartMissingRelatedContent");
+            Assert.Equal(typeCount, missing.GetProperty("count").GetInt32());
+            Assert.Equal(100, missing.GetProperty("types").GetArrayLength());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

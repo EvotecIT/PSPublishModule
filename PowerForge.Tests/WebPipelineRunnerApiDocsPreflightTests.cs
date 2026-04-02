@@ -946,6 +946,79 @@ public class WebPipelineRunnerApiDocsPreflightTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectApiDocs_DoesNotAppendSuiteLandingTwice_WhenSuiteHomeAlreadyTargetsSuiteRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-home-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcesRoot = Path.Combine(root, "projects-sources");
+            WriteProjectApiPowerShellSource(sourcesRoot, "testimox", "TestimoX.Module-help.xml", "TestimoX.Module.psd1", "TestimoX.Module.psm1");
+            WriteProjectApiPowerShellSource(sourcesRoot, "adplayground", "ADPlayground.Module-help.xml", "ADPlayground.Module.psd1", "ADPlayground.Module.psm1");
+
+            var catalogPath = Path.Combine(root, "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "testimox",
+                      "name": "TestimoX",
+                      "hubPath": "/projects/testimox/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    },
+                    {
+                      "slug": "adplayground",
+                      "name": "ADPlayground",
+                      "hubPath": "/projects/adplayground/",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "outRoot": "./_site/projects",
+                      "template": "docs",
+                      "format": "json",
+                      "suiteTitle": "Project APIs",
+                      "suiteHomeUrl": "/projects/api-suite/"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            var suiteManifestPath = Path.Combine(root, "_site", "projects", "api-suite.json");
+            using var suiteManifest = JsonDocument.Parse(File.ReadAllText(suiteManifestPath));
+            Assert.Equal("/projects/api-suite/", suiteManifest.RootElement.GetProperty("homeUrl").GetString());
+            Assert.Equal("/projects/api-suite/", suiteManifest.RootElement.GetProperty("landingUrl").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectApiDocs_WritesSuiteCoverageFromCatalogApiDocsOverrides()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-overrides-" + Guid.NewGuid().ToString("N"));

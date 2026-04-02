@@ -174,7 +174,7 @@ public sealed partial class ModulePipelineRunner
     private static string[] NormalizeExternalModuleDependencies(IEnumerable<string>? values)
     {
         return NormalizeStringArray(values)
-            .Where(name => !ShouldSkipManifestDependencyModule(name))
+            .Where(name => !ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(name))
             .ToArray();
     }
 
@@ -186,7 +186,7 @@ public sealed partial class ModulePipelineRunner
             .Where(module =>
                 module is not null &&
                 !string.IsNullOrWhiteSpace(module.ModuleName) &&
-                !ShouldSkipManifestDependencyModule(module.ModuleName))
+                !ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(module.ModuleName))
             .ToArray();
     }
 }

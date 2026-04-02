@@ -229,7 +229,7 @@ internal static partial class Program
             try
             {
                 var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
-                var pipeline = new ModuleBuildPipeline(cmdLogger);
+                var pipeline = ModuleBuildPipelineFactory.Create(cmdLogger);
                 var res = RunWithStatus(outputJson, cli, $"Installing {spec.Name} {spec.Version}", () => pipeline.InstallFromStaging(spec));
 
                 if (outputJson)

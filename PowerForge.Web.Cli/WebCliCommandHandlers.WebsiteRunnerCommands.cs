@@ -32,7 +32,9 @@ internal static partial class WebCliCommandHandlers
                     PowerForgeRefOverride = TryGetOptionValue(subArgs, "--powerforge-ref-override") ?? TryGetOptionValue(subArgs, "--powerforgeRefOverride"),
                     PowerForgeToolLockPath = TryGetOptionValue(subArgs, "--powerforge-tool-lock-path") ?? TryGetOptionValue(subArgs, "--powerforgeToolLockPath"),
                     PowerForgeWebTag = TryGetOptionValue(subArgs, "--powerforge-web-tag") ?? TryGetOptionValue(subArgs, "--powerforgeWebTag"),
-                    GitHubToken = Environment.GetEnvironmentVariable("GH_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN"),
+                    GitHubToken = Environment.GetEnvironmentVariable("POWERFORGE_REPOSITORY_TOKEN") ??
+                                  Environment.GetEnvironmentVariable("GH_TOKEN") ??
+                                  Environment.GetEnvironmentVariable("GITHUB_TOKEN"),
                     RunnerTempPath = Environment.GetEnvironmentVariable("RUNNER_TEMP"),
                     MaintenanceModeNote = HasOption(subArgs, "--maintenance-note") || HasOption(subArgs, "--maintenanceModeNote")
                 },

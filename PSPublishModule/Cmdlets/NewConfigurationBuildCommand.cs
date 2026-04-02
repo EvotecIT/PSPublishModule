@@ -13,6 +13,19 @@ namespace PSPublishModule;
 /// This cmdlet emits build configuration that is consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
 /// It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.
 /// </para>
+/// <para>
+/// Dependency-related options in this cmdlet affect the build machine, not artefact packaging. Use
+/// <c>InstallMissingModules</c> when the build host needs missing <c>RequiredModule</c> or
+/// <c>ExternalModule</c> dependencies installed before merge/import/test steps run.
+/// </para>
+/// <para>
+/// If you want dependencies copied into ZIP/unpacked artefacts, configure that separately with
+/// <c>New-ConfigurationArtefact -AddRequiredModules</c>. Build-time installation and artefact packaging are designed
+/// as separate decisions because many teams want one without the other.
+/// </para>
+/// <para>
+/// For a broader dependency workflow explanation, see <c>about_ModuleDependencies</c>.
+/// </para>
 /// </remarks>
 /// <example>
 /// <summary>Enable build and module merge, and keep a few installed versions</summary>
@@ -21,6 +34,21 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Enable signing and terminate locking processes before install</summary>
 /// <code>New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce</code>
+/// </example>
+/// <example>
+/// <summary>Install missing dependencies from PSGallery before the build</summary>
+/// <code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'PSGallery'</code>
+/// <para>Use this when the build host does not already have the declared RequiredModule or ExternalModule dependencies installed.</para>
+/// </example>
+/// <example>
+/// <summary>Resolve Auto or Latest online without installing first</summary>
+/// <code>New-ConfigurationBuild -Enable -ResolveMissingModulesOnline -WarnIfRequiredModulesOutdated</code>
+/// <para>Useful in CI or on clean machines when dependency versions should come from the repository rather than the local module cache.</para>
+/// </example>
+/// <example>
+/// <summary>Install from a private repository with a token stored in a file</summary>
+/// <code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'MyPrivateFeed' -InstallMissingModulesCredentialUserName 'build' -InstallMissingModulesCredentialSecretFilePath '.secrets\feed-token.txt'</code>
+/// <para>Use the credential parameters only when the repository requires authentication.</para>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationBuild")]
 public sealed class NewConfigurationBuildCommand : PSCmdlet
@@ -100,13 +128,22 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Parameter]
     public string[]? VersionedInstallPreserveVersions { get; set; }
 
-    /// <summary>Install missing module dependencies (Required/External) before build.</summary>
+    /// <summary>
+    /// Install missing module dependencies (<c>RequiredModule</c>/<c>ExternalModule</c>) before build. This affects
+    /// the build host only; it does not bundle modules into artefacts.
+    /// </summary>
     [Parameter] public SwitchParameter InstallMissingModules { get; set; }
 
-    /// <summary>Force re-install even if dependencies are already installed.</summary>
+    /// <summary>
+    /// Force re-install or update even if dependencies are already installed. Useful when you want the build host to
+    /// re-sync against the repository instead of accepting the current local state.
+    /// </summary>
     [Parameter] public SwitchParameter InstallMissingModulesForce { get; set; }
 
-    /// <summary>Allow prerelease versions when installing dependencies.</summary>
+    /// <summary>
+    /// Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and
+    /// repository policy intentionally allow prerelease packages.
+    /// </summary>
     [Parameter] public SwitchParameter InstallMissingModulesPrerelease { get; set; }
 
     /// <summary>
@@ -115,19 +152,34 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// </summary>
     [Parameter] public SwitchParameter ResolveMissingModulesOnline { get; set; }
 
-    /// <summary>Warn if RequiredModules are older than the latest available in the repository.</summary>
+    /// <summary>
+    /// Warn if <c>RequiredModule</c> entries are older than the latest version available in the repository. This is a
+    /// reporting hint and does not change the manifest or install anything by itself.
+    /// </summary>
     [Parameter] public SwitchParameter WarnIfRequiredModulesOutdated { get; set; }
 
-    /// <summary>Repository name used for dependency installation (defaults to PSGallery).</summary>
+    /// <summary>
+    /// Repository name used for dependency installation (defaults to <c>PSGallery</c>). Set this when your build
+    /// should resolve dependencies from a named private feed or alternate gallery.
+    /// </summary>
     [Parameter] public string? InstallMissingModulesRepository { get; set; }
 
-    /// <summary>Credential user name for dependency installation.</summary>
+    /// <summary>
+    /// Credential user name for dependency installation. This is usually paired with
+    /// <c>InstallMissingModulesCredentialSecret</c> or <c>InstallMissingModulesCredentialSecretFilePath</c>.
+    /// </summary>
     [Parameter] public string? InstallMissingModulesCredentialUserName { get; set; }
 
-    /// <summary>Credential secret/token for dependency installation.</summary>
+    /// <summary>
+    /// Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want
+    /// the secret value embedded directly in scripts.
+    /// </summary>
     [Parameter] public string? InstallMissingModulesCredentialSecret { get; set; }
 
-    /// <summary>Path to a file containing the credential secret/token.</summary>
+    /// <summary>
+    /// Path to a file containing the credential secret or token. This is often the safest option for automation and
+    /// CI agents.
+    /// </summary>
     [Parameter] public string? InstallMissingModulesCredentialSecretFilePath { get; set; }
 
     /// <summary>Disables built-in replacements done by the module builder.</summary>

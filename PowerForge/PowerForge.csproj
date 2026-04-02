@@ -59,41 +59,18 @@
     <Compile Remove="BuildServices.cs" />
     <Compile Remove="Models\\Analysis\\MissingFunctionCommand.cs" />
     <Compile Remove="Models\\Analysis\\MissingFunctionsReport.cs" />
-    <Compile Remove="Models\\ArtefactBuildResult.cs" />
-    <Compile Remove="Models\\ModuleInformation.cs" />
-    <Compile Remove="Models\\ModulePipelineDiagnosticsPolicyException.cs" />
-    <Compile Remove="Models\\ModulePipelinePlan.cs" />
-    <Compile Remove="Models\\ModulePipelineResult.cs" />
-    <Compile Remove="Models\\ModulePipelineStep.cs" />
-    <Compile Remove="Models\\ModulePublishResult.cs" />
-    <Compile Remove="Models\\ModuleTestSuiteResult.cs" />
-    <Compile Remove="Models\\ProjectCleanupOutput.cs" />
-    <Compile Remove="Models\\ProjectCleanupSpec.cs" />
-    <Compile Remove="Models\\ProjectCleanupSummary.cs" />
-    <Compile Remove="Models\\ProjectDeleteMethod.cs" />
-    <Compile Remove="Services\\ArtefactBuilder*.cs" />
     <Compile Remove="Services\\AuthenticodeSigningService.cs" />
-    <Compile Remove="Services\\BinaryConflictDetectionService.cs" />
     <Compile Remove="Services\\BinaryDependencyPreflightService.cs" />
-    <Compile Remove="Services\\BuildDiagnosticsFactory.cs" />
     <Compile Remove="Services\\DocumentationEngine.cs" />
-    <Compile Remove="Services\\ExportDetector.cs" />
-    <Compile Remove="Services\\IModulePipelineProgressReporter.cs" />
     <Compile Remove="Services\\LegacySegmentAdapter.cs" />
     <Compile Remove="Services\\ManifestEditor*.cs" />
     <Compile Remove="Services\\MissingFunctionsAnalyzer.cs" />
-    <Compile Remove="Services\\ModuleBuildPipeline.cs" />
-    <Compile Remove="Services\\ModuleBuilder.cs" />
-    <Compile Remove="Services\\ModuleInformationReader.cs" />
-    <Compile Remove="Services\\ModuleInstaller.cs" />
     <Compile Remove="Services\\ModulePipelineRunner*.cs" />
     <Compile Remove="Services\\ModulePublisher.cs" />
     <Compile Remove="Services\\ModuleTestFailureAnalyzer.cs" />
     <Compile Remove="Services\\ModuleTestFailureWorkflowService.cs" />
     <Compile Remove="Services\\ModuleTestSuiteService.cs" />
     <Compile Remove="Services\\ModuleValidationService*.cs" />
-    <Compile Remove="Services\\ModuleVersionStepper.cs" />
-    <Compile Remove="Services\\ProjectCleanupService.cs" />
   </ItemGroup>
 
 </Project>

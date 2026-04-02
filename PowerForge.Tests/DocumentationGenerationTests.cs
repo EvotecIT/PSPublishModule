@@ -468,6 +468,70 @@ Markdown only topic body.
         }
     }
 
+    [Fact]
+    public void XmlDocCommentEnricher_PreservesExampleCodeIndentation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-example-indent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Builds demo data.</summary>
+      <example>
+        <summary>Indented scriptblock example</summary>
+        <code>
+Invoke-Demo -Settings {
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester'
+    New-ConfigurationBuild -Enable -InstallMissingModules
+}
+        </code>
+      </example>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Synopsis = string.Empty,
+                        Description = string.Empty,
+                        Examples = new List<DocumentationExampleHelp>()
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var cmd = Assert.Single(payload.Commands);
+            var example = Assert.Single(cmd.Examples);
+            var normalizedCode = example.Code.Replace("\r\n", "\n");
+            Assert.StartsWith("Invoke-Demo -Settings {", normalizedCode);
+            Assert.Contains("\n    New-ConfigurationModule", normalizedCode);
+            Assert.Contains("\n    New-ConfigurationBuild", normalizedCode);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static bool HasIsolatedLf(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;
