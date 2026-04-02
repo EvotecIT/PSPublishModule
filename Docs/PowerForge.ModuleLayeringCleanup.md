@@ -147,11 +147,12 @@ Current status:
 - Installed-module required-module expansion used by missing-function merge analysis now also flows through `IModuleDependencyMetadataProvider`, which removes the last direct in-process SMA dependency from `ModulePipelineRunner` internals.
 - `IModulePipelineHostedOperations` now separates dependency install, documentation, binary preflight, tests-after-merge, validation, and publish execution from `ModulePipelineRunner`, with `PowerShellModulePipelineHostedOperations` in `PowerForge.PowerShell` preserving the existing behavior.
 - Default `ModulePipelineRunner` service construction now flows through a dedicated PowerShell-owned defaults builder, and `PowerShellModulePipelineHostedOperations` reuses the injected `IPowerShellRunner` instead of creating fresh runner instances for each hosted step.
+- `ModulePipelineRunner` manifest refresh, delivery metadata, generated-delivery export updates, and bootstrapper export reads now flow through `IModuleManifestMutator` plus neutral manifest readers instead of calling `ManifestEditor` and `BuildServices` directly from runner partials.
 - Signing and import-module script execution now also flow through `IModulePipelineHostedOperations`, so the runner keeps target/option selection while `PowerForge.PowerShell` owns the raw script execution and result parsing.
 - `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
 - The validation, test, packaging, publish, and install phases now run through dedicated runner helper methods backed by a shared run-state object, so `ModulePipelineRunner.Run` is acting more like an orchestrator than a giant mutable script.
 - The stage/build/manifest/docs/format/sign phases now also run through dedicated helpers, leaving `ModulePipelineRunner.Run` as a thin phase orchestrator with shared cleanup/failure handling.
-- The next extraction target is deciding whether `ModulePipelineRunner` itself is now ready to move back toward core, or whether a dedicated core orchestrator plus PowerShell adapter split is still the cleaner boundary.
+- The next extraction target is the remaining PowerShell-owned merge/missing-analysis and scripting helpers inside `ModulePipelineRunner`, which now represent the main blockers before the runner boundary can move again.
 
 ### Phase 4: Publish and validation decomposition
 

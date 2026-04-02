@@ -567,13 +567,7 @@ public sealed partial class ModulePipelineRunner
             ReadStringOrArray(psd1Path, "AliasesToExport"));
 
     private static string[] ReadStringOrArray(string psd1Path, string key)
-    {
-        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
-            return values;
-        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
-            return new[] { value! };
-        return Array.Empty<string>();
-    }
+        => ModuleManifestValueReader.ReadTopLevelStringOrArray(psd1Path, key);
 
     private static string PrependFunctions(string[] functions, string content)
     {
