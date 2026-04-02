@@ -105,6 +105,9 @@ public sealed class ModulePipelineHostedOperationsTests
                     static name => new InstalledModuleMetadata(name, null, null, null),
                     StringComparer.OrdinalIgnoreCase);
 
+        public IReadOnlyList<string> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<string>();
+
         public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
             IReadOnlyCollection<string> names,
             string? repository,

@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
-using System.Management.Automation.Runspaces;
 using System.Text;
 using System.Text.Json;
 
@@ -408,7 +406,7 @@ public sealed partial class ModulePipelineRunner
         if (!visited.Add(moduleName))
             return;
 
-        var required = GetRequiredModulesFromInstalledModule(moduleName);
+        var required = _moduleDependencyMetadataProvider.GetRequiredModulesForInstalledModule(moduleName);
         foreach (var dep in required)
         {
             if (string.IsNullOrWhiteSpace(dep))
@@ -416,39 +414,6 @@ public sealed partial class ModulePipelineRunner
             if (output.Add(dep))
                 CollectModuleDependencies(dep, visited, output);
         }
-    }
-
-    private string[] GetRequiredModulesFromInstalledModule(string moduleName)
-    {
-        try
-        {
-            using var ps = CreatePowerShell();
-            var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
-            ps.AddScript(script).AddArgument(moduleName);
-            var results = ps.Invoke();
-            if (ps.HadErrors || results is null)
-                return Array.Empty<string>();
-
-            return results
-                .Select(r => r?.BaseObject?.ToString())
-                .Where(n => !string.IsNullOrWhiteSpace(n))
-                .Select(n => n!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
-            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-            return Array.Empty<string>();
-        }
-    }
-
-    private static PowerShell CreatePowerShell()
-    {
-        if (Runspace.DefaultRunspace is null)
-            return PowerShell.Create();
-        return PowerShell.Create(RunspaceMode.CurrentRunspace);
     }
 
     private static bool IsBuiltInModule(string moduleName)
