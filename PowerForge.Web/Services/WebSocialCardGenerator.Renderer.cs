@@ -171,7 +171,7 @@ internal static partial class WebSocialCardGenerator
         };
     }
 
-    internal static bool IsRenderableImageSource(string? source, bool allowRemoteMediaFetch)
+    internal static bool IsRenderableImageSource(string? source, bool allowRemoteMediaFetch, Func<string, byte[]?>? remoteFetcher = null)
     {
         if (string.IsNullOrWhiteSpace(source))
             return false;
@@ -180,7 +180,7 @@ internal static partial class WebSocialCardGenerator
             return true;
 
         if (IsRemoteMediaSource(source))
-            return allowRemoteMediaFetch;
+            return GetRemoteImageBytes(source, allowRemoteMediaFetch, remoteFetcher) is { Length: > 0 };
 
         if (Uri.TryCreate(source, UriKind.Absolute, out var absoluteUri) && absoluteUri.IsFile)
             return File.Exists(absoluteUri.LocalPath);
