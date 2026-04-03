@@ -25,7 +25,7 @@ public sealed partial class ModuleValidationService
         if (settings.Severity == ValidationSeverity.Off) return null;
 
         var issues = new List<string>();
-        var summaryParts = new List<string>(4);
+        var summaryParts = new List<string>(6);
 
         var manifestPath = spec.ManifestPath ?? string.Empty;
         if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
@@ -62,6 +62,13 @@ public sealed partial class ModuleValidationService
         int descriptionCount = 0;
         int exampleCount = 0;
         int minExamplesMissing = 0;
+        int parameterDescriptionCount = 0;
+        int totalParameterCount = 0;
+        int typeDescriptionCount = 0;
+        int totalTypeCount = 0;
+        var missingParameterDescriptions = new List<string>();
+        var missingTypeDescriptions = new List<string>();
+        var seenTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var cmd in commands)
         {
@@ -74,15 +81,51 @@ public sealed partial class ModuleValidationService
                 exampleCount++;
             else if (settings.MinExampleCountPerCommand > 0)
                 minExamplesMissing++;
+
+            foreach (var parameter in cmd.Parameters ?? new List<DocumentationParameterHelp>())
+            {
+                if (parameter is null || string.IsNullOrWhiteSpace(parameter.Name)) continue;
+
+                totalParameterCount++;
+                if (!string.IsNullOrWhiteSpace(parameter.Description))
+                {
+                    parameterDescriptionCount++;
+                }
+                else if (settings.MinParameterDescriptionPercent > 0)
+                {
+                    missingParameterDescriptions.Add($"{cmd.Name}: parameter '{parameter.Name}' is missing description");
+                }
+            }
+
+            foreach (var type in EnumerateDocumentableTypes(cmd))
+            {
+                var key = GetDocumentationTypeKey(type);
+                if (string.IsNullOrWhiteSpace(key) || !seenTypes.Add(key)) continue;
+
+                totalTypeCount++;
+                if (!string.IsNullOrWhiteSpace(type.Description))
+                {
+                    typeDescriptionCount++;
+                }
+                else if (settings.MinTypeDescriptionPercent > 0)
+                {
+                    missingTypeDescriptions.Add($"{cmd.Name}: type '{GetDocumentationTypeDisplayName(type)}' is missing description");
+                }
+            }
         }
 
         var synopsisPercent = Percent(synopsisCount, total);
         var descriptionPercent = Percent(descriptionCount, total);
-        var examplesPercent = Percent(exampleCount, total);
+        var parameterDescriptionPercent = totalParameterCount == 0 ? 100.0 : Percent(parameterDescriptionCount, totalParameterCount);
+        var typeDescriptionPercent = totalTypeCount == 0 ? 100.0 : Percent(typeDescriptionCount, totalTypeCount);
 
         summaryParts.Add($"synopsis {synopsisCount}/{total}");
         summaryParts.Add($"description {descriptionCount}/{total}");
         summaryParts.Add($"examples {exampleCount}/{total}");
+        if (totalParameterCount > 0)
+            summaryParts.Add($"parameter docs {parameterDescriptionCount}/{totalParameterCount}");
+        if (totalTypeCount > 0)
+            summaryParts.Add($"type docs {typeDescriptionCount}/{totalTypeCount}");
 
         if (synopsisPercent < settings.MinSynopsisPercent)
             issues.Add($"Synopsis coverage {synopsisPercent:0.0}% (< {settings.MinSynopsisPercent}%)");
@@ -90,6 +133,16 @@ public sealed partial class ModuleValidationService
             issues.Add($"Description coverage {descriptionPercent:0.0}% (< {settings.MinDescriptionPercent}%)");
         if (settings.MinExampleCountPerCommand > 0 && minExamplesMissing > 0)
             issues.Add($"{minExamplesMissing} command(s) missing required examples");
+        if (settings.MinParameterDescriptionPercent > 0 && parameterDescriptionPercent < settings.MinParameterDescriptionPercent)
+        {
+            issues.Add($"Parameter description coverage {parameterDescriptionPercent:0.0}% (< {settings.MinParameterDescriptionPercent}%)");
+            AppendIssues(issues, missingParameterDescriptions);
+        }
+        if (settings.MinTypeDescriptionPercent > 0 && typeDescriptionPercent < settings.MinTypeDescriptionPercent)
+        {
+            issues.Add($"Type description coverage {typeDescriptionPercent:0.0}% (< {settings.MinTypeDescriptionPercent}%)");
+            AppendIssues(issues, missingTypeDescriptions);
+        }
 
         var summary = string.Join(", ", summaryParts);
         return BuildResult("Documentation", settings.Severity, issues, summary);

@@ -71,6 +71,15 @@ Before this change, the main remaining binary-focused gaps were:
 
 `XmlDoc2CmdletDoc` also has a nice strict-warning model and a focused binary-only reflection path. Those are useful patterns to absorb into PowerForge without adopting the package itself.
 
+After scanning the current module repos under `C:\Support\GitHub`, the most relevant real-world remaining gap was the warning model, not extra XML syntax:
+
+- several repos use `-strict`
+- some repos explicitly relax strictness with `XmlDoc2CmdletDocStrict=false`
+- `ADPlayground.PowerShell` uses `-ignoreOptional`
+- no maintained repos in that scan were using `-excludeParameterSets` or `-ignoreMissing`
+
+That made parameter-description and type-description validation the right PowerForge-native follow-up, rather than cloning every old package switch.
+
 ## Long-term architecture
 
 Recommended direction:

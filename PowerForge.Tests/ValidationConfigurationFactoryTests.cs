@@ -26,6 +26,8 @@ public sealed class ValidationConfigurationFactoryTests
             TestSkipDependencies = true,
             BinarySeverity = ValidationSeverity.Warning,
             ValidateBinaryAssemblies = false,
+            MinParameterDescriptionPercent = 100,
+            MinTypeDescriptionPercent = 100,
             CsprojSeverity = ValidationSeverity.Warning,
             RequireLibraryOutput = false
         });
@@ -39,6 +41,8 @@ public sealed class ValidationConfigurationFactoryTests
         Assert.True(segment.Settings.Tests.Enable);
         Assert.True(segment.Settings.Tests.SkipDependencies);
         Assert.Equal(1, segment.Settings.Tests.TimeoutSeconds);
+        Assert.Equal(100, segment.Settings.Documentation.MinParameterDescriptionPercent);
+        Assert.Equal(100, segment.Settings.Documentation.MinTypeDescriptionPercent);
         Assert.False(segment.Settings.Binary.ValidateAssembliesExist);
         Assert.False(segment.Settings.Csproj.RequireLibraryOutput);
     }

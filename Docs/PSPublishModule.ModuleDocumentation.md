@@ -47,6 +47,19 @@ Useful XML authoring shapes that PowerForge now preserves for binary modules:
 
 This keeps the authored XML style familiar for teams coming from `XmlDoc2CmdletDoc`, while the generated outputs stay PowerShell-oriented and valid for `Get-Help`.
 
+For validation, PowerForge can now enforce the old package's most-used missing-doc checks through `New-ConfigurationValidation`:
+
+- `-MinSynopsisPercent 100` for missing cmdlet synopsis
+- `-MinParameterDescriptionPercent 100` for missing parameter descriptions
+- `-MinTypeDescriptionPercent 100` for missing input/output type descriptions
+
+If a repo previously used `-ignoreOptional`, the closest native PowerForge profile is:
+
+- keep `-MinSynopsisPercent 100`
+- keep `-MinTypeDescriptionPercent 100`
+- set `-MinParameterDescriptionPercent 0`
+- optionally set `-MinDescriptionPercent 0` and `-MinExamplesPerCommand 0` if the repo wants `XmlDoc2CmdletDoc`-style validation rather than stricter markdown/help quality gates
+
 Recommended source layout in module repos:
 
 - `Help/About/about_<Topic>.help.txt`

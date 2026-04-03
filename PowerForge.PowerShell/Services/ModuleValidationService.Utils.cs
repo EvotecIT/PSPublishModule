@@ -83,6 +83,62 @@ public sealed partial class ModuleValidationService
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(joined));
     }
 
+    private static IEnumerable<DocumentationTypeHelp> EnumerateDocumentableTypes(DocumentationCommandHelp command)
+    {
+        if (command is null) yield break;
+
+        foreach (var type in command.Inputs ?? new List<DocumentationTypeHelp>())
+        {
+            if (IsDocumentableType(type))
+                yield return type;
+        }
+
+        foreach (var type in command.Outputs ?? new List<DocumentationTypeHelp>())
+        {
+            if (IsDocumentableType(type))
+                yield return type;
+        }
+    }
+
+    private static bool IsDocumentableType(DocumentationTypeHelp? type)
+    {
+        var key = GetDocumentationTypeKey(type);
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        return !string.Equals(key, "None", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(key, "System.Void", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(key, "void", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetDocumentationTypeKey(DocumentationTypeHelp? type)
+    {
+        if (type is null) return string.Empty;
+        if (!string.IsNullOrWhiteSpace(type.ClrTypeName)) return type.ClrTypeName.Trim();
+        if (!string.IsNullOrWhiteSpace(type.Name)) return type.Name.Trim();
+        return string.Empty;
+    }
+
+    private static string GetDocumentationTypeDisplayName(DocumentationTypeHelp? type)
+    {
+        if (type is null) return string.Empty;
+        if (!string.IsNullOrWhiteSpace(type.Name)) return type.Name.Trim();
+        if (!string.IsNullOrWhiteSpace(type.ClrTypeName)) return type.ClrTypeName.Trim();
+        return string.Empty;
+    }
+
+    private static void AppendIssues(List<string> issues, IEnumerable<string> newIssues, int maxItems = 25)
+    {
+        var items = (newIssues ?? Array.Empty<string>())
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .ToArray();
+        if (items.Length == 0) return;
+
+        foreach (var issue in items.Take(maxItems))
+            issues.Add(issue);
+
+        if (items.Length > maxItems)
+            issues.Add($"... and {items.Length - maxItems} more issue(s)");
+    }
+
     private static string? ExtractMarker(string text, string prefix)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;

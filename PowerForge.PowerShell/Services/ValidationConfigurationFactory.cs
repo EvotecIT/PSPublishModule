@@ -30,6 +30,8 @@ internal sealed class ValidationConfigurationFactory
                     MinSynopsisPercent = request.MinSynopsisPercent,
                     MinDescriptionPercent = request.MinDescriptionPercent,
                     MinExampleCountPerCommand = request.MinExamplesPerCommand,
+                    MinParameterDescriptionPercent = request.MinParameterDescriptionPercent,
+                    MinTypeDescriptionPercent = request.MinTypeDescriptionPercent,
                     ExcludeCommands = request.ExcludeCommands ?? Array.Empty<string>()
                 },
                 ScriptAnalyzer = new ScriptAnalyzerValidationSettings

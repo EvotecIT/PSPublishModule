@@ -1,11 +1,172 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Runtime.Serialization.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleValidationServiceTests
 {
+    [Fact]
+    public void Run_DocumentationValidation_CanRequireParameterAndTypeDescriptions()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestPath = Path.Combine(root.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{}");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands =
+                {
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Thing",
+                        Synopsis = "Gets a thing.",
+                        Description = "Long description.",
+                        Examples = { new DocumentationExampleHelp { Code = "Get-Thing" } },
+                        Parameters =
+                        {
+                            new DocumentationParameterHelp { Name = "Name", Description = "Thing name." },
+                            new DocumentationParameterHelp { Name = "Mode", Description = string.Empty }
+                        },
+                        Inputs =
+                        {
+                            new DocumentationTypeHelp { Name = "ThingInput", ClrTypeName = "Demo.ThingInput", Description = string.Empty }
+                        },
+                        Outputs =
+                        {
+                            new DocumentationTypeHelp { Name = "ThingOutput", ClrTypeName = "Demo.ThingOutput", Description = "Output docs." }
+                        }
+                    }
+                }
+            };
+
+            var settings = new ModuleValidationSettings
+            {
+                Enable = true,
+                Structure = new ModuleStructureValidationSettings { Severity = ValidationSeverity.Off },
+                Documentation = new DocumentationValidationSettings
+                {
+                    Severity = ValidationSeverity.Warning,
+                    MinSynopsisPercent = 100,
+                    MinDescriptionPercent = 100,
+                    MinExampleCountPerCommand = 1,
+                    MinParameterDescriptionPercent = 100,
+                    MinTypeDescriptionPercent = 100
+                },
+                ScriptAnalyzer = new ScriptAnalyzerValidationSettings { Severity = ValidationSeverity.Off },
+                FileIntegrity = new FileIntegrityValidationSettings { Severity = ValidationSeverity.Off },
+                Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off },
+                Binary = new BinaryModuleValidationSettings { Severity = ValidationSeverity.Off },
+                Csproj = new CsprojValidationSettings { Severity = ValidationSeverity.Off }
+            };
+
+            var service = new ModuleValidationService(
+                new NullLogger(),
+                new DocumentationPayloadRunner(payload));
+
+            var report = service.Run(new ModuleValidationSpec
+            {
+                ProjectRoot = root.FullName,
+                StagingPath = root.FullName,
+                ModuleName = "TestModule",
+                ManifestPath = manifestPath,
+                Settings = settings
+            });
+
+            var check = Assert.Single(report.Checks);
+            Assert.Equal("Documentation", check.Name);
+            Assert.Equal(CheckStatus.Warning, check.Status);
+            Assert.Contains("parameter docs 1/2", check.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("type docs 1/2", check.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(check.Issues, issue => issue.Contains("Parameter description coverage", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(check.Issues, issue => issue.Contains("Get-Thing: parameter 'Mode' is missing description", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(check.Issues, issue => issue.Contains("Type description coverage", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(check.Issues, issue => issue.Contains("Get-Thing: type 'ThingInput' is missing description", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_DocumentationValidation_AllowsOptionalParameterDescriptions_WhenThresholdDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestPath = Path.Combine(root.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{}");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands =
+                {
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Thing",
+                        Synopsis = "Gets a thing.",
+                        Examples = { new DocumentationExampleHelp { Code = "Get-Thing" } },
+                        Parameters =
+                        {
+                            new DocumentationParameterHelp { Name = "Mode", Description = string.Empty }
+                        },
+                        Inputs =
+                        {
+                            new DocumentationTypeHelp { Name = "ThingInput", ClrTypeName = "Demo.ThingInput", Description = "Input docs." }
+                        }
+                    }
+                }
+            };
+
+            var settings = new ModuleValidationSettings
+            {
+                Enable = true,
+                Structure = new ModuleStructureValidationSettings { Severity = ValidationSeverity.Off },
+                Documentation = new DocumentationValidationSettings
+                {
+                    Severity = ValidationSeverity.Warning,
+                    MinSynopsisPercent = 100,
+                    MinDescriptionPercent = 0,
+                    MinExampleCountPerCommand = 1,
+                    MinParameterDescriptionPercent = 0,
+                    MinTypeDescriptionPercent = 100
+                },
+                ScriptAnalyzer = new ScriptAnalyzerValidationSettings { Severity = ValidationSeverity.Off },
+                FileIntegrity = new FileIntegrityValidationSettings { Severity = ValidationSeverity.Off },
+                Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off },
+                Binary = new BinaryModuleValidationSettings { Severity = ValidationSeverity.Off },
+                Csproj = new CsprojValidationSettings { Severity = ValidationSeverity.Off }
+            };
+
+            var service = new ModuleValidationService(
+                new NullLogger(),
+                new DocumentationPayloadRunner(payload));
+
+            var report = service.Run(new ModuleValidationSpec
+            {
+                ProjectRoot = root.FullName,
+                StagingPath = root.FullName,
+                ModuleName = "TestModule",
+                ManifestPath = manifestPath,
+                Settings = settings
+            });
+
+            var check = Assert.Single(report.Checks);
+            Assert.Equal("Documentation", check.Name);
+            Assert.Equal(CheckStatus.Pass, check.Status);
+            Assert.DoesNotContain(check.Issues, issue => issue.Contains("parameter 'Mode'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Run_ScriptAnalyzerNoOutput_ReportsRunnerDetails()
     {
@@ -339,6 +500,32 @@ public sealed class ModuleValidationServiceTests
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
             return _result;
+        }
+    }
+
+    private sealed class DocumentationPayloadRunner : IPowerShellRunner
+    {
+        private readonly DocumentationExtractionPayload _payload;
+
+        public DocumentationPayloadRunner(DocumentationExtractionPayload payload)
+        {
+            _payload = payload;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            var outputPath = request.Arguments.First(arg => arg.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+
+            using var stream = File.Create(outputPath);
+            var serializer = new DataContractJsonSerializer(typeof(DocumentationExtractionPayload));
+            serializer.WriteObject(stream, _payload);
+
+            return new PowerShellRunResult(
+                0,
+                string.Empty,
+                string.Empty,
+                @"C:\Program Files\PowerShell\7\pwsh.exe");
         }
     }
 }
