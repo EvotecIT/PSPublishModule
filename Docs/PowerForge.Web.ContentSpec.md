@@ -911,7 +911,8 @@ themes/nova/assets/app.css
     "GeneratedCardWidth": 1200,
     "GeneratedCardHeight": 630,
     "GeneratedCardStyle": "default",
-    "GeneratedCardVariant": "standard",
+    "GeneratedCardVariant": "product",
+    "GeneratedCardLogo": "/assets/brand/logo.png",
     "GeneratedCardStylesByCollection": {
       "docs": "docs",
       "blog": "editorial",
@@ -956,14 +957,44 @@ Per-page override:
 You can also control generated card presentation:
 - `meta.social_card_badge`: top-right category badge text
 - `meta.social_card_route`: bottom route label text
-- `meta.social_card_style`: style key (`default`, `docs`, `api`, `editorial`)
-- `meta.social_card_variant`: layout variant (`standard`, `hero`, `compact`)
+- `meta.social_card_style`: style key (`home`, `default`, `docs`, `api`, `blog`, `contact`)
+- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`)
+- `meta.social_card_logo`: optional logo path/URL used inside generated cards
+- `meta.social_card_image`: optional inline media path/URL for generated cards
+- `meta.social_card_image_inline`: force/skip inline media rendering for generated cards
+
+Generated card colors are theme-aware when theme tokens are present:
+- generic theme tokens under `Tokens.color.*` are used as the default palette source
+  - expected keys: `bg`, `panel`, `ink`, `muted`, `accent`, `border`
+- optional dedicated overrides under `Tokens.socialCard.*` take precedence when present
+  - supported keys: `backgroundStart`, `backgroundMid`, `backgroundEnd`, `surface`, `surfaceStroke`, `accent`, `accentSoft`, `accentStrong`, `textPrimary`, `textSecondary`, `chipBackground`, `chipBorder`, `chipText`
+- when no usable theme tokens are available, PowerForge.Web falls back to built-in card palettes
+
+Generated card typography/layout can also follow theme tokens:
+- generic font tokens under `Tokens.font.*`
+  - `display` is used for title/eyebrow by default
+  - `body` is used for description/badge/footer by default
+- optional dedicated typography overrides under `Tokens.socialCard.*`
+  - supported font keys: `fontDisplay`, `fontBody`, `fontMono`, `fontEyebrow`, `fontBadge`, `fontFooter`
+- generic radius tokens under `Tokens.radius.*`
+  - `base` is used as the fallback for panel/frame radius
+  - `sm` is used as the fallback for badge/footer/top-band radius
+- optional dedicated layout overrides under `Tokens.socialCard.*`
+  - supported size keys: `frameInset`, `panelInset`, `contentPadding`, `safeMarginX`, `safeMarginY`, `topBandHeight`
+  - supported radius keys: `frameRadius`, `panelRadius`, `footerRadius`, `badgeRadius`, `topBandRadius`
+  - supported badge/footer keys: `badgeAlign` (`left`/`right`), `badgePaddingX`, `badgeHeight`, `badgeFontSize`, `badgeMinWidth`, `badgeMaxWidth`, `footerPaddingX`, `footerHeight`, `footerFontSize`, `footerMinWidth`, `footerMaxWidth`
+  - supported text size keys: `eyebrowFontSize`, `titleFontSize`, `descriptionFontSize`
+
+Generated cards can also include a site/page logo and editorial inline media:
+- logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
+- inline media source precedence: `meta.social_card_image` / `meta.social.card_image` / `meta.social_card_media` -> existing social image metadata -> first body image for editorial collections
+- blog/editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
 
 Preset precedence for generated social cards:
 1. per-page `meta.social_card_*` overrides
 2. `Social.GeneratedCard*ByCollection` for the page collection
 3. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
-4. built-in heuristics (for example: home -> `hero`, docs/blog -> `compact`)
+4. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
 
 If `meta.social_image` is not set, blog posts also try to use the first markdown image in the post body
 before falling back to generated/default site image.

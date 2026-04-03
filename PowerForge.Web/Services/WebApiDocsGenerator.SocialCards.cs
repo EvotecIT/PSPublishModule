@@ -58,16 +58,18 @@ public static partial class WebApiDocsGenerator
         if (!IsApiPathWithinRoot(siteRoot, fullPath))
             return string.Empty;
 
-        var bytes = WebSocialCardGenerator.RenderPng(
-            title,
-            description,
-            siteName,
-            "API",
-            routeLabel,
-            options.SocialCardWidth,
-            options.SocialCardHeight,
-            "api",
-            "standard");
+        var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = title,
+            Description = description,
+            Eyebrow = siteName,
+            Badge = "API",
+            FooterLabel = routeLabel,
+            Width = options.SocialCardWidth,
+            Height = options.SocialCardHeight,
+            StyleKey = "api",
+            VariantKey = "reference"
+        });
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
 

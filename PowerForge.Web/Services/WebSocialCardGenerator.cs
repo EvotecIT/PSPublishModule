@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,17 +7,9 @@ using ImageMagick;
 
 namespace PowerForge.Web;
 
-internal static class WebSocialCardGenerator
+internal static partial class WebSocialCardGenerator
 {
     private static readonly TimeSpan SocialRegexTimeout = TimeSpan.FromSeconds(1);
-    private static readonly Regex CamelCaseBoundaryRegex = new(
-        "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant,
-        SocialRegexTimeout);
-    private static readonly Regex SymbolBreakRegex = new(
-        "(?<=[/\\\\|_.:+-])",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant,
-        SocialRegexTimeout);
     private static readonly Regex WhitespaceRegex = new(
         "\\s+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -91,7 +84,46 @@ internal static class WebSocialCardGenerator
         int width,
         int height,
         string? styleKey = null,
-        string? variantKey = null)
+        string? variantKey = null,
+        IReadOnlyDictionary<string, object?>? themeTokens = null)
+    {
+        var svg = RenderSvg(title, description, eyebrow, badge, footerLabel, width, height, styleKey, variantKey, themeTokens);
+        if (string.IsNullOrWhiteSpace(svg))
+            return null;
+
+        try
+        {
+            var svgBytes = Encoding.UTF8.GetBytes(svg);
+            var settings = new MagickReadSettings
+            {
+                Width = (uint)Math.Clamp(width, 600, 2400),
+                Height = (uint)Math.Clamp(height, 315, 1400),
+                Format = MagickFormat.Svg
+            };
+            using var image = new MagickImage(svgBytes, settings);
+            image.Format = MagickFormat.Png;
+            image.Strip();
+            using var stream = new MemoryStream();
+            image.Write(stream);
+            return stream.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string RenderSvg(
+        string? title,
+        string? description,
+        string? eyebrow,
+        string? badge,
+        string? footerLabel,
+        int width,
+        int height,
+        string? styleKey = null,
+        string? variantKey = null,
+        IReadOnlyDictionary<string, object?>? themeTokens = null)
     {
         width = Math.Clamp(width, 600, 2400);
         height = Math.Clamp(height, 315, 1400);
@@ -123,17 +155,20 @@ internal static class WebSocialCardGenerator
         var safeBadgeUpper = EscapeXml(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 20));
         var safeFooter = EscapeXml(TrimSingleLine(normalizedFooterLabel, isHero ? 42 : (isCompact ? 40 : 44)));
         var seed = string.Join("|", normalizedStyle, normalizedVariant, primaryTitle, primaryDescription, primaryEyebrow, normalizedBadge, normalizedFooterLabel, width, height);
-        var palette = SelectPalette(normalizedStyle, seed);
-        var frameInset = GetScaledPixels(width, height, basePixels: 36, minimum: 22);
-        var panelInset = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
+        var palette = SelectPalette(normalizedStyle, seed, themeTokens);
+        var type = ResolveTypography(themeTokens);
+        var frameInset = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 36, minimum: 22, "socialCard", "frameInset");
+        var panelInset = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 48, minimum: 30, "socialCard", "panelInset");
         var panelWidth = width - (panelInset * 2);
         var panelHeight = height - (panelInset * 2);
-        var contentPadding = GetScaledPixels(width, height, basePixels: 24, minimum: 16);
+        var contentPadding = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 24, minimum: 16, "socialCard", "contentPadding");
         var contentLeft = panelInset + contentPadding;
         var contentRight = panelInset + panelWidth - contentPadding;
         var contentWidth = Math.Max(120, contentRight - contentLeft);
-        var safeMarginX = Math.Max(contentPadding, (int)Math.Round(width * 0.08));
-        var safeMarginY = Math.Max(GetScaledPixels(width, height, basePixels: 26, minimum: 16), (int)Math.Round(height * 0.09));
+        var safeMarginX = Math.Max(contentPadding, ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 96, minimum: 48, "socialCard", "safeMarginX"));
+        var safeMarginY = Math.Max(
+            ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 26, minimum: 16, "socialCard", "safeMarginY"),
+            (int)Math.Round(height * 0.09));
         var safeLeft = Math.Max(contentLeft, safeMarginX);
         var safeRight = Math.Min(contentRight, width - safeMarginX);
         var safeTop = Math.Max(panelInset + contentPadding, safeMarginY);
@@ -151,34 +186,35 @@ internal static class WebSocialCardGenerator
         }
 
         var safeWidth = Math.Max(120, safeRight - safeLeft);
-        var topBandHeight = GetScaledPixels(width, height, basePixels: isHero ? 11 : (isCompact ? 8 : 9), minimum: 5);
-        var eyebrowFontSize = GetScaledPixels(width, height, basePixels: isHero ? 26 : (isCompact ? 22 : 24), minimum: 14);
-        var titleFontSize = GetScaledPixels(width, height, basePixels: isHero ? 70 : (isCompact ? 52 : 60), minimum: isCompact ? 28 : 32);
-        var descriptionFontSize = GetScaledPixels(width, height, basePixels: isHero ? 34 : (isCompact ? 28 : 32), minimum: isCompact ? 16 : 18);
-        var footerFontSize = GetScaledPixels(width, height, basePixels: isHero ? 24 : (isCompact ? 20 : 22), minimum: 13);
-        var footerRectHeight = GetScaledPixels(width, height, basePixels: isHero ? 50 : (isCompact ? 42 : 48), minimum: 30);
-        var footerRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
+        var topBandHeight = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 11 : (isCompact ? 8 : 9), minimum: 5, "socialCard", "topBandHeight");
+        var topBandRadius = ResolveRadiusPixels(themeTokens, width, height, defaultBasePixels: 4, minimum: 2, "topBandRadius");
+        var eyebrowFontSize = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 26 : (isCompact ? 22 : 24), minimum: 14, "socialCard", "eyebrowFontSize");
+        var titleFontSize = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 70 : (isCompact ? 52 : 60), minimum: isCompact ? 28 : 32, "socialCard", "titleFontSize");
+        var descriptionFontSize = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 34 : (isCompact ? 28 : 32), minimum: isCompact ? 16 : 18, "socialCard", "descriptionFontSize");
+        var footerFontSize = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 24 : (isCompact ? 20 : 22), minimum: 13, "socialCard", "footerFontSize");
+        var footerRectHeight = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 50 : (isCompact ? 42 : 48), minimum: 30, "socialCard", "footerHeight");
+        var footerRectRadius = ResolveRadiusPixels(themeTokens, width, height, defaultBasePixels: 14, minimum: 8, "footerRadius");
         var footerRectY = safeBottom - footerRectHeight;
         var footerRectX = safeLeft;
-        var footerTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
+        var footerTextInsetX = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 20, minimum: 12, "socialCard", "footerPaddingX");
         var footerTextWidth = EstimateTextWidth(TrimSingleLine(normalizedFooterLabel, 64), footerFontSize, glyphFactor: 0.52);
-        var footerRectMinWidth = GetScaledPixels(width, height, basePixels: 180, minimum: 120);
+        var footerRectMinWidth = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 180, minimum: 120, "socialCard", "footerMinWidth");
         var footerRectMaxWidth = Math.Min(
             safeWidth,
-            GetScaledPixels(width, height, basePixels: isHero ? 440 : (isCompact ? 460 : 520), minimum: 220));
+            ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 440 : (isCompact ? 460 : 520), minimum: 220, "socialCard", "footerMaxWidth"));
         var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, footerRectMaxWidth);
         var footerTextY = footerRectY + (footerRectHeight / 2);
-        var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var pillHeight = GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 36 : 40), minimum: 26);
-        var pillRadius = GetScaledPixels(width, height, basePixels: 20, minimum: 13);
-        var pillFontSize = GetScaledPixels(width, height, basePixels: isHero ? 19 : (isCompact ? 16 : 18), minimum: 12);
-        var pillMaxWidth = Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
-        var pillMinWidth = GetScaledPixels(width, height, basePixels: 148, minimum: 112);
+        var pillPaddingX = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 14, minimum: 8, "socialCard", "badgePaddingX");
+        var pillHeight = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 42 : (isCompact ? 36 : 40), minimum: 26, "socialCard", "badgeHeight");
+        var pillRadius = ResolveRadiusPixels(themeTokens, width, height, defaultBasePixels: 20, minimum: 13, "badgeRadius");
+        var pillFontSize = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: isHero ? 19 : (isCompact ? 16 : 18), minimum: 12, "socialCard", "badgeFontSize");
+        var pillMaxWidth = Math.Min(safeWidth, ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 320, minimum: 192, "socialCard", "badgeMaxWidth"));
+        var pillMinWidth = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 148, minimum: 112, "socialCard", "badgeMinWidth");
         var pillTextWidth = EstimateTextWidth(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 24), pillFontSize);
         var pillWidth = Math.Clamp(pillTextWidth + (pillPaddingX * 2), pillMinWidth, pillMaxWidth);
-        var pillX = safeRight - pillWidth;
+        var pillX = ResolveBadgeX(themeTokens, safeLeft, safeRight, pillWidth);
         var pillY = safeTop;
-        var pillTextX = pillX + pillPaddingX;
+        var pillTextX = pillX + (pillWidth / 2);
         var pillTextY = pillY + (pillHeight / 2);
         var glowRadiusLarge = GetScaledPixels(width, height, basePixels: 240, minimum: 140);
         var glowRadiusSmall = GetScaledPixels(width, height, basePixels: 150, minimum: 88);
@@ -186,7 +222,23 @@ internal static class WebSocialCardGenerator
         var rightGlowY = GetScaledPixels(width, height, basePixels: 126, minimum: 76);
         var leftGlowX = GetScaledPixels(width, height, basePixels: 180, minimum: 108);
         var leftGlowY = height - GetScaledPixels(width, height, basePixels: 104, minimum: 66);
+        var badgeGap = ResolveTokenPixels(themeTokens, width, height, defaultBasePixels: 20, minimum: 10, "socialCard", "badgeGap");
+        var eyebrowX = safeLeft;
         var eyebrowY = safeTop + GetScaledPixels(width, height, basePixels: 26, minimum: 18);
+        if (string.Equals(ReadThemeToken(themeTokens, "socialCard", "badgeAlign"), "left", StringComparison.OrdinalIgnoreCase))
+        {
+            var shiftedEyebrowX = pillX + pillWidth + badgeGap;
+            var remainingWidth = safeRight - shiftedEyebrowX;
+            if (remainingWidth >= Math.Max(160, safeWidth / 3))
+            {
+                eyebrowX = shiftedEyebrowX;
+            }
+            else
+            {
+                eyebrowY = pillY + pillHeight + badgeGap;
+            }
+        }
+
         var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: isHero ? 106 : (isCompact ? 82 : 94), minimum: 56);
         var titleLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 66 : (isCompact ? 54 : 62), minimum: 30);
         var descriptionLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 36 : (isCompact ? 31 : 34), minimum: 20);
@@ -205,6 +257,8 @@ internal static class WebSocialCardGenerator
         var accentLineY = footerRectY - GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 32 : 36), minimum: 22);
         var accentLineX = safeLeft;
         var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), safeWidth);
+        var frameRadius = ResolveRadiusPixels(themeTokens, width, height, defaultBasePixels: 24, minimum: 12, "frameRadius");
+        var panelRadius = ResolveRadiusPixels(themeTokens, width, height, defaultBasePixels: 20, minimum: 10, "panelRadius");
 
         var svg = new StringBuilder();
         svg.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" width=""{width}"" height=""{height}"" viewBox=""0 0 {width} {height}"">");
@@ -234,54 +288,34 @@ internal static class WebSocialCardGenerator
         svg.AppendLine($@"  <rect x=""0"" y=""0"" width=""{width}"" height=""{height}"" fill=""url(#bg)""/>");
         svg.AppendLine($@"  <circle cx=""{rightGlowX}"" cy=""{rightGlowY}"" r=""{glowRadiusLarge}"" fill=""url(#orbA)"" />");
         svg.AppendLine($@"  <circle cx=""{leftGlowX}"" cy=""{leftGlowY}"" r=""{glowRadiusSmall}"" fill=""url(#orbB)"" />");
-        svg.AppendLine($@"  <rect x=""{frameInset}"" y=""{frameInset}"" width=""{width - (frameInset * 2)}"" height=""{height - (frameInset * 2)}"" rx=""24"" fill=""rgba(7,12,26,0.32)"" stroke=""rgba(148,163,184,0.26)""/>");
-        svg.AppendLine($@"  <rect x=""{panelInset}"" y=""{panelInset}"" width=""{panelWidth}"" height=""{panelHeight}"" rx=""20"" fill=""{palette.Surface}"" fill-opacity=""0.44"" stroke=""{palette.SurfaceStroke}"" stroke-opacity=""0.36""/>");
-        svg.AppendLine($@"  <rect x=""{panelInset}"" y=""{panelInset}"" width=""{panelWidth}"" height=""{topBandHeight}"" rx=""4"" fill=""url(#topBand)""/>");
+        svg.AppendLine($@"  <rect x=""{frameInset}"" y=""{frameInset}"" width=""{width - (frameInset * 2)}"" height=""{height - (frameInset * 2)}"" rx=""{frameRadius}"" fill=""rgba(7,12,26,0.32)"" stroke=""rgba(148,163,184,0.26)""/>");
+        svg.AppendLine($@"  <rect x=""{panelInset}"" y=""{panelInset}"" width=""{panelWidth}"" height=""{panelHeight}"" rx=""{panelRadius}"" fill=""{palette.Surface}"" fill-opacity=""0.44"" stroke=""{palette.SurfaceStroke}"" stroke-opacity=""0.36""/>");
+        svg.AppendLine($@"  <rect x=""{panelInset}"" y=""{panelInset}"" width=""{panelWidth}"" height=""{topBandHeight}"" rx=""{topBandRadius}"" fill=""url(#topBand)""/>");
         svg.AppendLine($@"  <rect x=""{accentLineX}"" y=""{accentLineY}"" width=""{accentLineWidth}"" height=""2"" rx=""1"" fill=""url(#accentLine)""/>");
 
         svg.AppendLine($@"  <rect x=""{pillX}"" y=""{pillY}"" width=""{pillWidth}"" height=""{pillHeight}"" rx=""{pillRadius}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.78"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.76""/>");
-        svg.AppendLine($@"  <text x=""{pillTextX}"" y=""{pillTextY}"" fill=""{palette.ChipText}"" font-size=""{pillFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeBadgeUpper}</text>");
+        svg.AppendLine($@"  <text x=""{pillTextX}"" y=""{pillTextY}"" fill=""{palette.ChipText}"" font-size=""{pillFontSize}"" font-family=""{EscapeXml(type.BadgeFontFamily)}"" font-weight=""700"" dominant-baseline=""middle"" text-anchor=""middle"">{safeBadgeUpper}</text>");
 
-        svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{eyebrowY}"" fill=""{palette.AccentSoft}"" font-size=""{eyebrowFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"">");
+        svg.AppendLine($@"  <text x=""{eyebrowX}"" y=""{eyebrowY}"" fill=""{palette.AccentSoft}"" font-size=""{eyebrowFontSize}"" font-family=""{EscapeXml(type.EyebrowFontFamily)}"" font-weight=""700"">");
         svg.AppendLine($"    {safeEyebrow}");
         svg.AppendLine(@"  </text>");
 
         for (var i = 0; i < titleLines.Count; i++)
         {
             var y = titleY + (i * titleLineHeight);
-            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextPrimary}"" font-size=""{titleFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""800"">{EscapeXml(titleLines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextPrimary}"" font-size=""{titleFontSize}"" font-family=""{EscapeXml(type.TitleFontFamily)}"" font-weight=""800"">{EscapeXml(titleLines[i])}</text>");
         }
 
         for (var i = 0; i < descriptionLines.Count; i++)
         {
             var y = descriptionY + (i * descriptionLineHeight);
-            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""{EscapeXml(type.BodyFontFamily)}"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
         }
 
         svg.AppendLine($@"  <rect x=""{footerRectX}"" y=""{footerRectY}"" rx=""{footerRectRadius}"" ry=""{footerRectRadius}"" width=""{footerRectWidth}"" height=""{footerRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
-        svg.AppendLine($@"  <text x=""{footerRectX + footerTextInsetX}"" y=""{footerTextY}"" fill=""{palette.AccentSoft}"" font-size=""{footerFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeFooter}</text>");
+        svg.AppendLine($@"  <text x=""{footerRectX + (footerRectWidth / 2)}"" y=""{footerTextY}"" fill=""{palette.AccentSoft}"" font-size=""{footerFontSize}"" font-family=""{EscapeXml(type.FooterFontFamily)}"" font-weight=""700"" dominant-baseline=""middle"" text-anchor=""middle"">{safeFooter}</text>");
         svg.AppendLine(@"</svg>");
-
-        try
-        {
-            var svgBytes = Encoding.UTF8.GetBytes(svg.ToString());
-            var settings = new MagickReadSettings
-            {
-                Width = (uint)width,
-                Height = (uint)height,
-                Format = MagickFormat.Svg
-            };
-            using var image = new MagickImage(svgBytes, settings);
-            image.Format = MagickFormat.Png;
-            image.Strip();
-            using var stream = new MemoryStream();
-            image.Write(stream);
-            return stream.ToArray();
-        }
-        catch
-        {
-            return null;
-        }
+        return svg.ToString();
     }
 
     private static List<string> WrapText(string? value, int maxChars, int maxLines)
@@ -395,28 +429,25 @@ internal static class WebSocialCardGenerator
         return (int)Math.Ceiling(text.Length * fontSize * glyphFactor);
     }
 
-    private static string NormalizeWrapInput(string? value)
+    internal static string NormalizeDisplayTextForWrap(string? value)
     {
         var input = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
         if (string.IsNullOrWhiteSpace(input))
             return string.Empty;
 
-        try
-        {
-            input = CamelCaseBoundaryRegex.Replace(input, " ");
-            input = SymbolBreakRegex.Replace(input, " ");
-            input = WhitespaceRegex.Replace(input, " ").Trim();
-        }
-        catch
-        {
-            // Best effort only; fallback to raw text.
-        }
-
-        return input;
+        return WhitespaceRegex.Replace(input, " ").Trim();
     }
 
-    private static SocialPalette SelectPalette(string styleKey, string seed)
+    private static string NormalizeWrapInput(string? value)
     {
+        return NormalizeDisplayTextForWrap(value);
+    }
+
+    internal static SocialPalette SelectPalette(string styleKey, string seed, IReadOnlyDictionary<string, object?>? themeTokens = null)
+    {
+        if (TryResolveThemePalette(themeTokens, out var themed))
+            return themed;
+
         if (Palettes.Length == 0)
             return new SocialPalette(
                 "#070f25",
@@ -439,25 +470,209 @@ internal static class WebSocialCardGenerator
         {
             "api" => new[] { 0, 2 },
             "docs" => new[] { 2, 0 },
-            "editorial" => new[] { 3, 1 },
+            "blog" => new[] { 3, 1 },
+            "contact" => new[] { 3, 0 },
+            "home" => new[] { 1, 0 },
             _ => new[] { 1, 0 }
         };
         var candidate = candidates[hash[0] % candidates.Length];
         return Palettes[candidate % Palettes.Length];
     }
 
+    private static bool TryResolveThemePalette(IReadOnlyDictionary<string, object?>? themeTokens, out SocialPalette palette)
+    {
+        palette = default!;
+        if (themeTokens is null || themeTokens.Count == 0)
+            return false;
+
+        var accent = ReadThemeToken(themeTokens, "socialCard", "accent") ??
+                     ReadThemeToken(themeTokens, "color", "accent");
+        var backgroundStart = ReadThemeToken(themeTokens, "socialCard", "backgroundStart") ??
+                              ReadThemeToken(themeTokens, "color", "bg");
+        var surface = ReadThemeToken(themeTokens, "socialCard", "surface") ??
+                      ReadThemeToken(themeTokens, "color", "panel");
+        var textPrimary = ReadThemeToken(themeTokens, "socialCard", "textPrimary") ??
+                          ReadThemeToken(themeTokens, "color", "ink");
+        var textSecondary = ReadThemeToken(themeTokens, "socialCard", "textSecondary") ??
+                            ReadThemeToken(themeTokens, "color", "muted");
+        var surfaceStroke = ReadThemeToken(themeTokens, "socialCard", "surfaceStroke") ??
+                            ReadThemeToken(themeTokens, "color", "border");
+
+        if (string.IsNullOrWhiteSpace(accent) ||
+            string.IsNullOrWhiteSpace(backgroundStart) ||
+            string.IsNullOrWhiteSpace(surface) ||
+            string.IsNullOrWhiteSpace(textPrimary))
+        {
+            return false;
+        }
+
+        var backgroundMid = ReadThemeToken(themeTokens, "socialCard", "backgroundMid") ?? surface;
+        var backgroundEnd = ReadThemeToken(themeTokens, "socialCard", "backgroundEnd") ?? backgroundStart;
+        var accentSoft = ReadThemeToken(themeTokens, "socialCard", "accentSoft") ?? accent;
+        var accentStrong = ReadThemeToken(themeTokens, "socialCard", "accentStrong") ?? textPrimary;
+        var resolvedTextSecondary = string.IsNullOrWhiteSpace(textSecondary) ? textPrimary : textSecondary;
+        var resolvedSurfaceStroke = string.IsNullOrWhiteSpace(surfaceStroke) ? accent : surfaceStroke;
+        var chipBackground = ReadThemeToken(themeTokens, "socialCard", "chipBackground") ?? surface;
+        var chipBorder = ReadThemeToken(themeTokens, "socialCard", "chipBorder") ?? resolvedSurfaceStroke;
+        var chipText = ReadThemeToken(themeTokens, "socialCard", "chipText") ?? textPrimary;
+
+        palette = new SocialPalette(
+            backgroundStart,
+            backgroundMid,
+            backgroundEnd,
+            surface,
+            resolvedSurfaceStroke,
+            accent,
+            accentSoft,
+            accentStrong,
+            textPrimary,
+            resolvedTextSecondary,
+            chipBackground,
+            chipBorder,
+            chipText);
+        return true;
+    }
+
+    private static string? ReadThemeToken(IReadOnlyDictionary<string, object?>? map, params string[] path)
+    {
+        if (map is null || path is null || path.Length == 0)
+            return null;
+
+        IReadOnlyDictionary<string, object?>? currentMap = map;
+        object? currentValue = null;
+        for (var i = 0; i < path.Length; i++)
+        {
+            if (currentMap is null || !currentMap.TryGetValue(path[i], out currentValue))
+                return null;
+
+            if (i == path.Length - 1)
+                return currentValue?.ToString();
+
+            currentMap = currentValue as IReadOnlyDictionary<string, object?>;
+        }
+
+        return currentValue?.ToString();
+    }
+
+    private static SocialCardTypography ResolveTypography(IReadOnlyDictionary<string, object?>? themeTokens)
+    {
+        var display = NormalizeFontFamily(
+            ReadThemeToken(themeTokens, "socialCard", "fontDisplay") ??
+            ReadThemeToken(themeTokens, "font", "display"),
+            "Segoe UI, Arial, sans-serif");
+        var body = NormalizeFontFamily(
+            ReadThemeToken(themeTokens, "socialCard", "fontBody") ??
+            ReadThemeToken(themeTokens, "font", "body"),
+            "Segoe UI, Arial, sans-serif");
+        var mono = NormalizeFontFamily(
+            ReadThemeToken(themeTokens, "socialCard", "fontMono") ??
+            ReadThemeToken(themeTokens, "font", "mono"),
+            "Cascadia Code, Consolas, monospace");
+        var eyebrow = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontEyebrow"), display);
+        var badge = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontBadge"), body);
+        var footer = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontFooter"), body);
+        return new SocialCardTypography(display, body, mono, eyebrow, badge, footer);
+    }
+
+    private static string NormalizeFontFamily(string? value, string fallback)
+    {
+        var candidate = (value ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;
+    }
+
+    private static int ResolveBadgeX(IReadOnlyDictionary<string, object?>? themeTokens, int safeLeft, int safeRight, int pillWidth)
+    {
+        var align = ReadThemeToken(themeTokens, "socialCard", "badgeAlign");
+        if (string.Equals(align, "left", StringComparison.OrdinalIgnoreCase))
+            return safeLeft;
+
+        return safeRight - pillWidth;
+    }
+
+    private static int ResolveRadiusPixels(
+        IReadOnlyDictionary<string, object?>? themeTokens,
+        int width,
+        int height,
+        int defaultBasePixels,
+        int minimum,
+        string socialCardKey)
+    {
+        var raw = ReadThemeToken(themeTokens, "socialCard", socialCardKey);
+        if (TryParsePixelishInt(raw, out var value))
+            return Math.Max(minimum, value);
+
+        var genericRadiusKey = socialCardKey switch
+        {
+            "panelRadius" => "base",
+            "frameRadius" => "base",
+            "footerRadius" => "sm",
+            "badgeRadius" => "sm",
+            "topBandRadius" => "sm",
+            _ => string.Empty
+        };
+
+        if (!string.IsNullOrWhiteSpace(genericRadiusKey) &&
+            TryParsePixelishInt(ReadThemeToken(themeTokens, "radius", genericRadiusKey), out value))
+        {
+            return Math.Max(minimum, value);
+        }
+
+        return GetScaledPixels(width, height, defaultBasePixels, minimum);
+    }
+
+    private static int ResolveTokenPixels(
+        IReadOnlyDictionary<string, object?>? themeTokens,
+        int width,
+        int height,
+        int defaultBasePixels,
+        int minimum,
+        params string[] path)
+    {
+        if (TryParsePixelishInt(ReadThemeToken(themeTokens, path), out var value))
+            return Math.Max(minimum, value);
+
+        return GetScaledPixels(width, height, defaultBasePixels, minimum);
+    }
+
+    private static bool TryParsePixelishInt(string? raw, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        var candidate = raw.Trim();
+        if (candidate.EndsWith("px", StringComparison.OrdinalIgnoreCase))
+            candidate = candidate[..^2].Trim();
+
+        if (int.TryParse(candidate, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            return true;
+
+        if (double.TryParse(candidate, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+        {
+            value = (int)Math.Round(number);
+            return true;
+        }
+
+        return false;
+    }
+
     private static string ClassifyStyle(string badge, string footerLabel)
     {
         var combined = string.Concat(badge ?? string.Empty, " ", footerLabel ?? string.Empty).ToLowerInvariant();
+        if (combined.Contains("home", StringComparison.Ordinal))
+            return "home";
         if (combined.Contains("api", StringComparison.Ordinal))
             return "api";
         if (combined.Contains("doc", StringComparison.Ordinal))
             return "docs";
+        if (combined.Contains("contact", StringComparison.Ordinal) ||
+            combined.Contains("support", StringComparison.Ordinal))
+            return "contact";
         if (combined.Contains("blog", StringComparison.Ordinal) ||
             combined.Contains("post", StringComparison.Ordinal) ||
             combined.Contains("news", StringComparison.Ordinal) ||
             combined.Contains("article", StringComparison.Ordinal))
-            return "editorial";
+            return "blog";
         return "default";
     }
 
@@ -467,13 +682,17 @@ internal static class WebSocialCardGenerator
         var normalizedFooter = (footerLabel ?? string.Empty).Trim();
         if (normalizedBadge.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
             normalizedFooter.Equals("/", StringComparison.OrdinalIgnoreCase))
-            return "hero";
+            return "spotlight";
 
-        if (styleKey.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
-            styleKey.Equals("editorial", StringComparison.OrdinalIgnoreCase))
-            return "compact";
-
-        return "standard";
+        return styleKey switch
+        {
+            "home" => "spotlight",
+            "docs" => "shelf",
+            "api" => "reference",
+            "blog" => "editorial",
+            "contact" => "connect",
+            _ => "product"
+        };
     }
 
     private static string? NormalizeStyle(string? style)
@@ -486,15 +705,21 @@ internal static class WebSocialCardGenerator
             "default" => "default",
             "platform" => "default",
             "product" => "default",
+            "home" => "home",
+            "landing" => "home",
             "docs" => "docs",
             "documentation" => "docs",
             "knowledge" => "docs",
             "api" => "api",
             "reference" => "api",
-            "editorial" => "editorial",
-            "blog" => "editorial",
-            "news" => "editorial",
-            "marketing" => "editorial",
+            "editorial" => "blog",
+            "blog" => "blog",
+            "news" => "blog",
+            "article" => "blog",
+            "marketing" => "blog",
+            "contact" => "contact",
+            "contacts" => "contact",
+            "support" => "contact",
             _ => null
         };
     }
@@ -506,11 +731,24 @@ internal static class WebSocialCardGenerator
 
         return variant.Trim().ToLowerInvariant() switch
         {
-            "standard" => "standard",
-            "default" => "standard",
-            "compact" => "compact",
-            "hero" => "hero",
-            "featured" => "hero",
+            "standard" => "product",
+            "default" => "product",
+            "product" => "product",
+            "compact" => "shelf",
+            "shelf" => "shelf",
+            "docs" => "shelf",
+            "hero" => "spotlight",
+            "featured" => "spotlight",
+            "spotlight" => "spotlight",
+            "home" => "spotlight",
+            "reference" => "reference",
+            "api" => "reference",
+            "editorial" => "editorial",
+            "imageinline" => "inline-image",
+            "image-inline" => "inline-image",
+            "inline-image" => "inline-image",
+            "connect" => "connect",
+            "contact" => "connect",
             _ => null
         };
     }
@@ -531,6 +769,8 @@ internal static class WebSocialCardGenerator
                 candidate = "API";
             else if (LooksLikeDocsLabel(candidate) || LooksLikeDocsLabel(footer))
                 candidate = "DOCS";
+            else if (LooksLikeContactLabel(candidate) || LooksLikeContactLabel(footer))
+                candidate = "CONTACT";
             else if (LooksLikeBlogLabel(candidate) || LooksLikeBlogLabel(footer))
                 candidate = "BLOG";
             else
@@ -558,6 +798,8 @@ internal static class WebSocialCardGenerator
             return "/api";
         if (LooksLikeDocsLabel(candidate))
             return "/docs";
+        if (LooksLikeContactLabel(candidate))
+            return "/contact";
         if (LooksLikeBlogLabel(candidate))
             return "/blog";
         if (string.Equals(candidate, "home", StringComparison.OrdinalIgnoreCase) ||
@@ -572,15 +814,17 @@ internal static class WebSocialCardGenerator
 
     private static string DefaultBadgeForStyle(string styleKey, string variantKey)
     {
-        if (string.Equals(variantKey, "hero", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(variantKey, "spotlight", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(styleKey, "home", StringComparison.OrdinalIgnoreCase))
             return "HOME";
 
         return styleKey switch
         {
             "api" => "API",
             "docs" => "DOCS",
-            "editorial" => "BLOG",
-            _ => "PAGES"
+            "blog" => "BLOG",
+            "contact" => "CONTACT",
+            _ => "PAGE"
         };
     }
 
@@ -590,7 +834,8 @@ internal static class WebSocialCardGenerator
         {
             "api" => "/api",
             "docs" => "/docs",
-            "editorial" => "/blog",
+            "blog" => "/blog",
+            "contact" => "/contact",
             _ => "/"
         };
     }
@@ -656,6 +901,11 @@ internal static class WebSocialCardGenerator
         return ContainsToken(value, "blog") || ContainsToken(value, "post") || ContainsToken(value, "news");
     }
 
+    private static bool LooksLikeContactLabel(string value)
+    {
+        return ContainsToken(value, "contact") || ContainsToken(value, "support");
+    }
+
     private static bool ContainsToken(string value, string token)
     {
         if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(token))
@@ -704,7 +954,7 @@ internal static class WebSocialCardGenerator
         return input[..Math.Max(0, maxLength - 3)] + "...";
     }
 
-    private sealed class SocialPalette
+    internal sealed class SocialPalette
     {
         public SocialPalette(
             string backgroundStart,
@@ -749,5 +999,31 @@ internal static class WebSocialCardGenerator
         public string ChipBackground { get; }
         public string ChipBorder { get; }
         public string ChipText { get; }
+    }
+
+    private sealed class SocialCardTypography
+    {
+        public SocialCardTypography(
+            string titleFontFamily,
+            string bodyFontFamily,
+            string monoFontFamily,
+            string eyebrowFontFamily,
+            string badgeFontFamily,
+            string footerFontFamily)
+        {
+            TitleFontFamily = titleFontFamily;
+            BodyFontFamily = bodyFontFamily;
+            MonoFontFamily = monoFontFamily;
+            EyebrowFontFamily = eyebrowFontFamily;
+            BadgeFontFamily = badgeFontFamily;
+            FooterFontFamily = footerFontFamily;
+        }
+
+        public string TitleFontFamily { get; }
+        public string BodyFontFamily { get; }
+        public string MonoFontFamily { get; }
+        public string EyebrowFontFamily { get; }
+        public string BadgeFontFamily { get; }
+        public string FooterFontFamily { get; }
     }
 }
