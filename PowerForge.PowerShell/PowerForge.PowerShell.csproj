@@ -37,21 +37,4 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\PowerForge\BuildServices.cs" Link="BuildServices.cs" />
-    <Compile Include="..\PowerForge\Models\Analysis\MissingFunctionCommand.cs" Link="Models\Analysis\MissingFunctionCommand.cs" />
-    <Compile Include="..\PowerForge\Models\Analysis\MissingFunctionsReport.cs" Link="Models\Analysis\MissingFunctionsReport.cs" />
-    <Compile Include="..\PowerForge\Services\AuthenticodeSigningService.cs" Link="Services\AuthenticodeSigningService.cs" />
-    <Compile Include="..\PowerForge\Services\BinaryDependencyPreflightService.cs" Link="Services\BinaryDependencyPreflightService.cs" />
-    <Compile Include="..\PowerForge\Services\DocumentationEngine.cs" Link="Services\DocumentationEngine.cs" />
-    <Compile Include="..\PowerForge\Services\LegacySegmentAdapter.cs" Link="Services\LegacySegmentAdapter.cs" />
-    <Compile Include="..\PowerForge\Services\ManifestEditor*.cs" Link="Services\%(Filename)%(Extension)" />
-    <Compile Include="..\PowerForge\Services\MissingFunctionsAnalyzer.cs" Link="Services\MissingFunctionsAnalyzer.cs" />
-    <Compile Include="..\PowerForge\Services\ModulePipelineRunner*.cs" Link="Services\%(Filename)%(Extension)" />
-    <Compile Include="..\PowerForge\Services\ModuleTestFailureAnalyzer.cs" Link="Services\ModuleTestFailureAnalyzer.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleTestFailureWorkflowService.cs" Link="Services\ModuleTestFailureWorkflowService.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleTestSuiteService.cs" Link="Services\ModuleTestSuiteService.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleValidationService*.cs" Link="Services\%(Filename)%(Extension)" />
-  </ItemGroup>
-
 </Project>
