@@ -3971,8 +3971,8 @@ PowerForge.DotNetPublishResult</maml:name>
       <command:example>
         <maml:title>Generate DotNet publish JSON from DSL without execution</maml:title>
         <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {
-New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
-New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -4927,6 +4927,10 @@ scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
 steps, use -JsonOnly with -JsonPath.</maml:para>
       <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.&#xD;
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
+      <maml:para>Dependency behavior is composed from the configuration segments you emit. Typically this means:&#xD;
+New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host&#xD;
+should install missing ones, and New-ConfigurationArtefact decides whether required modules should be&#xD;
+bundled into the output artefact.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="Modern">
@@ -6102,7 +6106,7 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:example>
         <maml:title>Build a module (DSL) and keep docs in sync</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6118,8 +6122,8 @@ New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -
       <command:example>
         <maml:title>Enforce consistency and compatibility during build (fail CI on issues)</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
-New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6128,8 +6132,8 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       <command:example>
         <maml:title>Publish a .NET project into the module as part of the build</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
--Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+    -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -6137,8 +6141,19 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       <command:example>
         <maml:title>Fail CI only on new diagnostics compared to a committed baseline</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
--DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
--FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+    -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Install missing dependencies during the build and bundle required modules into the package</maml:title>
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+}</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -10650,7 +10665,14 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
 Unpacked (folder) for inspection or offline installation.</maml:para>
       <maml:para>When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,&#xD;
 when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.</maml:para>
+      <maml:para>Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are&#xD;
+intentionally excluded because they represent dependencies that should remain separately installed on the target&#xD;
+machine.</maml:para>
+      <maml:para>RequiredModulesSource controls the packaging strategy: Installed means local-only copy,&#xD;
+Auto means prefer local and download when missing, and Download means always download. When omitted,&#xD;
+the default is Installed.</maml:para>
       <maml:para>Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.</maml:para>
+      <maml:para>For a broader dependency workflow explanation, see about_ModuleDependencies.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -10658,7 +10680,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredModules">
           <maml:name>AddRequiredModules</maml:name>
           <maml:description>
-            <maml:para>Add required modules to artefact by copying them over.</maml:para>
+            <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include&#xD;
+ExternalModule dependencies.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -10886,7 +10909,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesPath</maml:name>
           <maml:description>
-            <maml:para>Path where required modules will be copied to.</maml:para>
+            <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under&#xD;
+the artefact output.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -10898,7 +10922,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesRepository</maml:name>
           <maml:description>
-            <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+            <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this&#xD;
+when packaging should resolve from a specific gallery or private feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -10910,7 +10935,9 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesSource</maml:name>
           <maml:description>
-            <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).</maml:para>
+            <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,&#xD;
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the&#xD;
+machine.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">RequiredModulesSource</command:parameterValue>
           <command:parameterValueGroup>
@@ -10927,7 +10954,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesTool</maml:name>
           <maml:description>
-            <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+            <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers&#xD;
+PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
           <command:parameterValueGroup>
@@ -10977,7 +11005,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredModules">
         <maml:name>AddRequiredModules</maml:name>
         <maml:description>
-          <maml:para>Add required modules to artefact by copying them over.</maml:para>
+          <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include&#xD;
+ExternalModule dependencies.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -11205,7 +11234,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesPath</maml:name>
         <maml:description>
-          <maml:para>Path where required modules will be copied to.</maml:para>
+          <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under&#xD;
+the artefact output.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -11217,7 +11247,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesRepository</maml:name>
         <maml:description>
-          <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+          <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this&#xD;
+when packaging should resolve from a specific gallery or private feed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -11229,7 +11260,9 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesSource</maml:name>
         <maml:description>
-          <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).</maml:para>
+          <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,&#xD;
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the&#xD;
+machine.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">RequiredModulesSource</command:parameterValue>
         <command:parameterValueGroup>
@@ -11246,7 +11279,8 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesTool</maml:name>
         <maml:description>
-          <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+          <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers&#xD;
+PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
         <command:parameterValueGroup>
@@ -11325,6 +11359,20 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
+      <command:example>
+        <maml:title>Always download required modules into a packed artefact</maml:title>
+        <dev:code>New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'</dev:code>
+        <dev:remarks>
+          <maml:para>Use this when you want packaging to ignore whatever is already installed on the build machine.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Prefer local modules and download only when a dependency is missing</maml:title>
+        <dev:code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto</dev:code>
+        <dev:remarks>
+          <maml:para>This is a good default for developer machines that may already have some dependencies installed.</maml:para>
+        </dev:remarks>
+      </command:example>
     </command:examples>
     <command:relatedLinks />
   </command:command>
@@ -11340,6 +11388,13 @@ when configured, downloaded (via Save-PSResource/Save-Module) before being copie
     <maml:description>
       <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.&#xD;
 It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.</maml:para>
+      <maml:para>Dependency-related options in this cmdlet affect the build machine, not artefact packaging. Use&#xD;
+InstallMissingModules when the build host needs missing RequiredModule or&#xD;
+ExternalModule dependencies installed before merge/import/test steps run.</maml:para>
+      <maml:para>If you want dependencies copied into ZIP/unpacked artefacts, configure that separately with&#xD;
+New-ConfigurationArtefact -AddRequiredModules. Build-time installation and artefact packaging are designed&#xD;
+as separate decisions because many teams want one without the other.</maml:para>
+      <maml:para>For a broader dependency workflow explanation, see about_ModuleDependencies.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -11467,7 +11522,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModules</maml:name>
           <maml:description>
-            <maml:para>Install missing module dependencies (Required/External) before build.</maml:para>
+            <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects&#xD;
+the build host only; it does not bundle modules into artefacts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -11479,7 +11535,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Credential secret/token for dependency installation.</maml:para>
+            <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want&#xD;
+the secret value embedded directly in scripts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -11491,7 +11548,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Path to a file containing the credential secret/token.</maml:para>
+            <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and&#xD;
+CI agents.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -11503,7 +11561,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Credential user name for dependency installation.</maml:para>
+            <maml:para>Credential user name for dependency installation. This is usually paired with&#xD;
+InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFilePath.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -11515,7 +11574,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesForce</maml:name>
           <maml:description>
-            <maml:para>Force re-install even if dependencies are already installed.</maml:para>
+            <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to&#xD;
+re-sync against the repository instead of accepting the current local state.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -11527,7 +11587,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesPrerelease</maml:name>
           <maml:description>
-            <maml:para>Allow prerelease versions when installing dependencies.</maml:para>
+            <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and&#xD;
+repository policy intentionally allow prerelease packages.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -11539,7 +11600,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesRepository</maml:name>
           <maml:description>
-            <maml:para>Repository name used for dependency installation (defaults to PSGallery).</maml:para>
+            <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build&#xD;
+should resolve dependencies from a named private feed or alternate gallery.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -12038,7 +12100,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>WarnIfRequiredModulesOutdated</maml:name>
           <maml:description>
-            <maml:para>Warn if RequiredModules are older than the latest available in the repository.</maml:para>
+            <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a&#xD;
+reporting hint and does not change the manifest or install anything by itself.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -12173,7 +12236,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModules</maml:name>
         <maml:description>
-          <maml:para>Install missing module dependencies (Required/External) before build.</maml:para>
+          <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects&#xD;
+the build host only; it does not bundle modules into artefacts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -12185,7 +12249,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialSecret</maml:name>
         <maml:description>
-          <maml:para>Credential secret/token for dependency installation.</maml:para>
+          <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want&#xD;
+the secret value embedded directly in scripts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -12197,7 +12262,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialSecretFilePath</maml:name>
         <maml:description>
-          <maml:para>Path to a file containing the credential secret/token.</maml:para>
+          <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and&#xD;
+CI agents.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -12209,7 +12275,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialUserName</maml:name>
         <maml:description>
-          <maml:para>Credential user name for dependency installation.</maml:para>
+          <maml:para>Credential user name for dependency installation. This is usually paired with&#xD;
+InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFilePath.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -12221,7 +12288,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesForce</maml:name>
         <maml:description>
-          <maml:para>Force re-install even if dependencies are already installed.</maml:para>
+          <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to&#xD;
+re-sync against the repository instead of accepting the current local state.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -12233,7 +12301,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesPrerelease</maml:name>
         <maml:description>
-          <maml:para>Allow prerelease versions when installing dependencies.</maml:para>
+          <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and&#xD;
+repository policy intentionally allow prerelease packages.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -12245,7 +12314,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesRepository</maml:name>
         <maml:description>
-          <maml:para>Repository name used for dependency installation (defaults to PSGallery).</maml:para>
+          <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build&#xD;
+should resolve dependencies from a named private feed or alternate gallery.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -12744,7 +12814,8 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>WarnIfRequiredModulesOutdated</maml:name>
         <maml:description>
-          <maml:para>Warn if RequiredModules are older than the latest available in the repository.</maml:para>
+          <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a&#xD;
+reporting hint and does not change the manifest or install anything by itself.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -12786,6 +12857,27 @@ This is opt-in and updates the source .csproj file when a project path can be re
         <dev:code>New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Install missing dependencies from PSGallery before the build</maml:title>
+        <dev:code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'PSGallery'</dev:code>
+        <dev:remarks>
+          <maml:para>Use this when the build host does not already have the declared RequiredModule or ExternalModule dependencies installed.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Resolve Auto or Latest online without installing first</maml:title>
+        <dev:code>New-ConfigurationBuild -Enable -ResolveMissingModulesOnline -WarnIfRequiredModulesOutdated</dev:code>
+        <dev:remarks>
+          <maml:para>Useful in CI or on clean machines when dependency versions should come from the repository rather than the local module cache.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Install from a private repository with a token stored in a file</maml:title>
+        <dev:code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'MyPrivateFeed' -InstallMissingModulesCredentialUserName 'build' -InstallMissingModulesCredentialSecretFilePath '.secrets\feed-token.txt'</dev:code>
+        <dev:remarks>
+          <maml:para>Use the credential parameters only when the repository requires authentication.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -16521,7 +16613,7 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
       <command:example>
         <maml:title>Create a basic DotNet publish spec from DSL</maml:title>
         <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {
-New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -21218,12 +21310,20 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
     <maml:description>
       <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)&#xD;
 install/package dependencies during a build.</maml:para>
-      <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries are written to&#xD;
-PrivateData.PSData.ExternalModuleDependencies (not packaged into artefacts).</maml:para>
+      <maml:para>Use RequiredModule for dependencies that should appear in the manifest and can also be bundled into build&#xD;
+artefacts when New-ConfigurationArtefact -AddRequiredModules is enabled. Use ExternalModule for&#xD;
+dependencies that must exist on the target system but should not be bundled into artefacts.</maml:para>
+      <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries&#xD;
+are written to PrivateData.PSData.ExternalModuleDependencies. ApprovedModule entries are used by&#xD;
+merge/missing-function workflows and are not emitted as manifest dependencies.</maml:para>
       <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime&#xD;
 modules, not gallery-resolvable dependencies.</maml:para>
-      <maml:para>Version/Guid values set to Auto or Latest are resolved from installed modules; when&#xD;
-ResolveMissingModulesOnline is enabled, repository results are used without installing.</maml:para>
+      <maml:para>Version and Guid values set to Auto or Latest are resolved from installed modules by default. When&#xD;
+New-ConfigurationBuild -ResolveMissingModulesOnline is enabled, repository results can be used without&#xD;
+installing the dependency first.</maml:para>
+      <maml:para>Choose only one versioning style per dependency: a minimum version (-Version or&#xD;
+-MinimumVersion) or an exact version (-RequiredVersion). Mixing them for the same module is treated&#xD;
+as invalid input.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -21231,7 +21331,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Guid</maml:name>
           <maml:description>
-            <maml:para>GUID of the dependency module (or 'Auto').</maml:para>
+            <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock&#xD;
+onto a specific module identity across repositories.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -21243,7 +21344,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MinimumVersion</maml:name>
           <maml:description>
-            <maml:para>Minimum version of the dependency module (preferred over -Version).</maml:para>
+            <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible&#xD;
+version is acceptable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -21255,7 +21357,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Name</maml:name>
           <maml:description>
-            <maml:para>Name of the PowerShell module(s) that your module depends on.</maml:para>
+            <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per&#xD;
+module using the same dependency settings.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -21267,7 +21370,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredVersion</maml:name>
           <maml:description>
-            <maml:para>Required version of the dependency module (exact match).</maml:para>
+            <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the&#xD;
+exact same version.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -21279,7 +21383,9 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Type</maml:name>
           <maml:description>
-            <maml:para>Choose between RequiredModule, ExternalModule and ApprovedModule.</maml:para>
+            <maml:para>Choose between RequiredModule, ExternalModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only, and&#xD;
+ApprovedModule is merge-only.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
           <command:parameterValueGroup>
@@ -21296,7 +21402,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Version</maml:name>
           <maml:description>
-            <maml:para>Minimum version of the dependency module (or 'Auto'/'Latest').</maml:para>
+            <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as&#xD;
+-MinimumVersion and cannot be combined with -RequiredVersion.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -21311,7 +21418,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Guid</maml:name>
         <maml:description>
-          <maml:para>GUID of the dependency module (or 'Auto').</maml:para>
+          <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock&#xD;
+onto a specific module identity across repositories.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -21323,7 +21431,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MinimumVersion</maml:name>
         <maml:description>
-          <maml:para>Minimum version of the dependency module (preferred over -Version).</maml:para>
+          <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible&#xD;
+version is acceptable.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -21335,7 +21444,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Name</maml:name>
         <maml:description>
-          <maml:para>Name of the PowerShell module(s) that your module depends on.</maml:para>
+          <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per&#xD;
+module using the same dependency settings.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -21347,7 +21457,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredVersion</maml:name>
         <maml:description>
-          <maml:para>Required version of the dependency module (exact match).</maml:para>
+          <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the&#xD;
+exact same version.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -21359,7 +21470,9 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Type</maml:name>
         <maml:description>
-          <maml:para>Choose between RequiredModule, ExternalModule and ApprovedModule.</maml:para>
+          <maml:para>Choose between RequiredModule, ExternalModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only, and&#xD;
+ApprovedModule is merge-only.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
         <command:parameterValueGroup>
@@ -21376,7 +21489,8 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Version</maml:name>
         <maml:description>
-          <maml:para>Minimum version of the dependency module (or 'Auto'/'Latest').</maml:para>
+          <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as&#xD;
+-MinimumVersion and cannot be combined with -RequiredVersion.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -21425,6 +21539,20 @@ ResolveMissingModulesOnline is enabled, repository results are used without inst
         <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'</dev:code>
         <dev:remarks>
           <maml:para>Uses RequiredVersion when an exact match is required.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Declare an approved helper module for merge-time reuse</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'</dev:code>
+        <dev:remarks>
+          <maml:para>Allows approved helper functions to be copied into the built module when they are actually used.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Declare a dependency whose version can be resolved online later</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</dev:code>
+        <dev:remarks>
+          <maml:para>Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

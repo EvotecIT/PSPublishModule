@@ -29,6 +29,10 @@ on:
         required: false
         type: number
         default: 40
+      build_timeout_minutes:
+        required: false
+        type: number
+        default: 60
       dotnet_version:
         required: false
         type: string
@@ -104,7 +108,7 @@ jobs:
       pipeline_config: ${{ inputs.pipeline_config }}
       engine_mode: ${{ inputs.engine_mode }}
       runner_labels_json: ${{ inputs.runner_labels_json }}
-      timeout_minutes: ${{ inputs.timeout_minutes }}
+      timeout_minutes: ${{ inputs.build_timeout_minutes }}
       dotnet_version: ${{ inputs.dotnet_version }}
       report_artifact_name: ${{ inputs.report_artifact_name }}
       powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
@@ -136,7 +140,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
   post-deploy:
     if: ${{ inputs.post_deploy_pipeline_config != '' }}

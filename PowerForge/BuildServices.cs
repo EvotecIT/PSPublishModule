@@ -22,6 +22,8 @@ namespace PowerForge;
 /// </example>
 public static class BuildServices
 {
+    // BuildServices intentionally stays script-first and static. If we later need to unit-test
+    // alternate manifest mutation strategies here, extract a dedicated host service instead.
     private static readonly IModuleManifestMutator ManifestMutator = new AstModuleManifestMutator();
     private static readonly IScriptFunctionExportDetector ScriptFunctionExportDetector = new PowerShellScriptFunctionExportDetector();
 
@@ -85,7 +87,8 @@ public static class BuildServices
         var resolved = ModuleInstaller.ResolveTargetVersion(roots, moduleName, moduleVersion, strategy);
         if (updateManifestToResolvedVersion)
         {
-            try { ManifestMutator.TrySetTopLevelModuleVersion(System.IO.Path.Combine(stagingPath, $"{moduleName}.psd1"), resolved); } catch { }
+            try { ManifestMutator.TrySetTopLevelModuleVersion(System.IO.Path.Combine(stagingPath, $"{moduleName}.psd1"), resolved); }
+            catch { /* best effort */ }
         }
         var opts = new ModuleInstallerOptions(roots, InstallationStrategy.Exact, keepVersions);
         return installer.InstallFromStaging(stagingPath, moduleName, resolved, opts);

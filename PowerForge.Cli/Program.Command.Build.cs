@@ -44,7 +44,7 @@ internal static partial class Program
                     var runner = new ModulePipelineRunner(cmdLogger);
                     var plan = runner.Plan(spec);
 
-                    var pipeline = new ModuleBuildPipeline(cmdLogger);
+                    var pipeline = ModuleBuildPipelineFactory.Create(cmdLogger);
                     var res = RunWithStatus(outputJson, cli, $"Building {plan.ModuleName} {plan.ResolvedVersion}", () => pipeline.BuildToStaging(plan.BuildSpec));
 
                     if (outputJson)
@@ -72,7 +72,7 @@ internal static partial class Program
                 var (buildSpec, buildSpecPath) = LoadBuildSpecWithPath(fullConfigPath);
                 ResolveBuildSpecPaths(buildSpec, buildSpecPath);
 
-                var buildPipeline = new ModuleBuildPipeline(cmdLogger);
+                var buildPipeline = ModuleBuildPipelineFactory.Create(cmdLogger);
                 var buildRes = RunWithStatus(outputJson, cli, $"Building {buildSpec.Name} {buildSpec.Version}", () => buildPipeline.BuildToStaging(buildSpec));
 
                 if (outputJson)
@@ -134,7 +134,7 @@ internal static partial class Program
                 ProjectUri = p.ProjectUri,
             };
 
-            var pipelineFromArgs = new ModuleBuildPipeline(cmdLogger);
+            var pipelineFromArgs = ModuleBuildPipelineFactory.Create(cmdLogger);
             var resFromArgs = RunWithStatus(outputJson, cli, $"Building {specFromArgs.Name} {specFromArgs.Version}", () => pipelineFromArgs.BuildToStaging(specFromArgs));
 
             if (outputJson)
@@ -176,4 +176,3 @@ internal static partial class Program
         }
     }
 }
-

@@ -140,55 +140,6 @@ public sealed partial class ModulePipelineRunner
         return Path.GetFullPath(Path.Combine(baseDir, p));
     }
 
-    private static ConfigurationFormattingSegment? MergeFormattingSegments(
-        ConfigurationFormattingSegment? existing,
-        ConfigurationFormattingSegment incoming)
-    {
-        if (incoming is null) return existing;
-        if (existing is null) return incoming;
-
-        existing.Options ??= new FormattingOptions();
-        incoming.Options ??= new FormattingOptions();
-
-        existing.Options.UpdateProjectRoot |= incoming.Options.UpdateProjectRoot;
-
-        MergeTarget(existing.Options.Standard, incoming.Options.Standard);
-        MergeTarget(existing.Options.Merge, incoming.Options.Merge);
-
-        return existing;
-
-        static void MergeTarget(FormattingTargetOptions dst, FormattingTargetOptions src)
-        {
-            if (src is null) return;
-
-            if (src.FormatCodePS1 is not null) dst.FormatCodePS1 = src.FormatCodePS1;
-            if (src.FormatCodePSM1 is not null) dst.FormatCodePSM1 = src.FormatCodePSM1;
-            if (src.FormatCodePSD1 is not null) dst.FormatCodePSD1 = src.FormatCodePSD1;
-
-            if (src.Style?.PSD1 is not null)
-            {
-                dst.Style ??= new FormattingStyleOptions();
-                dst.Style.PSD1 = src.Style.PSD1;
-            }
-        }
-    }
-
-    private static bool HasStandardFormattingConfiguration(ConfigurationFormattingSegment formatting)
-    {
-        if (formatting is null) return false;
-        var options = formatting.Options;
-        if (options is null) return false;
-
-        var standard = options.Standard;
-        if (standard is null) return false;
-
-        if (standard.FormatCodePS1?.Enabled == true) return true;
-        if (standard.FormatCodePSM1?.Enabled == true) return true;
-        if (standard.FormatCodePSD1?.Enabled == true) return true;
-
-        return !string.IsNullOrWhiteSpace(standard.Style?.PSD1);
-    }
-
     private static void DirectoryCopy(string sourceDir, string destDir)
     {
         var source = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -221,16 +172,4 @@ public sealed partial class ModulePipelineRunner
             File.Copy(full, target, overwrite: true);
         }
     }
-
-    private sealed class NullModulePipelineProgressReporter : IModulePipelineProgressReporter
-    {
-        public static readonly NullModulePipelineProgressReporter Instance = new();
-
-        private NullModulePipelineProgressReporter() { }
-
-        public void StepStarting(ModulePipelineStep step) { }
-        public void StepCompleted(ModulePipelineStep step) { }
-        public void StepFailed(ModulePipelineStep step, Exception error) { }
-    }
-
 }

@@ -1237,6 +1237,50 @@ internal static partial class WebPipelineRunner
         return null;
     }
 
+    private static bool HasProjectDocsSection(ProjectCatalogEntry project)
+    {
+        return TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false;
+    }
+
+    private static bool HasProjectApiSection(ProjectCatalogEntry project)
+    {
+        return (TryGetProjectSurfaceValue(project.Surfaces, "apiPowerShell") ?? false) ||
+               (TryGetProjectSurfaceValue(project.Surfaces, "apiDotNet") ?? false);
+    }
+
+    private static bool HasProjectExamplesSection(ProjectCatalogEntry project)
+    {
+        return TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false;
+    }
+
+    private static string? GetProjectDocsLink(ProjectCatalogEntry project)
+    {
+        if (!HasProjectDocsSection(project))
+            return null;
+
+        return TryGetProjectDictionaryValue(project.Links, "docs");
+    }
+
+    private static string? GetProjectApiLink(ProjectCatalogEntry project)
+    {
+        if (!HasProjectApiSection(project))
+            return null;
+
+        var apiLink = TryGetProjectDictionaryValue(project.Links, "apiPowerShell");
+        if (!string.IsNullOrWhiteSpace(apiLink))
+            return apiLink;
+
+        return TryGetProjectDictionaryValue(project.Links, "apiDotNet");
+    }
+
+    private static string? GetProjectExamplesLink(ProjectCatalogEntry project)
+    {
+        if (!HasProjectExamplesSection(project))
+            return null;
+
+        return TryGetProjectDictionaryValue(project.Links, "examples");
+    }
+
     private static bool IsValidProjectLinkTarget(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1375,23 +1419,18 @@ internal static partial class WebPipelineRunner
             }
             else
             {
-                var docsLink = TryGetProjectDictionaryValue(project.Links, "docs");
-                var apiLink = TryGetProjectDictionaryValue(project.Links, "apiPowerShell");
-                var examplesLink = TryGetProjectDictionaryValue(project.Links, "examples");
-                if (string.IsNullOrWhiteSpace(apiLink))
-                    apiLink = TryGetProjectDictionaryValue(project.Links, "apiDotNet");
-                if (string.IsNullOrWhiteSpace(docsLink))
-                    docsLink = $"/docs/{slug}/";
-                if (string.IsNullOrWhiteSpace(apiLink))
-                    apiLink = $"/api/{slug}/";
-                if (string.IsNullOrWhiteSpace(examplesLink))
-                    examplesLink = $"/examples/{slug}/";
+                var docsLink = GetProjectDocsLink(project);
+                var apiLink = GetProjectApiLink(project);
+                var examplesLink = GetProjectExamplesLink(project);
 
                 lines.Add("This project is hosted as part of the main hub website.");
                 lines.Add(string.Empty);
-                lines.Add($"- Docs: {docsLink}");
-                lines.Add($"- API: {apiLink}");
-                lines.Add($"- Examples: {examplesLink}");
+                if (!string.IsNullOrWhiteSpace(docsLink))
+                    lines.Add($"- Docs: {docsLink}");
+                if (!string.IsNullOrWhiteSpace(apiLink))
+                    lines.Add($"- API: {apiLink}");
+                if (!string.IsNullOrWhiteSpace(examplesLink))
+                    lines.Add($"- Examples: {examplesLink}");
                 if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     lines.Add($"- External website: [{project.ExternalUrl}]({project.ExternalUrl})");
                 lines.Add(string.Empty);
@@ -1494,12 +1533,12 @@ internal static partial class WebPipelineRunner
             var listed = project.Listed ?? !status.Equals("archived", StringComparison.OrdinalIgnoreCase);
             var name = string.IsNullOrWhiteSpace(project.Name) ? slug : project.Name!;
             var description = string.IsNullOrWhiteSpace(project.Description) ? $"{name} project page." : project.Description!;
-            var sections = new List<string> { "docs", "api" };
-            var includeExamplesSection =
-                (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false) ||
-                !string.IsNullOrWhiteSpace(TryGetProjectDictionaryValue(project.Links, "examples")) ||
-                !string.IsNullOrWhiteSpace(project.Artifacts?.Examples);
-            if (includeExamplesSection)
+            var sections = new List<string>();
+            if (HasProjectDocsSection(project))
+                sections.Add("docs");
+            if (HasProjectApiSection(project))
+                sections.Add("api");
+            if (HasProjectExamplesSection(project))
                 sections.Add("examples");
 
             foreach (var section in sections)
@@ -1555,23 +1594,9 @@ internal static partial class WebPipelineRunner
 
                 if (section.Equals("docs", StringComparison.OrdinalIgnoreCase))
                 {
-                    var docsLink = string.Empty;
-                    var apiLink = string.Empty;
-                    var examplesLink = string.Empty;
-                    if (project.Links is not null)
-                    {
-                        project.Links.TryGetValue("docs", out docsLink);
-                        project.Links.TryGetValue("apiPowerShell", out apiLink);
-                        if (string.IsNullOrWhiteSpace(apiLink))
-                            project.Links.TryGetValue("apiDotNet", out apiLink);
-                        project.Links.TryGetValue("examples", out examplesLink);
-                    }
-                    if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/projects/{slug}/docs/";
-                    if (string.IsNullOrWhiteSpace(apiLink))
-                        apiLink = $"/projects/{slug}/api/";
-                    if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/projects/{slug}/examples/";
+                    var docsLink = GetProjectDocsLink(project);
+                    var apiLink = GetProjectApiLink(project);
+                    var examplesLink = GetProjectExamplesLink(project);
 
                     if (!string.IsNullOrWhiteSpace(docsLink))
                         lines.Add($"Documentation is available at [{docsLink}]({docsLink}).");
@@ -1581,30 +1606,25 @@ internal static partial class WebPipelineRunner
                         lines.Add("Documentation for this project is being prepared.");
                     lines.Add(string.Empty);
                     lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
-                    lines.Add($"- API: [{apiLink}]({apiLink})");
-                    lines.Add($"- Examples: [{examplesLink}]({examplesLink})");
+                    if (!string.IsNullOrWhiteSpace(apiLink))
+                        lines.Add($"- API: [{apiLink}]({apiLink})");
+                    if (!string.IsNullOrWhiteSpace(examplesLink))
+                        lines.Add($"- Examples: [{examplesLink}]({examplesLink})");
                 }
                 else if (section.Equals("api", StringComparison.OrdinalIgnoreCase))
                 {
-                    var docsLink = string.Empty;
-                    var examplesLink = string.Empty;
-                    if (project.Links is not null)
-                    {
-                        project.Links.TryGetValue("docs", out docsLink);
-                        project.Links.TryGetValue("examples", out examplesLink);
-                    }
-                    if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/projects/{slug}/docs/";
-                    if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/projects/{slug}/examples/";
+                    var docsLink = GetProjectDocsLink(project);
+                    var examplesLink = GetProjectExamplesLink(project);
 
                     var hasApi = false;
-                    if (project.Links is not null && project.Links.TryGetValue("apiPowerShell", out var psApi) && !string.IsNullOrWhiteSpace(psApi))
+                    var psApi = TryGetProjectDictionaryValue(project.Links, "apiPowerShell");
+                    if (!string.IsNullOrWhiteSpace(psApi))
                     {
                         lines.Add($"- PowerShell API: [{psApi}]({psApi})");
                         hasApi = true;
                     }
-                    if (project.Links is not null && project.Links.TryGetValue("apiDotNet", out var dotnetApi) && !string.IsNullOrWhiteSpace(dotnetApi))
+                    var dotnetApi = TryGetProjectDictionaryValue(project.Links, "apiDotNet");
+                    if (!string.IsNullOrWhiteSpace(dotnetApi))
                     {
                         lines.Add($"- .NET API: [{dotnetApi}]({dotnetApi})");
                         hasApi = true;
@@ -1618,28 +1638,16 @@ internal static partial class WebPipelineRunner
                     }
                     lines.Add(string.Empty);
                     lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
-                    lines.Add($"- Docs: [{docsLink}]({docsLink})");
-                    lines.Add($"- Examples: [{examplesLink}]({examplesLink})");
+                    if (!string.IsNullOrWhiteSpace(docsLink))
+                        lines.Add($"- Docs: [{docsLink}]({docsLink})");
+                    if (!string.IsNullOrWhiteSpace(examplesLink))
+                        lines.Add($"- Examples: [{examplesLink}]({examplesLink})");
                 }
                 else
                 {
-                    var docsLink = string.Empty;
-                    var apiLink = string.Empty;
-                    var examplesLink = string.Empty;
-                    if (project.Links is not null)
-                    {
-                        project.Links.TryGetValue("docs", out docsLink);
-                        project.Links.TryGetValue("apiPowerShell", out apiLink);
-                        if (string.IsNullOrWhiteSpace(apiLink))
-                            project.Links.TryGetValue("apiDotNet", out apiLink);
-                        project.Links.TryGetValue("examples", out examplesLink);
-                    }
-                    if (string.IsNullOrWhiteSpace(docsLink))
-                        docsLink = $"/projects/{slug}/docs/";
-                    if (string.IsNullOrWhiteSpace(apiLink))
-                        apiLink = $"/projects/{slug}/api/";
-                    if (string.IsNullOrWhiteSpace(examplesLink))
-                        examplesLink = $"/projects/{slug}/examples/";
+                    var docsLink = GetProjectDocsLink(project);
+                    var apiLink = GetProjectApiLink(project);
+                    var examplesLink = GetProjectExamplesLink(project);
 
                     if (!string.IsNullOrWhiteSpace(examplesLink))
                         lines.Add($"Examples are available at [{examplesLink}]({examplesLink}).");
@@ -1649,8 +1657,10 @@ internal static partial class WebPipelineRunner
                         lines.Add("Examples for this project are being prepared.");
                     lines.Add(string.Empty);
                     lines.Add($"- Overview: [/projects/{slug}/](/projects/{slug}/)");
-                    lines.Add($"- Docs: [{docsLink}]({docsLink})");
-                    lines.Add($"- API: [{apiLink}]({apiLink})");
+                    if (!string.IsNullOrWhiteSpace(docsLink))
+                        lines.Add($"- Docs: [{docsLink}]({docsLink})");
+                    if (!string.IsNullOrWhiteSpace(apiLink))
+                        lines.Add($"- API: [{apiLink}]({apiLink})");
                 }
 
                 if (!string.IsNullOrWhiteSpace(project.GitHubRepo))

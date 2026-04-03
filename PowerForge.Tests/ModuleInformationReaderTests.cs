@@ -91,6 +91,43 @@ public sealed class ModuleInformationReaderTests
         Assert.Equal("2fd9fdd0-9e34-4eb1-a5ec-13a8b53d7d49", result.RequiredModules[1].Guid);
     }
 
+    [Fact]
+    public void Read_ParsesNestedPrivateDataAndMixedRequiredModulesFromRealisticManifest()
+    {
+        var projectRoot = CreateModuleProject(
+            """
+            @{
+                RootModule = 'Sample.psm1'
+                ModuleVersion = '3.0.2'
+                PrivateData = @{
+                    PSData = @{
+                        Prerelease = 'preview1'
+                        Tags = @('Build', 'Module')
+                    }
+                }
+                RequiredModules = @(
+                    @{
+                        Guid = '11111111-1111-1111-1111-111111111111'
+                        ModuleName = 'PowerShellGet'
+                        ModuleVersion = '2.2.5'
+                    },
+                    'Pester'
+                )
+            }
+            """);
+
+        var reader = new ModuleInformationReader();
+
+        var result = reader.Read(projectRoot);
+
+        Assert.Equal("3.0.2", result.ModuleVersion);
+        Assert.Equal("preview1", result.PreRelease);
+        Assert.Equal(2, result.RequiredModules.Length);
+        Assert.Equal("PowerShellGet", result.RequiredModules[0].ModuleName);
+        Assert.Equal("2.2.5", result.RequiredModules[0].ModuleVersion);
+        Assert.Equal("Pester", result.RequiredModules[1].ModuleName);
+    }
+
     private static string CreateModuleProject(string manifestContent)
     {
         var projectRoot = Path.Combine(Path.GetTempPath(), "PowerForgeModuleInformationTests", Path.GetRandomFileName());

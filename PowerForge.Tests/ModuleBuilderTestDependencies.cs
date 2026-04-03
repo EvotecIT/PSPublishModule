@@ -17,6 +17,16 @@ internal static class ModuleBuilderTestDependencies
         public bool TrySetTopLevelStringArray(string filePath, string key, string[] values) => true;
         public bool TrySetPsDataString(string filePath, string key, string value) => true;
         public bool TrySetPsDataStringArray(string filePath, string key, string[] values) => true;
+        public bool TrySetPsDataBool(string filePath, string key, bool value) => true;
+        public bool TryRemoveTopLevelKey(string filePath, string key) => true;
+        public bool TryRemovePsDataKey(string filePath, string key) => true;
+        public bool TrySetRequiredModules(string filePath, RequiredModuleReference[] modules) => true;
+        public bool TrySetPsDataSubString(string filePath, string parentKey, string key, string value) => true;
+        public bool TrySetPsDataSubStringArray(string filePath, string parentKey, string key, string[] values) => true;
+        public bool TrySetPsDataSubBool(string filePath, string parentKey, string key, bool value) => true;
+        public bool TrySetPsDataSubHashtableArray(string filePath, string parentKey, string key, IReadOnlyList<IReadOnlyDictionary<string, string>> values) => true;
+        public bool TrySetManifestExports(string filePath, string[]? functions, string[]? cmdlets, string[]? aliases) => true;
+        public bool TrySetRepository(string filePath, string? branch, string[]? paths) => true;
     }
 
     private sealed class NoOpScriptFunctionExportDetector : IScriptFunctionExportDetector

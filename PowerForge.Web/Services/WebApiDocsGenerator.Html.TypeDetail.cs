@@ -34,7 +34,10 @@ public static partial class WebApiDocsGenerator
         var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
         var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
         var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
-        sb.AppendLine("    <article class=\"type-detail ev-page-body\">");
+        var detailClasses = isPowerShellCommand
+            ? "type-detail ev-page-body type-detail--powershell-command"
+            : "type-detail ev-page-body";
+        sb.AppendLine($"    <article class=\"{detailClasses}\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
         sb.AppendLine("      <nav class=\"breadcrumb\">");
         sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
@@ -52,7 +55,7 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine("        </div>");
         AppendAliasInlineMeta(sb, type, "type-header-meta", "type-header-aliases");
         var sourceAction = RenderTypeSourceAction(type.Source);
-        if (!string.IsNullOrWhiteSpace(sourceAction))
+        if (!isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
         {
             sb.AppendLine("        <div class=\"type-actions\">");
             sb.AppendLine($"          {sourceAction}");
@@ -120,7 +123,17 @@ public static partial class WebApiDocsGenerator
         {
             sb.AppendLine("        <div class=\"type-meta-row type-meta-source\">");
             sb.AppendLine("          <span class=\"type-meta-label\">Source</span>");
-            sb.AppendLine($"          {RenderSourceLink(type.Source)}");
+            if (isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
+            {
+                sb.AppendLine("          <div class=\"type-meta-list type-meta-source-links\">");
+                sb.AppendLine($"            {RenderSourceLink(type.Source)}");
+                sb.AppendLine($"            {sourceAction}");
+                sb.AppendLine("          </div>");
+            }
+            else
+            {
+                sb.AppendLine($"          {RenderSourceLink(type.Source)}");
+            }
             sb.AppendLine("        </div>");
         }
         if (type.Freshness is not null)
@@ -587,10 +600,7 @@ public static partial class WebApiDocsGenerator
             if (string.IsNullOrWhiteSpace(example.Text)) continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
-                var languageClass = string.IsNullOrWhiteSpace(codeLanguage) ? string.Empty : $" class=\"language-{codeLanguage}\"";
-                sb.AppendLine($"        <pre{languageClass}><code{languageClass}>");
-                sb.AppendLine(System.Web.HttpUtility.HtmlEncode(example.Text));
-                sb.AppendLine("        </code></pre>");
+                AppendExampleCodeBlock(sb, example.Text, codeLanguage);
             }
             else if (string.Equals(example.Kind, "heading", StringComparison.OrdinalIgnoreCase))
             {
@@ -604,6 +614,55 @@ public static partial class WebApiDocsGenerator
                 }
             }
         }
+    }
+
+    private static void AppendExampleCodeBlock(StringBuilder sb, string? codeText, string codeLanguage)
+    {
+        if (sb is null || string.IsNullOrWhiteSpace(codeText))
+            return;
+
+        var normalizedCode = codeText
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+
+        var languageToken = string.IsNullOrWhiteSpace(codeLanguage)
+            ? string.Empty
+            : codeLanguage.Trim().ToLowerInvariant();
+        var languageClass = string.IsNullOrWhiteSpace(languageToken)
+            ? string.Empty
+            : $" class=\"language-{languageToken}\"";
+
+        if (TrySplitPowerShellPrompt(normalizedCode, languageToken, out var prompt, out var body))
+        {
+            sb.AppendLine($"        <pre class=\"language-{languageToken} example-code-block example-code-block--has-prompt\">");
+            sb.AppendLine($"          <span class=\"example-code__prompt\">{System.Web.HttpUtility.HtmlEncode(prompt)}</span>");
+            sb.AppendLine($"          <code class=\"language-{languageToken} example-code__body\">{System.Web.HttpUtility.HtmlEncode(body)}</code>");
+            sb.AppendLine("        </pre>");
+            return;
+        }
+
+        sb.AppendLine($"        <pre{languageClass}><code{languageClass}>");
+        sb.AppendLine(System.Web.HttpUtility.HtmlEncode(normalizedCode));
+        sb.AppendLine("        </code></pre>");
+    }
+
+    private static bool TrySplitPowerShellPrompt(string codeText, string? languageToken, out string prompt, out string body)
+    {
+        prompt = string.Empty;
+        body = codeText;
+
+        if (!string.Equals(languageToken, "powershell", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.IsNullOrWhiteSpace(codeText))
+            return false;
+
+        var trimmedStart = codeText.TrimStart();
+        if (!trimmedStart.StartsWith("PS>", StringComparison.Ordinal))
+            return false;
+
+        prompt = "PS>";
+        body = trimmedStart.Substring(prompt.Length).TrimStart();
+        return !string.IsNullOrWhiteSpace(body);
     }
 
     private static void AppendExampleOriginBadge(

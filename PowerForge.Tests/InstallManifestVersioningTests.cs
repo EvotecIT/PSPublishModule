@@ -24,7 +24,7 @@ public sealed class InstallManifestVersioningTests
             var existing = Path.Combine(roots, moduleName, "3.0.0");
             Directory.CreateDirectory(existing);
 
-            var pipeline = new ModuleBuildPipeline(new NullLogger());
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
             var spec = new ModuleInstallSpec
             {
                 Name = moduleName,
@@ -69,7 +69,7 @@ public sealed class InstallManifestVersioningTests
             var existing = Path.Combine(roots, moduleName, "3.0.0");
             Directory.CreateDirectory(existing);
 
-            var pipeline = new ModuleBuildPipeline(new NullLogger());
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
             var spec = new ModuleInstallSpec
             {
                 Name = moduleName,

@@ -14,12 +14,10 @@ public static class ModulePathTokenFormatter
     /// <summary>
     /// Replaces common PSPublishModule path tokens (for example <c>&lt;ModuleName&gt;</c> and <c>&lt;ModuleVersion&gt;</c>).
     /// </summary>
-    public static string ReplacePathTokens(string replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
+    public static string ReplacePathTokens(string? replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
     {
-        if (replacementPath is null) return string.Empty;
-
-        moduleName ??= string.Empty;
-        moduleVersion ??= string.Empty;
+        if (replacementPath is null)
+            return string.Empty;
 
         var tagName = "v" + moduleVersion;
         var moduleVersionWithPreRelease = FormatVersionWithPreRelease(moduleVersion, preRelease);

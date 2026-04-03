@@ -365,11 +365,7 @@ public sealed class ModulePipelineRegressionParityTests
             var logger = new CollectingLogger();
             var runner = new ModulePipelineRunner(logger);
             var plan = runner.Plan(spec);
-            var report = new MissingFunctionsReport(
-                summary: new[] { new MissingFunctionCommand("Get-ADUser", string.Empty, string.Empty, false, false, string.Empty, null) },
-                summaryFiltered: Array.Empty<MissingFunctionCommand>(),
-                functions: Array.Empty<string>(),
-                functionsTopLevelOnly: Array.Empty<string>());
+            var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
 
             InvokeValidateMissingFunctions(runner, report, plan);
 
@@ -411,11 +407,7 @@ public sealed class ModulePipelineRegressionParityTests
             var logger = new CollectingLogger();
             var runner = new ModulePipelineRunner(logger);
             var plan = runner.Plan(spec);
-            var report = new MissingFunctionsReport(
-                summary: new[] { new MissingFunctionCommand(commandName, string.Empty, string.Empty, false, false, string.Empty, null) },
-                summaryFiltered: Array.Empty<MissingFunctionCommand>(),
-                functions: Array.Empty<string>(),
-                functionsTopLevelOnly: Array.Empty<string>());
+            var report = CreateMissingFunctionAnalysisResult(commandName);
 
             InvokeValidateMissingFunctions(runner, report, plan);
 
@@ -464,11 +456,7 @@ public sealed class ModulePipelineRegressionParityTests
             var logger = new CollectingLogger();
             var runner = new ModulePipelineRunner(logger);
             var plan = runner.Plan(spec);
-            var report = new MissingFunctionsReport(
-                summary: new[] { new MissingFunctionCommand("Get-ADUser", string.Empty, string.Empty, false, false, string.Empty, null) },
-                summaryFiltered: Array.Empty<MissingFunctionCommand>(),
-                functions: Array.Empty<string>(),
-                functionsTopLevelOnly: Array.Empty<string>());
+            var report = CreateMissingFunctionAnalysisResult("Get-ADUser");
 
             InvokeValidateMissingFunctions(runner, report, plan);
 
@@ -508,11 +496,7 @@ public sealed class ModulePipelineRegressionParityTests
             var logger = new CollectingLogger();
             var runner = new ModulePipelineRunner(logger);
             var plan = runner.Plan(spec);
-            var report = new MissingFunctionsReport(
-                summary: new[] { new MissingFunctionCommand("{ process { if ($_.TrustedDomain -eq $Trust.Target ) { $_ } } }", string.Empty, string.Empty, false, false, string.Empty, null) },
-                summaryFiltered: Array.Empty<MissingFunctionCommand>(),
-                functions: Array.Empty<string>(),
-                functionsTopLevelOnly: Array.Empty<string>());
+            var report = CreateMissingFunctionAnalysisResult("{ process { if ($_.TrustedDomain -eq $Trust.Target ) { $_ } } }");
 
             InvokeValidateMissingFunctions(runner, report, plan);
 
@@ -681,13 +665,24 @@ public sealed class ModulePipelineRegressionParityTests
 
     private static void InvokeValidateMissingFunctions(
         ModulePipelineRunner runner,
-        MissingFunctionsReport report,
+        MissingFunctionAnalysisResult report,
         ModulePipelinePlan plan,
         IReadOnlyCollection<string>? dependentModules = null)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "ValidateMissingFunctions method signature may have changed.");
         method!.Invoke(runner, new object?[] { report, plan, dependentModules });
+    }
+
+    private static MissingFunctionAnalysisResult CreateMissingFunctionAnalysisResult(params string[] commandNames)
+    {
+        return new MissingFunctionAnalysisResult(
+            summary: commandNames
+                .Select(static name => new MissingCommandReference(name, string.Empty, string.Empty, false, false, string.Empty))
+                .ToArray(),
+            summaryFiltered: Array.Empty<MissingCommandReference>(),
+            functions: Array.Empty<string>(),
+            functionsTopLevelOnly: Array.Empty<string>());
     }
 
     private static bool InvokeAreRequiredModuleDraftListsEquivalent(

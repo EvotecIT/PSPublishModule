@@ -83,16 +83,7 @@ public sealed partial class ArtefactBuilder
     }
 
     private static string ResolveOutputRoot(string? configuredPath, string projectRoot, string moduleName, string moduleVersion, string? preRelease, ArtefactType type)
-    {
-        var raw = ModulePathTokenFormatter.ReplacePathTokens(configuredPath ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            // Default: <ProjectRoot>\Artefacts\<Type>
-            return Path.GetFullPath(Path.Combine(projectRoot, "Artefacts", type.ToString()));
-        }
-
-        return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(projectRoot, raw));
-    }
+        => ArtefactLayoutPathResolver.ResolveOutputRoot(configuredPath, projectRoot, moduleName, moduleVersion, preRelease, type);
 
     private static string ResolveArtefactFileName(ArtefactConfiguration cfg, string moduleName, string moduleVersion, string? preRelease)
     {
@@ -264,17 +255,7 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease)
-    {
-        var path = cfg.RequiredModules.Path;
-        if (string.IsNullOrWhiteSpace(path))
-            return outputRoot;
-
-        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
-        if (string.IsNullOrWhiteSpace(replaced)) return outputRoot;
-
-        var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
-        return Path.GetFullPath(full);
-    }
+        => ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, moduleName, moduleVersion, preRelease);
 
     private static string ResolveModulesRootForUnpacked(
         ArtefactConfiguration cfg,
@@ -284,20 +265,7 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease)
-    {
-        var path = cfg.RequiredModules.ModulesPath;
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            // If RequiredModulesPath is set, default to the same location to keep a self-contained Modules folder.
-            return requiredModulesRoot;
-        }
-
-        var replaced = ModulePathTokenFormatter.ReplacePathTokens(path ?? string.Empty, moduleName, moduleVersion, preRelease).Trim().Trim('"');
-        if (string.IsNullOrWhiteSpace(replaced)) return requiredModulesRoot;
-
-        var full = Path.IsPathRooted(replaced) ? replaced : Path.Combine(outputRoot, replaced);
-        return Path.GetFullPath(full);
-    }
+        => ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(cfg, outputRoot, requiredModulesRoot, moduleName, moduleVersion, preRelease);
 
     private static string ResolveRequiredModulesRootForPacked(
         ArtefactConfiguration cfg,

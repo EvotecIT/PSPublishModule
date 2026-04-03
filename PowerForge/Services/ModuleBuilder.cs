@@ -301,9 +301,9 @@ public sealed class ModuleBuilder
         {
             _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1"), resolved);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort manifest patch before install.
+            _logger.Warn($"Manifest version patch failed before install: {ex.Message}");
         }
 
         var installer = new ModuleInstaller(_logger);

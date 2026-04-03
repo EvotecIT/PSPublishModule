@@ -98,7 +98,7 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout website
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ github.token }}
           # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
@@ -127,7 +127,7 @@ jobs:
           "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout shared PowerForge runner
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ steps.workflow_source.outputs.repository }}
           ref: ${{ steps.workflow_source.outputs.ref }}
@@ -136,12 +136,12 @@ jobs:
           fetch-depth: 1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
 
       - name: Cache NuGet packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload website reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ inputs.report_artifact_name }}
           path: |
@@ -205,7 +205,7 @@ jobs:
           tar \
             --dereference --hard-dereference \
             --directory "$PAGES_ARTIFACT_PATH" \
-            -cvf "$RUNNER_TEMP/artifact.tar" \
+            -cf "$RUNNER_TEMP/artifact.tar" \
             --exclude=.git \
             --exclude=.github \
             .
@@ -221,7 +221,7 @@ jobs:
           gtar \
             --dereference --hard-dereference \
             --directory "$PAGES_ARTIFACT_PATH" \
-            -cvf "$RUNNER_TEMP/artifact.tar" \
+            -cf "$RUNNER_TEMP/artifact.tar" \
             --exclude=.git \
             --exclude=.github \
             .
@@ -237,7 +237,7 @@ jobs:
           tar \
             --dereference --hard-dereference \
             --directory "$PAGES_ARTIFACT_PATH" \
-            -cvf "$RUNNER_TEMP/artifact.tar" \
+            -cf "$RUNNER_TEMP/artifact.tar" \
             --exclude=.git \
             --exclude=.github \
             --force-local \
@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload Pages artifact
         if: ${{ inputs.upload_pages_artifact }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar

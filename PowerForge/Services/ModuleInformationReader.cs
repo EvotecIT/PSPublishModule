@@ -60,6 +60,7 @@ public sealed class ModuleInformationReader
         {
             var metadata = ManifestMetadataReader.Read(manifestPath);
             moduleName = metadata.ModuleName;
+            moduleVersion = metadata.ModuleVersion;
             preRelease = metadata.PreRelease;
 
             var manifestContent = manifestText ?? string.Empty;
@@ -85,10 +86,6 @@ public sealed class ModuleInformationReader
                 {
                     requiredModules = resolvedRequiredModules;
                 }
-            }
-            else
-            {
-                moduleVersion = metadata.ModuleVersion;
             }
         }
         catch

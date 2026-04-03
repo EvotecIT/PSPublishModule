@@ -47,6 +47,23 @@ public class WebMarkdownRendererGfmTests
     }
 
     [Fact]
+    public void Build_StrongWrappedMarkdownLinks_RenderAsBoldLinks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Docs
+
+            - **[Installation](/docs/installation/)** — NuGet packages, PowerShell module
+            - **[Quick Start](/docs/quickstart/)** — Build your first document in 5 steps
+            """);
+
+        Assert.Contains("<strong><a href=\"/docs/installation/\">Installation</a></strong>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<strong><a href=\"/docs/quickstart/\">Quick Start</a></strong>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[Installation](/docs/installation/)", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[Quick Start](/docs/quickstart/)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_HeadingWithInlineCode_RendersCodeInsideHeading()
     {
         var html = BuildSinglePageSite(
