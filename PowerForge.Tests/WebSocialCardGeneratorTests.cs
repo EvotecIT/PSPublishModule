@@ -186,6 +186,31 @@ public class WebSocialCardGeneratorTests
         Assert.Contains("rx=\"30\"", svg, StringComparison.Ordinal);
         Assert.Contains("x=\"48\" y=\"48\"", svg, StringComparison.Ordinal);
         Assert.Contains("rx=\"26\"", svg, StringComparison.Ordinal);
+
+        var safeMarginTokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["safeMarginX"] = "72px",
+                ["safeMarginY"] = "68px",
+                ["logoSize"] = "96px"
+            }
+        };
+        var logoFrame = WebSocialCardGenerator.GetLogoFrameForTesting(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "TestimoX - Active Directory Security",
+            Description = "Theme aware social card",
+            Eyebrow = "TestimoX",
+            Badge = "HOME",
+            FooterLabel = "/",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "home",
+            VariantKey = "spotlight",
+            ThemeTokens = safeMarginTokens
+        });
+        Assert.NotNull(logoFrame);
+        Assert.Equal(68, logoFrame!.Value.Y);
     }
 
     [Fact]

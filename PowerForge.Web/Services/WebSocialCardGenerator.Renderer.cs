@@ -326,9 +326,10 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendSpotlightLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var contentWidth = Math.Max(320, (int)Math.Round(state.Width * 0.58));
-        var x = pad;
+        var x = padX;
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 62, 32, "socialCard", "titleFontSize");
         var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 68, 36);
@@ -336,7 +337,7 @@ internal static partial class WebSocialCardGenerator
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 30, 19);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -355,13 +356,13 @@ internal static partial class WebSocialCardGenerator
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
-        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var footerY = state.Height - padY - GetScaledPixels(state.Width, state.Height, 6, 4);
         AppendFooterRoute(svg, state, x, footerY);
 
         // Logo on right
         var logoSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 160, 90, "socialCard", "logoSize");
-        var logoX = state.Width - pad - logoSize;
-        var logoY = pad;
+        var logoX = state.Width - padX - logoSize;
+        var logoY = padY;
         AppendLogo(svg, state, logoX, logoY, logoSize);
     }
 
@@ -369,9 +370,10 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendShelfLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
-        var x = pad;
-        var contentWidth = state.Width - (pad * 2);
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
+        var x = padX;
+        var contentWidth = state.Width - (padX * 2);
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 26, "socialCard", "titleFontSize");
         var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 54, 30);
@@ -379,7 +381,7 @@ internal static partial class WebSocialCardGenerator
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 28, 18);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -388,7 +390,7 @@ internal static partial class WebSocialCardGenerator
         if (!string.IsNullOrWhiteSpace(routeLabel) && routeLabel != "/")
         {
             var routeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "footerFontSize");
-            svg.AppendLine($@"  <text x=""{state.Width - pad}"" y=""{badgeY + (badgeHeight / 2)}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.5"" font-size=""{routeFontSize}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-weight=""500"" dominant-baseline=""central"" text-anchor=""end"">{EscapeXml(routeLabel)}</text>");
+            svg.AppendLine($@"  <text x=""{state.Width - padX}"" y=""{badgeY + (badgeHeight / 2)}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.5"" font-size=""{routeFontSize}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-weight=""500"" dominant-baseline=""central"" text-anchor=""end"">{EscapeXml(routeLabel)}</text>");
         }
 
         // Eyebrow
@@ -410,11 +412,12 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendReferenceLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var codeWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 340, 220), (int)Math.Round(state.Width * 0.35));
-        var codeX = state.Width - pad - codeWidth;
+        var codeX = state.Width - padX - codeWidth;
         var gapX = GetScaledPixels(state.Width, state.Height, 32, 18);
-        var x = pad;
+        var x = padX;
         var contentWidth = Math.Max(240, codeX - x - gapX);
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 44, 26, "socialCard", "titleFontSize");
@@ -423,7 +426,7 @@ internal static partial class WebSocialCardGenerator
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 27, 18);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -442,21 +445,22 @@ internal static partial class WebSocialCardGenerator
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
-        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var footerY = state.Height - padY - GetScaledPixels(state.Width, state.Height, 6, 4);
         AppendFooterRoute(svg, state, x, footerY);
 
         // Code pane on right
-        AppendCodePane(svg, state, codeX, pad, codeWidth, state.Height - (pad * 2) - GetScaledPixels(state.Width, state.Height, 6, 4));
+        AppendCodePane(svg, state, codeX, padY, codeWidth, state.Height - (padY * 2) - GetScaledPixels(state.Width, state.Height, 6, 4));
     }
 
     // ── Layout: Inline Image (Blog with image) ────────────────────────
 
     private static void AppendInlineImageLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var media = GetInlineMediaFrame(state);
         var gapX = GetScaledPixels(state.Width, state.Height, 28, 16);
-        var x = pad;
+        var x = padX;
         var contentWidth = Math.Max(240, media.X - x - gapX);
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 44, 26, "socialCard", "titleFontSize");
@@ -465,7 +469,7 @@ internal static partial class WebSocialCardGenerator
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 27, 18);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -484,7 +488,7 @@ internal static partial class WebSocialCardGenerator
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
-        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var footerY = state.Height - padY - GetScaledPixels(state.Width, state.Height, 6, 4);
         AppendFooterRoute(svg, state, x, footerY);
 
         // Inline image on right
@@ -498,11 +502,12 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendConnectLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var mapWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 380, 220), (int)Math.Round(state.Width * 0.38));
         var mapX = state.Width - mapWidth;
         var gapX = GetScaledPixels(state.Width, state.Height, 28, 16);
-        var x = pad;
+        var x = padX;
         var contentWidth = Math.Max(240, mapX - x - gapX);
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 28, "socialCard", "titleFontSize");
@@ -514,7 +519,7 @@ internal static partial class WebSocialCardGenerator
         AppendMapVisual(svg, state, mapX, 0, mapWidth, state.Height);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -533,7 +538,7 @@ internal static partial class WebSocialCardGenerator
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
-        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var footerY = state.Height - padY - GetScaledPixels(state.Width, state.Height, 6, 4);
         AppendFooterRoute(svg, state, x, footerY);
 
         if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
@@ -582,9 +587,10 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendEditorialOrProductLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
-        var x = pad;
-        var contentWidth = state.Width - (pad * 2);
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
+        var x = padX;
+        var contentWidth = state.Width - (padX * 2);
 
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 50, 28, "socialCard", "titleFontSize");
         var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 56, 32);
@@ -592,7 +598,7 @@ internal static partial class WebSocialCardGenerator
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 28, 18);
 
         // Badge
-        var badgeY = pad;
+        var badgeY = padY;
         AppendBadge(svg, state, x, badgeY);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
 
@@ -611,14 +617,14 @@ internal static partial class WebSocialCardGenerator
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
-        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var footerY = state.Height - padY - GetScaledPixels(state.Width, state.Height, 6, 4);
         AppendFooterRoute(svg, state, x, footerY);
 
         // Small logo top-right if available
         if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
         {
             var logoSize = GetScaledPixels(state.Width, state.Height, 48, 30);
-            AppendLogo(svg, state, state.Width - pad - logoSize, pad, logoSize);
+            AppendLogo(svg, state, state.Width - padX - logoSize, padY, logoSize);
         }
     }
 
@@ -683,12 +689,13 @@ internal static partial class WebSocialCardGenerator
 
     private static SocialRect GetInlineMediaFrame(SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var width = Math.Max(GetScaledPixels(state.Width, state.Height, 340, 220), (int)Math.Round(state.Width * 0.35));
-        var imgHeight = state.Height - (pad * 2) - GetScaledPixels(state.Width, state.Height, 6, 4);
+        var imgHeight = state.Height - (padY * 2) - GetScaledPixels(state.Width, state.Height, 6, 4);
         return new SocialRect(
-            state.Width - pad - width,
-            pad,
+            state.Width - padX - width,
+            padY,
             width,
             Math.Max(160, imgHeight),
             GetScaledPixels(state.Width, state.Height, 12, 6));
@@ -783,13 +790,14 @@ internal static partial class WebSocialCardGenerator
 
     private static SocialRect? ResolveLogoFrame(SocialCardRenderState state)
     {
-        var pad = state.SafeMarginX;
+        var padX = state.SafeMarginX;
+        var padY = state.SafeMarginY;
         var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
 
         if (string.Equals(state.LayoutKey, "spotlight", StringComparison.OrdinalIgnoreCase))
         {
             var size = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 160, 90, "socialCard", "logoSize");
-            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
+            return new SocialRect(state.Width - padX - size, padY, size, size, radius);
         }
 
         if (string.Equals(state.LayoutKey, "connect", StringComparison.OrdinalIgnoreCase))
@@ -799,14 +807,14 @@ internal static partial class WebSocialCardGenerator
             var size = Math.Min(
                 ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 96, 56, "socialCard", "logoSize"),
                 maxSize);
-            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
+            return new SocialRect(state.Width - padX - size, padY, size, size, radius);
         }
 
         if (string.Equals(state.LayoutKey, "product", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase))
         {
             var size = GetScaledPixels(state.Width, state.Height, 48, 30);
-            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
+            return new SocialRect(state.Width - padX - size, padY, size, size, radius);
         }
 
         return null;
@@ -815,6 +823,12 @@ internal static partial class WebSocialCardGenerator
     internal static void ClearRemoteImageCache()
     {
         RemoteImageByteCache.Clear();
+    }
+
+    internal static (int X, int Y, int Width, int Height)? GetLogoFrameForTesting(SocialCardRenderOptions options)
+    {
+        var frame = ResolveLogoFrame(CreateState(options));
+        return frame is null ? null : (frame.X, frame.Y, frame.Width, frame.Height);
     }
 
     internal static byte[]? GetRemoteImageBytes(string source, bool allowRemoteMediaFetch, Func<string, byte[]?>? remoteFetcher = null)
