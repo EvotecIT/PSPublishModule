@@ -274,7 +274,10 @@ internal sealed class PowerForgeReleaseService
         }
 
         if (!request.PlanOnly && !request.ValidateOnly)
+        {
             PopulateReleaseOutputs(spec, request, configDirectory, result);
+            GenerateWingetOutputs(spec, configDirectory, result);
+        }
 
         return result;
     }
@@ -402,16 +405,10 @@ internal sealed class PowerForgeReleaseService
         string configDirectory,
         PowerForgeReleaseResult result)
     {
-        var assetEntries = CollectReleaseAssetEntries(result)
+        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
-        var assets = assetEntries
-            .Select(entry => entry.Path)
-            .ToArray();
-
-        result.ReleaseAssetEntries = assetEntries;
-        result.ReleaseAssets = assets;
 
         var outputs = new PowerForgeReleaseOutputsOptions
         {
@@ -438,7 +435,24 @@ internal sealed class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(outputs.ManifestJsonPath)
             && string.IsNullOrWhiteSpace(outputs.ChecksumsPath)
             && string.IsNullOrWhiteSpace(stageRootTemplate))
+        {
+            result.ReleaseAssetEntries = assetEntries;
+            result.ReleaseAssets = assetEntries
+                .Select(entry => entry.Path)
+                .ToArray();
             return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(stageRootTemplate))
+        {
+            var stageRoot = ResolveOutputPath(configDirectory, stageRootTemplate!);
+            assetEntries = StageReleaseAssets(assetEntries, stageRoot, outputs.Staging).ToArray();
+        }
+
+        result.ReleaseAssetEntries = assetEntries;
+        result.ReleaseAssets = assetEntries
+            .Select(entry => entry.StagedPath ?? entry.Path)
+            .ToArray();
 
         var manifestPathTemplate = outputs.ManifestJsonPath;
         var checksumsPathTemplate = outputs.ChecksumsPath;
@@ -465,13 +479,19 @@ internal sealed class PowerForgeReleaseService
                 schemaVersion = 1,
                 createdUtc = DateTime.UtcNow.ToString("o"),
                 configPath = result.ConfigPath,
-                assets,
+                assets = result.ReleaseAssets,
                 assetEntries = assetEntries.Select(entry => new
                 {
                     entry.Path,
                     category = entry.Category.ToString(),
                     entry.Source,
                     entry.Target,
+                    entry.PackageId,
+                    entry.Version,
+                    entry.Runtime,
+                    entry.Framework,
+                    entry.Style,
+                    entry.BundleId,
                     entry.RelativeStagePath,
                     entry.StagedPath
                 }).ToArray(),
@@ -491,7 +511,7 @@ internal sealed class PowerForgeReleaseService
         if (!string.IsNullOrWhiteSpace(checksumsPath))
         {
             var resolvedChecksumsPath = checksumsPath!;
-            var checksumInputs = new List<string>(assets);
+            var checksumInputs = new List<string>(result.ReleaseAssets);
             var releaseManifestPath = result.ReleaseManifestPath;
             if (!string.IsNullOrWhiteSpace(releaseManifestPath) && File.Exists(releaseManifestPath))
                 checksumInputs.Add(releaseManifestPath!);
@@ -503,18 +523,63 @@ internal sealed class PowerForgeReleaseService
                 .ToArray();
 
             Directory.CreateDirectory(Path.GetDirectoryName(resolvedChecksumsPath)!);
+            var relativeTo = Path.GetDirectoryName(resolvedChecksumsPath)!;
             var lines = uniqueChecksumInputs
-                .Select(path => $"{ComputeSha256(path!)} *{GetRelativePathCompat(configDirectory, path!).Replace('\\', '/')}")
+                .Select(path => $"{ComputeSha256(path!)} *{GetRelativePathCompat(relativeTo, path!).Replace('\\', '/')}")
                 .ToArray();
             File.WriteAllLines(resolvedChecksumsPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             result.ReleaseChecksumsPath = resolvedChecksumsPath;
         }
+    }
 
-        if (!string.IsNullOrWhiteSpace(stageRootTemplate))
+    private void GenerateWingetOutputs(
+        PowerForgeReleaseSpec spec,
+        string configDirectory,
+        PowerForgeReleaseResult result)
+    {
+        var winget = spec.Winget;
+        if (winget is null || !winget.Enabled || winget.Packages.Length == 0)
+            return;
+
+        var outputPath = string.IsNullOrWhiteSpace(winget.OutputPath)
+            ? ResolveOutputPath(configDirectory, Path.Combine("Artifacts", "Winget"))
+            : ResolveOutputPath(configDirectory, winget.OutputPath!);
+        Directory.CreateDirectory(outputPath);
+
+        var manifestPaths = new List<string>();
+        foreach (var package in winget.Packages)
         {
-            var stageRoot = ResolveOutputPath(configDirectory, stageRootTemplate!);
-            result.ReleaseAssetEntries = StageReleaseAssets(assetEntries, stageRoot, outputs.Staging).ToArray();
+            if (string.IsNullOrWhiteSpace(package.PackageIdentifier))
+                throw new InvalidOperationException("Winget package PackageIdentifier is required.");
+            if (string.IsNullOrWhiteSpace(package.Publisher))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing Publisher.");
+            if (string.IsNullOrWhiteSpace(package.PackageName))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing PackageName.");
+            if (string.IsNullOrWhiteSpace(package.License))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing License.");
+            if (string.IsNullOrWhiteSpace(package.ShortDescription))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing ShortDescription.");
+
+            var installerEntries = package.Installers
+                .Select(installer => ResolveWingetInstallerEntry(installer, winget, package, result.ReleaseAssetEntries, result.ToolGitHubReleases))
+                .ToArray();
+            if (installerEntries.Length == 0)
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' did not resolve any installers.");
+
+            var packageVersion = package.PackageVersion
+                ?? installerEntries.Select(entry => entry.Asset.Version).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+            if (string.IsNullOrWhiteSpace(packageVersion))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing PackageVersion and no installer asset version was available.");
+
+            var manifestPath = Path.Combine(outputPath, $"{package.PackageIdentifier}.yaml");
+            if (File.Exists(manifestPath))
+                throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
+            var yaml = BuildWingetManifestYaml(winget, package, packageVersion!, installerEntries);
+            File.WriteAllText(manifestPath, yaml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            manifestPaths.Add(manifestPath);
         }
+
+        result.WingetManifestPaths = manifestPaths.ToArray();
     }
 
     private PowerForgeToolGitHubReleaseResult[] PublishLegacyToolGitHubReleases(
@@ -707,6 +772,8 @@ internal sealed class PowerForgeReleaseService
 
             return new PowerForgeToolGitHubReleaseResult
             {
+                Owner = owner,
+                Repository = repository,
                 Target = target,
                 Version = version,
                 TagName = tagName,
@@ -723,6 +790,8 @@ internal sealed class PowerForgeReleaseService
         {
             return new PowerForgeToolGitHubReleaseResult
             {
+                Owner = owner,
+                Repository = repository,
                 Target = target,
                 Version = version,
                 TagName = tagName,
@@ -1294,7 +1363,9 @@ internal sealed class PowerForgeReleaseService
             .Replace("{UtcTimestamp}", utcNow.ToString("yyyyMMddHHmmss"));
     }
 
-    private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(PowerForgeReleaseResult result)
+    private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
+        PowerForgeReleaseResult result,
+        DotNetPublishPlan? dotNetPlan)
     {
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
@@ -1323,20 +1394,23 @@ internal sealed class PowerForgeReleaseService
 
         assets.AddRange(
             (result.DotNetTools?.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
-            .SelectMany(CreateDotNetArtefactEntries));
+            .SelectMany(artifact => CreateDotNetArtefactEntries(artifact, dotNetPlan)));
 
         assets.AddRange(
             (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-            .SelectMany(build => build.OutputFiles ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
+            .SelectMany(build => (build.OutputFiles ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(path => new { Path = path!, Build = build }))
+            .Select(item => new PowerForgeReleaseAssetEntry
             {
-                Path = path!,
+                Path = item.Path,
                 Category = PowerForgeReleaseAssetCategory.Installer,
                 Source = "DotNetPublish",
-                Target = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Target
+                Target = item.Build.Target,
+                Version = item.Build.Version,
+                Runtime = item.Build.Runtime,
+                Framework = item.Build.Framework,
+                Style = item.Build.Style.ToString()
             }));
 
         assets.AddRange(
@@ -1371,7 +1445,9 @@ internal sealed class PowerForgeReleaseService
                 Path = package,
                 Category = PowerForgeReleaseAssetCategory.Package,
                 Source = "Packages",
-                Target = project.ProjectName
+                Target = project.ProjectName,
+                PackageId = project.PackageId,
+                Version = project.NewVersion
             };
         }
 
@@ -1382,7 +1458,9 @@ internal sealed class PowerForgeReleaseService
                 Path = project.ReleaseZipPath!,
                 Category = PowerForgeReleaseAssetCategory.Package,
                 Source = "Packages",
-                Target = project.ProjectName
+                Target = project.ProjectName,
+                PackageId = project.PackageId,
+                Version = project.NewVersion
             };
         }
     }
@@ -1397,15 +1475,23 @@ internal sealed class PowerForgeReleaseService
                 Path = path!,
                 Category = PowerForgeReleaseAssetCategory.Tool,
                 Source = "LegacyTools",
-                Target = artifact.Target
+                Target = artifact.Target,
+                Version = artifact.Version,
+                Runtime = artifact.Runtime,
+                Framework = artifact.Framework,
+                Style = artifact.Flavor.ToString()
             };
         }
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetArtefactEntries(DotNetPublishArtefactResult artifact)
+    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetArtefactEntries(
+        DotNetPublishArtefactResult artifact,
+        DotNetPublishPlan? dotNetPlan)
     {
         if (string.IsNullOrWhiteSpace(artifact.ZipPath) || !File.Exists(artifact.ZipPath))
             yield break;
+
+        var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan);
 
         yield return new PowerForgeReleaseAssetEntry
         {
@@ -1414,7 +1500,12 @@ internal sealed class PowerForgeReleaseService
                 ? PowerForgeReleaseAssetCategory.Portable
                 : PowerForgeReleaseAssetCategory.Tool,
             Source = "DotNetPublish",
-            Target = artifact.Target
+            Target = artifact.Target,
+            Version = version,
+            Runtime = artifact.Runtime,
+            Framework = artifact.Framework,
+            Style = artifact.Style.ToString(),
+            BundleId = artifact.BundleId
         };
     }
 
@@ -1430,7 +1521,10 @@ internal sealed class PowerForgeReleaseService
                 Path = path!,
                 Category = PowerForgeReleaseAssetCategory.Store,
                 Source = "DotNetPublish",
-                Target = storePackage.Target
+                Target = storePackage.Target,
+                Runtime = storePackage.Runtime,
+                Framework = storePackage.Framework,
+                Style = storePackage.Style.ToString()
             };
         }
     }
@@ -1471,7 +1565,7 @@ internal sealed class PowerForgeReleaseService
                 continue;
 
             var categoryDirectory = ResolveStageDirectory(options, entry.Category);
-            var relativeStagePath = Path.Combine(categoryDirectory, GetStageEntryName(sourcePath, sourceIsDirectory));
+            var relativeStagePath = Path.Combine(categoryDirectory, GetStageEntryName(entry, sourceIsDirectory, options));
             var destinationPath = Path.Combine(stageRoot, relativeStagePath);
             var sourceFullPath = Path.GetFullPath(sourcePath);
             var destinationFullPath = Path.GetFullPath(destinationPath);
@@ -1517,6 +1611,245 @@ internal sealed class PowerForgeReleaseService
     {
         var trimmed = (value ?? string.Empty).Trim().Trim('\\', '/');
         return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
+    }
+
+    private static ResolvedWingetInstallerEntry ResolveWingetInstallerEntry(
+        PowerForgeReleaseWingetInstaller installer,
+        PowerForgeReleaseWingetOptions winget,
+        PowerForgeReleaseWingetPackage package,
+        IReadOnlyList<PowerForgeReleaseAssetEntry> assets,
+        IReadOnlyList<PowerForgeToolGitHubReleaseResult> toolGitHubReleases)
+    {
+        var asset = assets.FirstOrDefault(candidate =>
+            candidate.Category == installer.Category &&
+            (string.IsNullOrWhiteSpace(installer.Target) || string.Equals(candidate.Target, installer.Target, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Runtime) || string.Equals(candidate.Runtime, installer.Runtime, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Framework) || string.Equals(candidate.Framework, installer.Framework, StringComparison.OrdinalIgnoreCase)));
+
+        if (asset is null)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' could not match an asset for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}.");
+        }
+
+        var installerPath = asset.StagedPath ?? asset.Path;
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+            throw new FileNotFoundException($"Winget asset does not exist on disk: {installerPath}");
+
+        var fileName = Path.GetFileName(installerPath);
+        var version = package.PackageVersion ?? asset.Version ?? string.Empty;
+        var architecture = string.IsNullOrWhiteSpace(installer.Architecture)
+            ? InferWingetArchitecture(asset.Runtime)
+            : installer.Architecture!.Trim();
+        var urlTemplate = string.IsNullOrWhiteSpace(installer.UrlTemplate)
+            ? winget.InstallerUrlTemplate
+            : installer.UrlTemplate;
+        var url = !string.IsNullOrWhiteSpace(urlTemplate)
+            ? ApplyWingetUrlTemplate(
+                urlTemplate!,
+                package.PackageIdentifier,
+                version,
+                fileName,
+                asset.Target,
+                asset.Runtime,
+                asset.Framework)
+            : ResolveGitHubReleaseDownloadUrl(asset, toolGitHubReleases);
+        if (string.IsNullOrWhiteSpace(url))
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' requires InstallerUrlTemplate, installer UrlTemplate, or matching PublishToolGitHub release output.");
+        var resolvedUrl = url!;
+
+        return new ResolvedWingetInstallerEntry
+        {
+            Asset = asset,
+            Architecture = architecture,
+            InstallerType = string.IsNullOrWhiteSpace(installer.InstallerType) ? "zip" : installer.InstallerType,
+            NestedInstallerType = installer.NestedInstallerType,
+            RelativeFilePath = installer.RelativeFilePath,
+            InstallerUrl = resolvedUrl,
+            InstallerSha256 = ComputeSha256(installerPath)
+        };
+    }
+
+    private static string? ResolveGitHubReleaseDownloadUrl(
+        PowerForgeReleaseAssetEntry asset,
+        IReadOnlyList<PowerForgeToolGitHubReleaseResult> toolGitHubReleases)
+    {
+        var release = toolGitHubReleases.FirstOrDefault(candidate =>
+            !string.IsNullOrWhiteSpace(candidate.TagName) &&
+            !string.IsNullOrWhiteSpace(candidate.Owner) &&
+            !string.IsNullOrWhiteSpace(candidate.Repository) &&
+            string.Equals(candidate.Target, asset.Target, StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(asset.Version) || string.Equals(candidate.Version, asset.Version, StringComparison.OrdinalIgnoreCase)));
+        if (release is null)
+            return null;
+
+        var fileName = Path.GetFileName(asset.StagedPath ?? asset.Path);
+        return $"https://github.com/{release.Owner}/{release.Repository}/releases/download/{Uri.EscapeDataString(release.TagName)}/{Uri.EscapeDataString(fileName)}";
+    }
+
+    private static string BuildWingetManifestYaml(
+        PowerForgeReleaseWingetOptions winget,
+        PowerForgeReleaseWingetPackage package,
+        string packageVersion,
+        IReadOnlyList<ResolvedWingetInstallerEntry> installers)
+    {
+        var builder = new StringBuilder();
+        var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
+        var manifestVersion = string.IsNullOrWhiteSpace(package.ManifestVersion) ? (winget.ManifestVersion ?? "1.12.0") : package.ManifestVersion!;
+        AppendYamlLine(builder, "PackageIdentifier", package.PackageIdentifier);
+        AppendYamlLine(builder, "PackageVersion", packageVersion);
+        AppendYamlLine(builder, "PackageLocale", packageLocale);
+        AppendYamlLine(builder, "Publisher", package.Publisher);
+        AppendOptionalYamlLine(builder, "PublisherUrl", package.PublisherUrl);
+        AppendYamlLine(builder, "PackageName", package.PackageName);
+        AppendOptionalYamlLine(builder, "PackageUrl", package.PackageUrl);
+        AppendYamlLine(builder, "License", package.License);
+        AppendOptionalYamlLine(builder, "LicenseUrl", package.LicenseUrl);
+        AppendYamlLine(builder, "ShortDescription", package.ShortDescription);
+        AppendOptionalYamlLine(builder, "Moniker", package.Moniker);
+        AppendYamlArray(builder, "Tags", package.Tags);
+        AppendYamlArray(builder, "Platform", package.Platform);
+        AppendOptionalYamlLine(builder, "MinimumOSVersion", package.MinimumOSVersion);
+        var installerType = installers[0].InstallerType;
+        var distinctInstallerTypes = installers
+            .Select(entry => entry.InstallerType)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctInstallerTypes.Length > 1)
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values ({string.Join(", ", distinctInstallerTypes)}), which is not supported in singleton manifests.");
+        AppendYamlLine(builder, "InstallerType", installerType);
+        builder.AppendLine("Installers:");
+        foreach (var installer in installers)
+        {
+            AppendYamlSequenceLine(builder, "Architecture", installer.Architecture);
+            AppendYamlLine(builder, "InstallerUrl", installer.InstallerUrl, indent: 2);
+            AppendYamlLine(builder, "InstallerSha256", installer.InstallerSha256, indent: 2);
+            if (!string.IsNullOrWhiteSpace(installer.NestedInstallerType))
+                AppendYamlLine(builder, "NestedInstallerType", installer.NestedInstallerType!, indent: 2);
+            if (!string.IsNullOrWhiteSpace(installer.RelativeFilePath))
+            {
+                builder.AppendLine("  NestedInstallerFiles:");
+                AppendYamlSequenceLine(builder, "RelativeFilePath", installer.RelativeFilePath!, indent: 2);
+            }
+        }
+
+        AppendYamlLine(builder, "ManifestType", "singleton");
+        AppendYamlLine(builder, "ManifestVersion", manifestVersion);
+        return builder.ToString();
+    }
+
+    private static void AppendYamlLine(StringBuilder builder, string key, string value, int indent = 0)
+    {
+        if (indent > 0)
+            builder.Append(' ', indent);
+        builder.Append(key);
+        builder.Append(": ");
+        builder.AppendLine(EscapeYamlScalar(value));
+    }
+
+    private static void AppendOptionalYamlLine(StringBuilder builder, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            AppendYamlLine(builder, key, value!);
+    }
+
+    private static void AppendYamlArray(StringBuilder builder, string key, IReadOnlyList<string>? values)
+    {
+        if (values is null || values.Count == 0)
+            return;
+
+        builder.AppendLine($"{key}:");
+        foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
+            builder.AppendLine($"- {EscapeYamlScalar(value)}");
+    }
+
+    private static void AppendYamlSequenceLine(StringBuilder builder, string key, string value, int indent = 0)
+    {
+        if (indent > 0)
+            builder.Append(' ', indent);
+        builder.Append("- ");
+        builder.Append(key);
+        builder.Append(": ");
+        builder.AppendLine(EscapeYamlScalar(value));
+    }
+
+    private static string ApplyWingetUrlTemplate(
+        string template,
+        string packageIdentifier,
+        string packageVersion,
+        string fileName,
+        string? target,
+        string? runtime,
+        string? framework)
+    {
+        return template
+            .Replace("{PackageIdentifier}", Uri.EscapeDataString(packageIdentifier))
+            .Replace("{PackageVersion}", Uri.EscapeDataString(packageVersion))
+            .Replace("{FileName}", Uri.EscapeDataString(fileName))
+            .Replace("{Target}", Uri.EscapeDataString(target ?? string.Empty))
+            .Replace("{Runtime}", Uri.EscapeDataString(runtime ?? string.Empty))
+            .Replace("{Framework}", Uri.EscapeDataString(framework ?? string.Empty));
+    }
+
+    private static string EscapeYamlScalar(string value)
+    {
+        var normalized = value.Replace("\r", string.Empty).Replace("\n", " ").Trim();
+        if (normalized.Length == 0)
+            return "\"\"";
+
+        return normalized.IndexOfAny(new[] { ':', '#', '{', '}', '[', ']', ',', '&', '*', '?', '|', '-', '<', '>', '=', '!', '%', '@', '\\', '"' }) >= 0
+            || normalized.Contains(' ')
+            ? "\"" + normalized.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
+            : normalized;
+    }
+
+    private static string InferWingetArchitecture(string? runtime)
+    {
+        var normalized = (runtime ?? string.Empty).Trim();
+        if (normalized.EndsWith("arm64", StringComparison.OrdinalIgnoreCase))
+            return "arm64";
+        if (normalized.EndsWith("x64", StringComparison.OrdinalIgnoreCase))
+            return "x64";
+        if (normalized.EndsWith("x86", StringComparison.OrdinalIgnoreCase))
+            return "x86";
+
+        throw new InvalidOperationException($"Could not infer Winget architecture from runtime '{runtime ?? "<null>"}'. Set the installer Architecture explicitly.");
+    }
+
+    private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan)
+    {
+        if (plan?.Targets is null)
+            return null;
+
+        var target = plan.Targets.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, artifact.Target, StringComparison.OrdinalIgnoreCase));
+        if (target is null)
+            return null;
+
+        return !string.IsNullOrWhiteSpace(target.ProjectPath)
+            && File.Exists(target.ProjectPath)
+            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var version)
+            && !string.IsNullOrWhiteSpace(version)
+            ? version
+            : null;
+    }
+
+    private sealed class ResolvedWingetInstallerEntry
+    {
+        public PowerForgeReleaseAssetEntry Asset { get; set; } = new();
+
+        public string Architecture { get; set; } = string.Empty;
+
+        public string InstallerType { get; set; } = "zip";
+
+        public string? NestedInstallerType { get; set; }
+
+        public string? RelativeFilePath { get; set; }
+
+        public string InstallerUrl { get; set; } = string.Empty;
+
+        public string InstallerSha256 { get; set; } = string.Empty;
     }
 
     private static object? BuildPackageManifestSection(ProjectBuildHostExecutionResult? packages)
@@ -1592,13 +1925,71 @@ internal sealed class PowerForgeReleaseService
         };
     }
 
-    private static string GetStageEntryName(string sourcePath, bool isDirectory)
+    private static string GetStageEntryName(
+        PowerForgeReleaseAssetEntry entry,
+        bool isDirectory,
+        PowerForgeReleaseStagingOptions options)
     {
-        if (!isDirectory)
-            return Path.GetFileName(sourcePath);
+        var sourcePath = entry.Path;
+        var defaultName = !isDirectory
+            ? Path.GetFileName(sourcePath)
+            : Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var template = ResolveStageNameTemplate(options, entry.Category);
+        if (string.IsNullOrWhiteSpace(template))
+            return defaultName;
 
-        var trimmed = sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return Path.GetFileName(trimmed);
+        var extension = isDirectory ? string.Empty : Path.GetExtension(sourcePath);
+        var fileNameWithoutExtension = isDirectory
+            ? defaultName
+            : Path.GetFileNameWithoutExtension(sourcePath);
+        var name = template!
+            .Replace("{FileName}", defaultName)
+            .Replace("{FileNameWithoutExtension}", fileNameWithoutExtension)
+            .Replace("{Extension}", extension)
+            .Replace("{Category}", entry.Category.ToString())
+            .Replace("{Source}", entry.Source ?? string.Empty)
+            .Replace("{Target}", entry.Target ?? string.Empty)
+            .Replace("{PackageId}", entry.PackageId ?? string.Empty)
+            .Replace("{Version}", entry.Version ?? string.Empty)
+            .Replace("{Runtime}", entry.Runtime ?? string.Empty)
+            .Replace("{Framework}", entry.Framework ?? string.Empty)
+            .Replace("{Style}", entry.Style ?? string.Empty)
+            .Replace("{BundleId}", entry.BundleId ?? string.Empty);
+        name = SanitizeStageEntryName(name);
+
+        if (!isDirectory && !string.IsNullOrWhiteSpace(extension) && string.IsNullOrWhiteSpace(Path.GetExtension(name)))
+            name += extension;
+
+        return string.IsNullOrWhiteSpace(name) ? defaultName : name;
+    }
+
+    private static string? ResolveStageNameTemplate(PowerForgeReleaseStagingOptions options, PowerForgeReleaseAssetCategory category)
+    {
+        return category switch
+        {
+            PowerForgeReleaseAssetCategory.Module => options.ModulesNameTemplate,
+            PowerForgeReleaseAssetCategory.Package => options.PackagesNameTemplate,
+            PowerForgeReleaseAssetCategory.Portable => options.PortableNameTemplate,
+            PowerForgeReleaseAssetCategory.Installer => options.InstallerNameTemplate,
+            PowerForgeReleaseAssetCategory.Store => options.StoreNameTemplate,
+            PowerForgeReleaseAssetCategory.Tool => options.ToolsNameTemplate,
+            PowerForgeReleaseAssetCategory.Metadata => options.MetadataNameTemplate,
+            _ => options.OtherNameTemplate
+        };
+    }
+
+    private static string SanitizeStageEntryName(string value)
+    {
+        var normalized = value.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+            normalized = normalized.Replace(invalid, '-');
+
+        return normalized
+            .Replace(Path.DirectorySeparatorChar, '-')
+            .Replace(Path.AltDirectorySeparatorChar, '-');
     }
 
     private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
