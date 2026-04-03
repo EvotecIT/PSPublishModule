@@ -39,6 +39,7 @@ public sealed partial class ModulePipelineRunner
 {
     private readonly ILogger _logger;
     private readonly IPowerShellRunner _powerShellRunner;
+    private readonly IMissingFunctionAnalysisService _missingFunctionAnalysisService;
 
     private sealed class RequiredModuleDraft
     {
@@ -61,10 +62,14 @@ public sealed partial class ModulePipelineRunner
     /// <summary>
     /// Creates a new instance using the provided logger.
     /// </summary>
-    public ModulePipelineRunner(ILogger logger, IPowerShellRunner? powerShellRunner = null)
+    public ModulePipelineRunner(
+        ILogger logger,
+        IPowerShellRunner? powerShellRunner = null,
+        IMissingFunctionAnalysisService? missingFunctionAnalysisService = null)
     {
         _logger = logger;
         _powerShellRunner = powerShellRunner ?? new PowerShellRunner();
+        _missingFunctionAnalysisService = missingFunctionAnalysisService ?? new PowerShellMissingFunctionAnalysisService();
     }
 
 }

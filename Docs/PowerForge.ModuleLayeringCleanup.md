@@ -1,6 +1,6 @@
 # PowerForge Module Layering Cleanup
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Goal
 
@@ -124,7 +124,10 @@ Current status:
 - `IScriptFunctionExportDetector` now exists in `PowerForge`.
 - `BinaryExportDetector` now lives in `PowerForge`, while `PowerShellScriptFunctionExportDetector` lives in `PowerForge.PowerShell`.
 - `ModuleBuilder` now uses both seams and compiles in `PowerForge`.
-- The next blocker is no longer `ModuleBuilder`; it is the remaining PowerShell-owned pipeline execution and validation surface.
+- `IMissingFunctionAnalysisService` now exists in `PowerForge`.
+- `PowerShellMissingFunctionAnalysisService` now lives in `PowerForge.PowerShell`.
+- `ModulePipelineRunner` now consumes the missing-analysis seam instead of directly instantiating `MissingFunctionsAnalyzer`.
+- The remaining blockers are concentrated around direct manifest editing, dependency install/discovery, documentation generation, validation/test execution, publishing, and other PowerShell-owned runner defaults.
 
 ### Phase 3: Move the reusable pipeline engine back to core
 
@@ -133,6 +136,15 @@ After the helper splits:
 - Move `ModuleBuildPipeline`
 - Move the plan/result portions of `ModulePipelineRunner`
 - Keep PowerShell execution adapters, dependency install, help extraction, Pester execution, and signing in `PowerForge.PowerShell`
+
+Current boundary pressure inside `ModulePipelineRunner` is now:
+
+- direct `ManifestEditor` / `BuildServices` usage during manifest refresh and delivery metadata updates
+- direct `ModuleDependencyInstaller`, `PSResourceGetClient`, and `PowerShellGetClient` usage during dependency install/resolution
+- direct `DocumentationEngine`, `ModuleValidationService`, `ModuleTestSuiteService`, and `ModulePublisher` construction in the run loop
+- `CreatePowerShell()` usage for dependent-required-module expansion from installed modules
+
+That means the next clean slices should focus on moving those direct constructions behind core-facing interfaces rather than trying to move the whole runner in one step.
 
 ### Phase 4: Publish and validation decomposition
 
