@@ -895,6 +895,9 @@ internal sealed class PowerForgeReleaseService
 
     private static string? ResolveDotNetTargetVersion(DotNetPublishTargetPlan target, DotNetPublishResult result, string? sharedReleaseVersion)
     {
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+
         if (!string.IsNullOrWhiteSpace(target.ProjectPath)
             && File.Exists(target.ProjectPath)
             && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var version)
@@ -1914,13 +1917,16 @@ internal sealed class PowerForgeReleaseService
 
     private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan, string? sharedReleaseVersion)
     {
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+
         if (plan?.Targets is null)
-            return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
+            return null;
 
         var target = plan.Targets.FirstOrDefault(candidate =>
             string.Equals(candidate.Name, artifact.Target, StringComparison.OrdinalIgnoreCase));
         if (target is null)
-            return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
+            return null;
 
         var version = !string.IsNullOrWhiteSpace(target.ProjectPath)
             && File.Exists(target.ProjectPath)
@@ -1929,7 +1935,7 @@ internal sealed class PowerForgeReleaseService
             ? resolvedVersion
             : null;
 
-        return string.IsNullOrWhiteSpace(version) ? sharedReleaseVersion : version;
+        return version;
     }
 
     private sealed class ResolvedWingetInstallerEntry

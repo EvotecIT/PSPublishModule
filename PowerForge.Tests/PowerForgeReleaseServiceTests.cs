@@ -1304,7 +1304,7 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_PublishesDotNetPublishAssetsToGitHub_UsingResolvedPackageVersionWhenProjectVersionIsMissing()
+    public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
     {
         var root = CreateSandbox();
         var zip = Path.Combine(root, "tray-portable.zip");
@@ -1314,6 +1314,7 @@ public sealed class PowerForgeReleaseServiceTests
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>9.9.9</Version>
   </PropertyGroup>
 </Project>
 """, new UTF8Encoding(false));
@@ -2207,7 +2208,7 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_Winget_UsesResolvedPackageVersionWhenPortableTargetVersionIsMissing()
+    public void Execute_Winget_PrefersResolvedPackageVersionOverPortableTargetVersion()
     {
         var root = CreateSandbox();
         var trayX64 = Path.Combine(root, "tray-x64.zip");
@@ -2217,6 +2218,7 @@ public sealed class PowerForgeReleaseServiceTests
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>9.9.9</Version>
   </PropertyGroup>
 </Project>
 """, new UTF8Encoding(false));
