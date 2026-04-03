@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -80,12 +81,32 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
 
+        var badge = ResolveSocialBadge(item, routeForSlug);
+        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
+        var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
+        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
+        var colorScheme = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
+        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item);
+        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item));
+        var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
+            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
+            : string.Empty;
+        var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
+        var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var hashInput = string.Join("|", new[]
         {
             routeForSlug,
             title ?? string.Empty,
             description ?? string.Empty,
-            siteName ?? string.Empty
+            siteName ?? string.Empty,
+            badge,
+            styleKey,
+            variantKey,
+            colorScheme,
+            allowRemoteMediaFetch ? "remote-media-enabled" : "remote-media-disabled",
+            themeTokenFingerprint,
+            logoSource,
+            inlineImageSource
         });
         var hash = ComputeSocialHash(hashInput);
         var fileName = $"{routeSlug}-{hash}.png";
@@ -93,20 +114,23 @@ public static partial class WebSiteBuilder
         var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
             return string.Empty;
-
-        var badge = ResolveSocialBadge(item, routeForSlug);
-        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
-        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
-        var bytes = WebSocialCardGenerator.RenderPng(
-            title,
-            description,
-            siteName,
-            badge,
-            routeLabel,
-            spec.Social.GeneratedCardWidth,
-            spec.Social.GeneratedCardHeight,
-            styleKey,
-            variantKey);
+        var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = title,
+            Description = description,
+            Eyebrow = siteName,
+            Badge = badge,
+            FooterLabel = routeLabel,
+            Width = spec.Social.GeneratedCardWidth,
+            Height = spec.Social.GeneratedCardHeight,
+            StyleKey = styleKey,
+            VariantKey = variantKey,
+            ColorScheme = colorScheme,
+            ThemeTokens = themeTokens,
+            AllowRemoteMediaFetch = allowRemoteMediaFetch,
+            LogoDataUri = logoSource,
+            InlineImageDataUri = inlineImageSource
+        });
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
 
@@ -183,6 +207,12 @@ public static partial class WebSiteBuilder
         var normalizedRoute = NormalizePath(route).Trim('/');
         if (normalizedRoute.StartsWith("docs", StringComparison.OrdinalIgnoreCase))
             return "DOCS";
+        if (normalizedRoute.StartsWith("contact", StringComparison.OrdinalIgnoreCase) ||
+            normalizedRoute.StartsWith("support", StringComparison.OrdinalIgnoreCase))
+            return "CONTACT";
+        if (string.IsNullOrWhiteSpace(normalizedRoute) ||
+            string.Equals(normalizedRoute, "index", StringComparison.OrdinalIgnoreCase))
+            return "HOME";
 
         return "PAGE";
     }
@@ -233,6 +263,42 @@ public static partial class WebSiteBuilder
         return InferSocialCardVariant(item, styleKey, route);
     }
 
+    private static string? ResolveSocialCardColorScheme(SiteSpec spec, ContentItem item)
+    {
+        var colorSchemeOverride =
+            GetMetaString(item.Meta, "social_card_color_scheme") ??
+            GetMetaString(item.Meta, "social.color_scheme");
+        if (!string.IsNullOrWhiteSpace(colorSchemeOverride))
+            return colorSchemeOverride!.Trim();
+
+        var collection = item.Collection?.Trim();
+        if (!string.IsNullOrWhiteSpace(collection) &&
+            TryResolveCollectionCardPreset(spec.Social?.GeneratedCardColorSchemesByCollection, collection!, out var collectionScheme))
+            return collectionScheme;
+
+        if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardColorScheme))
+            return spec.Social.GeneratedCardColorScheme!.Trim();
+
+        return null;
+    }
+
+    private static bool ResolveSocialCardAllowRemoteMediaFetch(SiteSpec spec, ContentItem item)
+    {
+        if (TryGetMetaBool(item.Meta, "social_card_allow_remote_media_fetch", out var explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social.allow_remote_media_fetch", out explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social_card_allow_remote_media", out explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social.allow_remote_media", out explicitValue))
+            return explicitValue;
+
+        return spec.Social?.GeneratedCardAllowRemoteMediaFetch ?? false;
+    }
+
     private static bool TryResolveCollectionCardPreset(
         Dictionary<string, string>? map,
         string collection,
@@ -264,33 +330,42 @@ public static partial class WebSiteBuilder
     private static string InferSocialCardStyle(string badge, string route)
     {
         var combined = string.Concat(badge ?? string.Empty, " ", route ?? string.Empty).ToLowerInvariant();
+        if (combined.Contains("home", StringComparison.Ordinal))
+            return "home";
         if (combined.Contains("api", StringComparison.Ordinal))
             return "api";
         if (combined.Contains("doc", StringComparison.Ordinal))
             return "docs";
+        if (combined.Contains("contact", StringComparison.Ordinal) ||
+            combined.Contains("support", StringComparison.Ordinal))
+            return "contact";
         if (combined.Contains("blog", StringComparison.Ordinal) ||
             combined.Contains("post", StringComparison.Ordinal) ||
             combined.Contains("news", StringComparison.Ordinal) ||
             combined.Contains("article", StringComparison.Ordinal))
-            return "editorial";
+            return "blog";
         return "default";
     }
 
     private static string InferSocialCardVariant(ContentItem item, string styleKey, string route)
     {
         if (item.Kind == PageKind.Home)
-            return "hero";
+            return "spotlight";
 
         var normalizedRoute = NormalizePath(route).Trim('/');
         if (string.IsNullOrWhiteSpace(normalizedRoute) ||
             string.Equals(normalizedRoute, "index", StringComparison.OrdinalIgnoreCase))
-            return "hero";
+            return "spotlight";
 
-        if (string.Equals(styleKey, "docs", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(styleKey, "editorial", StringComparison.OrdinalIgnoreCase))
-            return "compact";
-
-        return "standard";
+        return styleKey switch
+        {
+            "home" => "spotlight",
+            "docs" => "shelf",
+            "api" => "reference",
+            "blog" => "editorial",
+            "contact" => "connect",
+            _ => "product"
+        };
     }
 
     private static string ComputeSocialHash(string input)
@@ -298,6 +373,57 @@ public static partial class WebSiteBuilder
         var bytes = System.Text.Encoding.UTF8.GetBytes(input ?? string.Empty);
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant()[..10];
+    }
+
+    internal static string ComputeThemeTokenFingerprint(IReadOnlyDictionary<string, object?>? themeTokens)
+    {
+        if (themeTokens is null || themeTokens.Count == 0)
+            return string.Empty;
+
+        var canonical = NormalizeThemeTokenValue(themeTokens);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(canonical);
+        return ComputeSocialHash(serialized);
+    }
+
+    private static object? NormalizeThemeTokenValue(object? value)
+    {
+        if (value is null)
+            return null;
+
+        if (value is System.Text.Json.JsonElement element)
+            return NormalizeThemeTokenValue(ConvertJsonElement(element));
+
+        if (value is IReadOnlyDictionary<string, object?> map)
+        {
+            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var pair in map.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+                normalized[pair.Key] = NormalizeThemeTokenValue(pair.Value);
+            return normalized;
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key is null)
+                    continue;
+
+                normalized[Convert.ToString(entry.Key) ?? string.Empty] = NormalizeThemeTokenValue(entry.Value);
+            }
+
+            return normalized;
+        }
+
+        if (value is IEnumerable enumerable && value is not string)
+        {
+            var list = new List<object?>();
+            foreach (var item in enumerable)
+                list.Add(NormalizeThemeTokenValue(item));
+            return list;
+        }
+
+        return value;
     }
 
     private static bool WriteAllBytesIfChanged(string path, byte[] content)
@@ -446,5 +572,217 @@ public static partial class WebSiteBuilder
             return trimmed;
 
         return string.Empty;
+    }
+
+    private static string ResolveSocialCardLogoCandidate(SiteSpec spec, ContentItem item)
+    {
+        return GetMetaString(item.Meta, "social_card_logo") ??
+               GetMetaString(item.Meta, "social.logo") ??
+               spec.Social?.GeneratedCardLogo ??
+               spec.StructuredData?.OrganizationLogo ??
+               string.Empty;
+    }
+
+    private static string ResolveSocialCardInlineImageCandidate(ContentItem item)
+    {
+        var explicitCardImage =
+            GetMetaString(item.Meta, "social_card_image") ??
+            GetMetaString(item.Meta, "social.card_image") ??
+            GetMetaString(item.Meta, "social_card_media") ??
+            GetMetaString(item.Meta, "social.media") ??
+            GetMetaString(item.Meta, "social_image") ??
+            GetMetaString(item.Meta, "social.image") ??
+            GetMetaString(item.Meta, "cover_image") ??
+            GetMetaString(item.Meta, "thumbnail") ??
+            GetMetaString(item.Meta, "image");
+
+        if (!string.IsNullOrWhiteSpace(explicitCardImage))
+            return explicitCardImage!;
+
+        if (!IsEditorialCollection(item.Collection))
+            return string.Empty;
+
+        return TryExtractFirstBodyImageCandidate(item.SourcePath);
+    }
+
+    private static bool ShouldRenderSocialCardInlineImage(ContentItem item, string styleKey, string variantKey, string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (TryGetMetaBool(item.Meta, "social_card_image_inline", out var explicitInline))
+            return explicitInline;
+
+        if (TryGetMetaBool(item.Meta, "social.image_inline", out explicitInline))
+            return explicitInline;
+
+        if (string.Equals(variantKey, "inline-image", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return string.Equals(styleKey, "blog", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return string.Empty;
+
+        var trimmed = candidate.Trim();
+        if (trimmed.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed);
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            return string.Empty;
+
+        var mimeType = Path.GetExtension(sourcePath).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".svg" => "image/svg+xml",
+            _ => string.Empty
+        };
+        if (string.IsNullOrWhiteSpace(mimeType))
+            return string.Empty;
+
+        return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(sourcePath))}";
+    }
+
+    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate)
+    {
+        var sourceDir = Path.GetDirectoryName(item.SourcePath);
+        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir);
+
+        if (Path.IsPathRooted(candidate) && File.Exists(candidate))
+        {
+            var fullCandidate = Path.GetFullPath(candidate);
+            return IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, fullCandidate)
+                ? fullCandidate
+                : string.Empty;
+        }
+
+        var normalizedCandidate = candidate.Replace('\\', '/').Trim();
+        foreach (var resource in item.Resources ?? Array.Empty<PageResource>())
+        {
+            var resourcePath = resource.RelativePath?.Replace('\\', '/').TrimStart('/') ?? string.Empty;
+            if (string.Equals(resourcePath, normalizedCandidate.TrimStart('/'), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(resource.Name, Path.GetFileName(normalizedCandidate), StringComparison.OrdinalIgnoreCase))
+            {
+                var resourceSourcePath = Path.GetFullPath(resource.SourcePath);
+                return IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, resourceSourcePath)
+                    ? resourceSourcePath
+                    : string.Empty;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceDir))
+        {
+            var relativeCandidate = Path.GetFullPath(Path.Combine(sourceDir, normalizedCandidate.Replace('/', Path.DirectorySeparatorChar)));
+            if (File.Exists(relativeCandidate) &&
+                IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, relativeCandidate))
+                return relativeCandidate;
+        }
+
+        foreach (var root in allowedRoots)
+        {
+            var combined = Path.GetFullPath(Path.Combine(root, normalizedCandidate.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
+            if (File.Exists(combined) &&
+                IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, combined))
+                return combined;
+        }
+
+        return string.Empty;
+    }
+
+    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir)
+    {
+        var roots = new List<string>();
+        var rootPath = BuildRootPathScope.Value;
+        if (!string.IsNullOrWhiteSpace(rootPath))
+        {
+            roots.Add(Path.GetFullPath(rootPath));
+            roots.Add(Path.GetFullPath(Path.Combine(rootPath, "static")));
+            if (!string.IsNullOrWhiteSpace(spec.ContentRoot))
+                roots.Add(Path.GetFullPath(Path.Combine(rootPath, spec.ContentRoot)));
+            if (spec.ContentRoots is { Length: > 0 })
+            {
+                foreach (var contentRoot in spec.ContentRoots.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                    roots.Add(Path.GetFullPath(Path.Combine(rootPath, contentRoot)));
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(sourceDir))
+        {
+            roots.Add(Path.GetFullPath(sourceDir));
+        }
+
+        return roots
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsSocialCardAssetPathWithinAllowedRoots(IReadOnlyCollection<string> allowedRoots, string candidatePath)
+    {
+        if (allowedRoots is null || allowedRoots.Count == 0)
+            return false;
+
+        foreach (var root in allowedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            if (IsPathWithinRoot(Path.GetFullPath(root), candidatePath))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string TryExtractFirstBodyImageCandidate(string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            return string.Empty;
+
+        try
+        {
+            var markdown = File.ReadAllText(sourcePath);
+            var (_, body) = FrontMatterParser.Parse(markdown);
+            var scrubbed = MarkdownFenceRegex.Replace(body ?? string.Empty, string.Empty);
+
+            var markdownMatch = MarkdownImageRegex.Match(scrubbed);
+            if (markdownMatch.Success)
+                return NormalizeSocialCardMediaCandidate(ExtractMarkdownImageTarget(markdownMatch.Groups["target"].Value));
+
+            var htmlMatch = HtmlImageRegex.Match(scrubbed);
+            if (htmlMatch.Success)
+                return NormalizeSocialCardMediaCandidate(htmlMatch.Groups["src"].Value);
+        }
+        catch
+        {
+            // Ignore extraction errors and fall back to generated/default image.
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeSocialCardMediaCandidate(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return string.Empty;
+
+        var trimmed = candidate.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("/", StringComparison.Ordinal) ||
+            trimmed.StartsWith("./", StringComparison.Ordinal) ||
+            trimmed.StartsWith("../", StringComparison.Ordinal))
+            return trimmed;
+
+        return trimmed;
     }
 }

@@ -261,6 +261,55 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void ResolveSocialCardAssetDataUri_PreservesRemoteUrls()
+    {
+        var spec = BuildPagesSpec();
+        var item = new ContentItem
+        {
+            SourcePath = Path.Combine(Path.GetTempPath(), "index.md"),
+            Collection = "pages"
+        };
+
+        var resolved = WebSiteBuilder.ResolveSocialCardAssetDataUri(
+            spec,
+            item,
+            "https://cdn.example.test/logo.svg");
+
+        Assert.Equal("https://cdn.example.test/logo.svg", resolved);
+    }
+
+    [Fact]
+    public void TryResolveSocialCardAssetPath_RejectsTraversalOutsideAllowedRoots()
+    {
+        var root = CreateTempRoot("pf-web-social-asset-root-");
+        try
+        {
+            var pagesDir = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesDir);
+            var pagePath = Path.Combine(pagesDir, "index.md");
+            File.WriteAllText(pagePath, "# Home");
+
+            var outsidePath = Path.Combine(root, "secret.png");
+            File.WriteAllBytes(outsidePath, new byte[] { 1, 2, 3, 4 });
+
+            var spec = BuildPagesSpec();
+            var item = new ContentItem
+            {
+                SourcePath = pagePath,
+                Collection = "pages"
+            };
+
+            var resolved = WebSiteBuilder.TryResolveSocialCardAssetPath(spec, item, "../../../secret.png");
+
+            Assert.Equal(string.Empty, resolved);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_DoesNotAutoGenerateCards_ForDocsPages_UnlessOverridden()
     {
         var root = CreateTempRoot("pf-web-social-generated-scope-");
@@ -549,6 +598,57 @@ public class WebSiteSocialCardsTests
         {
             Cleanup(root);
         }
+    }
+
+    [Fact]
+    public void ComputeThemeTokenFingerprint_IsStableForEquivalentTokens_AndChangesWhenTokensChange()
+    {
+        var first = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["frameRadius"] = "24px",
+                ["contentPadding"] = "32px"
+            },
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["background"] = "#111111",
+                ["text"] = "#fefefe"
+            }
+        };
+        var reordered = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["text"] = "#fefefe",
+                ["background"] = "#111111"
+            },
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["contentPadding"] = "32px",
+                ["frameRadius"] = "24px"
+            }
+        };
+        var changed = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["frameRadius"] = "24px",
+                ["contentPadding"] = "32px"
+            },
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["background"] = "#222222",
+                ["text"] = "#fefefe"
+            }
+        };
+
+        var firstFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(first);
+        var reorderedFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(reordered);
+        var changedFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(changed);
+
+        Assert.Equal(firstFingerprint, reorderedFingerprint);
+        Assert.NotEqual(firstFingerprint, changedFingerprint);
     }
 
     private static SiteSpec BuildPagesSpec()

@@ -27,12 +27,20 @@ public sealed class SocialSpec
     public int GeneratedCardWidth { get; set; } = 1200;
     /// <summary>Height of generated social card PNG files.</summary>
     public int GeneratedCardHeight { get; set; } = 630;
-    /// <summary>Optional default style key for generated social cards (default/docs/api/editorial).</summary>
+    /// <summary>Optional default style key for generated social cards (home/default/docs/api/blog/contact).</summary>
     public string? GeneratedCardStyle { get; set; }
-    /// <summary>Optional default layout variant for generated social cards (standard/hero/compact).</summary>
+    /// <summary>Optional default layout variant for generated social cards (product/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? GeneratedCardVariant { get; set; }
+    /// <summary>Optional default logo URL/path for generated social cards.</summary>
+    public string? GeneratedCardLogo { get; set; }
     /// <summary>Optional per-collection style overrides for generated social cards.</summary>
     public Dictionary<string, string>? GeneratedCardStylesByCollection { get; set; }
     /// <summary>Optional per-collection variant overrides for generated social cards.</summary>
     public Dictionary<string, string>? GeneratedCardVariantsByCollection { get; set; }
+    /// <summary>Optional default color scheme for generated social cards (dark/light).</summary>
+    public string? GeneratedCardColorScheme { get; set; }
+    /// <summary>Optional per-collection color scheme overrides for generated social cards.</summary>
+    public Dictionary<string, string>? GeneratedCardColorSchemesByCollection { get; set; }
+    /// <summary>When true, generated social card PNGs may fetch remote HTTP(S) logo/media assets.</summary>
+    public bool GeneratedCardAllowRemoteMediaFetch { get; set; }
 }
