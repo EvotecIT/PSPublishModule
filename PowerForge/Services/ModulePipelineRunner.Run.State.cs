@@ -37,6 +37,9 @@ public sealed partial class ModulePipelineRunner
         public ModuleInstallerResult? InstallResult { get; set; }
         public string? ProjectManifestSyncMessage { get; set; }
         public bool MergedScripts => MergeExecution.MergedModule;
+        public bool PackageWithoutScriptFolders =>
+            MergeExecution.MergedModule ||
+            (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
 
         public ModuleBuildResult RequireBuildResult()
             => BuildResult ?? throw new InvalidOperationException("Build result is not available for the current pipeline state.");

@@ -61,10 +61,10 @@ public sealed partial class ModulePipelineRunner
                 ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
                 if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
-                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.MergedScripts);
+                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
             }
 
-            if (!state.MergedScripts && !plan.BuildSpec.RefreshManifestOnly)
+            if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
                 TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
             session.Done(session.ManifestStep);
@@ -633,7 +633,7 @@ public sealed partial class ModulePipelineRunner
                         requiredModules: packagingRequiredModules,
                         information: plan.Information,
                         delivery: plan.Delivery,
-                        includeScriptFolders: !state.MergedScripts));
+                        includeScriptFolders: !state.PackageWithoutScriptFolders));
                     session.Done(step);
                 }
                 catch (Exception ex)
@@ -657,7 +657,7 @@ public sealed partial class ModulePipelineRunner
                         plan,
                         buildResult,
                         state.ArtefactResults,
-                        includeScriptFolders: !state.MergedScripts));
+                        includeScriptFolders: !state.PackageWithoutScriptFolders));
                     session.Done(step);
                 }
                 catch (Exception ex)
@@ -681,7 +681,7 @@ public sealed partial class ModulePipelineRunner
                     installPackagePath,
                     plan.Information,
                     plan.Delivery,
-                    includeScriptFolders: !state.MergedScripts);
+                    includeScriptFolders: !state.PackageWithoutScriptFolders);
 
                 var installSpec = new ModuleInstallSpec
                 {
@@ -714,7 +714,7 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool mergedScripts)
+    private void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
     {
         var generator = new DeliveryCommandGenerator(_logger);
         var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
@@ -732,7 +732,7 @@ public sealed partial class ModulePipelineRunner
                 _manifestMutator.TrySetManifestExports(buildResult.ManifestPath, functions.ToArray(), cmdlets: null, aliases: null);
             }
 
-            if (mergedScripts)
+            if (packageWithoutScriptFolders)
                 SyncMergedPsm1WithGeneratedScripts(buildResult.ManifestPath, buildResult.StagingPath, plan.ModuleName, generated.Select(static g => g.ScriptPath));
         }
         catch (Exception ex)
