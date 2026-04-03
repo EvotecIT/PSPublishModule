@@ -94,6 +94,16 @@ internal static class ModuleManifestTextParser
         return true;
     }
 
+    internal static bool TryGetStrictStringArrayValue(string manifestText, string key, out string[]? values)
+    {
+        values = null;
+        if (!TryReadAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        return TryParseStrictStringArrayExpression(expression!, out values);
+    }
+
     internal static bool TryParseStringArrayExpression(string expression, out string[]? values)
     {
         values = null;
@@ -105,6 +115,37 @@ internal static class ModuleManifestTextParser
             .ToArray();
 
         values = parsed;
+        return true;
+    }
+
+    internal static bool TryParseStrictStringArrayExpression(string expression, out string[]? values)
+    {
+        values = null;
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        var trimmed = expression.Trim();
+        if (TryUnquote(trimmed, out var singleValue) && !string.IsNullOrWhiteSpace(singleValue))
+        {
+            values = new[] { singleValue };
+            return true;
+        }
+
+        if (!IsArrayExpression(trimmed))
+            return false;
+
+        var parsed = new List<string>();
+        var body = TrimCompositeWrapper(trimmed);
+        var index = 0;
+        while (TryReadValueExpression(body, ref index, out var itemExpression))
+        {
+            if (!TryUnquote(itemExpression, out var value) || string.IsNullOrWhiteSpace(value))
+                return false;
+
+            parsed.Add(value);
+        }
+
+        values = parsed.ToArray();
         return true;
     }
 

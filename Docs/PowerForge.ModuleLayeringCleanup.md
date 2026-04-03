@@ -1,6 +1,6 @@
 # PowerForge Module Layering Cleanup
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Goal
 
@@ -157,6 +157,7 @@ Current status:
 - `ModulePipelineExecutionSession` now owns planned step lookup, artefact/publish step mapping, progress callbacks, and skipped-step reporting, which removes the bulk of the run-loop bookkeeping from `ModulePipelineRunner.Run`.
 - The validation, test, packaging, publish, and install phases now run through dedicated runner helper methods backed by a shared run-state object, so `ModulePipelineRunner.Run` is acting more like an orchestrator than a giant mutable script.
 - The stage/build/manifest/docs/format/sign phases now also run through dedicated helpers, leaving `ModulePipelineRunner.Run` as a thin phase orchestrator with shared cleanup/failure handling.
+- The host-neutral structure, binary-export, and csproj validation checks now flow through `ModuleValidationCoreChecks` in `PowerForge`, while documentation extraction, PSScriptAnalyzer, file syntax/token checks, and test execution remain PowerShell-hosted in `ModuleValidationService`.
 - The next extraction target is the remaining bootstrapper/delivery result-shaping surface in `ModulePipelineRunner`, plus eventual retirement of the legacy analyzer output models that now sit entirely behind the PowerShell adapter seam.
 
 ### Phase 4: Publish and validation decomposition
