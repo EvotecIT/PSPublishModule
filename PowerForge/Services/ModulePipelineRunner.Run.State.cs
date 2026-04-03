@@ -36,7 +36,6 @@ public sealed partial class ModulePipelineRunner
         public List<ModulePublishResult> PublishResults { get; } = new();
         public ModuleInstallerResult? InstallResult { get; set; }
         public string? ProjectManifestSyncMessage { get; set; }
-        public bool MergedScripts => MergeExecution.MergedModule;
         public bool PackageWithoutScriptFolders =>
             MergeExecution.MergedModule ||
             (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
