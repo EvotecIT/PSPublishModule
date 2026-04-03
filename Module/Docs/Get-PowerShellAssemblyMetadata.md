@@ -25,14 +25,14 @@ the PowerShell surface.
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'
+PS> Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'
 ```
 
 Returns discovered cmdlet and alias names based on PowerShell attributes.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'
+PS> Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'
 ```
 
 Useful when validating what will be exported before publishing.

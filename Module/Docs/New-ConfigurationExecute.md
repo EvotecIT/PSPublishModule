@@ -22,7 +22,7 @@ It emits no configuration segment and has no effect.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationExecute
+PS> New-ConfigurationExecute
 ```
 
 No action is performed and nothing is emitted to the pipeline.

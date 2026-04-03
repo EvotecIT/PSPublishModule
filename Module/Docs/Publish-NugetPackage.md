@@ -23,14 +23,14 @@ Use -SkipDuplicate for CI-friendly, idempotent runs.
 
 ### EXAMPLE 1
 ```powershell
-PS>Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate
+PS> Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate
 ```
 
 Publishes all .nupkg files under the folder; safe to rerun in CI.
 
 ### EXAMPLE 2
 ```powershell
-PS>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'
+PS> Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'
 ```
 
 Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).

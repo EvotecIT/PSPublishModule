@@ -29,21 +29,21 @@ or emits JSON to the pipeline.
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ModuleTestFailures
+PS> Get-ModuleTestFailures
 ```
 
 Searches for TestResults.xml under the project and prints a detailed failure report.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary
+PS> Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary
 ```
 
 Writes a compact summary that is suitable for CI logs.
 
 ### EXAMPLE 3
 ```powershell
-PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru
+PS> Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru
 ```
 
 Uses the in-memory results and returns the analysis object for further processing.

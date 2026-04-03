@@ -24,21 +24,21 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
 
 ### EXAMPLE 1
 ```powershell
-PS>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'
+PS> Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'
 ```
 
 Reads the current version from the PSD1 and returns the next patch version.
 
 ### EXAMPLE 2
 ```powershell
-PS>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced
+PS> Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced
 ```
 
 Returns a structured object that includes whether auto-versioning was used.
 
 ### EXAMPLE 3
 ```powershell
-PS>Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'
+PS> Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'
 ```
 
 Resolves the next patch version by looking up the current version of the module.

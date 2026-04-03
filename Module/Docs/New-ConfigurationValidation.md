@@ -24,12 +24,12 @@ Encoding and line-ending enforcement is handled by New-ConfigurationFileConsiste
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationValidation -Enable -StructureSeverity Error -DocumentationSeverity Warning
+PS> New-ConfigurationValidation -Enable -StructureSeverity Error -DocumentationSeverity Warning
 ```
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationValidation -Enable -EnableTests -TestsSeverity Error -TestsPath 'Tests'
+PS> New-ConfigurationValidation -Enable -EnableTests -TestsSeverity Error -TestsPath 'Tests'
 ```
 
 ## PARAMETERS

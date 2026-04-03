@@ -26,4 +26,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Fixtures\**\*.cs" />
+    <EmbeddedResource Remove="Fixtures\**\*" />
+    <None Remove="Fixtures\**\*" />
+    <None Include="Fixtures\**\*" Exclude="Fixtures\**\bin\**;Fixtures\**\obj\**" />
+  </ItemGroup>
+
 </Project>

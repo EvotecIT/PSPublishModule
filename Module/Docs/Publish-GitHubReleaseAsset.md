@@ -24,14 +24,14 @@ For private repositories, use a token with the minimal required scope and prefer
 
 ### EXAMPLE 1
 ```powershell
-PS>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN
+PS> Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN
 ```
 
 Creates a GitHub release and uploads bin\Release\<Project>.<Version>.zip.
 
 ### EXAMPLE 2
 ```powershell
-PS>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'
+PS> Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'
 ```
 
 Useful when your repository uses a specific tag naming convention.

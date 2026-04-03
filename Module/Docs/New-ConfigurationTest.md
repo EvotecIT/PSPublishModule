@@ -22,14 +22,14 @@ Use this when you want builds to fail fast on test failures.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationTest -Enable -TestsPath 'Tests'
+PS> New-ConfigurationTest -Enable -TestsPath 'Tests'
 ```
 
 Runs tests from the Tests folder after the build/merge step.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
+PS> New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
 ```
 
 Useful in CI when you always want a fresh test run.

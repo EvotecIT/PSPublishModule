@@ -22,14 +22,14 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport
+PS> New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport
 ```
 
 Enables validation and exports a CSV report when issues are detected.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport
+PS> New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport
 ```
 
 ## PARAMETERS

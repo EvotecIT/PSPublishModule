@@ -41,35 +41,35 @@ as invalid input.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'
+PS> New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'
 ```
 
 Declares a required dependency that is written into the manifest.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'
+PS> New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'
 ```
 
 Declares a dependency that is expected to be installed separately (not bundled into artefacts).
 
 ### EXAMPLE 3
 ```powershell
-PS>New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'
+PS> New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'
 ```
 
 Uses RequiredVersion when an exact match is required.
 
 ### EXAMPLE 4
 ```powershell
-PS>New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'
+PS> New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'
 ```
 
 Allows approved helper functions to be copied into the built module when they are actually used.
 
 ### EXAMPLE 5
 ```powershell
-PS>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+PS> New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
 ```
 
 Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.

@@ -27,21 +27,21 @@ OverwritePaths so selected relative paths keep local changes or are refreshed du
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign
+PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign
 ```
 
 Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'
+PS> New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'
 ```
 
 Helps modules expose docs from a repository path in a consistent order.
 
 ### EXAMPLE 3
 ```powershell
-PS>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'
+PS> New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'
 ```
 
 Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.

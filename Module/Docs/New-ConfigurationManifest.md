@@ -22,14 +22,14 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'
+PS> New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'
 ```
 
 Defines the core identity fields required for a module manifest.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'
+PS> New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'
 ```
 
 Populates common PSGallery metadata that shows up on the gallery and in generated docs.

@@ -22,14 +22,14 @@ Produces a formatting configuration segment used by the build pipeline to normal
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines
+PS> New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines
 ```
 
 Formats the merged module output and removes comments while keeping readability.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot
+PS> New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot
 ```
 
 Applies formatting rules to the project sources as well as generated output.

@@ -27,14 +27,14 @@ This cmdlet exports the selected certificate from the local certificate store.
 
 ### EXAMPLE 1
 ```powershell
-PS>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'
+PS> Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'
 ```
 
 Exports the certificate in DER format to the given path.
 
 ### EXAMPLE 2
 ```powershell
-PS>Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+PS> Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
 ```
 
 Useful when you have the SHA256 fingerprint but not the Windows thumbprint.

@@ -93,13 +93,7 @@ internal sealed class MamlHelpWriter
         WriteInputs(writer, cmd);
         WriteOutputs(writer, cmd);
 
-        writer.WriteStartElement("maml", "alertSet", MamlNs);
-        writer.WriteStartElement("maml", "alert", MamlNs);
-        writer.WriteStartElement("maml", "para", MamlNs);
-        writer.WriteString(string.Empty);
-        writer.WriteEndElement(); // para
-        writer.WriteEndElement(); // alert
-        writer.WriteEndElement(); // alertSet
+        WriteNotes(writer, cmd);
 
         WriteExamples(writer, cmd);
         WriteRelatedLinks(writer, cmd);
@@ -220,7 +214,7 @@ internal sealed class MamlHelpWriter
     private static void WriteExamples(XmlWriter writer, DocumentationCommandHelp cmd)
     {
         var examples = (cmd.Examples ?? Enumerable.Empty<DocumentationExampleHelp>())
-            .Where(e => e is not null && (!string.IsNullOrWhiteSpace(e.Code) || !string.IsNullOrWhiteSpace(e.Title) || !string.IsNullOrWhiteSpace(e.Remarks)))
+            .Where(e => e is not null && (!string.IsNullOrWhiteSpace(e.Code) || !string.IsNullOrWhiteSpace(e.Title) || !string.IsNullOrWhiteSpace(e.Introduction) || !string.IsNullOrWhiteSpace(e.Remarks)))
             .ToArray();
 
         if (examples.Length == 0)
@@ -237,6 +231,12 @@ internal sealed class MamlHelpWriter
             writer.WriteStartElement("command", "example", CommandNs);
             var title = string.IsNullOrWhiteSpace(ex.Title) ? $"EXAMPLE {i + 1}" : ex.Title.Trim();
             writer.WriteElementString("maml", "title", MamlNs, title);
+            if (!string.IsNullOrWhiteSpace(ex.Introduction))
+            {
+                writer.WriteStartElement("maml", "introduction", MamlNs);
+                WriteIntroductionParas(writer, ex.Introduction);
+                writer.WriteEndElement(); // maml:introduction
+            }
             writer.WriteElementString("dev", "code", DevNs, ex.Code?.TrimEnd() ?? string.Empty);
             writer.WriteStartElement("dev", "remarks", DevNs);
             WriteParas(writer, ex.Remarks ?? string.Empty);
@@ -261,6 +261,37 @@ internal sealed class MamlHelpWriter
             writer.WriteEndElement(); // navigationLink
         }
         writer.WriteEndElement(); // relatedLinks
+    }
+
+    private static void WriteNotes(XmlWriter writer, DocumentationCommandHelp cmd)
+    {
+        var notes = (cmd.Notes ?? Enumerable.Empty<DocumentationNoteHelp>())
+            .Where(note => note is not null && (!string.IsNullOrWhiteSpace(note.Title) || !string.IsNullOrWhiteSpace(note.Text)))
+            .ToArray();
+
+        writer.WriteStartElement("maml", "alertSet", MamlNs);
+        if (notes.Length == 0)
+        {
+            writer.WriteStartElement("maml", "alert", MamlNs);
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement(); // para
+            writer.WriteEndElement(); // alert
+            writer.WriteEndElement(); // alertSet
+            return;
+        }
+
+        foreach (var note in notes)
+        {
+            if (!string.IsNullOrWhiteSpace(note.Title))
+                writer.WriteElementString("maml", "title", MamlNs, note.Title.Trim());
+
+            writer.WriteStartElement("maml", "alert", MamlNs);
+            WriteParas(writer, note.Text);
+            writer.WriteEndElement(); // alert
+        }
+
+        writer.WriteEndElement(); // alertSet
     }
 
     private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue)
@@ -356,6 +387,38 @@ internal sealed class MamlHelpWriter
         {
             writer.WriteStartElement("maml", "para", MamlNs);
             writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+        }
+    }
+
+    private static void WriteIntroductionParas(XmlWriter writer, string? text)
+    {
+        if (text is null)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+            return;
+        }
+
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        var paras = normalized
+            .Split(new[] { "\n\n" }, StringSplitOptions.None)
+            .Select(para => para.Replace("\n", Environment.NewLine))
+            .ToArray();
+
+        if (paras.Length == 0)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
+            writer.WriteEndElement();
+            return;
+        }
+
+        foreach (var para in paras)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(para);
             writer.WriteEndElement();
         }
     }

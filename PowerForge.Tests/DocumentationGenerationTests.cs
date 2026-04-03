@@ -532,6 +532,350 @@ Invoke-Demo -Settings {
         }
     }
 
+    [Fact]
+    public void XmlDocCommentEnricher_EnrichesCommandNotes_AndTypeDescriptions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-alerts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+      <list type="alertSet">
+        <item>
+          <term>Important</term>
+          <description>
+            <para>Run this command only after validation.</para>
+            <para>It changes generated help output.</para>
+          </description>
+        </item>
+      </list>
+    </member>
+    <member name="T:Demo.Namespace.MyInputType">
+      <summary>Pipeline input object.</summary>
+    </member>
+    <member name="T:Demo.Namespace.MyOutputType">
+      <remarks>Structured output object.</remarks>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Synopsis = string.Empty,
+                        Description = string.Empty,
+                        Inputs = new List<DocumentationTypeHelp>
+                        {
+                            new() { Name = "MyInputType", ClrTypeName = "Demo.Namespace.MyInputType", Description = string.Empty }
+                        },
+                        Outputs = new List<DocumentationTypeHelp>
+                        {
+                            new() { Name = "MyOutputType", ClrTypeName = "Demo.Namespace.MyOutputType", Description = string.Empty }
+                        }
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var cmd = Assert.Single(payload.Commands);
+            var note = Assert.Single(cmd.Notes);
+            Assert.Equal("Important", note.Title);
+            Assert.Contains("Run this command only after validation.", note.Text);
+            Assert.Contains("It changes generated help output.", note.Text);
+
+            var input = Assert.Single(cmd.Inputs);
+            Assert.Equal("Pipeline input object.", input.Description);
+
+            var output = Assert.Single(cmd.Outputs);
+            Assert.Equal("Structured output object.", output.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void XmlDocCommentEnricher_PreservesLegacyTopLevelParas_AndExamplePrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-legacy-compat-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "LegacyModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.LegacyCommand">
+      <summary>Legacy synopsis.</summary>
+      <para>First legacy paragraph.</para>
+      <para>Second legacy paragraph.</para>
+      <example>
+        <summary>Render legacy output</summary>
+        <prefix>PS&gt; </prefix>
+        <code>
+          Get-LegacyThing `
+            -Name 'Alpha'
+        </code>
+        <para>Legacy example remarks.</para>
+      </example>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Get-LegacyThing",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.LegacyCommand",
+                        AssemblyPath = assemblyPath,
+                        Synopsis = string.Empty,
+                        Description = string.Empty
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var cmd = Assert.Single(payload.Commands);
+            Assert.Equal("Legacy synopsis.", cmd.Synopsis);
+            Assert.Contains("First legacy paragraph.", cmd.Description);
+            Assert.Contains("Second legacy paragraph.", cmd.Description);
+
+            var example = Assert.Single(cmd.Examples);
+            Assert.Equal("PS> ", example.Introduction);
+            Assert.Contains("Get-LegacyThing `", example.Code);
+            Assert.Contains("-Name 'Alpha'", example.Code);
+            Assert.Equal("Legacy example remarks.", example.Remarks);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void MamlHelpWriter_WritesCommandNotes_WhenPresent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-maml-notes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Thing",
+                        CommandType = "Cmdlet",
+                        Synopsis = "Does a thing.",
+                        Description = "Does a thing.",
+                        Notes = new List<DocumentationNoteHelp>
+                        {
+                            new() { Title = "Caution", Text = "This modifies generated help files." }
+                        }
+                    }
+                }
+            };
+
+            var writer = new MamlHelpWriter();
+            var path = writer.WriteExternalHelpFile(payload, "TestModule", root);
+            var doc = XDocument.Load(path);
+            XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
+
+            Assert.Contains(doc.Descendants(mamlNs + "title"), element => element.Value == "Caution");
+            Assert.Contains(doc.Descendants(mamlNs + "para"), element => element.Value == "This modifies generated help files.");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void MamlHelpWriter_WritesExampleIntroduction_WhenPresent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-maml-introduction-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Thing",
+                        CommandType = "Cmdlet",
+                        Synopsis = "Does a thing.",
+                        Description = "Does a thing.",
+                        Examples = new List<DocumentationExampleHelp>
+                        {
+                            new()
+                            {
+                                Title = "EXAMPLE 1",
+                                Introduction = "PS> ",
+                                Code = "Invoke-Thing -Name 'Alpha'",
+                                Remarks = "Runs the command."
+                            }
+                        }
+                    }
+                }
+            };
+
+            var writer = new MamlHelpWriter();
+            var path = writer.WriteExternalHelpFile(payload, "TestModule", root);
+            var doc = XDocument.Load(path);
+            XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
+            XNamespace devNs = "http://schemas.microsoft.com/maml/dev/2004/10";
+
+            Assert.Contains(doc.Descendants(mamlNs + "introduction"), element => element.Value.Contains("PS> ", StringComparison.Ordinal));
+            Assert.Contains(doc.Descendants(devNs + "code"), element => element.Value.Contains("Invoke-Thing -Name 'Alpha'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void GeneratedHelp_GetHelp_PreservesIntroductionAndNotes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-gethelp-integration-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "IntegrationProbeModule";
+            var psm1Path = Path.Combine(root, moduleName + ".psm1");
+            var psd1Path = Path.Combine(root, moduleName + ".psd1");
+            var culturePath = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(culturePath);
+
+            File.WriteAllText(psm1Path, """
+function Test-IntegrationProbe {
+    [CmdletBinding()]
+    param()
+
+    'ok'
+}
+
+Export-ModuleMember -Function Test-IntegrationProbe
+""");
+
+            File.WriteAllText(psd1Path, """
+@{
+    RootModule = 'IntegrationProbeModule.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '22222222-2222-2222-2222-222222222222'
+    FunctionsToExport = @('Test-IntegrationProbe')
+    CmdletsToExport = @()
+    AliasesToExport = @()
+    VariablesToExport = @()
+}
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = moduleName,
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Test-IntegrationProbe",
+                        CommandType = "Function",
+                        Synopsis = "Probe synopsis.",
+                        Description = "First paragraph." + Environment.NewLine + Environment.NewLine + "Second paragraph.",
+                        Notes = new List<DocumentationNoteHelp>
+                        {
+                            new() { Title = "Caution", Text = "First note para." + Environment.NewLine + Environment.NewLine + "Second note para." }
+                        },
+                        Examples = new List<DocumentationExampleHelp>
+                        {
+                            new()
+                            {
+                                Title = "----------  Example 1: Demo  ----------",
+                                Introduction = "PS> ",
+                                Code = "Test-IntegrationProbe",
+                                Remarks = "Example remarks line 1." + Environment.NewLine + Environment.NewLine + "Example remarks line 2."
+                            }
+                        }
+                    }
+                }
+            };
+
+            new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, culturePath);
+
+            var escapedManifestPath = psd1Path.Replace("'", "''", StringComparison.Ordinal);
+            var script = $"""
+$ErrorActionPreference = 'Stop'
+Import-Module '{escapedManifestPath}' -Force
+$full = Get-Help Test-IntegrationProbe -Full | Out-String -Width 200
+$examples = Get-Help Test-IntegrationProbe -Examples | Out-String -Width 200
+$exampleObject = (Get-Help Test-IntegrationProbe -Full).Examples.Example | ConvertTo-Json -Depth 8 -Compress
+Write-Output 'FULL>>'
+Write-Output $full
+Write-Output 'EXAMPLES>>'
+Write-Output $examples
+Write-Output 'OBJECT>>'
+Write-Output $exampleObject
+""";
+
+            var runner = new PowerShellRunner();
+            var result = runner.Run(PowerShellRunRequest.ForCommand(
+                commandText: script,
+                timeout: TimeSpan.FromSeconds(30),
+                preferPwsh: true,
+                workingDirectory: root));
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("Caution", result.StdOut, StringComparison.Ordinal);
+            Assert.Contains("PS> Test-IntegrationProbe", result.StdOut, StringComparison.Ordinal);
+            Assert.Contains("\"introduction\":[{\"Text\":\"PS> \"}]", result.StdOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static bool HasIsolatedLf(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;

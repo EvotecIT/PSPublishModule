@@ -27,14 +27,14 @@ Useful as a preprocessing step when producing merged/packed scripts.
 
 ### EXAMPLE 1
 ```powershell
-PS>Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'
+PS> Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'
 ```
 
 Writes the cleaned content to the destination file.
 
 ### EXAMPLE 2
 ```powershell
-PS>$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)
+PS> $clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)
 ```
 
 Returns the processed content when no destination file is specified.

@@ -29,14 +29,14 @@ When -ApprovedModules is specified, helper definitions are only accepted from th
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary
+PS> Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary
 ```
 
 Returns a list of functions referenced by the script that are not part of the script itself.
 
 ### EXAMPLE 2
 ```powershell
-PS>$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
+PS> $sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
 ```
 
 Returns a structured report that can include helper function bodies sourced from approved modules.

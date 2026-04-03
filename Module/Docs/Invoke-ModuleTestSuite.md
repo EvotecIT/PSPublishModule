@@ -24,21 +24,21 @@ For post-processing failures (e.g. emitting JSON summaries), combine it with Get
 
 ### EXAMPLE 1
 ```powershell
-PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'
+PS> Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'
 ```
 
 Runs tests under the module project folder, installs dependencies, and prints a summary.
 
 ### EXAMPLE 2
 ```powershell
-PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru
+PS> Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru
 ```
 
 Optimizes output for CI and returns a structured result object.
 
 ### EXAMPLE 3
 ```powershell
-PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary
+PS> Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary
 ```
 
 Produces a concise failure summary that can be used in CI logs.

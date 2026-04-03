@@ -22,14 +22,14 @@ Useful for optional dependencies where you want builds to succeed even if a tool
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
+PS> New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
 ```
 
 Prevents build failure when the module is not installed in the environment.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
+PS> New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
 ```
 
 ## PARAMETERS

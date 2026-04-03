@@ -240,13 +240,23 @@ try {
     $examples = @()
     foreach ($ex in $helpExamples) {
       $remarks = ''
+      $introduction = ''
       foreach ($r in @($ex.Remarks)) {
         $t = (GetText $r).Trim()
         if ($t) { if ($remarks) { $remarks += "`n`n" }; $remarks += $t }      
       }
+      foreach ($intro in @($ex.Introduction)) {
+        $text = GetText $intro
+        if ($null -eq $text) { continue }
+        $value = [string]$text
+        if ($value -eq '') { continue }
+        if ($introduction) { $introduction += "`n`n" }
+        $introduction += $value.Trim("`r", "`n")
+      }
 
       $examples += [ordered]@{
         title = $(try { [string]$ex.Title } catch { '' })
+        introduction = $introduction
         code = $(try { [string]$ex.Code } catch { '' })
         remarks = $remarks
       }
@@ -266,8 +276,12 @@ try {
       try { if ($help -and $help.InputTypes -and $help.InputTypes.InputType) { $helpInputTypes = @($help.InputTypes.InputType) } } catch { $helpInputTypes = @() }
       foreach ($it in $helpInputTypes) {
         $typeName = ''
+        $typeClrName = ''
         try { $typeName = [string]$it.Type.Name } catch { $typeName = '' }
         if (-not $typeName) { try { $typeName = [string]$it.Type } catch { $typeName = '' } }
+        try { $typeClrName = [string]$it.Type.Type.FullName } catch { $typeClrName = '' }
+        if (-not $typeClrName) { try { $typeClrName = [string]$it.Type.FullName } catch { $typeClrName = '' } }
+        if (-not $typeClrName) { $typeClrName = $typeName }
 
         $typeDesc = ''
         try {
@@ -277,9 +291,45 @@ try {
           }
         } catch { }
 
-        $inputs += [ordered]@{ name = $typeName; description = $typeDesc }
+        $inputs += [ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
       }
     } catch { }
+    if (-not $inputs -or $inputs.Count -eq 0) {
+      $seenInputs = @{}
+      foreach ($pn in $paramNames) {
+        $pmeta = $null
+        try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
+        if (-not $pmeta) { continue }
+
+        $supportsPipeline = $false
+        try {
+          foreach ($setName in @($pmeta.ParameterSets.Keys)) {
+            $psm = $pmeta.ParameterSets[$setName]
+            if ($psm -and ($psm.ValueFromPipeline -or $psm.ValueFromPipelineByPropertyName)) {
+              $supportsPipeline = $true
+              break
+            }
+          }
+        } catch { }
+
+        if (-not $supportsPipeline) { continue }
+
+        $inputTypeName = ''
+        $inputTypeClrName = ''
+        try {
+          if ($pmeta.ParameterType) {
+            $inputTypeName = [string]$pmeta.ParameterType.Name
+            $inputTypeClrName = [string]$pmeta.ParameterType.FullName
+          }
+        } catch { }
+
+        if (-not $inputTypeName) { continue }
+        $key = if ($inputTypeClrName) { $inputTypeClrName } else { $inputTypeName }
+        if ($seenInputs.ContainsKey($key)) { continue }
+        $seenInputs[$key] = $true
+        $inputs += [ordered]@{ name = $inputTypeName; clrTypeName = $inputTypeClrName; description = '' }
+      }
+    }
 
     $outputs = @()
     try {
@@ -287,8 +337,12 @@ try {
       try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
       foreach ($rv in $helpReturnValues) {
         $typeName = ''
+        $typeClrName = ''
         try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
         if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
+        try { $typeClrName = [string]$rv.Type.Type.FullName } catch { $typeClrName = '' }
+        if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
+        if (-not $typeClrName) { $typeClrName = $typeName }
 
         $typeDesc = ''
         try {
@@ -298,9 +352,30 @@ try {
           }
         } catch { }
 
-        $outputs += [ordered]@{ name = $typeName; description = $typeDesc }
+        $outputs += [ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
       }
     } catch { }
+    if (-not $outputs -or $outputs.Count -eq 0) {
+      $seenOutputs = @{}
+      try {
+        foreach ($outputType in @($c.OutputType)) {
+          $outputTypeName = ''
+          $outputTypeClrName = ''
+          try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
+          try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { $outputTypeClrName = '' }
+          if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' } }
+          if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { } }
+          if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
+          if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
+          if (-not $outputTypeName) { continue }
+
+          $key = if ($outputTypeClrName) { $outputTypeClrName } else { $outputTypeName }
+          if ($seenOutputs.ContainsKey($key)) { continue }
+          $seenOutputs[$key] = $true
+          $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = '' }
+        }
+      } catch { }
+    }
 
     $links = @()
     try {
@@ -331,6 +406,7 @@ try {
       inputs = @($inputs)
       outputs = @($outputs)
       relatedLinks = @($links)
+      notes = @()
     }
   }
 

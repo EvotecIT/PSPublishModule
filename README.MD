@@ -113,6 +113,18 @@ PowerForge can generate PowerShell help from a built module:
 - External help for `Get-Help` (MAML): `<culture>/<ModuleName>-help.xml` (default culture: `en-US`)
 - About topics (from `about_*.help.txt` / `about_*.txt`): converted to `Docs/About/*.md` and listed in `Docs/Readme.md`
 
+For binary modules, the recommended migration path is:
+
+- remove `MatejKafka.XmlDoc2CmdletDoc` package/targets from the `.csproj`
+- keep `<GenerateDocumentationFile>true</GenerateDocumentationFile>` in the `.csproj`
+- build the module normally so the compiler emits `<ModuleName>.xml` next to `<ModuleName>.dll`
+- let `New-ConfigurationDocumentation` / `Invoke-ModuleBuild` translate that compiler XML plus PowerShell metadata into Markdown help and spec-correct MAML help
+
+That means:
+
+- `<ModuleName>.xml` is the compiler XML documentation file used as input
+- `<culture>/<ModuleName>-help.xml` is the generated PowerShell external help file consumed by `Get-Help`
+
 To enable it in your build config:
 
 - `New-ConfigurationDocumentation -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
@@ -130,6 +142,18 @@ Authoring C# cmdlets (recommended):
 /// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\\Git\\MyModule'</code>
 /// </example>
 ```
+
+Supported XML authoring patterns for binary cmdlets include:
+
+- `<summary>` for synopsis
+- top-level cmdlet `<para>` blocks or `<remarks>` for long descriptions
+- parameter/property `<summary>` for parameter help
+- `<list type="alertSet">` for notes
+- `<example>` with `<summary>`, `<prefix>`, `<code>`, and `<para>` for examples
+- `<seealso>` for related links
+- CLR type XML docs for input/output descriptions
+
+PowerForge keeps the generated help spec-correct for both Windows PowerShell 5.1 and PowerShell 7+. Some host rendering quirks still exist in `Get-Help`, especially in Windows PowerShell 5.1 text output, but the generated MAML remains standards-aligned rather than being distorted to work around host-specific formatting.
 
 Authoring `about_*` topics:
 

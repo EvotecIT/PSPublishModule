@@ -25,14 +25,14 @@ This is useful for multi-project repositories where you want to quickly verify v
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ProjectVersion
+PS> Get-ProjectVersion
 ```
 
 Returns entries for discovered .csproj/.psd1/build scripts under the current folder.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'
+PS> Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
 
 Useful when a repository contains multiple modules/projects but you need only one.

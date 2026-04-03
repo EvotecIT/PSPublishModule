@@ -173,7 +173,7 @@ internal sealed class MarkdownHelpWriter
                 var ex = examples[i];
                 sb.AppendLine($"### EXAMPLE {i + 1}");
                 sb.AppendLine("```powershell");
-                sb.AppendLine(string.IsNullOrWhiteSpace(ex.Code) ? cmd.Name.Trim() : ex.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
+                sb.AppendLine(RenderMarkdownExampleCode(cmd.Name.Trim(), ex));
                 sb.AppendLine("```");
                 if (!string.IsNullOrWhiteSpace(ex.Remarks))
                 {
@@ -262,6 +262,34 @@ internal sealed class MarkdownHelpWriter
         }
         sb.AppendLine();
 
+        var notes = (cmd.Notes ?? Enumerable.Empty<DocumentationNoteHelp>())
+            .Where(n => n is not null && (!string.IsNullOrWhiteSpace(n.Title) || !string.IsNullOrWhiteSpace(n.Text)))
+            .ToArray();
+        if (notes.Length > 0)
+        {
+            sb.AppendLine("## NOTES");
+            sb.AppendLine();
+            foreach (var note in notes)
+            {
+                var title = string.IsNullOrWhiteSpace(note.Title) ? "Note" : note.Title.Trim();
+                var text = (note.Text ?? string.Empty).Replace("\r\n", "\n").Trim();
+                sb.AppendLine($"### {title}");
+                sb.AppendLine();
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    sb.AppendLine("- {{ Fill in the note }}");
+                }
+                else
+                {
+                    foreach (var paragraph in text.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        sb.AppendLine(paragraph.Replace("\n", Environment.NewLine).Trim());
+                        sb.AppendLine();
+                    }
+                }
+            }
+        }
+
         return sb.ToString();
     }
 
@@ -305,6 +333,30 @@ internal sealed class MarkdownHelpWriter
         => string.IsNullOrWhiteSpace(value) ? "False" : value.Trim();
 
     private static string Bool(bool value) => value ? "True" : "False";
+
+    private static string RenderMarkdownExampleCode(string commandName, DocumentationExampleHelp example)
+    {
+        var code = string.IsNullOrWhiteSpace(example.Code)
+            ? commandName
+            : example.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r');
+
+        var introduction = (example.Introduction ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Trim('\r', '\n');
+
+        if (string.IsNullOrWhiteSpace(introduction))
+            return code.Replace("\n", Environment.NewLine);
+
+        if (code.StartsWith(introduction, StringComparison.OrdinalIgnoreCase))
+            return code.Replace("\n", Environment.NewLine);
+
+        var lines = code.Split('\n');
+        if (lines.Length == 0)
+            return introduction;
+
+        lines[0] = introduction + lines[0];
+        return string.Join(Environment.NewLine, lines);
+    }
 
     private static string GetRelativeLink(string fromDirectory, string toPath)
     {
