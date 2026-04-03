@@ -195,6 +195,10 @@ Example Winget generation from staged assets:
 }
 ```
 
+- `InstallerUrlTemplate` tokens are URL-encoded automatically
+- `{FileName}` resolves to the staged filename after any `*NameTemplate` rewrite, not the raw internal artifact filename
+- set `NestedInstallerType` explicitly for archive-based installers when you want a reusable config that is not implicitly “portable zip only”
+
 - Plan or build preview executables only:
 
 ```powershell

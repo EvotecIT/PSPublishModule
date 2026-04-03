@@ -572,6 +572,8 @@ internal sealed class PowerForgeReleaseService
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing PackageVersion and no installer asset version was available.");
 
             var manifestPath = Path.Combine(outputPath, $"{package.PackageIdentifier}.yaml");
+            if (File.Exists(manifestPath))
+                throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
             var yaml = BuildWingetManifestYaml(winget, package, packageVersion!, installerEntries);
             File.WriteAllText(manifestPath, yaml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             manifestPaths.Add(manifestPath);
@@ -1643,13 +1645,14 @@ internal sealed class PowerForgeReleaseService
             ? winget.InstallerUrlTemplate
             : installer.UrlTemplate;
         var url = !string.IsNullOrWhiteSpace(urlTemplate)
-            ? urlTemplate!
-                .Replace("{PackageIdentifier}", package.PackageIdentifier)
-                .Replace("{PackageVersion}", version)
-                .Replace("{FileName}", Uri.EscapeDataString(fileName))
-                .Replace("{Target}", asset.Target ?? string.Empty)
-                .Replace("{Runtime}", asset.Runtime ?? string.Empty)
-                .Replace("{Framework}", asset.Framework ?? string.Empty)
+            ? ApplyWingetUrlTemplate(
+                urlTemplate!,
+                package.PackageIdentifier,
+                version,
+                fileName,
+                asset.Target,
+                asset.Runtime,
+                asset.Framework)
             : ResolveGitHubReleaseDownloadUrl(asset, toolGitHubReleases);
         if (string.IsNullOrWhiteSpace(url))
             throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' requires InstallerUrlTemplate, installer UrlTemplate, or matching PublishToolGitHub release output.");
@@ -1681,7 +1684,7 @@ internal sealed class PowerForgeReleaseService
             return null;
 
         var fileName = Path.GetFileName(asset.StagedPath ?? asset.Path);
-        return $"https://github.com/{release.Owner}/{release.Repository}/releases/download/{release.TagName}/{Uri.EscapeDataString(fileName)}";
+        return $"https://github.com/{release.Owner}/{release.Repository}/releases/download/{Uri.EscapeDataString(release.TagName)}/{Uri.EscapeDataString(fileName)}";
     }
 
     private static string BuildWingetManifestYaml(
@@ -1708,8 +1711,13 @@ internal sealed class PowerForgeReleaseService
         AppendYamlArray(builder, "Platform", package.Platform);
         AppendOptionalYamlLine(builder, "MinimumOSVersion", package.MinimumOSVersion);
         var installerType = installers[0].InstallerType;
-        if (installers.Any(entry => !string.Equals(entry.InstallerType, installerType, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values, which is not supported in singleton manifests.");
+        var distinctInstallerTypes = installers
+            .Select(entry => entry.InstallerType)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctInstallerTypes.Length > 1)
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values ({string.Join(", ", distinctInstallerTypes)}), which is not supported in singleton manifests.");
         AppendYamlLine(builder, "InstallerType", installerType);
         builder.AppendLine("Installers:");
         foreach (var installer in installers)
@@ -1764,6 +1772,24 @@ internal sealed class PowerForgeReleaseService
         builder.Append(key);
         builder.Append(": ");
         builder.AppendLine(EscapeYamlScalar(value));
+    }
+
+    private static string ApplyWingetUrlTemplate(
+        string template,
+        string packageIdentifier,
+        string packageVersion,
+        string fileName,
+        string? target,
+        string? runtime,
+        string? framework)
+    {
+        return template
+            .Replace("{PackageIdentifier}", Uri.EscapeDataString(packageIdentifier))
+            .Replace("{PackageVersion}", Uri.EscapeDataString(packageVersion))
+            .Replace("{FileName}", Uri.EscapeDataString(fileName))
+            .Replace("{Target}", Uri.EscapeDataString(target ?? string.Empty))
+            .Replace("{Runtime}", Uri.EscapeDataString(runtime ?? string.Empty))
+            .Replace("{Framework}", Uri.EscapeDataString(framework ?? string.Empty));
     }
 
     private static string EscapeYamlScalar(string value)

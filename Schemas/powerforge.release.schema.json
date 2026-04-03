@@ -47,7 +47,10 @@
       "properties": {
         "Enabled": { "type": "boolean" },
         "OutputPath": { "type": [ "string", "null" ] },
-        "InstallerUrlTemplate": { "type": [ "string", "null" ] },
+        "InstallerUrlTemplate": {
+          "type": [ "string", "null" ],
+          "description": "URL template for generated installer links. Tokens are URL-encoded and {FileName} uses the staged filename after any name-template rewrite."
+        },
         "ManifestVersion": { "type": [ "string", "null" ] },
         "PackageLocale": { "type": [ "string", "null" ] },
         "Packages": {
@@ -85,7 +88,10 @@
                     "Framework": { "type": [ "string", "null" ] },
                     "Architecture": { "type": [ "string", "null" ] },
                     "InstallerType": { "type": [ "string", "null" ] },
-                    "NestedInstallerType": { "type": [ "string", "null" ] },
+                    "NestedInstallerType": {
+                      "type": [ "string", "null" ],
+                      "description": "Optional nested installer type for archive-based installers. Set this explicitly for reusable configs instead of relying on portable-only assumptions."
+                    },
                     "RelativeFilePath": { "type": [ "string", "null" ] },
                     "UrlTemplate": { "type": [ "string", "null" ] }
                   }
