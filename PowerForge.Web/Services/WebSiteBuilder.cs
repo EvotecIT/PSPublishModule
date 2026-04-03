@@ -103,6 +103,7 @@ public static partial class WebSiteBuilder
             Language = language,
             LanguageAsRoot = languageAsRoot
         };
+        WebSocialCardGenerator.ClearRemoteImageCache();
         BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
         BuildRootPathScope.Value = plan.RootPath;
         BuildProgressSink.Value = ReportProgress;

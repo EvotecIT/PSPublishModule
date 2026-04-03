@@ -18,7 +18,7 @@ internal static partial class WebSocialCardGenerator
     {
         var rasterOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: false);
         var state = CreateState(rasterOptions);
-        var svg = RenderSvg(rasterOptions);
+        var svg = RenderSvg(state);
         if (string.IsNullOrWhiteSpace(svg))
             return null;
 
@@ -48,6 +48,11 @@ internal static partial class WebSocialCardGenerator
     internal static string RenderSvg(SocialCardRenderOptions options)
     {
         var state = CreateState(options);
+        return RenderSvg(state);
+    }
+
+    private static string RenderSvg(SocialCardRenderState state)
+    {
         var svg = new StringBuilder();
         svg.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" xmlns:xlink=""http://www.w3.org/1999/xlink"" width=""{state.Width}"" height=""{state.Height}"" viewBox=""0 0 {state.Width} {state.Height}"">");
         svg.AppendLine($@"  <!-- layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
@@ -171,7 +176,7 @@ internal static partial class WebSocialCardGenerator
         };
     }
 
-    internal static bool IsRenderableImageSource(string? source, bool allowRemoteMediaFetch)
+    internal static bool IsRenderableImageSource(string? source, bool allowRemoteMediaFetch, Func<string, byte[]?>? remoteFetcher = null)
     {
         if (string.IsNullOrWhiteSpace(source))
             return false;
@@ -180,7 +185,7 @@ internal static partial class WebSocialCardGenerator
             return true;
 
         if (IsRemoteMediaSource(source))
-            return allowRemoteMediaFetch;
+            return GetRemoteImageBytes(source, allowRemoteMediaFetch, remoteFetcher) is { Length: > 0 };
 
         if (Uri.TryCreate(source, UriKind.Absolute, out var absoluteUri) && absoluteUri.IsFile)
             return File.Exists(absoluteUri.LocalPath);
