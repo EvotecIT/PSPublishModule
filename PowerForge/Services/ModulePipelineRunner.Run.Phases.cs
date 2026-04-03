@@ -714,7 +714,7 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
+    internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
     {
         var generator = new DeliveryCommandGenerator(_logger);
         var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
