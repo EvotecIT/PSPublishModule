@@ -80,14 +80,27 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
 
-        var colorSchemeForHash = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
+        var badge = ResolveSocialBadge(item, routeForSlug);
+        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
+        var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
+        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
+        var colorScheme = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
+        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item));
+        var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
+            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
+            : string.Empty;
         var hashInput = string.Join("|", new[]
         {
             routeForSlug,
             title ?? string.Empty,
             description ?? string.Empty,
             siteName ?? string.Empty,
-            colorSchemeForHash
+            badge,
+            styleKey,
+            variantKey,
+            colorScheme,
+            logoSource,
+            inlineImageSource
         });
         var hash = ComputeSocialHash(hashInput);
         var fileName = $"{routeSlug}-{hash}.png";
@@ -96,11 +109,6 @@ public static partial class WebSiteBuilder
         if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
             return string.Empty;
 
-        var badge = ResolveSocialBadge(item, routeForSlug);
-        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
-        var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
-        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
-        var colorScheme = ResolveSocialCardColorScheme(spec, item);
         var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
         var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
         {
@@ -115,10 +123,8 @@ public static partial class WebSiteBuilder
             VariantKey = variantKey,
             ColorScheme = colorScheme,
             ThemeTokens = themeTokens,
-            LogoDataUri = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item)),
-            InlineImageDataUri = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
-                ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
-                : string.Empty
+            LogoDataUri = logoSource,
+            InlineImageDataUri = inlineImageSource
         });
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
@@ -543,7 +549,7 @@ public static partial class WebSiteBuilder
         return string.Equals(styleKey, "blog", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate)
+    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
             return string.Empty;
@@ -553,7 +559,7 @@ public static partial class WebSiteBuilder
             return trimmed;
         if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return string.Empty;
+            return trimmed;
 
         var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed);
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))

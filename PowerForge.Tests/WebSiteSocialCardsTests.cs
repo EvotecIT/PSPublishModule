@@ -261,6 +261,24 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void ResolveSocialCardAssetDataUri_PreservesRemoteUrls()
+    {
+        var spec = BuildPagesSpec();
+        var item = new ContentItem
+        {
+            SourcePath = Path.Combine(Path.GetTempPath(), "index.md"),
+            Collection = "pages"
+        };
+
+        var resolved = WebSiteBuilder.ResolveSocialCardAssetDataUri(
+            spec,
+            item,
+            "https://cdn.example.test/logo.svg");
+
+        Assert.Equal("https://cdn.example.test/logo.svg", resolved);
+    }
+
+    [Fact]
     public void Build_DoesNotAutoGenerateCards_ForDocsPages_UnlessOverridden()
     {
         var root = CreateTempRoot("pf-web-social-generated-scope-");

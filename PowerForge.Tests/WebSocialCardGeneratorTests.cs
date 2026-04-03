@@ -235,6 +235,53 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void RenderSvg_DoesNotEmbedMediaReferences_WhenDisabled()
+    {
+        const string dataUri = "data:image/svg+xml;base64,PHN2Zy8+";
+
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "OfficeIMO docs walkthrough",
+            Description = "Generated docs card with inline hero media.",
+            Eyebrow = "OfficeIMO",
+            Badge = "BLOG",
+            FooterLabel = "/blog/officeimo-docs",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "blog",
+            VariantKey = "inline-image",
+            LogoDataUri = dataUri,
+            InlineImageDataUri = dataUri,
+            EmbedReferencedMediaInSvg = false
+        });
+
+        Assert.Contains("layout:inline-image", svg, StringComparison.Ordinal);
+        Assert.DoesNotContain($"href=\"{dataUri}\"", svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderSvg_AllowsRemoteLogoReferences_WhenProvided()
+    {
+        const string logoUrl = "https://cdn.example.test/logo.svg";
+
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "TestimoX - Active Directory Security",
+            Description = "Security assessment suite for Active Directory.",
+            Eyebrow = "TestimoX",
+            Badge = "HOME",
+            FooterLabel = "/",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "home",
+            VariantKey = "spotlight",
+            LogoDataUri = logoUrl
+        });
+
+        Assert.Contains(logoUrl, svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AdaptTitleSize_ReducesFontSize_WhenTitleWouldTruncate()
     {
         // Very long title that cannot fit in 2 lines at 60px on a 400px-wide area

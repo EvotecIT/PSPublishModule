@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text;
 using ImageMagick;
 
@@ -5,10 +6,16 @@ namespace PowerForge.Web;
 
 internal static partial class WebSocialCardGenerator
 {
+    private static readonly HttpClient SocialImageHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(10)
+    };
+
     internal static byte[]? RenderPng(SocialCardRenderOptions options)
     {
-        var state = CreateState(options);
-        var svg = RenderSvg(options);
+        var rasterOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: false);
+        var state = CreateState(rasterOptions);
+        var svg = RenderSvg(rasterOptions);
         if (string.IsNullOrWhiteSpace(svg))
             return null;
 
@@ -122,6 +129,7 @@ internal static partial class WebSocialCardGenerator
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
+            EmbedReferencedMediaInSvg = options.EmbedReferencedMediaInSvg,
             CtaLabel = ResolveCtaLabel(styleKey, normalizedBadge),
             FrameInset = frameInset,
             PanelInset = panelInset,
@@ -168,6 +176,27 @@ internal static partial class WebSocialCardGenerator
         if (string.Equals(styleKey, "docs", StringComparison.OrdinalIgnoreCase))
             return "Read Docs";
         return "Learn More";
+    }
+
+    private static SocialCardRenderOptions CloneRenderOptions(SocialCardRenderOptions options, bool embedReferencedMediaInSvg)
+    {
+        return new SocialCardRenderOptions
+        {
+            Title = options.Title,
+            Description = options.Description,
+            Eyebrow = options.Eyebrow,
+            Badge = options.Badge,
+            FooterLabel = options.FooterLabel,
+            Width = options.Width,
+            Height = options.Height,
+            StyleKey = options.StyleKey,
+            VariantKey = options.VariantKey,
+            ThemeTokens = options.ThemeTokens,
+            LogoDataUri = options.LogoDataUri,
+            InlineImageDataUri = options.InlineImageDataUri,
+            ColorScheme = options.ColorScheme,
+            EmbedReferencedMediaInSvg = embedReferencedMediaInSvg
+        };
     }
 
     // ── Defs & Background ─────────────────────────────────────────────
@@ -248,12 +277,15 @@ internal static partial class WebSocialCardGenerator
     {
         var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
         svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{size}"" height=""{size}"" rx=""{radius}"" fill=""{state.Palette.Surface}""/>");
-        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
+        if (!string.IsNullOrWhiteSpace(state.LogoDataUri) && state.EmbedReferencedMediaInSvg)
         {
             var inset = Math.Max(6, size / 8);
             svg.AppendLine($@"  <image href=""{EscapeXml(state.LogoDataUri)}"" xlink:href=""{EscapeXml(state.LogoDataUri)}"" x=""{x + inset}"" y=""{y + inset}"" width=""{Math.Max(12, size - (inset * 2))}"" height=""{Math.Max(12, size - (inset * 2))}"" preserveAspectRatio=""xMidYMid meet""/>");
             return;
         }
+
+        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
+            return;
 
         var monogram = BuildMonogram(state.Eyebrow, state.Badge);
         svg.AppendLine($@"  <text x=""{x + (size / 2)}"" y=""{y + (size / 2)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{Math.Max(18, size * 2 / 5)}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
@@ -432,7 +464,8 @@ internal static partial class WebSocialCardGenerator
         // Inline image on right
         var imgRadius = GetScaledPixels(state.Width, state.Height, 12, 6);
         svg.AppendLine($@"  <rect x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" rx=""{imgRadius}"" fill=""{state.Palette.Surface}""/>");
-        svg.AppendLine($@"  <image href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" xlink:href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" preserveAspectRatio=""xMidYMid slice"" clip-path=""url(#mediaClip)""/>");
+        if (state.EmbedReferencedMediaInSvg)
+            svg.AppendLine($@"  <image href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" xlink:href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" preserveAspectRatio=""xMidYMid slice"" clip-path=""url(#mediaClip)""/>");
     }
 
     // ── Layout: Connect (Contact) ──────────────────────────────────────
@@ -693,7 +726,7 @@ internal static partial class WebSocialCardGenerator
             string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
         {
             var media = GetInlineMediaFrame(state);
-            using var image = TryLoadDataUriImage(state.InlineImageDataUri, media.Width, media.Height);
+            using var image = TryLoadImageSource(state.InlineImageDataUri, media.Width, media.Height);
             if (image is not null)
             {
                 image.Resize(new MagickGeometry((uint)media.Width, (uint)media.Height) { FillArea = true });
@@ -709,7 +742,7 @@ internal static partial class WebSocialCardGenerator
         if (frame is null)
             return;
 
-        using var logo = TryLoadDataUriImage(state.LogoDataUri, frame.Width, frame.Height);
+        using var logo = TryLoadImageSource(state.LogoDataUri, frame.Width, frame.Height);
         if (logo is null)
             return;
 
@@ -753,37 +786,69 @@ internal static partial class WebSocialCardGenerator
         return null;
     }
 
-    private static MagickImage? TryLoadDataUriImage(string dataUri, int widthHint, int heightHint)
+    private static MagickImage? TryLoadImageSource(string source, int widthHint, int heightHint)
     {
         try
         {
-            var commaIndex = dataUri.IndexOf(',', StringComparison.Ordinal);
-            if (commaIndex <= 0)
+            if (string.IsNullOrWhiteSpace(source))
                 return null;
 
-            var metadata = dataUri[..commaIndex];
-            var payload = dataUri[(commaIndex + 1)..];
-            var isBase64 = metadata.EndsWith(";base64", StringComparison.OrdinalIgnoreCase);
-            var bytes = isBase64
-                ? Convert.FromBase64String(payload)
-                : Encoding.UTF8.GetBytes(Uri.UnescapeDataString(payload));
-
-            if (metadata.Contains("image/svg+xml", StringComparison.OrdinalIgnoreCase))
+            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                return new MagickImage(bytes, new MagickReadSettings
-                {
-                    Width = (uint)Math.Max(1, widthHint),
-                    Height = (uint)Math.Max(1, heightHint),
-                    Format = MagickFormat.Svg
-                });
+                using var response = SocialImageHttpClient.GetAsync(source).GetAwaiter().GetResult();
+                if (!response.IsSuccessStatusCode)
+                    return null;
+
+                var bytes = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                return CreateMagickImage(bytes, source, widthHint, heightHint);
             }
 
-            return new MagickImage(bytes);
+            var commaIndex = source.IndexOf(',', StringComparison.Ordinal);
+            if (commaIndex > 0 && source.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                var metadata = source[..commaIndex];
+                var payload = source[(commaIndex + 1)..];
+                var isBase64 = metadata.EndsWith(";base64", StringComparison.OrdinalIgnoreCase);
+                var bytes = isBase64
+                    ? Convert.FromBase64String(payload)
+                    : Encoding.UTF8.GetBytes(Uri.UnescapeDataString(payload));
+
+                return CreateMagickImage(bytes, metadata, widthHint, heightHint);
+            }
+
+            if (Uri.TryCreate(source, UriKind.Absolute, out var absoluteUri) &&
+                absoluteUri.IsFile &&
+                File.Exists(absoluteUri.LocalPath))
+            {
+                return new MagickImage(absoluteUri.LocalPath);
+            }
+
+            if (File.Exists(source))
+                return new MagickImage(source);
+
+            return null;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static MagickImage CreateMagickImage(byte[] bytes, string sourceHint, int widthHint, int heightHint)
+    {
+        if (sourceHint.Contains("image/svg+xml", StringComparison.OrdinalIgnoreCase) ||
+            sourceHint.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MagickImage(bytes, new MagickReadSettings
+            {
+                Width = (uint)Math.Max(1, widthHint),
+                Height = (uint)Math.Max(1, heightHint),
+                Format = MagickFormat.Svg
+            });
+        }
+
+        return new MagickImage(bytes);
     }
 
     // ── Types ──────────────────────────────────────────────────────────
@@ -804,6 +869,7 @@ internal static partial class WebSocialCardGenerator
         public string? InlineImageDataUri { get; set; }
         /// <summary>"light", "dark", or null (auto = dark).</summary>
         public string? ColorScheme { get; set; }
+        public bool EmbedReferencedMediaInSvg { get; set; } = true;
     }
 
     private sealed class SocialCardRenderState
@@ -828,6 +894,7 @@ internal static partial class WebSocialCardGenerator
         public required int SafeMarginX { get; init; }
         public required int SafeMarginY { get; init; }
         public required string CtaLabel { get; init; }
+        public required bool EmbedReferencedMediaInSvg { get; init; }
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; init; }
         public string? LogoDataUri { get; init; }
         public string? InlineImageDataUri { get; init; }
