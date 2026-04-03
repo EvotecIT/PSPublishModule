@@ -46,7 +46,8 @@
 
   function normalizePath(path) {
     if (!path) return '/';
-    return path.length > 1 && path.endsWith('/') ? path : path + '/';
+    if (path === '/') return '/';
+    return path.endsWith('/') ? path : path + '/';
   }
 
   function getApiDocsBasePath() {
