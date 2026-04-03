@@ -600,6 +600,57 @@ public class WebSiteSocialCardsTests
         }
     }
 
+    [Fact]
+    public void ComputeThemeTokenFingerprint_IsStableForEquivalentTokens_AndChangesWhenTokensChange()
+    {
+        var first = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["frameRadius"] = "24px",
+                ["contentPadding"] = "32px"
+            },
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["background"] = "#111111",
+                ["text"] = "#fefefe"
+            }
+        };
+        var reordered = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["text"] = "#fefefe",
+                ["background"] = "#111111"
+            },
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["contentPadding"] = "32px",
+                ["frameRadius"] = "24px"
+            }
+        };
+        var changed = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["frameRadius"] = "24px",
+                ["contentPadding"] = "32px"
+            },
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["background"] = "#222222",
+                ["text"] = "#fefefe"
+            }
+        };
+
+        var firstFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(first);
+        var reorderedFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(reordered);
+        var changedFingerprint = WebSiteBuilder.ComputeThemeTokenFingerprint(changed);
+
+        Assert.Equal(firstFingerprint, reorderedFingerprint);
+        Assert.NotEqual(firstFingerprint, changedFingerprint);
+    }
+
     private static SiteSpec BuildPagesSpec()
     {
         return new SiteSpec

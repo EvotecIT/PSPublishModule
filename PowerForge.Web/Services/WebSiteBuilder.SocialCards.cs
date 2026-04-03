@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -90,6 +91,8 @@ public static partial class WebSiteBuilder
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
             : string.Empty;
+        var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
+        var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var hashInput = string.Join("|", new[]
         {
             routeForSlug,
@@ -101,6 +104,7 @@ public static partial class WebSiteBuilder
             variantKey,
             colorScheme,
             allowRemoteMediaFetch ? "remote-media-enabled" : "remote-media-disabled",
+            themeTokenFingerprint,
             logoSource,
             inlineImageSource
         });
@@ -110,8 +114,6 @@ public static partial class WebSiteBuilder
         var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
             return string.Empty;
-
-        var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
         var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
         {
             Title = title,
@@ -371,6 +373,57 @@ public static partial class WebSiteBuilder
         var bytes = System.Text.Encoding.UTF8.GetBytes(input ?? string.Empty);
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant()[..10];
+    }
+
+    internal static string ComputeThemeTokenFingerprint(IReadOnlyDictionary<string, object?>? themeTokens)
+    {
+        if (themeTokens is null || themeTokens.Count == 0)
+            return string.Empty;
+
+        var canonical = NormalizeThemeTokenValue(themeTokens);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(canonical);
+        return ComputeSocialHash(serialized);
+    }
+
+    private static object? NormalizeThemeTokenValue(object? value)
+    {
+        if (value is null)
+            return null;
+
+        if (value is System.Text.Json.JsonElement element)
+            return NormalizeThemeTokenValue(ConvertJsonElement(element));
+
+        if (value is IReadOnlyDictionary<string, object?> map)
+        {
+            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var pair in map.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+                normalized[pair.Key] = NormalizeThemeTokenValue(pair.Value);
+            return normalized;
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key is null)
+                    continue;
+
+                normalized[Convert.ToString(entry.Key) ?? string.Empty] = NormalizeThemeTokenValue(entry.Value);
+            }
+
+            return normalized;
+        }
+
+        if (value is IEnumerable enumerable && value is not string)
+        {
+            var list = new List<object?>();
+            foreach (var item in enumerable)
+                list.Add(NormalizeThemeTokenValue(item));
+            return list;
+        }
+
+        return value;
     }
 
     private static bool WriteAllBytesIfChanged(string path, byte[] content)
