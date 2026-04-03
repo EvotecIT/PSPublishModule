@@ -317,13 +317,18 @@ $@"<!doctype html>
         }
     }
 
-    private static void ValidateCssContract(string outputPath, WebApiDocsOptions options, List<string> warnings)
+    private static void ValidateCssContract(
+        string outputPath,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, ApiTypeUsageModel> typeUsageMap,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
+        List<string> warnings)
     {
         if (options is null || warnings is null) return;
         if (string.IsNullOrWhiteSpace(options.CssHref)) return;
 
         var template = (options.Template ?? string.Empty).Trim().ToLowerInvariant();
-        var required = template is "docs" or "sidebar" ? RequiredSelectorsDocs : RequiredSelectorsSimple;
+        var required = GetRequiredCssSelectors(template, options, typeUsageMap, typeRelatedContentMap);
         if (required.Length == 0) return;
 
         var hrefs = SplitCssHrefs(options.CssHref);
@@ -378,6 +383,43 @@ $@"<!doctype html>
         var preview = string.Join(", ", missing.Take(6));
         var more = missing.Length > 6 ? $" (+{missing.Length - 6} more)" : string.Empty;
         warnings.Add($"API docs CSS contract: combined CSS ({string.Join(", ", checkedHrefs)}) is missing expected selectors: {preview}{more}.");
+    }
+
+    private static string[] GetRequiredCssSelectors(
+        string template,
+        WebApiDocsOptions options,
+        IReadOnlyDictionary<string, ApiTypeUsageModel> typeUsageMap,
+        IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap)
+    {
+        if (template is not ("docs" or "sidebar"))
+            return RequiredSelectorsSimple;
+
+        var selectors = new List<string>(RequiredSelectorsDocs);
+        var suite = BuildApiSuiteContext(options, options.BaseUrl);
+        if (suite?.HasEntries == true)
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsSuite);
+
+        if (typeUsageMap is not null && typeUsageMap.Values.Any(static usage => usage?.HasEntries == true))
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsUsage);
+
+        if (typeRelatedContentMap is not null && typeRelatedContentMap.Values.Any(static relatedContent => relatedContent?.HasEntries == true))
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsRelatedContent);
+
+        return selectors.ToArray();
+    }
+
+    private static void AddRequiredCssSelectors(List<string> selectors, IReadOnlyList<string> group)
+    {
+        if (selectors is null || group is null)
+            return;
+
+        foreach (var selector in group)
+        {
+            if (string.IsNullOrWhiteSpace(selector) || selectors.Contains(selector, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            selectors.Add(selector);
+        }
     }
 
     private static string BuildDescriptionMetaTag(string description)

@@ -1195,6 +1195,9 @@ public class WebPipelineRunnerApiDocsPreflightTests
             Assert.Equal(1, types.GetProperty("quickStartRelatedContent").GetProperty("covered").GetInt32());
             Assert.Equal(50d, types.GetProperty("quickStartRelatedContent").GetProperty("percent").GetDouble());
             Assert.Equal(1, types.GetProperty("quickStartMissingRelatedContent").GetProperty("count").GetInt32());
+            var projects = suiteCoverage.RootElement.GetProperty("projects");
+            Assert.Equal("./testimox/api/coverage.json", projects[0].GetProperty("coveragePath").GetString());
+            Assert.Equal("./adplayground/api/coverage.json", projects[1].GetProperty("coveragePath").GetString());
             Assert.Contains(
                 "Invoke-ADPlaygroundAction",
                 types.GetProperty("quickStartMissingRelatedContent").GetProperty("types").EnumerateArray().Select(static item => item.GetString()).Where(static item => !string.IsNullOrWhiteSpace(item)));

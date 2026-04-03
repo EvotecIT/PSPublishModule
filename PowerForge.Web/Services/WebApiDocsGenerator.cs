@@ -332,36 +332,6 @@ public static partial class WebApiDocsGenerator
         ".type-toc",
         ".type-toc-header",
         ".type-toc-toggle",
-        ".api-suite-switcher",
-        ".api-suite-list",
-        ".api-suite-item",
-        ".api-suite-overview",
-        ".api-suite-grid",
-        ".api-suite-card",
-        ".api-suite-search",
-        ".api-suite-search-filter",
-        ".api-suite-search-input",
-        ".api-suite-search-results",
-        ".api-suite-search-result",
-        ".api-suite-coverage-summary",
-        ".api-suite-coverage-card",
-        ".api-suite-artifact",
-        ".api-suite-narrative",
-        ".api-suite-narrative-section",
-        ".api-suite-narrative-item",
-        ".api-suite-narrative-kind",
-        ".api-suite-related-content",
-        ".api-suite-related-content-list",
-        ".api-suite-related-content-item",
-        ".api-suite-related-content-kind",
-        ".type-usage",
-        ".usage-group",
-        ".usage-list",
-        ".type-related-content",
-        ".related-content-list",
-        ".related-content-item",
-        ".related-content-kind",
-        ".member-related-content",
         ".filter-button",
         ".member-card",
         ".member-signature",
@@ -373,6 +343,29 @@ public static partial class WebApiDocsGenerator
         ".member-card pre::-webkit-scrollbar",
         ".member-card pre::-webkit-scrollbar-track",
         ".member-card pre::-webkit-scrollbar-thumb"
+    };
+    private static readonly string[] RequiredSelectorsDocsSuite =
+    {
+        ".api-suite-switcher",
+        ".api-suite-list",
+        ".api-suite-item",
+        ".api-suite-overview",
+        ".api-suite-grid",
+        ".api-suite-card"
+    };
+    private static readonly string[] RequiredSelectorsDocsUsage =
+    {
+        ".type-usage",
+        ".usage-group",
+        ".usage-list"
+    };
+    private static readonly string[] RequiredSelectorsDocsRelatedContent =
+    {
+        ".type-related-content",
+        ".related-content-list",
+        ".related-content-item",
+        ".related-content-kind",
+        ".member-related-content"
     };
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>
@@ -802,7 +795,7 @@ public static partial class WebApiDocsGenerator
         if (format is "hybrid" or "html" or "both")
         {
             GenerateHtml(outputPath, options, types, typeUsageMap, typeRelatedContentMap, warnings);
-            ValidateCssContract(outputPath, options, warnings);
+            ValidateCssContract(outputPath, options, typeUsageMap, typeRelatedContentMap, warnings);
         }
 
         AppendSourceCoverageWarnings(types, warnings);

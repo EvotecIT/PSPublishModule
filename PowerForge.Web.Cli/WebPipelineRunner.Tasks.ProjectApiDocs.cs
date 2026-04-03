@@ -1415,7 +1415,7 @@ internal static partial class WebPipelineRunner
                 ["generatedAtUtc"] = DateTime.UtcNow.ToString("O"),
                 ["suite"] = BuildProjectApiSuiteMetadataNode(suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries),
                 ["projectCount"] = coverageDocuments.Count,
-                ["projects"] = new JsonArray(coverageDocuments.Select(static item => BuildProjectCoverageProjectNode(item.Prepared, item.Document.RootElement)).Cast<JsonNode?>().ToArray()),
+                ["projects"] = new JsonArray(coverageDocuments.Select(item => BuildProjectCoverageProjectNode(item.Prepared, item.Document.RootElement, suiteCoveragePath)).Cast<JsonNode?>().ToArray()),
                 ["types"] = BuildAggregatedCoverageGroup(coverageDocuments.Select(static item => item.Document.RootElement).ToArray(), "types"),
                 ["members"] = BuildAggregatedMemberCoverageGroup(coverageDocuments.Select(static item => item.Document.RootElement).ToArray()),
                 ["source"] = BuildAggregatedSourceCoverageGroup(coverageDocuments.Select(static item => item.Document.RootElement).ToArray()),
@@ -1893,13 +1893,14 @@ internal static partial class WebPipelineRunner
         };
     }
 
-    private static JsonObject BuildProjectCoverageProjectNode(ProjectApiDocsPreparedInput prepared, JsonElement root)
+    private static JsonObject BuildProjectCoverageProjectNode(ProjectApiDocsPreparedInput prepared, JsonElement root, string suiteCoveragePath)
     {
+        var projectCoveragePath = Path.Combine(prepared.OutputPath, "coverage.json");
         return new JsonObject
         {
             ["id"] = prepared.SuiteEntry.Id,
             ["label"] = prepared.SuiteEntry.Label,
-            ["coveragePath"] = Path.Combine(prepared.OutputPath, "coverage.json"),
+            ["coveragePath"] = BuildSuiteArtifactRelativePath(suiteCoveragePath, projectCoveragePath),
             ["typeCount"] = ReadIntByPath(root, "types.count"),
             ["memberCount"] = ReadIntByPath(root, "members.count"),
             ["commandCount"] = ReadIntByPath(root, "powershell.commandCount")
