@@ -371,6 +371,34 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void GetRemoteImageBytes_UsesCaseSensitiveCacheKeys()
+    {
+        WebSocialCardGenerator.ClearRemoteImageCache();
+        var calls = 0;
+
+        byte[]? Fetcher(string source)
+        {
+            calls++;
+            return Encoding.UTF8.GetBytes(source);
+        }
+
+        var upper = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/Logo.png",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+        var lower = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.png",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+
+        Assert.Equal(2, calls);
+        Assert.NotNull(upper);
+        Assert.NotNull(lower);
+        Assert.False(upper!.SequenceEqual(lower!));
+        WebSocialCardGenerator.ClearRemoteImageCache();
+    }
+
+    [Fact]
     public void RenderSvg_FallsBackToMonogram_WhenRemoteLogoCannotBeRendered()
     {
         var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions

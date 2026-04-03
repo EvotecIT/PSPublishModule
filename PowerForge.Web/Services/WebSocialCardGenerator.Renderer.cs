@@ -12,7 +12,7 @@ internal static partial class WebSocialCardGenerator
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
-    private static readonly ConcurrentDictionary<string, Lazy<byte[]>> RemoteImageByteCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, Lazy<byte[]>> RemoteImageByteCache = new(StringComparer.Ordinal);
 
     internal static byte[]? RenderPng(SocialCardRenderOptions options)
     {

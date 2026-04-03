@@ -100,6 +100,7 @@ public static partial class WebSiteBuilder
             styleKey,
             variantKey,
             colorScheme,
+            allowRemoteMediaFetch ? "remote-media-enabled" : "remote-media-disabled",
             logoSource,
             inlineImageSource
         });
