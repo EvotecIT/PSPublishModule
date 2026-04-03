@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Xunit;
 using PowerForge.Web;
 
@@ -1081,6 +1082,87 @@ public class WebApiDocsGeneratorContractTests
             Assert.Contains(result.Warnings, w =>
                 w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase) &&
                 w.Contains(".api-suite-switcher", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_DoesNotWarnWhenTypeRelatedSelectorsAreMissingForMemberOnlyRelatedContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-member-related-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        const string widgetType = "MyNamespace.Sample";
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            $"""
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:{widgetType}">
+                  <summary>Widget docs.</summary>
+                </member>
+                <member name="M:{widgetType}.Configure(System.String)">
+                  <summary>Configures the widget.</summary>
+                  <param name="mode">Mode value.</param>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var manifestPath = Path.Combine(root, "related-content.json");
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                new
+                {
+                    entries = new object[]
+                    {
+                        new
+                        {
+                            title = "Configure sample",
+                            url = "/docs/widgets/configure/",
+                            kind = "sample",
+                            targets = new[] { $"M:{widgetType}.Configure(System.String)" }
+                        }
+                    }
+                }));
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        var css = File.ReadAllText(GetApiFallbackCssPath())
+            .Replace(".type-related-content", ".removed-type-related-content", StringComparison.OrdinalIgnoreCase);
+        File.WriteAllText(cssPath, css);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+        options.RelatedContentManifestPaths.Add(manifestPath);
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.DoesNotContain(result.Warnings, w =>
+                w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains(".type-related-content", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

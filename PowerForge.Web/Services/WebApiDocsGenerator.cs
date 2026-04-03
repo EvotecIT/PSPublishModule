@@ -359,13 +359,20 @@ public static partial class WebApiDocsGenerator
         ".usage-group",
         ".usage-list"
     };
-    private static readonly string[] RequiredSelectorsDocsRelatedContent =
+    private static readonly string[] RequiredSelectorsDocsRelatedContentType =
     {
         ".type-related-content",
         ".related-content-list",
         ".related-content-item",
-        ".related-content-kind",
+        ".related-content-kind"
+    };
+    private static readonly string[] RequiredSelectorsDocsRelatedContentMember =
+    {
         ".member-related-content"
+        ,
+        ".related-content-list",
+        ".related-content-item",
+        ".related-content-kind"
     };
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>

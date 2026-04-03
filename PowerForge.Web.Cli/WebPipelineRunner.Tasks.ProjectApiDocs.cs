@@ -1483,7 +1483,6 @@ internal static partial class WebPipelineRunner
                     ["summary"] = NormalizeOptionalString(entry.Summary),
                     ["kind"] = kind,
                     ["order"] = entry.Order,
-                    ["sourcePath"] = NormalizeOptionalString(entry.SourcePath),
                     ["targetCount"] = targets.Length,
                     ["suiteEntryId"] = prepared.SuiteEntry.Id,
                     ["suiteEntryLabel"] = prepared.SuiteEntry.Label

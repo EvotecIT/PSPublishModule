@@ -930,6 +930,7 @@ public class WebPipelineRunnerApiDocsPreflightTests
             Assert.Equal("testimox", relatedItem.GetProperty("suiteEntryId").GetString());
             Assert.Equal("TestimoX", relatedItem.GetProperty("suiteEntryLabel").GetString());
             Assert.Equal("/projects/testimox/docs/onboarding/", relatedItem.GetProperty("url").GetString());
+            Assert.False(relatedItem.TryGetProperty("sourcePath", out _));
 
             var apiIndexPath = Path.Combine(root, "_site", "projects", "testimox", "api", "index.html");
             var html = File.ReadAllText(apiIndexPath);
