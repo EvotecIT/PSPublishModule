@@ -1242,6 +1242,204 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PlanOnly_UsesResolvedPackageVersionForDotNetPublishPlan()
+    {
+        var service = new PowerForgeReleaseService(
+            new NullLogger(),
+            executePackages: (_, _, _) =>
+            {
+                var release = new DotNetRepositoryReleaseResult
+                {
+                    Success = true,
+                    ResolvedVersion = "0.1.5"
+                };
+                release.ResolvedVersionsByProject["IntelligenceX"] = "0.1.5";
+
+                return new ProjectBuildHostExecutionResult
+                {
+                    Success = true,
+                    Result = new ProjectBuildResult
+                    {
+                        Success = true,
+                        Release = release
+                    }
+                };
+            },
+            planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+            runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+            loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+            planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+            {
+                ProjectRoot = Path.GetTempPath(),
+                Configuration = "Release"
+            },
+            runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
+            publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+        var result = service.Execute(
+            new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration
+                {
+                    GitHubPrimaryProject = "IntelligenceX"
+                },
+                Tools = new PowerForgeToolReleaseSpec
+                {
+                    DotNetPublish = new DotNetPublishSpec()
+                }
+            },
+            new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                PlanOnly = true
+            });
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.DotNetToolPlan);
+        Assert.Equal("0.1.5", result.DotNetToolPlan!.MsBuildProperties["Version"]);
+        Assert.Equal("0.1.5", result.DotNetToolPlan.MsBuildProperties["PackageVersion"]);
+        Assert.Equal("0.1.5", result.DotNetToolPlan.MsBuildProperties["AssemblyVersion"]);
+        Assert.Equal("0.1.5", result.DotNetToolPlan.MsBuildProperties["FileVersion"]);
+        Assert.Equal("0.1.5", result.DotNetToolPlan.MsBuildProperties["InformationalVersion"]);
+    }
+
+    [Fact]
+    public void Execute_PublishesDotNetPublishAssetsToGitHub_PrefersResolvedPackageVersionOverProjectVersion()
+    {
+        var root = CreateSandbox();
+        var zip = Path.Combine(root, "tray-portable.zip");
+        var projectPath = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        File.WriteAllText(zip, "zip", new UTF8Encoding(false));
+        File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>9.9.9</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+        try
+        {
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) =>
+                {
+                    var release = new DotNetRepositoryReleaseResult
+                    {
+                        Success = true,
+                        ResolvedVersion = "0.1.5"
+                    };
+                    release.ResolvedVersionsByProject["IntelligenceX"] = "0.1.5";
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                },
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "IntelligenceX.Tray",
+                            ProjectPath = projectPath,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0-windows10.0.19041.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0-windows10.0.19041.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Target = "IntelligenceX.Tray",
+                            Framework = "net10.0-windows10.0.19041.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            ZipPath = zip
+                        }
+                    }
+                },
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult
+                    {
+                        Succeeded = true,
+                        HtmlUrl = "https://example.test/release",
+                        ReusedExistingRelease = true
+                    };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        GitHubPrimaryProject = "IntelligenceX"
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec(),
+                        GitHub = new PowerForgeToolReleaseGitHubOptions
+                        {
+                            Publish = true,
+                            Owner = "EvotecIT",
+                            Repository = "IntelligenceX",
+                            Token = "token",
+                            TagTemplate = "{Target}-v{Version}",
+                            ReleaseNameTemplate = "{Target} {Version}"
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json")
+                });
+
+            Assert.True(result.Success);
+            var publish = Assert.Single(publishCalls);
+            Assert.Equal("IntelligenceX.Tray-v0.1.5", publish.TagName);
+            Assert.Equal("IntelligenceX.Tray 0.1.5", publish.ReleaseName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_PublishesDotNetPublishPreviewAssetsToStablePreviewTag()
     {
         var root = CreateSandbox();
@@ -2002,6 +2200,165 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Contains("RelativeFilePath: IntelligenceX.Tray.exe", yaml, StringComparison.Ordinal);
             Assert.Contains("Architecture: x64", yaml, StringComparison.Ordinal);
             Assert.Contains("Architecture: arm64", yaml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_Winget_PrefersResolvedPackageVersionOverPortableTargetVersion()
+    {
+        var root = CreateSandbox();
+        var trayX64 = Path.Combine(root, "tray-x64.zip");
+        var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        File.WriteAllText(trayX64, "zip", new UTF8Encoding(false));
+        File.WriteAllText(trayProject, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>9.9.9</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) =>
+                {
+                    var release = new DotNetRepositoryReleaseResult
+                    {
+                        Success = true,
+                        ResolvedVersion = "0.1.5"
+                    };
+                    release.ResolvedVersionsByProject["IntelligenceX"] = "0.1.5";
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                },
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "IntelligenceX.Tray",
+                            ProjectPath = trayProject,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0-windows10.0.19041.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0-windows10.0.19041.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Bundle,
+                            Target = "IntelligenceX.Tray",
+                            Framework = "net10.0-windows10.0.19041.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            PublishDir = root,
+                            ZipPath = trayX64
+                        }
+                    }
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        GitHubPrimaryProject = "IntelligenceX"
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    },
+                    Outputs = new PowerForgeReleaseOutputsOptions
+                    {
+                        Staging = new PowerForgeReleaseStagingOptions
+                        {
+                            RootPath = "Artifacts/UploadReady",
+                            PortablePath = "GitHub",
+                            PortableNameTemplate = "{Target}-{Version}-{Runtime}-portable{Extension}"
+                        }
+                    },
+                    Winget = new PowerForgeReleaseWingetOptions
+                    {
+                        Enabled = true,
+                        OutputPath = "Artifacts/UploadReady/Winget",
+                        InstallerUrlTemplate = "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
+                        Packages = new[]
+                        {
+                            new PowerForgeReleaseWingetPackage
+                            {
+                                PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
+                                Publisher = "Evotec",
+                                PackageName = "IntelligenceX Tray",
+                                License = "MIT",
+                                ShortDescription = "Windows tray app for IntelligenceX.",
+                                Installers = new[]
+                                {
+                                    new PowerForgeReleaseWingetInstaller
+                                    {
+                                        Category = PowerForgeReleaseAssetCategory.Portable,
+                                        Target = "IntelligenceX.Tray",
+                                        Runtime = "win-x64",
+                                        InstallerType = "zip",
+                                        NestedInstallerType = "portable",
+                                        RelativeFilePath = "IntelligenceX.Tray.exe"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    StageRoot = Path.Combine(root, "upload-ready")
+                });
+
+            Assert.True(result.Success);
+            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            var yaml = File.ReadAllText(manifestPath);
+            Assert.Contains("PackageVersion: 0.1.5", yaml, StringComparison.Ordinal);
+            Assert.Contains("IntelligenceX.Tray-0.1.5-win-x64-portable.zip", yaml, StringComparison.Ordinal);
         }
         finally
         {
