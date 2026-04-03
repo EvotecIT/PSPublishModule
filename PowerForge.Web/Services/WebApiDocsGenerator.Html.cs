@@ -402,8 +402,11 @@ $@"<!doctype html>
         if (typeUsageMap is not null && typeUsageMap.Values.Any(static usage => usage?.HasEntries == true))
             AddRequiredCssSelectors(selectors, RequiredSelectorsDocsUsage);
 
-        if (typeRelatedContentMap is not null && typeRelatedContentMap.Values.Any(static relatedContent => relatedContent?.HasEntries == true))
-            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsRelatedContent);
+        if (typeRelatedContentMap is not null && typeRelatedContentMap.Values.Any(static relatedContent => relatedContent is not null && relatedContent.Entries.Count > 0))
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsRelatedContentType);
+
+        if (typeRelatedContentMap is not null && typeRelatedContentMap.Values.Any(static relatedContent => relatedContent is not null && relatedContent.MemberEntries.Count > 0))
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsRelatedContentMember);
 
         return selectors.ToArray();
     }
