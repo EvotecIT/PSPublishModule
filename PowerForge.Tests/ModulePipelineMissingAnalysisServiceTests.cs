@@ -76,6 +76,75 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         }
     }
 
+    [Fact]
+    public void UpdateManifestForGeneratedDeliveryCommands_UsesInjectedScriptFunctionExportDetector()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var manifestPath = Path.Combine(root.FullName, $"{moduleName}.psd1");
+            var manifestMutator = new FakeManifestMutator();
+            var scriptDetector = new RecordingScriptFunctionExportDetector("Install-TestModule");
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeDependencyMetadataProvider(),
+                new FakeHostedOperations(),
+                manifestMutator,
+                new RecordingMissingFunctionAnalysisService(new MissingFunctionAnalysisResult(
+                    Array.Empty<MissingCommandReference>(),
+                    Array.Empty<MissingCommandReference>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>())),
+                scriptDetector);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Delivery = new DeliveryOptionsConfiguration
+                            {
+                                Enable = true,
+                                GenerateInstallCommand = true
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            var buildResult = new ModuleBuildResult(root.FullName, manifestPath, new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+            var method = typeof(ModulePipelineRunner).GetMethod("UpdateManifestForGeneratedDeliveryCommands", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.True(method is not null, "UpdateManifestForGeneratedDeliveryCommands method signature may have changed.");
+
+            method!.Invoke(runner, new object?[] { plan, buildResult, false });
+
+            Assert.Equal(1, scriptDetector.Calls);
+            Assert.Single(manifestMutator.ManifestExportWrites);
+            Assert.Equal(new[] { "Install-TestModule" }, manifestMutator.ManifestExportWrites[0].Functions);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -201,6 +270,8 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
 
     private sealed class FakeManifestMutator : IModuleManifestMutator
     {
+        public List<(string FilePath, string[] Functions)> ManifestExportWrites { get; } = new();
+
         public bool TrySetTopLevelModuleVersion(string filePath, string newVersion) => true;
         public bool TrySetTopLevelString(string filePath, string key, string newValue) => true;
         public bool TrySetTopLevelStringArray(string filePath, string key, string[] values) => true;
@@ -214,7 +285,29 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         public bool TrySetPsDataSubStringArray(string filePath, string parentKey, string key, string[] values) => true;
         public bool TrySetPsDataSubBool(string filePath, string parentKey, string key, bool value) => true;
         public bool TrySetPsDataSubHashtableArray(string filePath, string parentKey, string key, IReadOnlyList<IReadOnlyDictionary<string, string>> values) => true;
-        public bool TrySetManifestExports(string filePath, string[]? functions, string[]? cmdlets, string[]? aliases) => true;
+        public bool TrySetManifestExports(string filePath, string[]? functions, string[]? cmdlets, string[]? aliases)
+        {
+            ManifestExportWrites.Add((filePath, functions ?? Array.Empty<string>()));
+            return true;
+        }
         public bool TrySetRepository(string filePath, string? branch, string[]? paths) => true;
+    }
+
+    private sealed class RecordingScriptFunctionExportDetector : IScriptFunctionExportDetector
+    {
+        private readonly string[] _functions;
+
+        public RecordingScriptFunctionExportDetector(params string[] functions)
+        {
+            _functions = functions ?? Array.Empty<string>();
+        }
+
+        public int Calls { get; private set; }
+
+        public IReadOnlyList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
+        {
+            Calls++;
+            return _functions;
+        }
     }
 }
