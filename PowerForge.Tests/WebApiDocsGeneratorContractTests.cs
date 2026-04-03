@@ -837,6 +837,36 @@ public class WebApiDocsGeneratorContractTests
             .type-toc{}
             .type-toc-header{}
             .type-toc-toggle{}
+            .api-suite-switcher{}
+            .api-suite-list{}
+            .api-suite-item{}
+            .api-suite-overview{}
+            .api-suite-grid{}
+            .api-suite-card{}
+            .api-suite-search{}
+            .api-suite-search-filter{}
+            .api-suite-search-input{}
+            .api-suite-search-results{}
+            .api-suite-search-result{}
+            .api-suite-coverage-summary{}
+            .api-suite-coverage-card{}
+            .api-suite-artifact{}
+            .api-suite-narrative{}
+            .api-suite-narrative-section{}
+            .api-suite-narrative-item{}
+            .api-suite-narrative-kind{}
+            .api-suite-related-content{}
+            .api-suite-related-content-list{}
+            .api-suite-related-content-item{}
+            .api-suite-related-content-kind{}
+            .type-usage{}
+            .usage-group{}
+            .usage-list{}
+            .type-related-content{}
+            .related-content-list{}
+            .related-content-item{}
+            .related-content-kind{}
+            .member-related-content{}
             .filter-button{}
             .member-card{}
             .member-signature{}
@@ -928,6 +958,149 @@ public class WebApiDocsGeneratorContractTests
                 // ignore cleanup failures in tests
             }
         }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_DoesNotWarnWhenOptionalSuiteUsageAndRelatedSelectorsAreMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-optional-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        var css = File.ReadAllText(GetApiFallbackCssPath());
+        foreach (var selector in new[]
+                 {
+                     ".api-suite-switcher",
+                     ".api-suite-list",
+                     ".api-suite-item",
+                     ".api-suite-overview",
+                     ".api-suite-grid",
+                     ".api-suite-card",
+                     ".type-usage",
+                     ".usage-group",
+                     ".usage-list",
+                     ".type-related-content",
+                     ".related-content-list",
+                     ".related-content-item",
+                     ".related-content-kind",
+                     ".member-related-content"
+                 })
+        {
+            css = css.Replace(selector, $".removed{selector.Replace(".", "-", StringComparison.Ordinal)}", StringComparison.OrdinalIgnoreCase);
+        }
+
+        File.WriteAllText(cssPath, css);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.DoesNotContain(result.Warnings, w => w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSuiteSelectorsAreMissingForEnabledSuiteUi()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-suite-required-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        var css = File.ReadAllText(GetApiFallbackCssPath())
+            .Replace(".api-suite-switcher", ".removed-api-suite-switcher", StringComparison.OrdinalIgnoreCase);
+        File.WriteAllText(cssPath, css);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css",
+            ApiSuiteTitle = "Project APIs",
+            ApiSuiteCurrentId = "sample"
+        };
+        options.ApiSuiteEntries.Add(new WebApiDocsSuiteEntry { Id = "sample", Label = "Sample", Href = "/api/" });
+        options.ApiSuiteEntries.Add(new WebApiDocsSuiteEntry { Id = "other", Label = "Other", Href = "/other-api/" });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains(".api-suite-switcher", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    private static string GetApiFallbackCssPath()
+    {
+        var fallbackCssPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Web", "Assets", "ApiDocs", "fallback.css"));
+        Assert.True(File.Exists(fallbackCssPath), "Expected embedded API fallback CSS to exist for contract validation.");
+        return fallbackCssPath;
     }
 
     [Fact]

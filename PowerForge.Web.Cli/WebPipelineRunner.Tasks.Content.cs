@@ -57,6 +57,16 @@ internal static partial class WebPipelineRunner
         var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
         var docsHome = GetString(step, "docsHome") ?? GetString(step, "docsHomeUrl") ??
                        GetString(step, "docs-home") ?? GetString(step, "docs-home-url");
+        var suiteTitle = GetApiSuiteString(step, "suiteTitle", "suite-title");
+        var suiteCurrentId = GetApiSuiteString(step, "suiteCurrentId", "suite-current-id");
+        var suiteHomeUrl = GetApiSuiteString(step, "suiteHomeUrl", "suite-home-url");
+        var suiteHomeLabel = GetApiSuiteString(step, "suiteHomeLabel", "suite-home-label");
+        var suiteSearchUrl = GetApiSuiteString(step, "suiteSearchUrl", "suite-search-url");
+        var suiteXrefMapUrl = GetApiSuiteString(step, "suiteXrefMapUrl", "suite-xref-map-url");
+        var suiteCoverageUrl = GetApiSuiteString(step, "suiteCoverageUrl", "suite-coverage-url");
+        var suiteRelatedContentUrl = GetApiSuiteString(step, "suiteRelatedContentUrl", "suite-related-content-url");
+        var suiteNarrativeUrl = GetApiSuiteString(step, "suiteNarrativeUrl", "suite-narrative-url");
+        var suiteEntries = GetApiSuiteEntries(step);
         var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
         var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
         var legacyAliasMode = GetString(step, "legacyAliasMode") ?? GetString(step, "legacy-alias-mode") ??
@@ -75,6 +85,10 @@ internal static partial class WebPipelineRunner
         var memberXrefKindsArray = GetArrayOfStrings(step, "memberXrefKinds") ?? GetArrayOfStrings(step, "member-xref-kinds");
         var memberXrefMaxPerType = GetInt(step, "memberXrefMaxPerType") ?? GetInt(step, "member-xref-max-per-type") ?? 0;
         var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
+        var relatedContentManifest = GetString(step, "relatedContentManifest") ?? GetString(step, "related-content-manifest") ??
+                                     GetString(step, "exampleManifest") ?? GetString(step, "example-manifest");
+        var relatedContentManifestArray = GetArrayOfStrings(step, "relatedContentManifests") ?? GetArrayOfStrings(step, "related-content-manifests") ??
+                                          GetArrayOfStrings(step, "exampleManifests") ?? GetArrayOfStrings(step, "example-manifests");
         var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
         var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
         var validatePowerShellExamples = GetBool(step, "validatePowerShellExamples") ?? GetBool(step, "validate-powershell-examples") ?? false;
@@ -171,7 +185,8 @@ internal static partial class WebPipelineRunner
                 nav,
                 navSurfaceName,
                 navContextPath,
-                powerShellExamplesPath);
+                powerShellExamplesPath,
+                ResolveRelatedContentManifestPaths(baseDir, relatedContentManifest, relatedContentManifestArray));
             var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
                 ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
                 : preflightWarnings;
@@ -324,6 +339,15 @@ internal static partial class WebPipelineRunner
                 DocsScriptPath = docsScript,
                 SearchScriptPath = searchScript,
                 DocsHomeUrl = docsHome,
+                ApiSuiteTitle = suiteTitle,
+                ApiSuiteCurrentId = suiteCurrentId,
+                ApiSuiteHomeUrl = suiteHomeUrl,
+                ApiSuiteHomeLabel = suiteHomeLabel,
+                ApiSuiteSearchUrl = suiteSearchUrl,
+                ApiSuiteXrefMapUrl = suiteXrefMapUrl,
+                ApiSuiteCoverageUrl = suiteCoverageUrl,
+                ApiSuiteRelatedContentUrl = suiteRelatedContentUrl,
+                ApiSuiteNarrativeUrl = suiteNarrativeUrl,
                 SidebarPosition = sidebar,
                 BodyClass = bodyClass,
                 LegacyAliasMode = legacyAliasMode,
@@ -369,6 +393,10 @@ internal static partial class WebPipelineRunner
                 BrandUrl = brandUrl,
                 BrandIcon = brandIcon
             };
+        if (suiteEntries.Length > 0)
+            options.ApiSuiteEntries.AddRange(suiteEntries);
+        foreach (var relatedContentManifestPath in ResolveRelatedContentManifestPaths(baseDir, relatedContentManifest, relatedContentManifestArray))
+            options.RelatedContentManifestPaths.Add(relatedContentManifestPath);
         if (TryGetObject(step, "templateTokens", out var templateTokens) ||
             TryGetObject(step, "template-tokens", out templateTokens))
         {
@@ -575,6 +603,7 @@ internal static partial class WebPipelineRunner
         if (inputs.Length == 0)
             throw new InvalidOperationException("apidocs batch requires at least one input object.");
 
+        var suite = BuildApiSuiteSpec(parentStep, inputs);
         var completed = 0;
         var notes = new List<string>();
         for (var index = 0; index < inputs.Length; index++)
@@ -585,7 +614,10 @@ internal static partial class WebPipelineRunner
                              GetString(input, "title") ??
                              $"input-{index + 1}";
 
-            using var merged = CreateMergedApiDocsStepDocument(parentStep, input);
+            using var merged = CreateMergedApiDocsStepDocument(
+                parentStep,
+                input,
+                mergedNode => ApplyApiSuiteToStepNode(mergedNode, suite, GetApiSuiteInputId(input, index)));
             var nestedResult = new WebPipelineStepResult { Task = "apidocs" };
             try
             {
@@ -621,7 +653,10 @@ internal static partial class WebPipelineRunner
             : $"API docs batch {completed} input(s): {summary}{suffix}";
     }
 
-    private static JsonDocument CreateMergedApiDocsStepDocument(JsonElement parentStep, JsonElement input)
+    private static JsonDocument CreateMergedApiDocsStepDocument(
+        JsonElement parentStep,
+        JsonElement input,
+        Action<JsonObject>? transform = null)
     {
         var parentNode = JsonNode.Parse(parentStep.GetRawText()) as JsonObject
                          ?? throw new InvalidOperationException("apidocs batch parent step must be a JSON object.");
@@ -634,7 +669,199 @@ internal static partial class WebPipelineRunner
         foreach (var property in input.EnumerateObject())
             parentNode[property.Name] = JsonNode.Parse(property.Value.GetRawText());
 
+        transform?.Invoke(parentNode);
         return JsonDocument.Parse(parentNode.ToJsonString());
+    }
+
+    private static string? GetApiSuiteString(JsonElement source, string primaryName, string aliasName)
+    {
+        var direct = GetString(source, primaryName) ?? GetString(source, aliasName);
+        if (!string.IsNullOrWhiteSpace(direct))
+            return direct;
+
+        if (TryGetObject(source, "suite", out var suiteObject))
+        {
+            direct = GetString(suiteObject, primaryName) ?? GetString(suiteObject, aliasName);
+            if (!string.IsNullOrWhiteSpace(direct))
+                return direct;
+        }
+
+        if (TryGetObject(source, "apiSuite", out var apiSuiteObject) ||
+            TryGetObject(source, "api-suite", out apiSuiteObject))
+        {
+            direct = GetString(apiSuiteObject, primaryName) ?? GetString(apiSuiteObject, aliasName);
+            if (!string.IsNullOrWhiteSpace(direct))
+                return direct;
+        }
+
+        return null;
+    }
+
+    private static WebApiDocsSuiteEntry[] GetApiSuiteEntries(JsonElement source)
+    {
+        var entries = new List<WebApiDocsSuiteEntry>();
+        AddApiSuiteEntries(entries, GetArrayOfObjects(source, "suiteEntries"));
+        AddApiSuiteEntries(entries, GetArrayOfObjects(source, "suite-entries"));
+
+        if (TryGetObject(source, "suite", out var suiteObject))
+            AddApiSuiteEntries(entries, GetArrayOfObjects(suiteObject, "entries"));
+
+        if (TryGetObject(source, "apiSuite", out var apiSuiteObject) ||
+            TryGetObject(source, "api-suite", out apiSuiteObject))
+        {
+            AddApiSuiteEntries(entries, GetArrayOfObjects(apiSuiteObject, "entries"));
+        }
+
+        return entries
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+            .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static entry => entry.Order ?? int.MaxValue)
+            .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddApiSuiteEntries(List<WebApiDocsSuiteEntry> entries, JsonElement[]? items)
+    {
+        if (items is not { Length: > 0 })
+            return;
+
+        foreach (var item in items)
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var entry = new WebApiDocsSuiteEntry
+            {
+                Id = GetString(item, "id") ?? string.Empty,
+                Label = GetString(item, "label") ?? GetString(item, "name") ?? string.Empty,
+                Href = GetString(item, "href") ?? GetString(item, "url") ?? string.Empty,
+                Summary = GetString(item, "summary") ?? GetString(item, "description"),
+                Order = GetInt(item, "order")
+            };
+            if (!string.IsNullOrWhiteSpace(entry.Label) && !string.IsNullOrWhiteSpace(entry.Href))
+                entries.Add(entry);
+        }
+    }
+
+    private static ApiSuiteStepSpec? BuildApiSuiteSpec(JsonElement parentStep, JsonElement[] inputs)
+    {
+        if (inputs.Length <= 1)
+            return null;
+
+        var entries = GetApiSuiteEntries(parentStep).ToList();
+        if (entries.Count == 0)
+        {
+            for (var index = 0; index < inputs.Length; index++)
+            {
+                var input = inputs[index];
+                var href = GetString(input, "suiteHref") ??
+                           GetString(input, "suite-href") ??
+                           GetString(input, "baseUrl") ??
+                           GetString(input, "base-url");
+                if (string.IsNullOrWhiteSpace(href))
+                    continue;
+
+                entries.Add(new WebApiDocsSuiteEntry
+                {
+                    Id = GetApiSuiteInputId(input, index),
+                    Label = GetString(input, "suiteLabel") ??
+                            GetString(input, "suite-label") ??
+                            GetString(input, "label") ??
+                            GetString(input, "name") ??
+                            GetString(input, "title") ??
+                            GetString(input, "id") ??
+                            $"API {index + 1}",
+                    Href = href,
+                    Summary = GetString(input, "suiteSummary") ??
+                              GetString(input, "suite-summary") ??
+                              GetString(input, "summary") ??
+                              GetString(input, "description"),
+                    Order = GetInt(input, "suiteOrder") ?? GetInt(input, "suite-order") ?? index
+                });
+            }
+        }
+
+        if (entries.Count <= 1)
+            return null;
+
+        return new ApiSuiteStepSpec
+        {
+            Title = GetApiSuiteString(parentStep, "suiteTitle", "suite-title"),
+            HomeUrl = GetApiSuiteString(parentStep, "suiteHomeUrl", "suite-home-url"),
+            HomeLabel = GetApiSuiteString(parentStep, "suiteHomeLabel", "suite-home-label"),
+            Entries = entries
+                .GroupBy(static entry => string.IsNullOrWhiteSpace(entry.Id) ? entry.Href : entry.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First())
+                .OrderBy(static entry => entry.Order ?? int.MaxValue)
+                .ThenBy(static entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
+    }
+
+    private static string GetApiSuiteInputId(JsonElement input, int index)
+    {
+        var id = GetString(input, "suiteId") ??
+                 GetString(input, "suite-id") ??
+                 GetString(input, "id");
+        if (!string.IsNullOrWhiteSpace(id))
+            return id.Trim();
+
+        id = GetString(input, "name") ?? GetString(input, "title");
+        if (!string.IsNullOrWhiteSpace(id))
+            return NormalizeSlug(id) ?? $"api-{index + 1}";
+
+        return $"api-{index + 1}";
+    }
+
+    private static void ApplyApiSuiteToStepNode(JsonObject node, ApiSuiteStepSpec? suite, string currentId)
+    {
+        if (suite is null || node is null || suite.Entries.Count <= 1)
+            return;
+
+        SetJsonPropertyIfMissing(node, "suiteTitle", suite.Title);
+        SetJsonPropertyIfMissing(node, "suiteHomeUrl", suite.HomeUrl);
+        SetJsonPropertyIfMissing(node, "suiteHomeLabel", suite.HomeLabel);
+        SetJsonPropertyIfMissing(node, "suiteCurrentId", currentId);
+        if (!HasAnyJsonProperty(node, "suiteEntries", "suite-entries"))
+            node["suiteEntries"] = BuildApiSuiteEntriesNode(suite.Entries);
+    }
+
+    private static bool HasAnyJsonProperty(JsonObject node, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (node.ContainsKey(name))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void SetJsonPropertyIfMissing(JsonObject node, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || HasAnyJsonProperty(node, name))
+            return;
+
+        node[name] = value;
+    }
+
+    private static JsonArray BuildApiSuiteEntriesNode(IReadOnlyList<WebApiDocsSuiteEntry> entries)
+    {
+        var array = new JsonArray();
+        foreach (var entry in entries ?? Array.Empty<WebApiDocsSuiteEntry>())
+        {
+            array.Add(new JsonObject
+            {
+                ["id"] = entry.Id,
+                ["label"] = entry.Label,
+                ["href"] = entry.Href,
+                ["summary"] = entry.Summary,
+                ["order"] = entry.Order
+            });
+        }
+
+        return array;
     }
 
     internal static string[] ValidateApiDocsPreflight(
@@ -645,7 +872,8 @@ internal static partial class WebPipelineRunner
         string? navPath,
         string? navSurfaceName,
         string? navContextPath,
-        string? powerShellExamplesPath)
+        string? powerShellExamplesPath,
+        IReadOnlyList<string>? relatedContentManifestPaths)
     {
         var warnings = new List<string>();
 
@@ -747,7 +975,47 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        if (relatedContentManifestPaths is { Count: > 0 })
+        {
+            foreach (var manifestPath in relatedContentManifestPaths.Where(static path => !string.IsNullOrWhiteSpace(path)))
+            {
+                var fullManifestPath = Path.GetFullPath(manifestPath);
+                if (!File.Exists(fullManifestPath))
+                {
+                    warnings.Add($"[PFWEB.APIDOCS.RELATED] API docs related content preflight: manifest was not found: {fullManifestPath}");
+                }
+            }
+        }
+
         return warnings.ToArray();
+    }
+
+    private static string[] ResolveRelatedContentManifestPaths(
+        string baseDir,
+        string? relatedContentManifest,
+        string[]? relatedContentManifestArray)
+    {
+        var paths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(relatedContentManifest))
+            paths.AddRange(CliPatternHelper.SplitPatterns(relatedContentManifest));
+
+        if (relatedContentManifestArray is { Length: > 0 })
+        {
+            foreach (var entry in relatedContentManifestArray)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+
+                paths.AddRange(CliPatternHelper.SplitPatterns(entry));
+            }
+        }
+
+        return paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolvePath(baseDir, path) ?? path)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static bool ContainsAnyPathToken(string value)
@@ -797,8 +1065,11 @@ internal static partial class WebPipelineRunner
         AddCoverageMinPercentThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeRelatedContentPercent", "min-type-related-content-percent", "types.relatedContent.percent", "Type curated related-content coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minQuickStartRelatedContentPercent", "min-quick-start-related-content-percent", "types.quickStartRelatedContent.percent", "Quick start curated related-content coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberRelatedContentPercent", "min-member-related-content-percent", "members.relatedContent.percent", "Member curated related-content coverage");
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
         AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
@@ -819,6 +1090,7 @@ internal static partial class WebPipelineRunner
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaUnsupportedSidecarCount", "max-powershell-imported-script-playback-media-unsupported-sidecar-count", "powershell.importedScriptPlaybackMediaUnsupportedSidecars.covered", "PowerShell imported-script playback media with unsupported sidecars count", powerShellCommandMetric: true);
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaOversizedAssetCount", "max-powershell-imported-script-playback-media-oversized-asset-count", "powershell.importedScriptPlaybackMediaOversizedAssets.covered", "PowerShell imported-script playback media with oversized assets count", powerShellCommandMetric: true);
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellImportedScriptPlaybackMediaStaleAssetCount", "max-powershell-imported-script-playback-media-stale-asset-count", "powershell.importedScriptPlaybackMediaStaleAssets.covered", "PowerShell imported-script playback media with stale assets count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxQuickStartMissingRelatedContentCount", "max-quick-start-missing-related-content-count", "types.quickStartMissingRelatedContent.count", "Quick start types missing curated related content count");
         AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
         AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
@@ -962,6 +1234,14 @@ internal static partial class WebPipelineRunner
             double.TryParse(current.GetString(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value))
             return true;
         return false;
+    }
+
+    private sealed class ApiSuiteStepSpec
+    {
+        public string? Title { get; init; }
+        public string? HomeUrl { get; init; }
+        public string? HomeLabel { get; init; }
+        public IReadOnlyList<WebApiDocsSuiteEntry> Entries { get; init; } = Array.Empty<WebApiDocsSuiteEntry>();
     }
 
     private sealed class ApiDocsCoverageThreshold

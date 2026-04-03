@@ -126,9 +126,30 @@ Legend:
 
 - **Have**: C# XML API docs generator + pipeline integration + source links.
 - **Have**: PowerShell help API docs (command help XML + parameter sets + examples + `about_*` topic import + fallback examples + coverage report).
+- **Have**: inferred reverse-usage relationships for documented API types (`Usage` section in docs pages + `usage` payload in per-type JSON).
+  - Helps answer “where is this type accepted/returned/exposed?” even when no curated example exists yet.
 - **Have**: API docs xref map emission (`xrefmap.json`, DocFX-style `references`) for both C# and PowerShell outputs.
   - Supports aliases like `T:Namespace.Type`, short type names (when unique), `ps:Command-Name`, `command:Command-Name`, module-qualified command aliases, and `about:` aliases.
   - Docs: `Docs/PowerForge.Web.ApiDocs.md`
+- **Partial**: Example-to-type/member correlation now has a first-class manifest contract, and quick-start relevance gates now exist, but broader relevance automation is still incomplete.
+  - Sites can attach curated guides/samples to types and members via `relatedContentManifest(s)` using xref-style ids.
+  - Coverage/CI can now gate curated related content for all types/members and for configured `quickStartTypes`.
+  - We still do not infer those attachments automatically from conceptual docs.
+- **Have**: First-class multi-project API suite metadata and switchers for docs-template output.
+  - `apidocs` supports `suiteTitle` / `suiteCurrentId` / `suiteHomeUrl` / `suiteHomeLabel` / `suiteSearchUrl` / `suiteXrefMapUrl` / `suiteCoverageUrl` / `suiteEntries`.
+  - Batch `apidocs` infers suite entries from `inputs`/`entries`, and `project-apidocs` auto-injects suite entries plus emits `api-suite.json` under `outRoot`.
+  - `project-apidocs` also emits merged suite artifacts (`api-suite-search.json`, `api-suite-xrefmap.json`, `api-suite-coverage.json`) plus a generated `api-suite/` landing page so site/search/xref consumers have one suite-root contract and one engine-owned suite route.
+  - Docs-template HTML now renders suite switchers/cards plus a built-in suite-search widget when `suiteSearchUrl` is available, and API JSON emits `suite` metadata for downstream search/portal consumers.
+- **Have**: `project-apidocs` can now enforce suite-level relevance gates and consume project-specific API-doc guidance hints.
+  - Project catalog entries can define `apiDocs.quickStartTypes` and `apiDocs.relatedContentManifest(s)` so “important entry points” are tracked per project before suite aggregation.
+  - `project-apidocs` can evaluate merged `api-suite-coverage.json` via `suiteCoverage` + `suiteFailOnCoverage`, which closes the first version of suite-level curated-guidance enforcement.
+- **Partial**: Unified suite-wide portal guidance is still incomplete as a broader adoption experience.
+  - We now have an engine-owned `api-suite/` landing/search route plus merged suite search/xref/coverage/related-content/narrative artifacts and suite-level relevance gates.
+  - The built-in suite portal can now group search by project/module via filters, surface a coverage summary widget, aggregate curated `Guides & Samples` from project manifests, render authored `Start Here` sections from a suite narrative manifest, and `project-apidocs` can gate that narrative in CI.
+  - We still do not synthesize those narrative paths automatically from site docs or infer cross-project adoption flows without authored curation.
+- **Have**: Website scaffolding now includes a first-class multi-project API suite starter profile.
+  - `powerforge-web scaffold --starter-profile multi-project-api-suite` emits the recommended `project-apidocs` step, suite manifests, theme API fragments/CSS, project source staging, a safe placeholder `/projects/api-suite/` route, and per-project starter templates for catalog entries + related-content guides.
+  - optional `--suite-project-slug` / `--suite-project-name` / `--suite-project-surface` now promote that starter into a real first project so teams can go from scaffold to first meaningful suite publish with one command.
 - **Partial**: XRef link resolver + verifier checks (`xref:` in markdown links) with optional external maps (`Xref.MapFiles`) and optional build map emission (`_powerforge/xrefmap.json`).
   - Code: `PowerForge.Web/Services/WebSiteBuilder.Xref.cs`, `PowerForge.Web/Services/WebSiteVerifier.Xref.cs`, `PowerForge.Web/Services/WebXrefSupport.cs`
 - **Partial**: Theme/layout contract for API pages (ensuring site nav renders) requires consistent `api-header/api-footer` partials across themes.
@@ -232,6 +253,13 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - XRef/cross-reference graph hardening (symbol graph parity, richer API UID generation, and template/runtime exposure).
 - Multi-version docs conventions with canonical rules.
 - Include/overwrite mechanisms for conceptual docs (DocFX-like).
+- First-class API suite portal model:
+  - one API home for multiple assemblies/modules/projects
+  - shared search/filter/project switcher without forcing separate top-level API menus
+  - suite-aware coverage and xref merge defaults
+- First-class example correlation model:
+  - curated example manifests/pages can target types and members
+  - API pages can show “learn by example” links even when code examples live outside XML/help
 
 ### M4: Extensibility + Incremental Build (Later)
 

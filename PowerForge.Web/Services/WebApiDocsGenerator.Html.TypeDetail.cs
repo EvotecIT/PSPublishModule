@@ -21,6 +21,8 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         IReadOnlyDictionary<string, ApiTypeModel> typeIndex,
         IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap,
+        ApiTypeUsageModel? usage,
+        ApiTypeRelatedContentModel? relatedContent,
         string codeLanguage,
         string displayName)
     {
@@ -33,7 +35,7 @@ public static partial class WebApiDocsGenerator
         var memberFilterLabel = isPowerShellCommand ? "Filter syntax" : "Filter members";
         var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
         var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
-        var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
+        var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0, usage?.HasEntries == true, relatedContent?.Entries.Count > 0);
         var detailClasses = isPowerShellCommand
             ? "type-detail ev-page-body type-detail--powershell-command"
             : "type-detail ev-page-body";
@@ -222,6 +224,23 @@ public static partial class WebApiDocsGenerator
             detailBody.AppendLine("      </section>");
         }
 
+        if (usage?.HasEntries == true)
+            AppendUsageSection(detailBody, usage, baseUrl, slugMap);
+
+        if (relatedContent?.Entries.Count > 0)
+        {
+            AppendRelatedContentSection(
+                detailBody,
+                relatedContent.Entries,
+                baseUrl,
+                slugMap,
+                "guides-and-samples",
+                "Guides & Samples",
+                "Authored walkthroughs and practical samples linked to this API.",
+                "h2",
+                "      ");
+        }
+
         if (type.TypeParameters.Count > 0)
         {
             detailBody.AppendLine("      <section class=\"type-parameters\" id=\"type-parameters\">");
@@ -309,17 +328,17 @@ public static partial class WebApiDocsGenerator
             var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (isPowerShellCommand)
             {
-                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
+                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
             }
             else
             {
-                AppendMemberSections(detailBody, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
-                AppendMemberSections(detailBody, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
-                AppendMemberSections(detailBody, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
-                AppendMemberSections(detailBody, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
+                AppendMemberSections(detailBody, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
+                AppendMemberSections(detailBody, "Properties", "property", type.Properties, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "properties");
+                AppendMemberSections(detailBody, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+                AppendMemberSections(detailBody, "Events", "event", type.Events, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "events");
                 if (type.ExtensionMethods.Count > 0)
-                    AppendMemberSections(detailBody, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+                    AppendMemberSections(detailBody, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
             }
         }
 
@@ -375,6 +394,7 @@ public static partial class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
         string codeLanguage,
         ISet<string> usedMemberIds,
         bool treatAsInherited = true,
@@ -388,9 +408,9 @@ public static partial class WebApiDocsGenerator
         var directId = direct.Count > 0 ? sectionId : null;
         var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, codeLanguage, usedMemberIds, false, groupOverloads, directId);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, codeLanguage, usedMemberIds, true, groupOverloads, inheritedId);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -400,6 +420,7 @@ public static partial class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
         string codeLanguage,
         ISet<string> usedMemberIds,
         bool inheritedSection,
@@ -430,7 +451,7 @@ public static partial class WebApiDocsGenerator
             {
                 if (group.Count() == 1)
                 {
-                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, codeLanguage, usedMemberIds, label);
+                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
                     continue;
                 }
                 sb.AppendLine("          <div class=\"member-group\">");
@@ -441,7 +462,7 @@ public static partial class WebApiDocsGenerator
                 sb.AppendLine("            <div class=\"member-group-body\">");
                 foreach (var member in group)
                 {
-                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, usedMemberIds, label);
+                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
                 }
                 sb.AppendLine("            </div>");
                 sb.AppendLine("          </div>");
@@ -451,7 +472,7 @@ public static partial class WebApiDocsGenerator
         {
             foreach (var member in members)
             {
-                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, usedMemberIds, label);
+                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
             }
         }
         sb.AppendLine("        </div>");
@@ -464,6 +485,7 @@ public static partial class WebApiDocsGenerator
         ApiMemberModel member,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
         string codeLanguage,
         ISet<string> usedMemberIds,
         string sectionLabel)
@@ -506,6 +528,12 @@ public static partial class WebApiDocsGenerator
         }
         if (!string.IsNullOrWhiteSpace(member.Summary))
             sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
+        if (relatedContent is not null &&
+            relatedContent.MemberEntries.TryGetValue(member, out var memberRelatedContent) &&
+            memberRelatedContent.Count > 0)
+        {
+            AppendMemberRelatedContent(sb, memberRelatedContent, baseUrl, slugMap);
+        }
         if (member.TypeParameters.Count > 0)
         {
             sb.AppendLine("          <h3>Type Parameters</h3>");

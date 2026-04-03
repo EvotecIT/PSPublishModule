@@ -196,6 +196,145 @@ public class WebSiteScaffolderTests
     }
 
     [Fact]
+    public void Scaffold_MultiProjectApiSuiteStarter_CreatesApiSuiteStarterFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-api-suite-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var result = WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "scriban", starterProfileName: "multi-project-api-suite");
+
+            Assert.Equal("multi-project-api-suite", result.StarterProfile);
+            Assert.True(File.Exists(Path.Combine(root, "content", "pages", "projects", "api-suite.md")));
+            Assert.True(File.Exists(Path.Combine(root, "content", "docs", "api-suite.md")));
+            Assert.True(File.Exists(Path.Combine(root, "content", "docs", "projects", "api-guide-template.md")));
+            Assert.True(File.Exists(Path.Combine(root, "data", "projects", "catalog.json")));
+            Assert.True(File.Exists(Path.Combine(root, "data", "projects", "catalog.project-template.json")));
+            Assert.True(File.Exists(Path.Combine(root, "data", "projects", "api-suite-narrative.json")));
+            Assert.True(File.Exists(Path.Combine(root, "data", "projects", "sample-project-api-guides.json")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "README.md")));
+            Assert.True(File.Exists(Path.Combine(root, "themes", "nova", "partials", "api-header.html")));
+            Assert.True(File.Exists(Path.Combine(root, "themes", "nova", "partials", "api-footer.html")));
+            Assert.True(File.Exists(Path.Combine(root, "themes", "nova", "assets", "api.css")));
+
+            using var siteDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
+            var site = siteDoc.RootElement;
+            var features = site.GetProperty("features").EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray();
+            Assert.Contains("apiDocs", features, StringComparer.OrdinalIgnoreCase);
+
+            var navItems = site.GetProperty("navigation")
+                .GetProperty("menus")[0]
+                .GetProperty("items")
+                .EnumerateArray()
+                .Select(element => new
+                {
+                    Title = element.GetProperty("title").GetString() ?? string.Empty,
+                    Url = element.GetProperty("url").GetString() ?? string.Empty
+                })
+                .ToArray();
+            Assert.Contains(navItems, item =>
+                item.Title.Equals("API", StringComparison.OrdinalIgnoreCase) &&
+                item.Url.Equals("/projects/api-suite/", StringComparison.OrdinalIgnoreCase));
+
+            using var manifestDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "themes", "nova", "theme.manifest.json")));
+            var apiContract = manifestDoc.RootElement.GetProperty("featureContracts").GetProperty("apiDocs");
+            Assert.Contains(apiContract.GetProperty("requiredPartials").EnumerateArray().Select(e => e.GetString() ?? string.Empty), value => value.Equals("api-header", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(apiContract.GetProperty("cssHrefs").EnumerateArray().Select(e => e.GetString() ?? string.Empty), value => value.Equals("/themes/nova/assets/api.css", StringComparison.OrdinalIgnoreCase));
+
+            using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
+            var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var apiStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "project-apidocs", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("./data/projects/catalog.json", apiStep.GetProperty("catalog").GetString());
+            Assert.Equal("./data/projects/api-suite-narrative.json", apiStep.GetProperty("suiteNarrativeManifest").GetString());
+            Assert.Equal("/themes/nova/assets/app.css,/themes/nova/assets/api.css", apiStep.GetProperty("css").GetString());
+
+            var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+            Assert.Contains("Starter profile:", readme, StringComparison.Ordinal);
+            Assert.Contains("multi-project-api-suite", readme, StringComparison.Ordinal);
+            Assert.Contains("/projects/api-suite/", readme, StringComparison.Ordinal);
+
+            using var projectTemplateDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "projects", "catalog.project-template.json")));
+            Assert.Equal("sample-project", projectTemplateDoc.RootElement.GetProperty("slug").GetString());
+            Assert.True(projectTemplateDoc.RootElement.GetProperty("surfaces").GetProperty("apiPowerShell").GetBoolean());
+
+            using var guidesDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "projects", "sample-project-api-guides.json")));
+            var guideEntry = guidesDoc.RootElement.GetProperty("entries")[0];
+            Assert.Equal("guide", guideEntry.GetProperty("kind").GetString());
+            Assert.Contains("ps:Invoke-SampleProjectAction", guideEntry.GetProperty("targets")[0].GetString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Scaffold_MultiProjectApiSuiteStarter_CanSeedFirstProject()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-api-suite-first-project-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var result = WebSiteScaffolder.Scaffold(
+                root,
+                "Starter",
+                "https://example.test",
+                "scriban",
+                starterProfileName: "multi-project-api-suite",
+                suiteProjectSlug: "testimox",
+                suiteProjectName: "TestimoX",
+                suiteProjectSurface: "powershell");
+
+            Assert.Equal("testimox", result.FirstSuiteProjectSlug);
+            Assert.Equal("powershell", result.FirstSuiteProjectSurface);
+
+            using var catalogDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "projects", "catalog.json")));
+            var project = catalogDoc.RootElement.GetProperty("projects")[0];
+            Assert.Equal("testimox", project.GetProperty("slug").GetString());
+            Assert.Equal("TestimoX", project.GetProperty("name").GetString());
+            Assert.True(project.GetProperty("surfaces").GetProperty("apiPowerShell").GetBoolean());
+            Assert.Equal("Invoke-TestimoXAction", project.GetProperty("apiDocs").GetProperty("quickStartTypes").GetString());
+            Assert.Equal("./data/projects/testimox-api-guides.json", project.GetProperty("apiDocs").GetProperty("relatedContentManifest").GetString());
+
+            Assert.True(File.Exists(Path.Combine(root, "content", "docs", "projects", "testimox-quick-start.md")));
+            Assert.True(File.Exists(Path.Combine(root, "data", "projects", "testimox-api-guides.json")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "README.md")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "README.md")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "examples", ".gitkeep")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "templates", "Invoke-TestimoXAction.ps1.template")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "templates", "testimox-help.xml.template")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "templates", "testimox.psd1.template")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "templates", "command-metadata.json.template")));
+            Assert.True(File.Exists(Path.Combine(root, "projects-sources", "testimox", "powershell", "promote-from-templates.ps1")));
+
+            using var narrativeDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "projects", "api-suite-narrative.json")));
+            var narrativeItem = narrativeDoc.RootElement.GetProperty("sections")[0].GetProperty("items")[0];
+            Assert.Equal("/docs/projects/testimox-quick-start/", narrativeItem.GetProperty("url").GetString());
+            Assert.Contains("testimox", narrativeItem.GetProperty("projects")[0].GetString(), StringComparison.OrdinalIgnoreCase);
+
+            using var guidesDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "projects", "testimox-api-guides.json")));
+            var guideEntry = guidesDoc.RootElement.GetProperty("entries")[0];
+            Assert.Equal("/docs/projects/testimox-quick-start/", guideEntry.GetProperty("url").GetString());
+            Assert.Contains("ps:Invoke-TestimoXAction", guideEntry.GetProperty("targets")[0].GetString(), StringComparison.Ordinal);
+
+            var sourceReadme = File.ReadAllText(Path.Combine(root, "projects-sources", "testimox", "powershell", "README.md"));
+            Assert.Contains("templates/", sourceReadme, StringComparison.Ordinal);
+            Assert.Contains("promote-from-templates.ps1", sourceReadme, StringComparison.Ordinal);
+
+            var promoteScript = File.ReadAllText(Path.Combine(root, "projects-sources", "testimox", "powershell", "promote-from-templates.ps1"));
+            Assert.Contains("Starter templates promoted into discoverable PowerShell API inputs.", promoteScript, StringComparison.Ordinal);
+            Assert.Contains("command-metadata.json", promoteScript, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Scaffold_Scriban_AddsEditorialLayouts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-scriban-" + Guid.NewGuid().ToString("N"));

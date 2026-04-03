@@ -185,6 +185,20 @@ Theme best practice (Scriban):
   - if those are missing, it falls back to theme `partials/header.html` + `footer.html` (so API reference pages don't lose site nav)
 Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
 
+For multi-project API portals (for example TestimoX-style ecosystems), the current recommended contract is:
+
+- use `project-apidocs` instead of separate hand-wired API menus
+- define project-level `apiDocs.quickStartTypes`
+- define project-level `apiDocs.relatedContentManifest(s)`
+- define suite-level `suiteNarrativeManifest(s)`
+- gate both:
+  - `suiteCoverage` + `suiteFailOnCoverage`
+  - `suiteNarrative` + `suiteFailOnNarrative`
+
+Starter reference: `Docs\PowerForge.Web.WebsiteStarter.md` (`## Multi-Project API Suite Starter`).
+- For new multi-project sites, prefer `powerforge-web scaffold --starter-profile multi-project-api-suite` so the suite contract, placeholder route, and theme API fragments are created up front instead of retrofitting them later.
+- When you already know the first project, prefer adding `--suite-project-slug` / `--suite-project-name` / `--suite-project-surface` during scaffold time so the site starts with one real catalog entry and guide manifest instead of only sample placeholders.
+
 ### Verify / lint
 
 - Verify includes: navigation lint, theme contract checks, not-found checks, markdown hygiene warnings.

@@ -444,11 +444,15 @@ internal static partial class WebCliCommandHandlers
         var engine = TryGetOptionValue(subArgs, "--engine") ??
                      TryGetOptionValue(subArgs, "--theme-engine");
         var maintenanceProfile = TryGetOptionValue(subArgs, "--maintenance-profile");
+        var starterProfile = TryGetOptionValue(subArgs, "--starter-profile");
+        var suiteProjectSlug = TryGetOptionValue(subArgs, "--suite-project-slug");
+        var suiteProjectName = TryGetOptionValue(subArgs, "--suite-project-name");
+        var suiteProjectSurface = TryGetOptionValue(subArgs, "--suite-project-surface");
 
         if (string.IsNullOrWhiteSpace(outPath))
             return Fail("Missing required --out.", outputJson, logger, "web.scaffold");
 
-        var result = WebSiteScaffolder.Scaffold(outPath, name, baseUrl, engine, maintenanceProfile);
+        var result = WebSiteScaffolder.Scaffold(outPath, name, baseUrl, engine, maintenanceProfile, starterProfile, suiteProjectSlug, suiteProjectName, suiteProjectSurface);
 
         if (outputJson)
         {
@@ -468,6 +472,9 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Created files: {result.CreatedFileCount}");
         logger.Info($"Theme engine: {result.ThemeEngine}");
         logger.Info($"Maintenance profile: {result.MaintenanceProfile}");
+        logger.Info($"Starter profile: {result.StarterProfile}");
+        if (!string.IsNullOrWhiteSpace(result.FirstSuiteProjectSlug))
+            logger.Info($"First suite project: {result.FirstSuiteProjectSlug} ({result.FirstSuiteProjectSurface ?? "powershell"})");
         return 0;
     }
 

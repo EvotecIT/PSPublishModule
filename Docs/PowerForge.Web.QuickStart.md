@@ -12,6 +12,32 @@ Maintenance profiles:
 - `balanced` (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) (default)
 - `aggressive` (`keep:3`, `maxAgeDays:7`, `maxDelete:250`)
 
+Starter profiles:
+- `standard` (default)
+- `multi-project-api-suite` (adds a safe `project-apidocs` starter, theme API fragments/CSS, `data/projects/` manifests, and a placeholder `/projects/api-suite/` route)
+
+Multi-project API suite starter example:
+```
+powerforge-web scaffold --out ./SuiteSite --name "TestimoX" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite
+```
+
+Materialize a real first project while scaffolding:
+```
+powerforge-web scaffold --out ./SuiteSite --name "TestimoX" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite --suite-project-slug testimox --suite-project-name "TestimoX" --suite-project-surface powershell
+```
+
+When you seed a first project, the scaffold also creates surface-specific source staging:
+- PowerShell: `projects-sources/<slug>/powershell/` plus `examples/`
+- .NET: `projects-sources/<slug>/dotnet/`
+
+It also adds safe starter templates under `templates/` that do not match discovery patterns yet:
+- PowerShell: `*.ps1.template`, `*-help.xml.template`, `*.psd1.template`, `command-metadata.json.template`
+- .NET: `*.xml.template`, `*.dll.placeholder.txt`
+
+Promotion helpers:
+- PowerShell: `projects-sources/<slug>/powershell/promote-from-templates.ps1`
+- .NET: `projects-sources/<slug>/dotnet/promote-from-build.ps1`
+
 Result (minimal structure):
 ```
 MySite/
@@ -35,6 +61,32 @@ MySite/
       layouts/
       partials/
       assets/
+```
+
+With `--starter-profile multi-project-api-suite`, the scaffold also includes:
+```
+data/
+  projects/
+    catalog.json
+    catalog.project-template.json
+    api-suite-narrative.json
+    sample-project-api-guides.json
+projects-sources/
+  README.md
+content/
+  docs/
+    projects/
+      api-guide-template.md
+  pages/
+    projects/
+      api-suite.md
+themes/
+  <theme>/
+    partials/
+      api-header.html
+      api-footer.html
+    assets/
+      api.css
 ```
 
 ## 2) Define collections in site.json
