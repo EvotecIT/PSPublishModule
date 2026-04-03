@@ -2420,7 +2420,18 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<WebApiDocsSuiteEntry> suiteEntries)
     {
         if (!string.IsNullOrWhiteSpace(explicitLandingUrl))
+        {
+            if (Uri.TryCreate(explicitLandingUrl, UriKind.Absolute, out var absoluteLandingUrl))
+            {
+                var builder = new UriBuilder(absoluteLandingUrl)
+                {
+                    Path = EnsureProjectSuiteLandingRoute(absoluteLandingUrl.AbsolutePath)
+                };
+                return builder.Uri.ToString();
+            }
+
             return EnsureProjectSuiteLandingRoute(explicitLandingUrl);
+        }
 
         if (!string.IsNullOrWhiteSpace(suiteHomeUrl))
         {
