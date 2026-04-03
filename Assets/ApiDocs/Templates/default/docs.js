@@ -44,6 +44,22 @@
     }
   }
 
+  function normalizePath(path) {
+    if (!path) return '/';
+    return path.length > 1 && path.endsWith('/') ? path : path + '/';
+  }
+
+  function getApiDocsBasePath() {
+    var sidebarTitle = document.querySelector('.sidebar-title[href]');
+    var href = sidebarTitle ? sidebarTitle.getAttribute('href') : null;
+
+    try {
+      return normalizePath(new URL(href || window.location.pathname, window.location.href).pathname);
+    } catch (error) {
+      return normalizePath(window.location.pathname);
+    }
+  }
+
   function getTypeFilterState() {
     return {
       query: filterInput ? filterInput.value : '',
@@ -64,7 +80,9 @@
 
     try {
       var url = new URL(href, window.location.href);
-      return url.origin === window.location.origin && /^\/api(?:\/|$)/.test(url.pathname);
+      var basePath = getApiDocsBasePath();
+      var normalizedPath = normalizePath(url.pathname);
+      return url.origin === window.location.origin && (normalizedPath === basePath || normalizedPath.indexOf(basePath) === 0);
     } catch (error) {
       return false;
     }
