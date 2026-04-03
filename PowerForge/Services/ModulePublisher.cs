@@ -12,6 +12,7 @@ namespace PowerForge;
 public sealed class ModulePublisher
 {
     private readonly ILogger _logger;
+    private readonly RepositoryPublisher _repositoryPublisher;
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGetClient _powerShellGet;
     private readonly GitHubReleasePublisher _gitHub;
@@ -37,6 +38,7 @@ public sealed class ModulePublisher
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
+        _repositoryPublisher = new RepositoryPublisher(_logger, runner);
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
@@ -123,9 +125,8 @@ public sealed class ModulePublisher
         bool includeScriptFolders)
     {
         var credential = repoConfig?.Credential;
-        bool createdRepository = false;
         string? temporaryPublishPath = null;
-        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         try
         {
@@ -136,11 +137,6 @@ public sealed class ModulePublisher
                 delivery: plan.Delivery,
                 includeScriptFolders: includeScriptFolders);
 
-            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
-            {
-                createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
-            }
-
             if (!publish.Force)
                 EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
 
@@ -148,30 +144,24 @@ public sealed class ModulePublisher
 
             var modulePath = Path.GetFullPath(temporaryPublishPath);
 
-            if (tool == PublishTool.PowerShellGet)
-            {
-                _powerShellGet.Publish(
-                    new PowerShellGetPublishOptions(
-                        path: modulePath,
-                        repository: repositoryName,
-                        apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
-                        credential: credential));
-            }
-            else
+            if (tool != PublishTool.PowerShellGet)
             {
                 ValidateRequiredModulesForRepositoryPublish(repositoryName, credential, plan, buildResult);
-
-                _psResourceGet.Publish(
-                    new PSResourcePublishOptions(
-                        path: modulePath,
-                        isNupkg: false,
-                        repository: repositoryName,
-                        apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
-                        destinationPath: null,
-                        skipDependenciesCheck: true,
-                        skipModuleManifestValidate: false,
-                        credential: credential));
             }
+
+            _repositoryPublisher.Publish(
+                new RepositoryPublishRequest
+                {
+                    Path = modulePath,
+                    IsNupkg = false,
+                    RepositoryName = repositoryName,
+                    Tool = tool,
+                    ApiKey = string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
+                    Repository = repoConfig,
+                    DestinationPath = null,
+                    SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
+                    SkipModuleManifestValidate = false
+                });
 
             _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");
 
@@ -182,18 +172,6 @@ public sealed class ModulePublisher
         {
             if (!string.IsNullOrWhiteSpace(temporaryPublishPath))
                 CleanupTemporaryPublishPath(temporaryPublishPath);
-
-            if (createdRepository && repoConfig is not null && repoConfig.UnregisterAfterUse)
-            {
-                try
-                {
-                    UnregisterRepository(tool, repositoryName);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn($"Failed to unregister repository '{repositoryName}': {ex.Message}");
-                }
-            }
         }
 
         return new ModulePublishResult(
@@ -317,8 +295,7 @@ public sealed class ModulePublisher
     {
         if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
             File.Exists(buildResult.ManifestPath) &&
-            ManifestEditor.TryGetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", out var manifestExternalModules) &&
-            manifestExternalModules is { Length: > 0 })
+            ModuleManifestValueReader.ReadPsDataStringOrArray(buildResult.ManifestPath, "ExternalModuleDependencies") is { Length: > 0 } manifestExternalModules)
         {
             return manifestExternalModules
                 .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -338,8 +315,7 @@ public sealed class ModulePublisher
     {
         if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
             File.Exists(buildResult.ManifestPath) &&
-            ManifestEditor.TryGetRequiredModules(buildResult.ManifestPath, out RequiredModuleReference[]? manifestModules) &&
-            manifestModules is { Length: > 0 })
+            ModuleManifestValueReader.ReadRequiredModules(buildResult.ManifestPath) is { Length: > 0 } manifestModules)
         {
             return manifestModules
                 .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
@@ -555,56 +531,6 @@ public sealed class ModulePublisher
         return (name, repoConfig);
     }
 
-    private static bool HasRepositoryUris(PublishRepositoryConfiguration repo)
-        => repo is not null &&
-           (!string.IsNullOrWhiteSpace(repo.Uri) ||
-            !string.IsNullOrWhiteSpace(repo.SourceUri) ||
-            !string.IsNullOrWhiteSpace(repo.PublishUri));
-
-    private bool EnsureRepositoryRegistered(PublishTool tool, string repositoryName, PublishRepositoryConfiguration repo)
-    {
-        if (tool == PublishTool.PowerShellGet)
-        {
-            var sourceUri = string.IsNullOrWhiteSpace(repo.SourceUri)
-                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.PublishUri : repo.Uri)
-                : repo.SourceUri;
-            var publishUri = string.IsNullOrWhiteSpace(repo.PublishUri)
-                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.SourceUri : repo.Uri)
-                : repo.PublishUri;
-
-            if (string.IsNullOrWhiteSpace(sourceUri) || string.IsNullOrWhiteSpace(publishUri))
-                throw new InvalidOperationException($"Repository '{repositoryName}' is missing SourceUri/PublishUri/Uri for PowerShellGet registration.");
-
-            return _powerShellGet.EnsureRepositoryRegistered(repositoryName, sourceUri!, publishUri!, trusted: repo.Trusted, timeout: TimeSpan.FromMinutes(2));
-        }
-
-        var uri = string.IsNullOrWhiteSpace(repo.Uri)
-            ? (string.IsNullOrWhiteSpace(repo.PublishUri) ? repo.SourceUri : repo.PublishUri)
-            : repo.Uri;
-
-        if (string.IsNullOrWhiteSpace(uri))
-            throw new InvalidOperationException($"Repository '{repositoryName}' is missing Uri/PublishUri/SourceUri for PSResourceGet registration.");
-
-        return _psResourceGet.EnsureRepositoryRegistered(
-            name: repositoryName,
-            uri: uri!,
-            trusted: repo.Trusted,
-            priority: repo.Priority,
-            apiVersion: repo.ApiVersion,
-            timeout: TimeSpan.FromMinutes(2));
-    }
-
-    private void UnregisterRepository(PublishTool tool, string repositoryName)
-    {
-        if (tool == PublishTool.PowerShellGet)
-        {
-            _powerShellGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
-            return;
-        }
-
-        _psResourceGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
-    }
-
     private ModulePublishResult PublishToGitHub(PublishConfiguration publish, ModulePipelinePlan plan, IReadOnlyList<ArtefactBuildResult> artefactResults)
     {
         if (string.IsNullOrWhiteSpace(publish.UserName))
@@ -614,7 +540,7 @@ public sealed class ModulePublisher
 
         var owner = publish.UserName!.Trim();
         var repo = string.IsNullOrWhiteSpace(publish.RepositoryName) ? plan.ModuleName : publish.RepositoryName!.Trim();
-        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var tag = GetGitHubTag(publish, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease);
 
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
@@ -661,9 +587,9 @@ public sealed class ModulePublisher
             throw new ArgumentNullException(nameof(publish));
 
         if (string.IsNullOrWhiteSpace(publish.OverwriteTagName))
-            return "v" + BuildServices.FormatVersionWithPreRelease(resolvedVersion, preRelease);
+            return "v" + ModulePathTokenFormatter.FormatVersionWithPreRelease(resolvedVersion, preRelease);
 
-        return BuildServices.ReplacePathTokens(publish.OverwriteTagName!, moduleName, resolvedVersion, preRelease);
+        return ModulePathTokenFormatter.ReplacePathTokens(publish.OverwriteTagName!, moduleName, resolvedVersion, preRelease);
     }
 
     private static ArtefactBuildResult[] SelectPackedArtefacts(IReadOnlyList<ArtefactBuildResult> artefactResults, string? id)
