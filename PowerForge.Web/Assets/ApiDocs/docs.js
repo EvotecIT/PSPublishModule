@@ -427,6 +427,67 @@
     setStatus('Start typing to search across the full API suite.');
   }
 
+  function normalizePath(path) {
+    if (!path) return '/';
+    if (path === '/') return '/';
+    return path.endsWith('/') ? path : path + '/';
+  }
+
+  function getApiDocsBasePath() {
+    var sidebarTitle = document.querySelector('.sidebar-title[href]');
+    var href = sidebarTitle ? sidebarTitle.getAttribute('href') : null;
+
+    try {
+      return normalizePath(new URL(href || window.location.pathname, window.location.href).pathname);
+    } catch (error) {
+      return normalizePath(window.location.pathname);
+    }
+  }
+
+  function isApiDocLink(anchor) {
+    var href = anchor && anchor.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return false;
+
+    try {
+      var url = new URL(href, window.location.href);
+      var basePath = getApiDocsBasePath();
+      var normalizedPath = normalizePath(url.pathname);
+      return url.origin === window.location.origin && (normalizedPath === basePath || normalizedPath.indexOf(basePath) === 0);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isStateHash(hash) {
+    return /^#(?:k|ns|q|mk|mq|mi|mc|tc)=/.test(hash || '');
+  }
+
+  function buildStateHash() {
+    var parts = [];
+    if (activeKind) parts.push('k=' + encodeURIComponent(activeKind));
+    if (activeNamespace) parts.push('ns=' + encodeURIComponent(activeNamespace));
+    if (filterInput && filterInput.value) parts.push('q=' + encodeURIComponent(filterInput.value));
+    if (activeMemberKind) parts.push('mk=' + encodeURIComponent(activeMemberKind));
+    if (memberFilter && memberFilter.value) parts.push('mq=' + encodeURIComponent(memberFilter.value));
+    if (inheritedToggle && inheritedToggle.checked) parts.push('mi=1');
+    if (window.__pfMemberCollapsed) parts.push('mc=' + encodeURIComponent(window.__pfMemberCollapsed));
+    if (window.__pfTocCollapsed) parts.push('tc=1');
+
+    return parts.length ? '#' + parts.join('&') : '';
+  }
+
+  function syncApiLinksWithState(hash) {
+    document.querySelectorAll('a[href]').forEach(function(anchor) {
+      if (!isApiDocLink(anchor)) return;
+
+      var url = new URL(anchor.getAttribute('href'), window.location.href);
+      if (url.hash && !isStateHash(url.hash)) return;
+
+      url.hash = hash;
+      anchor.setAttribute('href', url.pathname + url.search + url.hash);
+    });
+  }
+
   var activeKind = '';
   var activeNamespace = '';
   var activeMemberKind = '';
@@ -629,20 +690,14 @@
   }
 
   function saveState() {
-    var parts = [];
-    if (activeKind) parts.push('k=' + encodeURIComponent(activeKind));
-    if (activeNamespace) parts.push('ns=' + encodeURIComponent(activeNamespace));
-    if (filterInput && filterInput.value) parts.push('q=' + encodeURIComponent(filterInput.value));
-    if (activeMemberKind) parts.push('mk=' + encodeURIComponent(activeMemberKind));
-    if (memberFilter && memberFilter.value) parts.push('mq=' + encodeURIComponent(memberFilter.value));
-    if (inheritedToggle && inheritedToggle.checked) parts.push('mi=1');
-    if (window.__pfMemberCollapsed) parts.push('mc=' + encodeURIComponent(window.__pfMemberCollapsed));
-    if (window.__pfTocCollapsed) parts.push('tc=1');
-    if (!parts.length) {
+    var hash = buildStateHash();
+    if (!hash) {
       history.replaceState(null, '', window.location.pathname + window.location.search);
+      syncApiLinksWithState('');
       return;
     }
-    history.replaceState(null, '', window.location.pathname + window.location.search + '#' + parts.join('&'));
+    history.replaceState(null, '', window.location.pathname + window.location.search + hash);
+    syncApiLinksWithState(hash);
   }
 
   function applyFilter(query) {

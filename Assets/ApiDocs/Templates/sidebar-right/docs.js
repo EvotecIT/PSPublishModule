@@ -36,6 +36,95 @@
   var activeKind = '';
   var activeNamespace = '';
 
+  function setSearchParam(searchParams, key, value) {
+    if (value) {
+      searchParams.set(key, value);
+    } else {
+      searchParams.delete(key);
+    }
+  }
+
+  function getTypeFilterState() {
+    return {
+      query: filterInput ? filterInput.value : '',
+      kind: activeKind || '',
+      namespace: activeNamespace || ''
+    };
+  }
+
+  function writeTypeFilterState(url, state) {
+    setSearchParam(url.searchParams, 'q', state.query);
+    setSearchParam(url.searchParams, 'kind', state.kind);
+    setSearchParam(url.searchParams, 'namespace', state.namespace);
+  }
+
+  function isApiDocLink(anchor) {
+    var href = anchor && anchor.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return false;
+
+    try {
+      var url = new URL(href, window.location.href);
+      return url.origin === window.location.origin && /^\/api(?:\/|$)/.test(url.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function syncKindButtons() {
+    if (!kindButtons.length) return;
+
+    kindButtons.forEach(function(btn) {
+      var buttonKind = btn.dataset.kind || '';
+      btn.classList.toggle('active', buttonKind === activeKind);
+    });
+  }
+
+  function syncApiLinks() {
+    var state = getTypeFilterState();
+
+    document.querySelectorAll('a[href]').forEach(function(anchor) {
+      if (!isApiDocLink(anchor)) return;
+
+      var url = new URL(anchor.getAttribute('href'), window.location.href);
+      writeTypeFilterState(url, state);
+      anchor.setAttribute('href', url.pathname + url.search + url.hash);
+    });
+  }
+
+  function syncTypeFilterUrl() {
+    if (!window.history || !window.history.replaceState) return;
+
+    var url = new URL(window.location.href);
+    writeTypeFilterState(url, getTypeFilterState());
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+
+  function persistTypeFilterState() {
+    syncTypeFilterUrl();
+    syncApiLinks();
+  }
+
+  function applyTypeFilterStateFromUrl() {
+    var url = new URL(window.location.href);
+
+    activeKind = url.searchParams.get('kind') || '';
+    activeNamespace = url.searchParams.get('namespace') || '';
+
+    if (filterInput) {
+      filterInput.value = url.searchParams.get('q') || '';
+    }
+
+    if (clearButton) {
+      clearButton.style.display = filterInput && filterInput.value ? 'inline-flex' : 'none';
+    }
+
+    if (namespaceSelect) {
+      namespaceSelect.value = activeNamespace;
+    }
+
+    syncKindButtons();
+  }
+
   function applyFilter(query) {
     var q = normalize(query);
     var items = Array.prototype.slice.call(document.querySelectorAll('.type-item'));
@@ -77,6 +166,7 @@
       if (clearButton) {
         clearButton.style.display = filterInput.value ? 'inline-flex' : 'none';
       }
+      persistTypeFilterState();
     });
   }
 
@@ -85,6 +175,7 @@
       filterInput.value = '';
       applyFilter('');
       clearButton.style.display = 'none';
+      persistTypeFilterState();
       filterInput.focus();
     });
     clearButton.style.display = filterInput.value ? 'inline-flex' : 'none';
@@ -93,10 +184,10 @@
   if (kindButtons.length) {
     kindButtons.forEach(function(btn) {
       btn.addEventListener('click', function() {
-        kindButtons.forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
         activeKind = btn.dataset.kind || '';
+        syncKindButtons();
         applyFilter(filterInput ? filterInput.value : '');
+        persistTypeFilterState();
       });
     });
   }
@@ -105,6 +196,7 @@
     namespaceSelect.addEventListener('change', function() {
       activeNamespace = namespaceSelect.value || '';
       applyFilter(filterInput ? filterInput.value : '');
+      persistTypeFilterState();
     });
   }
 
@@ -179,6 +271,8 @@
     });
   });
 
+  applyTypeFilterStateFromUrl();
   applyFilter(filterInput ? filterInput.value : '');
+  persistTypeFilterState();
   applyMemberFilter();
 })();
