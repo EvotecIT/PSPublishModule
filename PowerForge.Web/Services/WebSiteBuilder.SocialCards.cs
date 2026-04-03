@@ -600,10 +600,18 @@ public static partial class WebSiteBuilder
         return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(sourcePath))}";
     }
 
-    private static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate)
+    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate)
     {
+        var sourceDir = Path.GetDirectoryName(item.SourcePath);
+        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir);
+
         if (Path.IsPathRooted(candidate) && File.Exists(candidate))
-            return Path.GetFullPath(candidate);
+        {
+            var fullCandidate = Path.GetFullPath(candidate);
+            return IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, fullCandidate)
+                ? fullCandidate
+                : string.Empty;
+        }
 
         var normalizedCandidate = candidate.Replace('\\', '/').Trim();
         foreach (var resource in item.Resources ?? Array.Empty<PageResource>())
@@ -611,40 +619,74 @@ public static partial class WebSiteBuilder
             var resourcePath = resource.RelativePath?.Replace('\\', '/').TrimStart('/') ?? string.Empty;
             if (string.Equals(resourcePath, normalizedCandidate.TrimStart('/'), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(resource.Name, Path.GetFileName(normalizedCandidate), StringComparison.OrdinalIgnoreCase))
-                return resource.SourcePath;
-        }
-
-        var sourceDir = Path.GetDirectoryName(item.SourcePath);
-        if (!string.IsNullOrWhiteSpace(sourceDir))
-        {
-            var relativeCandidate = Path.GetFullPath(Path.Combine(sourceDir, normalizedCandidate.Replace('/', Path.DirectorySeparatorChar)));
-            if (File.Exists(relativeCandidate))
-                return relativeCandidate;
-        }
-
-        var searchRoots = new List<string>();
-        var rootPath = BuildRootPathScope.Value;
-        if (!string.IsNullOrWhiteSpace(rootPath))
-        {
-            searchRoots.Add(Path.GetFullPath(rootPath));
-            searchRoots.Add(Path.GetFullPath(Path.Combine(rootPath, "static")));
-            if (!string.IsNullOrWhiteSpace(spec.ContentRoot))
-                searchRoots.Add(Path.GetFullPath(Path.Combine(rootPath, spec.ContentRoot)));
-            if (spec.ContentRoots is { Length: > 0 })
             {
-                foreach (var contentRoot in spec.ContentRoots.Where(static value => !string.IsNullOrWhiteSpace(value)))
-                    searchRoots.Add(Path.GetFullPath(Path.Combine(rootPath, contentRoot)));
+                var resourceSourcePath = Path.GetFullPath(resource.SourcePath);
+                return IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, resourceSourcePath)
+                    ? resourceSourcePath
+                    : string.Empty;
             }
         }
 
-        foreach (var root in searchRoots.Distinct(StringComparer.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(sourceDir))
+        {
+            var relativeCandidate = Path.GetFullPath(Path.Combine(sourceDir, normalizedCandidate.Replace('/', Path.DirectorySeparatorChar)));
+            if (File.Exists(relativeCandidate) &&
+                IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, relativeCandidate))
+                return relativeCandidate;
+        }
+
+        foreach (var root in allowedRoots)
         {
             var combined = Path.GetFullPath(Path.Combine(root, normalizedCandidate.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
-            if (File.Exists(combined))
+            if (File.Exists(combined) &&
+                IsSocialCardAssetPathWithinAllowedRoots(allowedRoots, combined))
                 return combined;
         }
 
         return string.Empty;
+    }
+
+    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir)
+    {
+        var roots = new List<string>();
+        var rootPath = BuildRootPathScope.Value;
+        if (!string.IsNullOrWhiteSpace(rootPath))
+        {
+            roots.Add(Path.GetFullPath(rootPath));
+            roots.Add(Path.GetFullPath(Path.Combine(rootPath, "static")));
+            if (!string.IsNullOrWhiteSpace(spec.ContentRoot))
+                roots.Add(Path.GetFullPath(Path.Combine(rootPath, spec.ContentRoot)));
+            if (spec.ContentRoots is { Length: > 0 })
+            {
+                foreach (var contentRoot in spec.ContentRoots.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                    roots.Add(Path.GetFullPath(Path.Combine(rootPath, contentRoot)));
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(sourceDir))
+        {
+            roots.Add(Path.GetFullPath(sourceDir));
+        }
+
+        return roots
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsSocialCardAssetPathWithinAllowedRoots(IReadOnlyCollection<string> allowedRoots, string candidatePath)
+    {
+        if (allowedRoots is null || allowedRoots.Count == 0)
+            return false;
+
+        foreach (var root in allowedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            if (IsPathWithinRoot(Path.GetFullPath(root), candidatePath))
+                return true;
+        }
+
+        return false;
     }
 
     private static string TryExtractFirstBodyImageCandidate(string? sourcePath)

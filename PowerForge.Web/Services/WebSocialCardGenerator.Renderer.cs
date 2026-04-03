@@ -104,7 +104,8 @@ internal static partial class WebSocialCardGenerator
         var variantKey = NormalizeVariant(options.VariantKey) ?? ClassifyVariant(styleKey, badge, footerLabel);
         var normalizedBadge = NormalizeBadgeLabel(badge, footerLabel, styleKey, variantKey);
         var normalizedFooter = NormalizeFooterLabel(footerLabel, normalizedBadge, styleKey);
-        var layoutKey = ResolveLayoutKey(styleKey, variantKey, !string.IsNullOrWhiteSpace(options.InlineImageDataUri));
+        var hasRenderableInlineImage = IsRenderableImageSource(options.InlineImageDataUri, options.AllowRemoteMediaFetch);
+        var layoutKey = ResolveLayoutKey(styleKey, variantKey, hasRenderableInlineImage);
         var frameInset = ResolveTokenPixels(options.ThemeTokens, width, height, 0, 0, "socialCard", "frameInset");
         var panelInset = ResolveTokenPixels(options.ThemeTokens, width, height, 0, 0, "socialCard", "panelInset");
         var contentPadding = ResolveTokenPixels(options.ThemeTokens, width, height, 28, 18, "socialCard", "contentPadding");
@@ -168,6 +169,23 @@ internal static partial class WebSocialCardGenerator
             "blog" => "editorial",
             _ => "product"
         };
+    }
+
+    internal static bool IsRenderableImageSource(string? source, bool allowRemoteMediaFetch)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        if (source.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (IsRemoteMediaSource(source))
+            return allowRemoteMediaFetch;
+
+        if (Uri.TryCreate(source, UriKind.Absolute, out var absoluteUri) && absoluteUri.IsFile)
+            return File.Exists(absoluteUri.LocalPath);
+
+        return File.Exists(source);
     }
 
     private static string ResolveCtaLabel(string styleKey, string badge)

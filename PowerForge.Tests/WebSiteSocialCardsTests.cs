@@ -279,6 +279,37 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void TryResolveSocialCardAssetPath_RejectsTraversalOutsideAllowedRoots()
+    {
+        var root = CreateTempRoot("pf-web-social-asset-root-");
+        try
+        {
+            var pagesDir = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesDir);
+            var pagePath = Path.Combine(pagesDir, "index.md");
+            File.WriteAllText(pagePath, "# Home");
+
+            var outsidePath = Path.Combine(root, "secret.png");
+            File.WriteAllBytes(outsidePath, new byte[] { 1, 2, 3, 4 });
+
+            var spec = BuildPagesSpec();
+            var item = new ContentItem
+            {
+                SourcePath = pagePath,
+                Collection = "pages"
+            };
+
+            var resolved = WebSiteBuilder.TryResolveSocialCardAssetPath(spec, item, "../../../secret.png");
+
+            Assert.Equal(string.Empty, resolved);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_DoesNotAutoGenerateCards_ForDocsPages_UnlessOverridden()
     {
         var root = CreateTempRoot("pf-web-social-generated-scope-");

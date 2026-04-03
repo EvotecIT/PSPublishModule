@@ -261,6 +261,28 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void RenderSvg_FallsBackFromInlineImageLayout_WhenRemoteMediaFetchIsDisabled()
+    {
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "OfficeIMO docs walkthrough",
+            Description = "Generated docs card with inline hero media.",
+            Eyebrow = "OfficeIMO",
+            Badge = "BLOG",
+            FooterLabel = "/blog/officeimo-docs",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "blog",
+            VariantKey = "inline-image",
+            InlineImageDataUri = "https://cdn.example.test/hero.png",
+            AllowRemoteMediaFetch = false
+        });
+
+        Assert.Contains("layout:editorial", svg, StringComparison.Ordinal);
+        Assert.DoesNotContain("layout:inline-image", svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderSvg_AllowsRemoteLogoReferences_WhenProvided()
     {
         const string logoUrl = "https://cdn.example.test/logo.svg";
