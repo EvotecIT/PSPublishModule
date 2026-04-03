@@ -73,7 +73,7 @@ These mostly represent reusable workflow, but they currently depend on PowerShel
 | `Services\ModuleTestFailureAnalyzer.cs` | Split: XML/core in `PowerForge`, Pester-object analysis in `PowerForge.PowerShell` | NUnit XML analysis is core, but Pester result-object inspection uses `PSObject`. | Split analyzers by input source. |
 | `Services\ModuleTestFailureWorkflowService.cs` | `PowerForge` after analyzer split | Workflow/path resolution is core, but it currently depends on the mixed analyzer. | Move after `ModuleTestFailureAnalyzer` is split. |
 | `Services\ModuleValidationService*.cs` | Split: validation coordinator in `PowerForge`, PowerShell validators in `PowerForge.PowerShell` | The coordinator is reusable, but script parsing/PSSA/import validation rely on PowerShell concepts. | Break into neutral validation pipeline plus PowerShell-backed validation adapters. |
-| `Services\ModulePublisher.cs` | Split: publish coordinator in `PowerForge`, PowerShell repository publishers in `PowerForge.PowerShell` | GitHub release publishing is host-neutral, but PowerShell repository publishing uses `PSResourceGet` / `PowerShellGet` clients. | Introduce publisher interfaces and separate repository-specific implementations. |
+| `Services\ModulePublisher.cs` | `PowerForge` | The host-neutral publish coordinator now lives in core and delegates repository publish work through shared helpers instead of depending on `ManifestEditor` / `BuildServices`-owned behavior. | Continue shrinking the remaining repository-specific helper surface if we want a narrower publish adapter later. |
 | `Services\ModulePipelineRunner*.cs` | Split: planning/result assembly in `PowerForge`, PowerShell-backed execution in `PowerForge.PowerShell` | The plan/result contracts are core, but execution currently mixes staging, manifest refresh, module import, dependency install, documentation, validation, and PowerShell-runner concerns. | First extract a core planner and immutable execution context, then keep a PowerShell execution adapter on top. |
 
 ## Recommended Extraction Order
@@ -164,9 +164,11 @@ Current status:
 
 These are worth doing separately because they mix reusable orchestration with PowerShell-specific implementations:
 
-- `ModulePublisher`
+- `RepositoryPublisher`
 - `ModuleValidationService*`
 - `BinaryDependencyPreflightService`
+
+- `ModulePublisher` now compiles in `PowerForge`. Repository publish registration/tool interactions are still an area we may narrow further, but the main publish coordinator is no longer stuck in the PowerShell-owned layer.
 
 ## First Concrete Slice
 
