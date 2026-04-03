@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
 using System.Management.Automation.Language;
 
 namespace PowerForge;
@@ -33,73 +31,6 @@ public sealed partial class ModuleValidationService
     {
         if (total <= 0) return 0;
         return (part / (double)total) * 100.0;
-    }
-
-    private static bool TryLoadAssembly(string name, out string? error)
-    {
-        error = null;
-        try
-        {
-            Assembly.Load(new AssemblyName(name));
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-    }
-
-    private static HashSet<string> DiscoverFunctionFileNames(string moduleRoot, string[]? paths)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (paths is null) return names;
-
-        foreach (var rel in paths)
-        {
-            if (string.IsNullOrWhiteSpace(rel)) continue;
-            var full = Path.IsPathRooted(rel) ? rel : Path.Combine(moduleRoot, rel);
-            if (!Directory.Exists(full)) continue;
-
-            foreach (var file in Directory.EnumerateFiles(full, "*.ps1", SearchOption.AllDirectories))
-                names.Add(Path.GetFileNameWithoutExtension(file));
-        }
-
-        return names;
-    }
-
-    private static (string[]? Values, bool Wildcard) GetManifestStringArray(string manifestPath, string key)
-    {
-        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, key, out var values) && values is { Length: > 0 })
-            return (values, false);
-
-        if (ManifestEditor.TryGetTopLevelString(manifestPath, key, out var raw))
-        {
-            var trimmed = raw?.Trim();
-            if (!string.IsNullOrWhiteSpace(trimmed))
-            {
-                if (string.Equals(trimmed, "*", StringComparison.OrdinalIgnoreCase))
-                    return (Array.Empty<string>(), true);
-                return (new[] { trimmed! }, false);
-            }
-        }
-
-        return (null, false);
-    }
-
-    private static string[] ResolveManifestAssemblies(string manifestPath)
-    {
-        var list = new List<string>();
-        if (ManifestEditor.TryGetTopLevelString(manifestPath, "RootModule", out var root) && !string.IsNullOrWhiteSpace(root))
-            list.Add(root!);
-
-        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "NestedModules", out var nested) && nested is { Length: > 0 })
-            list.AddRange(nested.Where(n => !string.IsNullOrWhiteSpace(n)));
-
-        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "RequiredAssemblies", out var assemblies) && assemblies is { Length: > 0 })
-            list.AddRange(assemblies.Where(a => !string.IsNullOrWhiteSpace(a)));
-
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static string ResolveModuleRoot(ModuleValidationSpec spec)
