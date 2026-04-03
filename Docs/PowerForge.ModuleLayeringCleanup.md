@@ -12,10 +12,10 @@ Clean up the current `PowerForge` vs `PowerForge.PowerShell` ownership split so 
 
 ## Current State
 
-- `PowerForge/PowerForge.csproj` removes the module pipeline files from the core assembly with `Compile Remove`.
-- `PowerForge.PowerShell/PowerForge.PowerShell.csproj` then compiles those same files via linked includes from `..\PowerForge\...`.
-- `PowerForge.Cli/PowerForge.Cli.csproj` references both `PowerForge` and `PowerForge.PowerShell`, which means the CLI currently needs the PowerShell-owned assembly for build/pipeline features.
-- `PowerForgeStudio.Orchestrator/PowerForgeStudio.Orchestrator.csproj` references `PowerForge` only. That is the strongest reason to make the reusable pipeline surface live in core again.
+- The reusable module pipeline surface already moved back into `PowerForge` across the earlier cleanup slices.
+- The remaining PowerShell-owned pipeline files now live physically under `PowerForge.PowerShell`, so file placement matches assembly ownership and we no longer depend on cross-project linked source includes for that set.
+- `PowerForge.Cli/PowerForge.Cli.csproj` still references both `PowerForge` and `PowerForge.PowerShell`, but that dependency is now driven by the remaining PowerShell-hosted execution features rather than confusing file ownership.
+- `PowerForgeStudio.Orchestrator/PowerForgeStudio.Orchestrator.csproj` still references `PowerForge` only, which remains the guardrail for keeping reusable build/publish logic in core.
 
 ## Classification
 

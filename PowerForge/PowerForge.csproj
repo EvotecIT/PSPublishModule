@@ -55,21 +55,4 @@
     <Compile Include="..\Shared\PowerShellFailureLineFilter.cs" Link="Shared\PowerShellFailureLineFilter.cs" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Remove="BuildServices.cs" />
-    <Compile Remove="Models\\Analysis\\MissingFunctionCommand.cs" />
-    <Compile Remove="Models\\Analysis\\MissingFunctionsReport.cs" />
-    <Compile Remove="Services\\AuthenticodeSigningService.cs" />
-    <Compile Remove="Services\\BinaryDependencyPreflightService.cs" />
-    <Compile Remove="Services\\DocumentationEngine.cs" />
-    <Compile Remove="Services\\LegacySegmentAdapter.cs" />
-    <Compile Remove="Services\\ManifestEditor*.cs" />
-    <Compile Remove="Services\\MissingFunctionsAnalyzer.cs" />
-    <Compile Remove="Services\\ModulePipelineRunner*.cs" />
-    <Compile Remove="Services\\ModuleTestFailureAnalyzer.cs" />
-    <Compile Remove="Services\\ModuleTestFailureWorkflowService.cs" />
-    <Compile Remove="Services\\ModuleTestSuiteService.cs" />
-    <Compile Remove="Services\\ModuleValidationService*.cs" />
-  </ItemGroup>
-
 </Project>
