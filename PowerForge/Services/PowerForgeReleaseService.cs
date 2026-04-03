@@ -1396,29 +1396,19 @@ internal sealed class PowerForgeReleaseService
 
         assets.AddRange(
             (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-            .SelectMany(build => build.OutputFiles ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
+            .SelectMany(build => (build.OutputFiles ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(path => new { Path = path!, Build = build }))
+            .Select(item => new PowerForgeReleaseAssetEntry
             {
-                Path = path!,
+                Path = item.Path,
                 Category = PowerForgeReleaseAssetCategory.Installer,
                 Source = "DotNetPublish",
-                Target = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Target,
-                Version = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Version,
-                Runtime = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Runtime,
-                Framework = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Framework,
-                Style = (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-                    .FirstOrDefault(build => (build.OutputFiles ?? Array.Empty<string>()).Contains(path!, StringComparer.OrdinalIgnoreCase))
-                    ?.Style
-                    .ToString()
+                Target = item.Build.Target,
+                Version = item.Build.Version,
+                Runtime = item.Build.Runtime,
+                Framework = item.Build.Framework,
+                Style = item.Build.Style.ToString()
             }));
 
         assets.AddRange(
@@ -1656,7 +1646,7 @@ internal sealed class PowerForgeReleaseService
             ? urlTemplate!
                 .Replace("{PackageIdentifier}", package.PackageIdentifier)
                 .Replace("{PackageVersion}", version)
-                .Replace("{FileName}", fileName)
+                .Replace("{FileName}", Uri.EscapeDataString(fileName))
                 .Replace("{Target}", asset.Target ?? string.Empty)
                 .Replace("{Runtime}", asset.Runtime ?? string.Empty)
                 .Replace("{Framework}", asset.Framework ?? string.Empty)
@@ -1724,15 +1714,15 @@ internal sealed class PowerForgeReleaseService
         builder.AppendLine("Installers:");
         foreach (var installer in installers)
         {
-            builder.AppendLine($"- Architecture: {installer.Architecture}");
-            builder.AppendLine($"  InstallerUrl: {installer.InstallerUrl}");
-            builder.AppendLine($"  InstallerSha256: {installer.InstallerSha256}");
+            AppendYamlSequenceLine(builder, "Architecture", installer.Architecture);
+            AppendYamlLine(builder, "InstallerUrl", installer.InstallerUrl, indent: 2);
+            AppendYamlLine(builder, "InstallerSha256", installer.InstallerSha256, indent: 2);
             if (!string.IsNullOrWhiteSpace(installer.NestedInstallerType))
-                builder.AppendLine($"  NestedInstallerType: {installer.NestedInstallerType}");
+                AppendYamlLine(builder, "NestedInstallerType", installer.NestedInstallerType!, indent: 2);
             if (!string.IsNullOrWhiteSpace(installer.RelativeFilePath))
             {
                 builder.AppendLine("  NestedInstallerFiles:");
-                builder.AppendLine($"  - RelativeFilePath: {installer.RelativeFilePath}");
+                AppendYamlSequenceLine(builder, "RelativeFilePath", installer.RelativeFilePath!, indent: 2);
             }
         }
 
@@ -1741,8 +1731,10 @@ internal sealed class PowerForgeReleaseService
         return builder.ToString();
     }
 
-    private static void AppendYamlLine(StringBuilder builder, string key, string value)
+    private static void AppendYamlLine(StringBuilder builder, string key, string value, int indent = 0)
     {
+        if (indent > 0)
+            builder.Append(' ', indent);
         builder.Append(key);
         builder.Append(": ");
         builder.AppendLine(EscapeYamlScalar(value));
@@ -1762,6 +1754,16 @@ internal sealed class PowerForgeReleaseService
         builder.AppendLine($"{key}:");
         foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
             builder.AppendLine($"- {EscapeYamlScalar(value)}");
+    }
+
+    private static void AppendYamlSequenceLine(StringBuilder builder, string key, string value, int indent = 0)
+    {
+        if (indent > 0)
+            builder.Append(' ', indent);
+        builder.Append("- ");
+        builder.Append(key);
+        builder.Append(": ");
+        builder.AppendLine(EscapeYamlScalar(value));
     }
 
     private static string EscapeYamlScalar(string value)
@@ -1786,7 +1788,7 @@ internal sealed class PowerForgeReleaseService
         if (normalized.EndsWith("x86", StringComparison.OrdinalIgnoreCase))
             return "x86";
 
-        return "x64";
+        throw new InvalidOperationException($"Could not infer Winget architecture from runtime '{runtime ?? "<null>"}'. Set the installer Architecture explicitly.");
     }
 
     private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan)

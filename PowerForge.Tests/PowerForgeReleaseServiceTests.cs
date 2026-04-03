@@ -2161,6 +2161,380 @@ public sealed class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_Winget_UsesRawAssetPathWhenStagingDisabled_EncodesUrlAndEscapesYaml()
+    {
+        var root = CreateSandbox();
+        var trayX64 = Path.Combine(root, "tray raw.zip");
+        var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        File.WriteAllText(trayX64, "zip", new UTF8Encoding(false));
+        File.WriteAllText(trayProject, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "IntelligenceX.Tray",
+                            ProjectPath = trayProject,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0-windows10.0.19041.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0-windows10.0.19041.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Bundle,
+                            Target = "IntelligenceX.Tray",
+                            Framework = "net10.0-windows10.0.19041.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            PublishDir = root,
+                            ZipPath = trayX64
+                        }
+                    }
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    },
+                    Winget = new PowerForgeReleaseWingetOptions
+                    {
+                        Enabled = true,
+                        OutputPath = "Winget",
+                        InstallerUrlTemplate = "https://example.test/downloads/{FileName}",
+                        Packages = new[]
+                        {
+                            new PowerForgeReleaseWingetPackage
+                            {
+                                PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
+                                PackageVersion = "1.0.0",
+                                Publisher = "Evotec",
+                                PackageName = "IntelligenceX Tray",
+                                License = "MIT",
+                                ShortDescription = "Windows tray app for IntelligenceX.",
+                                Installers = new[]
+                                {
+                                    new PowerForgeReleaseWingetInstaller
+                                    {
+                                        Category = PowerForgeReleaseAssetCategory.Portable,
+                                        Target = "IntelligenceX.Tray",
+                                        Runtime = "win-x64",
+                                        InstallerType = "zip",
+                                        NestedInstallerType = "portable",
+                                        RelativeFilePath = @"IntelligenceX Tray\IntelligenceX.Tray.exe"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true
+                });
+
+            Assert.True(result.Success);
+            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            var yaml = File.ReadAllText(manifestPath);
+            Assert.Contains("InstallerUrl: \"https://example.test/downloads/tray%20raw.zip\"", yaml, StringComparison.Ordinal);
+            Assert.Contains("RelativeFilePath: \"IntelligenceX Tray\\\\IntelligenceX.Tray.exe\"", yaml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_Winget_ThrowsWhenRuntimeArchitectureCannotBeInferred()
+    {
+        var root = CreateSandbox();
+        var trayArchive = Path.Combine(root, "tray-unknown.zip");
+        var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        File.WriteAllText(trayArchive, "zip", new UTF8Encoding(false));
+        File.WriteAllText(trayProject, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "IntelligenceX.Tray",
+                            ProjectPath = trayProject,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0-windows10.0.19041.0",
+                                Runtimes = new[] { "win-custom" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0-windows10.0.19041.0",
+                                    Runtime = "win-custom",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Bundle,
+                            Target = "IntelligenceX.Tray",
+                            Framework = "net10.0-windows10.0.19041.0",
+                            Runtime = "win-custom",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            PublishDir = root,
+                            ZipPath = trayArchive
+                        }
+                    }
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var blocked = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    },
+                    Winget = new PowerForgeReleaseWingetOptions
+                    {
+                        Enabled = true,
+                        OutputPath = "Winget",
+                        InstallerUrlTemplate = "https://example.test/downloads/{FileName}",
+                        Packages = new[]
+                        {
+                            new PowerForgeReleaseWingetPackage
+                            {
+                                PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
+                                PackageVersion = "1.0.0",
+                                Publisher = "Evotec",
+                                PackageName = "IntelligenceX Tray",
+                                License = "MIT",
+                                ShortDescription = "Windows tray app for IntelligenceX.",
+                                Installers = new[]
+                                {
+                                    new PowerForgeReleaseWingetInstaller
+                                    {
+                                        Category = PowerForgeReleaseAssetCategory.Portable,
+                                        Target = "IntelligenceX.Tray",
+                                        Runtime = "win-custom",
+                                        InstallerType = "zip"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true
+                }));
+
+            Assert.Contains("Could not infer Winget architecture", blocked.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_Winget_ThrowsWhenNoInstallerUrlSourceCanBeResolved()
+    {
+        var root = CreateSandbox();
+        var trayArchive = Path.Combine(root, "tray-x64.zip");
+        var trayProject = Path.Combine(root, "IntelligenceX.Tray.csproj");
+        File.WriteAllText(trayArchive, "zip", new UTF8Encoding(false));
+        File.WriteAllText(trayProject, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+        try
+        {
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Configuration = "Release",
+                    Targets = new[]
+                    {
+                        new DotNetPublishTargetPlan
+                        {
+                            Name = "IntelligenceX.Tray",
+                            ProjectPath = trayProject,
+                            Publish = new DotNetPublishPublishOptions
+                            {
+                                Framework = "net10.0-windows10.0.19041.0",
+                                Runtimes = new[] { "win-x64" },
+                                Style = DotNetPublishStyle.PortableCompat,
+                                Zip = true
+                            },
+                            Combinations = new[]
+                            {
+                                new DotNetPublishTargetCombination
+                                {
+                                    Framework = "net10.0-windows10.0.19041.0",
+                                    Runtime = "win-x64",
+                                    Style = DotNetPublishStyle.PortableCompat
+                                }
+                            }
+                        }
+                    }
+                },
+                runDotNetTools: _ => new DotNetPublishResult
+                {
+                    Succeeded = true,
+                    Artefacts = new[]
+                    {
+                        new DotNetPublishArtefactResult
+                        {
+                            Category = DotNetPublishArtefactCategory.Bundle,
+                            Target = "IntelligenceX.Tray",
+                            Framework = "net10.0-windows10.0.19041.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat,
+                            OutputDir = root,
+                            PublishDir = root,
+                            ZipPath = trayArchive
+                        }
+                    }
+                },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var blocked = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        DotNetPublish = new DotNetPublishSpec()
+                    },
+                    Winget = new PowerForgeReleaseWingetOptions
+                    {
+                        Enabled = true,
+                        OutputPath = "Winget",
+                        Packages = new[]
+                        {
+                            new PowerForgeReleaseWingetPackage
+                            {
+                                PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
+                                PackageVersion = "1.0.0",
+                                Publisher = "Evotec",
+                                PackageName = "IntelligenceX Tray",
+                                License = "MIT",
+                                ShortDescription = "Windows tray app for IntelligenceX.",
+                                Installers = new[]
+                                {
+                                    new PowerForgeReleaseWingetInstaller
+                                    {
+                                        Category = PowerForgeReleaseAssetCategory.Portable,
+                                        Target = "IntelligenceX.Tray",
+                                        Runtime = "win-x64",
+                                        InstallerType = "zip"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true
+                }));
+
+            Assert.Contains("requires InstallerUrlTemplate", blocked.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ToolOutputSelection_InstallerOnlyKeepsRequiredBundlesButDisablesPortableZips()
     {
         var root = CreateSandbox();
