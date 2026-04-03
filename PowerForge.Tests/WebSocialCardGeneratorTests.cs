@@ -344,6 +344,55 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void GetRemoteImageBytes_DoesNotCacheTransientFailures()
+    {
+        WebSocialCardGenerator.ClearRemoteImageCache();
+        var calls = 0;
+
+        byte[]? Fetcher(string _)
+        {
+            calls++;
+            return calls == 1 ? null : Encoding.UTF8.GetBytes("recovered");
+        }
+
+        var first = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.svg",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+        var second = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.svg",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+
+        Assert.Null(first);
+        Assert.NotNull(second);
+        Assert.Equal(2, calls);
+        WebSocialCardGenerator.ClearRemoteImageCache();
+    }
+
+    [Fact]
+    public void RenderSvg_FallsBackToMonogram_WhenRemoteLogoCannotBeRendered()
+    {
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "TestimoX - Active Directory Security",
+            Description = "Security assessment suite for Active Directory.",
+            Eyebrow = "TestimoX",
+            Badge = "HOME",
+            FooterLabel = "/",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "home",
+            VariantKey = "spotlight",
+            LogoDataUri = "https://cdn.example.test/logo.svg",
+            AllowRemoteMediaFetch = false,
+            EmbedReferencedMediaInSvg = false
+        });
+
+        Assert.Contains(">TE</text>", svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AdaptTitleSize_ReducesFontSize_WhenTitleWouldTruncate()
     {
         // Very long title that cannot fit in 2 lines at 60px on a 400px-wide area

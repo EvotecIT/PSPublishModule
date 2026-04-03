@@ -307,8 +307,11 @@ internal static partial class WebSocialCardGenerator
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
+        if (!string.IsNullOrWhiteSpace(state.LogoDataUri) &&
+            IsRenderableImageSource(state.LogoDataUri, state.AllowRemoteMediaFetch))
+        {
             return;
+        }
 
         var monogram = BuildMonogram(state.Eyebrow, state.Badge);
         svg.AppendLine($@"  <text x=""{x + (size / 2)}"" y=""{y + (size / 2)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{Math.Max(18, size * 2 / 5)}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
@@ -823,11 +826,19 @@ internal static partial class WebSocialCardGenerator
         var lazy = RemoteImageByteCache.GetOrAdd(
             source,
             key => new Lazy<byte[]>(
-                () => fetch(key) ?? Array.Empty<byte>(),
+                () => fetch(key) is { Length: > 0 } payload
+                    ? payload
+                    : throw new InvalidOperationException("Remote image fetch returned no data."),
                 LazyThreadSafetyMode.ExecutionAndPublication));
-
-        var bytes = lazy.Value;
-        return bytes.Length == 0 ? null : bytes;
+        try
+        {
+            return lazy.Value;
+        }
+        catch
+        {
+            RemoteImageByteCache.TryRemove(new KeyValuePair<string, Lazy<byte[]>>(source, lazy));
+            return null;
+        }
     }
 
     private static bool IsRemoteMediaSource(string source)
