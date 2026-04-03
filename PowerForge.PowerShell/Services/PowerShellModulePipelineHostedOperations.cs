@@ -71,7 +71,7 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
     public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
     {
         var service = new BinaryDependencyPreflightService(_logger);
-        var result = service.Analyze(moduleRoot, powerShellEdition);
+        var result = service.Analyze(moduleRoot, powerShellEdition, modulePath);
         if (!result.HasIssues)
             return;
 

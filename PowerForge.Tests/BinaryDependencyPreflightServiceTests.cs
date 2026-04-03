@@ -57,6 +57,280 @@ public sealed class BinaryDependencyPreflightServiceTests
     }
 
     [Fact]
+    public void Analyze_WithManifestScopedScriptModule_IgnoresDeliveryInternalsDlls()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    PrivateData = @{
+        PSData = @{
+            Delivery = @{
+                Enable = $true
+                InternalsPath = 'Artefacts'
+            }
+        }
+    }
+}
+""");
+
+            var artefactsRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Artefacts"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(artefactsRoot.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.False(result.HasIssues);
+            Assert.Equal("no declared binary assemblies", result.Summary);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedScriptModule_UsesDefaultInternalsExclusion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    PrivateData = @{
+        PSData = @{
+            Delivery = @{
+                Enable = $true
+            }
+        }
+    }
+}
+""");
+
+            var internalsRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internalsRoot.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.False(result.HasIssues);
+            Assert.Equal("no declared binary assemblies", result.Summary);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedRequiredAssemblyInsideDefaultInternals_StillChecksDeclaredBinary()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    RequiredAssemblies = @('Internals/Consumer.dll')
+    PrivateData = @{
+        PSData = @{
+            Delivery = @{
+                Enable = $true
+            }
+        }
+    }
+}
+""");
+
+            var internalsRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internalsRoot.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.True(result.HasIssues);
+            Assert.Contains(result.Issues, i => string.Equals(i.MissingDependencyName, "Dependency", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedRequiredAssemblyInsideDefaultInternals_KeepsSiblingDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    RequiredAssemblies = @('Internals/Consumer.dll')
+    PrivateData = @{
+        PSData = @{
+            Delivery = @{
+                Enable = $true
+            }
+        }
+    }
+}
+""");
+
+            var internalsRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internalsRoot.FullName, "Consumer.dll"), overwrite: true);
+            File.Copy(paths.DependencyAssemblyPath, Path.Combine(internalsRoot.FullName, "Dependency.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.False(result.HasIssues);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedRootBinary_FindsMissingDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    NestedModules = @('Consumer.dll')
+}
+""");
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(moduleRoot.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.True(result.HasIssues);
+            Assert.Contains(result.Issues, i => string.Equals(i.MissingDependencyName, "Dependency", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedRootBinary_FindsTransitiveMissingDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateTransitiveDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    NestedModules = @('Consumer.dll')
+}
+""");
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(moduleRoot.FullName, "Consumer.dll"), overwrite: true);
+            File.Copy(paths.DependencyAssemblyPath, Path.Combine(moduleRoot.FullName, "Dependency.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.True(result.HasIssues);
+            Assert.Contains(result.Issues, i => string.Equals(i.MissingDependencyName, "Leaf", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_WithManifestScopedRequiredAssemblies_FindsMissingDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# script module");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), """
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'TestModule.psm1'
+    RequiredAssemblies = @('Consumer.dll')
+}
+""");
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(moduleRoot.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                moduleRoot.FullName,
+                "Core",
+                Path.Combine(moduleRoot.FullName, "TestModule.psd1"));
+
+            Assert.True(result.HasIssues);
+            Assert.Contains(result.Issues, i => string.Equals(i.MissingDependencyName, "Dependency", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildFailureMessage_IncludesClearHint()
     {
         var result = new BinaryDependencyPreflightResult(
@@ -113,6 +387,81 @@ namespace DependencyLib;
 
 public sealed class DependencyMarker
 {
+}
+""");
+
+        File.WriteAllText(Path.Combine(consumerRoot.FullName, "Consumer.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Dependency\Dependency.csproj" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(Path.Combine(consumerRoot.FullName, "Class1.cs"), """
+using DependencyLib;
+
+namespace ConsumerLib;
+
+public sealed class ConsumerMarker
+{
+    public DependencyMarker Dependency { get; } = new();
+}
+""");
+
+        return new DependencyFixture(
+            Path.Combine(consumerRoot.FullName, "Consumer.csproj"),
+            Path.Combine(consumerRoot.FullName, "bin", "Release", "net8.0", "Consumer.dll"),
+            Path.Combine(dependencyRoot.FullName, "bin", "Release", "net8.0", "Dependency.dll"));
+    }
+
+    private static DependencyFixture CreateTransitiveDependencyFixture(string rootPath)
+    {
+        var leafRoot = Directory.CreateDirectory(Path.Combine(rootPath, "Leaf"));
+        var dependencyRoot = Directory.CreateDirectory(Path.Combine(rootPath, "Dependency"));
+        var consumerRoot = Directory.CreateDirectory(Path.Combine(rootPath, "Consumer"));
+
+        File.WriteAllText(Path.Combine(leafRoot.FullName, "Leaf.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>
+""");
+        File.WriteAllText(Path.Combine(leafRoot.FullName, "Class1.cs"), """
+namespace LeafLib;
+
+public sealed class LeafMarker
+{
+}
+""");
+
+        File.WriteAllText(Path.Combine(dependencyRoot.FullName, "Dependency.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Leaf\Leaf.csproj" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(Path.Combine(dependencyRoot.FullName, "Class1.cs"), """
+using LeafLib;
+
+namespace DependencyLib;
+
+public sealed class DependencyMarker
+{
+    public LeafMarker Leaf { get; } = new();
 }
 """);
 
