@@ -112,6 +112,9 @@ Unified release entrypoint
   - `--output-root <path>` to remap DotNetPublish tool/app artefacts, manifests, bundle outputs, and installer staging under a different root
   - `--stage-root <path>` to copy unified release assets into a categorized release folder (`modules`, `nuget`, `portable`, `installer`, `tools`, `metadata`) and write `release-manifest.json` / `SHA256SUMS.txt` there by default
   - `Outputs.Staging` in `release.json` for default folder names when you want the same categorized layout without repeating CLI switches
+  - `Outputs.Staging.*Path` values may point multiple categories at the same folder when you want a flat `UploadReady` layout such as `NuGet` + `GitHub`
+  - `Outputs.Staging.*NameTemplate` values let the staged copies use release-facing names instead of raw internal build names
+  - `Winget` in `release.json` when you want PowerForge to emit portable/signed release manifests from the same staged assets
   - `--keep-symbols` for symbol-preserving tool/app outputs
   - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`
   - `--sign`, `--sign-profile`, and raw overrides such as `--sign-thumbprint`, `--sign-subject-name`, `--sign-timestamp-url`, `--sign-tool-path`
@@ -142,6 +145,54 @@ New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
 
 ```powershell
 Invoke-PowerForgeRelease -ConfigPath .\Build\release.json -Plan
+```
+
+Example staging layout for release uploads:
+
+```json
+"Outputs": {
+  "Staging": {
+    "RootPath": "Artifacts/UploadReady",
+    "PackagesPath": "NuGet",
+    "PortablePath": "GitHub",
+    "InstallerPath": "GitHub",
+    "PackagesNameTemplate": "{PackageId}.{Version}{Extension}",
+    "PortableNameTemplate": "{Target}-{Version}-{Runtime}-portable{Extension}",
+    "InstallerNameTemplate": "{Target}-{Version}-{Runtime}-installer{Extension}"
+  }
+}
+```
+
+- checksums written for staged releases now follow the staged filenames/paths, not the raw internal build outputs
+
+Example Winget generation from staged assets:
+
+```json
+"Winget": {
+  "Enabled": true,
+  "OutputPath": "Artifacts/UploadReady/Winget",
+  "InstallerUrlTemplate": "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
+  "Packages": [
+    {
+      "PackageIdentifier": "EvotecIT.IntelligenceX.Tray",
+      "PackageVersion": "1.0.0",
+      "Publisher": "Evotec",
+      "PackageName": "IntelligenceX Tray",
+      "License": "MIT",
+      "ShortDescription": "Windows tray app for IntelligenceX.",
+      "Installers": [
+        {
+          "Category": "Portable",
+          "Target": "IntelligenceX.Tray",
+          "Runtime": "win-x64",
+          "InstallerType": "zip",
+          "NestedInstallerType": "portable",
+          "RelativeFilePath": "IntelligenceX.Tray.exe"
+        }
+      ]
+    }
+  ]
+}
 ```
 
 - Plan or build preview executables only:

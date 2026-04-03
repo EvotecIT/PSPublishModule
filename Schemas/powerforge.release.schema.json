@@ -41,6 +41,61 @@
         }
       }
     },
+    "Winget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "OutputPath": { "type": [ "string", "null" ] },
+        "InstallerUrlTemplate": { "type": [ "string", "null" ] },
+        "ManifestVersion": { "type": [ "string", "null" ] },
+        "PackageLocale": { "type": [ "string", "null" ] },
+        "Packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "PackageIdentifier", "Publisher", "PackageName", "License", "ShortDescription", "Installers" ],
+            "properties": {
+              "PackageIdentifier": { "type": "string" },
+              "PackageVersion": { "type": [ "string", "null" ] },
+              "PackageLocale": { "type": [ "string", "null" ] },
+              "Publisher": { "type": "string" },
+              "PublisherUrl": { "type": [ "string", "null" ] },
+              "PackageName": { "type": "string" },
+              "PackageUrl": { "type": [ "string", "null" ] },
+              "License": { "type": "string" },
+              "LicenseUrl": { "type": [ "string", "null" ] },
+              "ShortDescription": { "type": "string" },
+              "Moniker": { "type": [ "string", "null" ] },
+              "Tags": { "type": "array", "items": { "type": "string" } },
+              "Platform": { "type": "array", "items": { "type": "string" } },
+              "MinimumOSVersion": { "type": [ "string", "null" ] },
+              "ManifestVersion": { "type": [ "string", "null" ] },
+              "Installers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [ "Category" ],
+                  "properties": {
+                    "Category": { "type": "string", "enum": [ "Module", "Package", "Portable", "Installer", "Store", "Tool", "Metadata", "Other" ] },
+                    "Target": { "type": [ "string", "null" ] },
+                    "Runtime": { "type": [ "string", "null" ] },
+                    "Framework": { "type": [ "string", "null" ] },
+                    "Architecture": { "type": [ "string", "null" ] },
+                    "InstallerType": { "type": [ "string", "null" ] },
+                    "NestedInstallerType": { "type": [ "string", "null" ] },
+                    "RelativeFilePath": { "type": [ "string", "null" ] },
+                    "UrlTemplate": { "type": [ "string", "null" ] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Outputs": {
       "type": "object",
       "additionalProperties": false,
@@ -59,7 +114,15 @@
             "StorePath": { "type": [ "string", "null" ] },
             "ToolsPath": { "type": [ "string", "null" ] },
             "MetadataPath": { "type": [ "string", "null" ] },
-            "OtherPath": { "type": [ "string", "null" ] }
+            "OtherPath": { "type": [ "string", "null" ] },
+            "ModulesNameTemplate": { "type": [ "string", "null" ] },
+            "PackagesNameTemplate": { "type": [ "string", "null" ] },
+            "PortableNameTemplate": { "type": [ "string", "null" ] },
+            "InstallerNameTemplate": { "type": [ "string", "null" ] },
+            "StoreNameTemplate": { "type": [ "string", "null" ] },
+            "ToolsNameTemplate": { "type": [ "string", "null" ] },
+            "MetadataNameTemplate": { "type": [ "string", "null" ] },
+            "OtherNameTemplate": { "type": [ "string", "null" ] }
           }
         }
       }

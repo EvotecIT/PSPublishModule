@@ -21,6 +21,8 @@ internal sealed class PowerForgeReleaseSpec
     public PowerForgeWorkspaceValidationOptions? WorkspaceValidation { get; set; }
 
     public PowerForgeReleaseOutputsOptions Outputs { get; set; } = new();
+
+    public PowerForgeReleaseWingetOptions? Winget { get; set; }
 }
 
 /// <summary>
@@ -177,6 +179,8 @@ internal sealed class PowerForgeReleaseResult
     public string? ReleaseManifestPath { get; set; }
 
     public string? ReleaseChecksumsPath { get; set; }
+
+    public string[] WingetManifestPaths { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -210,6 +214,93 @@ internal sealed class PowerForgeReleaseStagingOptions
     public string MetadataPath { get; set; } = "metadata";
 
     public string OtherPath { get; set; } = "assets";
+
+    public string? ModulesNameTemplate { get; set; }
+
+    public string? PackagesNameTemplate { get; set; }
+
+    public string? PortableNameTemplate { get; set; }
+
+    public string? InstallerNameTemplate { get; set; }
+
+    public string? StoreNameTemplate { get; set; }
+
+    public string? ToolsNameTemplate { get; set; }
+
+    public string? MetadataNameTemplate { get; set; }
+
+    public string? OtherNameTemplate { get; set; }
+}
+
+internal sealed class PowerForgeReleaseWingetOptions
+{
+    public bool Enabled { get; set; }
+
+    public string? OutputPath { get; set; }
+
+    public string? InstallerUrlTemplate { get; set; }
+
+    public string ManifestVersion { get; set; } = "1.12.0";
+
+    public string PackageLocale { get; set; } = "en-US";
+
+    public PowerForgeReleaseWingetPackage[] Packages { get; set; } = Array.Empty<PowerForgeReleaseWingetPackage>();
+}
+
+internal sealed class PowerForgeReleaseWingetPackage
+{
+    public string PackageIdentifier { get; set; } = string.Empty;
+
+    public string? PackageVersion { get; set; }
+
+    public string? PackageLocale { get; set; }
+
+    public string Publisher { get; set; } = string.Empty;
+
+    public string? PublisherUrl { get; set; }
+
+    public string PackageName { get; set; } = string.Empty;
+
+    public string? PackageUrl { get; set; }
+
+    public string License { get; set; } = string.Empty;
+
+    public string? LicenseUrl { get; set; }
+
+    public string ShortDescription { get; set; } = string.Empty;
+
+    public string? Moniker { get; set; }
+
+    public string[] Tags { get; set; } = Array.Empty<string>();
+
+    public string[] Platform { get; set; } = new[] { "Windows.Desktop" };
+
+    public string? MinimumOSVersion { get; set; }
+
+    public string? ManifestVersion { get; set; }
+
+    public PowerForgeReleaseWingetInstaller[] Installers { get; set; } = Array.Empty<PowerForgeReleaseWingetInstaller>();
+}
+
+internal sealed class PowerForgeReleaseWingetInstaller
+{
+    public PowerForgeReleaseAssetCategory Category { get; set; } = PowerForgeReleaseAssetCategory.Portable;
+
+    public string? Target { get; set; }
+
+    public string? Runtime { get; set; }
+
+    public string? Framework { get; set; }
+
+    public string? Architecture { get; set; }
+
+    public string InstallerType { get; set; } = "zip";
+
+    public string? NestedInstallerType { get; set; } = "portable";
+
+    public string? RelativeFilePath { get; set; }
+
+    public string? UrlTemplate { get; set; }
 }
 
 internal enum PowerForgeReleaseToolOutputKind
@@ -286,6 +377,18 @@ internal sealed class PowerForgeReleaseAssetEntry
 
     public string? Target { get; set; }
 
+    public string? PackageId { get; set; }
+
+    public string? Version { get; set; }
+
+    public string? Runtime { get; set; }
+
+    public string? Framework { get; set; }
+
+    public string? Style { get; set; }
+
+    public string? BundleId { get; set; }
+
     public string? RelativeStagePath { get; set; }
 
     public string? StagedPath { get; set; }
@@ -307,6 +410,10 @@ internal sealed class PowerForgeWorkspaceValidationOptions
 /// </summary>
 internal sealed class PowerForgeToolGitHubReleaseResult
 {
+    public string Owner { get; set; } = string.Empty;
+
+    public string Repository { get; set; } = string.Empty;
+
     public string Target { get; set; } = string.Empty;
 
     public string Version { get; set; } = string.Empty;
