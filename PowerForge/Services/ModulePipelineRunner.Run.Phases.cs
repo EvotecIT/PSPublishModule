@@ -714,7 +714,7 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
+    internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
     {
         var generator = new DeliveryCommandGenerator(_logger);
         var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
@@ -728,7 +728,7 @@ public sealed partial class ModulePipelineRunner
             if (Directory.Exists(publicFolder))
             {
                 var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
-                var functions = ScriptFunctionExportDetector.DetectScriptFunctions(scripts);
+                var functions = _scriptFunctionExportDetector.DetectScriptFunctions(scripts);
                 _manifestMutator.TrySetManifestExports(buildResult.ManifestPath, functions.ToArray(), cmdlets: null, aliases: null);
             }
 

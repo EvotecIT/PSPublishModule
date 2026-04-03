@@ -2,8 +2,6 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private static readonly IScriptFunctionExportDetector ScriptFunctionExportDetector = new PowerShellScriptFunctionExportDetector();
-
     /// <summary>
     /// Executes the pipeline described by <paramref name="spec"/>.
     /// </summary>
