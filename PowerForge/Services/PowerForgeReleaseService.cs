@@ -203,6 +203,8 @@ internal sealed class PowerForgeReleaseService
             }
         }
 
+        var sharedReleaseVersion = ResolveSharedReleaseVersion(spec, result);
+
         if (runTools)
         {
             ApplyToolRequestOverrides(spec.Tools!, request, configurationOverride);
@@ -210,6 +212,7 @@ internal sealed class PowerForgeReleaseService
             {
                 var (dotNetSpec, dotNetSourcePath) = _loadDotNetToolsSpec(spec.Tools!, configPath);
                 var dotNetPlan = _planDotNetTools(dotNetSpec, dotNetSourcePath, request, selectedToolOutputs);
+                ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion);
                 ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                 result.DotNetToolPlan = dotNetPlan;
 
@@ -228,7 +231,7 @@ internal sealed class PowerForgeReleaseService
                     var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                     if (publishToolGitHub)
                     {
-                        var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools);
+                        var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools, sharedReleaseVersion);
                         result.ToolGitHubReleases = releases;
                         var failures = releases.Where(entry => !entry.Success).ToArray();
                         if (failures.Length > 0)
@@ -275,7 +278,7 @@ internal sealed class PowerForgeReleaseService
 
         if (!request.PlanOnly && !request.ValidateOnly)
         {
-            PopulateReleaseOutputs(spec, request, configDirectory, result);
+            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
             GenerateWingetOutputs(spec, configDirectory, result);
         }
 
@@ -399,13 +402,99 @@ internal sealed class PowerForgeReleaseService
         return options;
     }
 
+    private static string? ResolveSharedReleaseVersion(PowerForgeReleaseSpec spec, PowerForgeReleaseResult result)
+    {
+        var release = result.Packages?.Result.Release;
+        if (release is null)
+            return null;
+
+        var primaryProject = string.IsNullOrWhiteSpace(spec.Packages?.GitHubPrimaryProject)
+            ? null
+            : spec.Packages!.GitHubPrimaryProject!.Trim();
+        if (!string.IsNullOrWhiteSpace(primaryProject))
+        {
+            if (release.ResolvedVersionsByProject.TryGetValue(primaryProject!, out var primaryVersion)
+                && !string.IsNullOrWhiteSpace(primaryVersion))
+            {
+                return primaryVersion;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(release.ResolvedVersion))
+            return release.ResolvedVersion;
+
+        var distinctVersions = release.ResolvedVersionsByProject.Values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return distinctVersions.Length == 1 ? distinctVersions[0] : null;
+    }
+
+    private static void ApplySharedReleaseVersion(DotNetPublishPlan plan, string? sharedReleaseVersion)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+        if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return;
+
+        foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!))
+            plan.MsBuildProperties[entry.Key] = entry.Value;
+    }
+
+    private static Dictionary<string, string> BuildSharedReleaseVersionProperties(string sharedReleaseVersion)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Version"] = sharedReleaseVersion,
+            ["PackageVersion"] = sharedReleaseVersion,
+            ["InformationalVersion"] = sharedReleaseVersion
+        };
+
+        var numericVersion = NormalizeSharedReleaseAssemblyVersion(sharedReleaseVersion);
+        if (!string.IsNullOrWhiteSpace(numericVersion))
+        {
+            properties["VersionPrefix"] = numericVersion!;
+            properties["AssemblyVersion"] = numericVersion!;
+            properties["FileVersion"] = numericVersion!;
+        }
+
+        return properties;
+    }
+
+    private static string? NormalizeSharedReleaseAssemblyVersion(string version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return null;
+
+        var core = version.Trim();
+        var separatorIndex = core.IndexOfAny(new[] { '-', '+' });
+        if (separatorIndex >= 0)
+            core = core.Substring(0, separatorIndex);
+
+        if (string.IsNullOrWhiteSpace(core))
+            return null;
+
+        var segments = core.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(segment => segment.Trim())
+            .ToArray();
+        if (segments.Length == 0 || segments.Length > 4)
+            return null;
+
+        if (segments.Any(segment => !int.TryParse(segment, out _)))
+            return null;
+
+        return string.Join(".", segments);
+    }
+
     private void PopulateReleaseOutputs(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseRequest request,
         string configDirectory,
-        PowerForgeReleaseResult result)
+        PowerForgeReleaseResult result,
+        string? sharedReleaseVersion)
     {
-        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan)
+        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -647,7 +736,8 @@ internal sealed class PowerForgeReleaseService
         PowerForgeReleaseSpec spec,
         string configDirectory,
         DotNetPublishPlan plan,
-        DotNetPublishResult result)
+        DotNetPublishResult result,
+        string? sharedReleaseVersion)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
         var resolved = ResolveGitHubConfiguration(spec, gitHub, configDirectory);
@@ -668,7 +758,7 @@ internal sealed class PowerForgeReleaseService
         var releases = new List<PowerForgeToolGitHubReleaseResult>();
         foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
         {
-            var version = ResolveDotNetTargetVersion(target, result);
+            var version = ResolveDotNetTargetVersion(target, result, sharedReleaseVersion);
             if (string.IsNullOrWhiteSpace(version))
             {
                 releases.Add(new PowerForgeToolGitHubReleaseResult
@@ -803,7 +893,7 @@ internal sealed class PowerForgeReleaseService
         }
     }
 
-    private static string? ResolveDotNetTargetVersion(DotNetPublishTargetPlan target, DotNetPublishResult result)
+    private static string? ResolveDotNetTargetVersion(DotNetPublishTargetPlan target, DotNetPublishResult result, string? sharedReleaseVersion)
     {
         if (!string.IsNullOrWhiteSpace(target.ProjectPath)
             && File.Exists(target.ProjectPath)
@@ -818,7 +908,10 @@ internal sealed class PowerForgeReleaseService
             .Select(entry => entry.Version)
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
-        return string.IsNullOrWhiteSpace(msiVersion) ? null : msiVersion;
+        if (!string.IsNullOrWhiteSpace(msiVersion))
+            return msiVersion;
+
+        return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
     }
 
     private static (string? Owner, string? Repository, string? Token, PowerForgeToolGitHubReleaseResult? Error) ResolveGitHubConfiguration(
@@ -1365,7 +1458,8 @@ internal sealed class PowerForgeReleaseService
 
     private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
         PowerForgeReleaseResult result,
-        DotNetPublishPlan? dotNetPlan)
+        DotNetPublishPlan? dotNetPlan,
+        string? sharedReleaseVersion)
     {
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
@@ -1394,7 +1488,7 @@ internal sealed class PowerForgeReleaseService
 
         assets.AddRange(
             (result.DotNetTools?.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
-            .SelectMany(artifact => CreateDotNetArtefactEntries(artifact, dotNetPlan)));
+            .SelectMany(artifact => CreateDotNetArtefactEntries(artifact, dotNetPlan, sharedReleaseVersion)));
 
         assets.AddRange(
             (result.DotNetTools?.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
@@ -1486,12 +1580,13 @@ internal sealed class PowerForgeReleaseService
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetArtefactEntries(
         DotNetPublishArtefactResult artifact,
-        DotNetPublishPlan? dotNetPlan)
+        DotNetPublishPlan? dotNetPlan,
+        string? sharedReleaseVersion)
     {
         if (string.IsNullOrWhiteSpace(artifact.ZipPath) || !File.Exists(artifact.ZipPath))
             yield break;
 
-        var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan);
+        var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan, sharedReleaseVersion);
 
         yield return new PowerForgeReleaseAssetEntry
         {
@@ -1817,22 +1912,24 @@ internal sealed class PowerForgeReleaseService
         throw new InvalidOperationException($"Could not infer Winget architecture from runtime '{runtime ?? "<null>"}'. Set the installer Architecture explicitly.");
     }
 
-    private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan)
+    private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan, string? sharedReleaseVersion)
     {
         if (plan?.Targets is null)
-            return null;
+            return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
 
         var target = plan.Targets.FirstOrDefault(candidate =>
             string.Equals(candidate.Name, artifact.Target, StringComparison.OrdinalIgnoreCase));
         if (target is null)
-            return null;
+            return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
 
-        return !string.IsNullOrWhiteSpace(target.ProjectPath)
+        var version = !string.IsNullOrWhiteSpace(target.ProjectPath)
             && File.Exists(target.ProjectPath)
-            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var version)
-            && !string.IsNullOrWhiteSpace(version)
-            ? version
+            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var resolvedVersion)
+            && !string.IsNullOrWhiteSpace(resolvedVersion)
+            ? resolvedVersion
             : null;
+
+        return string.IsNullOrWhiteSpace(version) ? sharedReleaseVersion : version;
     }
 
     private sealed class ResolvedWingetInstallerEntry
