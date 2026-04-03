@@ -85,6 +85,7 @@ public static partial class WebSiteBuilder
         var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
         var colorScheme = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
+        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item);
         var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item));
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
@@ -123,6 +124,7 @@ public static partial class WebSiteBuilder
             VariantKey = variantKey,
             ColorScheme = colorScheme,
             ThemeTokens = themeTokens,
+            AllowRemoteMediaFetch = allowRemoteMediaFetch,
             LogoDataUri = logoSource,
             InlineImageDataUri = inlineImageSource
         });
@@ -275,6 +277,23 @@ public static partial class WebSiteBuilder
             return spec.Social.GeneratedCardColorScheme!.Trim();
 
         return null;
+    }
+
+    private static bool ResolveSocialCardAllowRemoteMediaFetch(SiteSpec spec, ContentItem item)
+    {
+        if (TryGetMetaBool(item.Meta, "social_card_allow_remote_media_fetch", out var explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social.allow_remote_media_fetch", out explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social_card_allow_remote_media", out explicitValue))
+            return explicitValue;
+
+        if (TryGetMetaBool(item.Meta, "social.allow_remote_media", out explicitValue))
+            return explicitValue;
+
+        return spec.Social?.GeneratedCardAllowRemoteMediaFetch ?? false;
     }
 
     private static bool TryResolveCollectionCardPreset(

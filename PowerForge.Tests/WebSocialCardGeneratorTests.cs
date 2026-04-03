@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -279,6 +280,45 @@ public class WebSocialCardGeneratorTests
         });
 
         Assert.Contains(logoUrl, svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GetRemoteImageBytes_DoesNotFetchRemoteMedia_WhenDisabled()
+    {
+        var bytes = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.svg",
+            allowRemoteMediaFetch: false,
+            _ => throw new InvalidOperationException("Remote fetch should not run when disabled."));
+
+        Assert.Null(bytes);
+    }
+
+    [Fact]
+    public void GetRemoteImageBytes_CachesRemoteMedia_WhenEnabled()
+    {
+        WebSocialCardGenerator.ClearRemoteImageCache();
+        var calls = 0;
+
+        byte[]? Fetcher(string _)
+        {
+            calls++;
+            return Encoding.UTF8.GetBytes("remote-logo");
+        }
+
+        var first = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.svg",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+        var second = WebSocialCardGenerator.GetRemoteImageBytes(
+            "https://cdn.example.test/logo.svg",
+            allowRemoteMediaFetch: true,
+            Fetcher);
+
+        Assert.Equal(1, calls);
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.True(first!.SequenceEqual(second!));
+        WebSocialCardGenerator.ClearRemoteImageCache();
     }
 
     [Fact]

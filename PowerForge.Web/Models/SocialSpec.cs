@@ -41,4 +41,6 @@ public sealed class SocialSpec
     public string? GeneratedCardColorScheme { get; set; }
     /// <summary>Optional per-collection color scheme overrides for generated social cards.</summary>
     public Dictionary<string, string>? GeneratedCardColorSchemesByCollection { get; set; }
+    /// <summary>When true, generated social card PNGs may fetch remote HTTP(S) logo/media assets.</summary>
+    public bool GeneratedCardAllowRemoteMediaFetch { get; set; }
 }

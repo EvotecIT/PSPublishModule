@@ -1,4 +1,6 @@
 using System.Net.Http;
+using System.Collections.Concurrent;
+using System.Threading;
 using System.Text;
 using ImageMagick;
 
@@ -10,6 +12,7 @@ internal static partial class WebSocialCardGenerator
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
+    private static readonly ConcurrentDictionary<string, Lazy<byte[]>> RemoteImageByteCache = new(StringComparer.OrdinalIgnoreCase);
 
     internal static byte[]? RenderPng(SocialCardRenderOptions options)
     {
@@ -129,6 +132,7 @@ internal static partial class WebSocialCardGenerator
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
+            AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = options.EmbedReferencedMediaInSvg,
             CtaLabel = ResolveCtaLabel(styleKey, normalizedBadge),
             FrameInset = frameInset,
@@ -195,6 +199,7 @@ internal static partial class WebSocialCardGenerator
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
             ColorScheme = options.ColorScheme,
+            AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = embedReferencedMediaInSvg
         };
     }
@@ -726,7 +731,7 @@ internal static partial class WebSocialCardGenerator
             string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
         {
             var media = GetInlineMediaFrame(state);
-            using var image = TryLoadImageSource(state.InlineImageDataUri, media.Width, media.Height);
+            using var image = TryLoadImageSource(state.InlineImageDataUri, media.Width, media.Height, state.AllowRemoteMediaFetch);
             if (image is not null)
             {
                 image.Resize(new MagickGeometry((uint)media.Width, (uint)media.Height) { FillArea = true });
@@ -742,7 +747,7 @@ internal static partial class WebSocialCardGenerator
         if (frame is null)
             return;
 
-        using var logo = TryLoadImageSource(state.LogoDataUri, frame.Width, frame.Height);
+        using var logo = TryLoadImageSource(state.LogoDataUri, frame.Width, frame.Height, state.AllowRemoteMediaFetch);
         if (logo is null)
             return;
 
@@ -786,22 +791,56 @@ internal static partial class WebSocialCardGenerator
         return null;
     }
 
-    private static MagickImage? TryLoadImageSource(string source, int widthHint, int heightHint)
+    internal static void ClearRemoteImageCache()
+    {
+        RemoteImageByteCache.Clear();
+    }
+
+    internal static byte[]? GetRemoteImageBytes(string source, bool allowRemoteMediaFetch, Func<string, byte[]?>? remoteFetcher = null)
+    {
+        if (!allowRemoteMediaFetch || !IsRemoteMediaSource(source))
+            return null;
+
+        var fetch = remoteFetcher ?? FetchRemoteImageBytes;
+        var lazy = RemoteImageByteCache.GetOrAdd(
+            source,
+            key => new Lazy<byte[]>(
+                () => fetch(key) ?? Array.Empty<byte>(),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        var bytes = lazy.Value;
+        return bytes.Length == 0 ? null : bytes;
+    }
+
+    private static bool IsRemoteMediaSource(string source)
+    {
+        return source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               source.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static byte[]? FetchRemoteImageBytes(string source)
+    {
+        using var response = SocialImageHttpClient.GetAsync(source).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+    }
+
+    private static MagickImage? TryLoadImageSource(string source, int widthHint, int heightHint, bool allowRemoteMediaFetch)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(source))
                 return null;
 
-            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            if (IsRemoteMediaSource(source))
             {
-                using var response = SocialImageHttpClient.GetAsync(source).GetAwaiter().GetResult();
-                if (!response.IsSuccessStatusCode)
+                var remoteBytes = GetRemoteImageBytes(source, allowRemoteMediaFetch);
+                if (remoteBytes is null || remoteBytes.Length == 0)
                     return null;
 
-                var bytes = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-                return CreateMagickImage(bytes, source, widthHint, heightHint);
+                return CreateMagickImage(remoteBytes, source, widthHint, heightHint);
             }
 
             var commaIndex = source.IndexOf(',', StringComparison.Ordinal);
@@ -869,6 +908,7 @@ internal static partial class WebSocialCardGenerator
         public string? InlineImageDataUri { get; set; }
         /// <summary>"light", "dark", or null (auto = dark).</summary>
         public string? ColorScheme { get; set; }
+        public bool AllowRemoteMediaFetch { get; set; }
         public bool EmbedReferencedMediaInSvg { get; set; } = true;
     }
 
@@ -894,6 +934,7 @@ internal static partial class WebSocialCardGenerator
         public required int SafeMarginX { get; init; }
         public required int SafeMarginY { get; init; }
         public required string CtaLabel { get; init; }
+        public required bool AllowRemoteMediaFetch { get; init; }
         public required bool EmbedReferencedMediaInSvg { get; init; }
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; init; }
         public string? LogoDataUri { get; init; }
