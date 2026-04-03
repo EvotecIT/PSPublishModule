@@ -68,6 +68,51 @@ public sealed class ModuleValidationCoreChecksTests
     }
 
     [Fact]
+    public void ValidateStructure_SkipsStrictExportComparisonForMixedManifestExpressions()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(Path.Combine(root.FullName, "Public", "Get-PublicThing.ps1"), "function Get-PublicThing { }");
+
+            var manifestPath = Path.Combine(root.FullName, "SampleModule.psd1");
+            File.WriteAllText(manifestPath, """
+@{
+    FunctionsToExport = @('Get-PublicThing', $DynamicExport)
+}
+""");
+
+            var result = ModuleValidationCoreChecks.ValidateStructure(
+                new ModuleValidationSpec
+                {
+                    ProjectRoot = root.FullName,
+                    StagingPath = root.FullName,
+                    ManifestPath = manifestPath
+                },
+                new ModuleStructureValidationSettings
+                {
+                    Severity = ValidationSeverity.Warning,
+                    PublicFunctionPaths = new[] { "Public" },
+                    InternalFunctionPaths = Array.Empty<string>(),
+                    ValidateExports = true,
+                    ValidateInternalNotExported = false,
+                    ValidateManifestFiles = false,
+                    AllowWildcardExports = false
+                });
+
+            Assert.NotNull(result);
+            Assert.Equal(CheckStatus.Pass, result!.Status);
+            Assert.DoesNotContain(result.Issues, issue => issue.Contains("not exported", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Issues, issue => issue.Contains("public folder", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateBinary_ReportsManifestExportMismatchAgainstDetectedBinaryExports()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -301,7 +301,7 @@ internal static class ModuleValidationCoreChecks
 
     private static (string[]? Values, bool Wildcard) GetManifestStringArray(string manifestPath, string key)
     {
-        var values = ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key)
+        var values = (ModuleManifestValueReader.ReadTopLevelLiteralStringOrArray(manifestPath, key) ?? Array.Empty<string>())
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .ToArray();
 
