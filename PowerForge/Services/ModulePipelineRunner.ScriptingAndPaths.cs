@@ -245,25 +245,35 @@ public sealed partial class ModulePipelineRunner
             if (artefact.ArtefactType is not ArtefactType.Unpacked)
                 continue;
 
-            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
-                cfg,
-                outputRoot,
-                moduleName,
-                moduleVersion,
-                preRelease);
+            if (cfg.RequiredModules.Enabled == true)
+            {
+                var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
+                    cfg,
+                    outputRoot,
+                    moduleName,
+                    moduleVersion,
+                    preRelease);
 
-            AddPathOverlapConflict(
-                conflicts,
-                warnedScopes,
-                deliveryRoot,
-                configuredInternalsPath,
-                requiredModulesRoot,
-                $"required modules root for '{artefact.ArtefactType}'");
+                AddPathOverlapConflict(
+                    conflicts,
+                    warnedScopes,
+                    deliveryRoot,
+                    configuredInternalsPath,
+                    requiredModulesRoot,
+                    $"required modules root for '{artefact.ArtefactType}'");
+            }
 
             var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(
                 cfg,
                 outputRoot,
-                requiredModulesRoot,
+                cfg.RequiredModules.Enabled == true
+                    ? ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
+                        cfg,
+                        outputRoot,
+                        moduleName,
+                        moduleVersion,
+                        preRelease)
+                    : outputRoot,
                 moduleName,
                 moduleVersion,
                 preRelease);

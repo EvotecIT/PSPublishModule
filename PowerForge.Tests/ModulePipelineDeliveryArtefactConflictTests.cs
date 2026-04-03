@@ -144,13 +144,41 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         }
     }
 
+    [Fact]
+    public void Plan_DisabledRequiredModulesPathOverlap_DoesNotFail()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var error = Record.Exception(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: "PackageFiles",
+                artefactPath: Path.Combine("Artefacts", "Unpacked"),
+                requiredModulesPath: "PackageFiles",
+                requiredModulesEnabled: false)));
+
+            Assert.Null(error);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(
         string root,
         string moduleName,
         string deliveryInternalsPath,
         string? artefactPath = null,
         string? requiredModulesPath = null,
-        string[]? excludedDirectories = null)
+        string[]? excludedDirectories = null,
+        bool? requiredModulesEnabled = null)
     {
         var build = new ModuleBuildSpec
         {
@@ -189,6 +217,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
                     Path = artefactPath,
                     RequiredModules = new ArtefactRequiredModulesConfiguration
                     {
+                        Enabled = requiredModulesEnabled,
                         Path = requiredModulesPath
                     }
                 }
