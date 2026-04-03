@@ -42,7 +42,7 @@ internal static partial class WebSocialCardGenerator
         svg.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" xmlns:xlink=""http://www.w3.org/1999/xlink"" width=""{state.Width}"" height=""{state.Height}"" viewBox=""0 0 {state.Width} {state.Height}"">");
         svg.AppendLine($@"  <!-- layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
         svg.AppendLine(@"  <defs>");
-        AppendCommonDefs(svg, state);
+        AppendDefs(svg, state);
         if (string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
         {
             var media = GetInlineMediaFrame(state);
@@ -51,7 +51,7 @@ internal static partial class WebSocialCardGenerator
             svg.AppendLine(@"    </clipPath>");
         }
         svg.AppendLine(@"  </defs>");
-        AppendCommonBackground(svg, state);
+        AppendBackground(svg, state);
 
         switch (state.LayoutKey)
         {
@@ -95,6 +95,15 @@ internal static partial class WebSocialCardGenerator
         var normalizedBadge = NormalizeBadgeLabel(badge, footerLabel, styleKey, variantKey);
         var normalizedFooter = NormalizeFooterLabel(footerLabel, normalizedBadge, styleKey);
         var layoutKey = ResolveLayoutKey(styleKey, variantKey, !string.IsNullOrWhiteSpace(options.InlineImageDataUri));
+        var frameInset = ResolveTokenPixels(options.ThemeTokens, width, height, 0, 0, "socialCard", "frameInset");
+        var panelInset = ResolveTokenPixels(options.ThemeTokens, width, height, 0, 0, "socialCard", "panelInset");
+        var contentPadding = ResolveTokenPixels(options.ThemeTokens, width, height, 28, 18, "socialCard", "contentPadding");
+        var safeMarginX = Math.Max(
+            frameInset + panelInset + contentPadding,
+            ResolveTokenPixels(options.ThemeTokens, width, height, 72, 40, "socialCard", "safeMarginX"));
+        var safeMarginY = Math.Max(
+            frameInset + panelInset + contentPadding,
+            ResolveTokenPixels(options.ThemeTokens, width, height, 72, 40, "socialCard", "safeMarginY"));
 
         return new SocialCardRenderState
         {
@@ -108,18 +117,19 @@ internal static partial class WebSocialCardGenerator
             StyleKey = styleKey,
             VariantKey = variantKey,
             LayoutKey = layoutKey,
-            Palette = SelectPalette(styleKey, string.Join("|", styleKey, variantKey, title, description, eyebrow, normalizedBadge, normalizedFooter, width, height), options.ThemeTokens),
+            Palette = SelectPalette(styleKey, string.Join("|", styleKey, variantKey, title, description, eyebrow, normalizedBadge, normalizedFooter, width, height), options.ThemeTokens, options.ColorScheme),
             Typography = ResolveTypography(options.ThemeTokens),
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
-            FrameInset = ResolveTokenPixels(options.ThemeTokens, width, height, 30, 18, "socialCard", "frameInset"),
-            PanelInset = ResolveTokenPixels(options.ThemeTokens, width, height, 42, 24, "socialCard", "panelInset"),
-            ContentPadding = ResolveTokenPixels(options.ThemeTokens, width, height, 28, 16, "socialCard", "contentPadding"),
-            FrameRadius = ResolveRadiusPixels(options.ThemeTokens, width, height, 28, 14, "frameRadius"),
-            PanelRadius = ResolveRadiusPixels(options.ThemeTokens, width, height, 24, 12, "panelRadius"),
-            SafeMarginX = ResolveTokenPixels(options.ThemeTokens, width, height, 84, 44, "socialCard", "safeMarginX"),
-            SafeMarginY = ResolveTokenPixels(options.ThemeTokens, width, height, 44, 24, "socialCard", "safeMarginY")
+            CtaLabel = ResolveCtaLabel(styleKey, normalizedBadge),
+            FrameInset = frameInset,
+            PanelInset = panelInset,
+            ContentPadding = contentPadding,
+            FrameRadius = ResolveRadiusPixels(options.ThemeTokens, width, height, 24, 0, "frameRadius"),
+            PanelRadius = ResolveRadiusPixels(options.ThemeTokens, width, height, 16, 8, "panelRadius"),
+            SafeMarginX = safeMarginX,
+            SafeMarginY = safeMarginY
         };
     }
 
@@ -148,299 +158,487 @@ internal static partial class WebSocialCardGenerator
         };
     }
 
-    private static void AppendCommonDefs(StringBuilder svg, SocialCardRenderState state)
+    private static string ResolveCtaLabel(string styleKey, string badge)
+    {
+        if (string.Equals(styleKey, "contact", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(badge, "CONTACT", StringComparison.OrdinalIgnoreCase))
+            return "Get in Touch";
+        if (string.Equals(styleKey, "api", StringComparison.OrdinalIgnoreCase))
+            return "Explore API";
+        if (string.Equals(styleKey, "docs", StringComparison.OrdinalIgnoreCase))
+            return "Read Docs";
+        return "Learn More";
+    }
+
+    // ── Defs & Background ─────────────────────────────────────────────
+
+    private static void AppendDefs(StringBuilder svg, SocialCardRenderState state)
     {
         svg.AppendLine(@"    <linearGradient id=""bg"" x1=""0%"" y1=""0%"" x2=""100%"" y2=""100%"">");
         svg.AppendLine($@"      <stop offset=""0%"" stop-color=""{state.Palette.BackgroundStart}""/>");
-        svg.AppendLine($@"      <stop offset=""56%"" stop-color=""{state.Palette.BackgroundMid}""/>");
         svg.AppendLine($@"      <stop offset=""100%"" stop-color=""{state.Palette.BackgroundEnd}""/>");
         svg.AppendLine(@"    </linearGradient>");
-        svg.AppendLine(@"    <radialGradient id=""orbA"" cx=""50%"" cy=""50%"" r=""50%"">");
-        svg.AppendLine($@"      <stop offset=""0%"" stop-color=""{state.Palette.AccentSoft}"" stop-opacity=""0.34""/>");
-        svg.AppendLine($@"      <stop offset=""100%"" stop-color=""{state.Palette.Accent}"" stop-opacity=""0""/>");
-        svg.AppendLine(@"    </radialGradient>");
-        svg.AppendLine(@"    <radialGradient id=""orbB"" cx=""50%"" cy=""50%"" r=""50%"">");
-        svg.AppendLine($@"      <stop offset=""0%"" stop-color=""{state.Palette.AccentStrong}"" stop-opacity=""0.18""/>");
-        svg.AppendLine($@"      <stop offset=""100%"" stop-color=""{state.Palette.AccentStrong}"" stop-opacity=""0""/>");
-        svg.AppendLine(@"    </radialGradient>");
-        svg.AppendLine(@"    <linearGradient id=""accentBand"" x1=""0%"" y1=""0%"" x2=""100%"" y2=""0%"">");
-        svg.AppendLine($@"      <stop offset=""0%"" stop-color=""{state.Palette.AccentSoft}"" stop-opacity=""0.86""/>");
-        svg.AppendLine($@"      <stop offset=""100%"" stop-color=""{state.Palette.Accent}"" stop-opacity=""0.22""/>");
-        svg.AppendLine(@"    </linearGradient>");
     }
 
-    private static void AppendCommonBackground(StringBuilder svg, SocialCardRenderState state)
+    private static void AppendBackground(StringBuilder svg, SocialCardRenderState state)
     {
-        var glowRadiusLarge = GetScaledPixels(state.Width, state.Height, 320, 180);
-        var glowRadiusSmall = GetScaledPixels(state.Width, state.Height, 180, 96);
-        svg.AppendLine($@"  <rect x=""0"" y=""0"" width=""{state.Width}"" height=""{state.Height}"" fill=""url(#bg)""/>");
-        svg.AppendLine($@"  <circle cx=""{state.Width - GetScaledPixels(state.Width, state.Height, 160, 94)}"" cy=""{GetScaledPixels(state.Width, state.Height, 116, 78)}"" r=""{glowRadiusLarge}"" fill=""url(#orbA)"" />");
-        svg.AppendLine($@"  <circle cx=""{GetScaledPixels(state.Width, state.Height, 180, 110)}"" cy=""{state.Height - GetScaledPixels(state.Width, state.Height, 110, 72)}"" r=""{glowRadiusSmall}"" fill=""url(#orbB)"" />");
-        svg.AppendLine($@"  <rect x=""{state.FrameInset}"" y=""{state.FrameInset}"" width=""{state.Width - (state.FrameInset * 2)}"" height=""{state.Height - (state.FrameInset * 2)}"" rx=""{state.FrameRadius}"" fill=""#050b1a"" fill-opacity=""0.18"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.32""/>");
+        var accentBarHeight = GetScaledPixels(state.Width, state.Height, 6, 4);
+        svg.AppendLine($@"  <rect width=""{state.Width}"" height=""{state.Height}"" fill=""url(#bg)""/>");
+
+        if (state.FrameInset > 0)
+        {
+            var frameWidth = Math.Max(1, state.Width - (state.FrameInset * 2));
+            var frameHeight = Math.Max(1, state.Height - (state.FrameInset * 2));
+            svg.AppendLine($@"  <rect x=""{state.FrameInset}"" y=""{state.FrameInset}"" width=""{frameWidth}"" height=""{frameHeight}"" rx=""{state.FrameRadius}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.06"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.16""/>");
+        }
+
+        if (state.FrameInset > 0 || state.PanelInset > 0)
+        {
+            var panel = GetPanelRect(state);
+            svg.AppendLine($@"  <rect x=""{panel.X}"" y=""{panel.Y}"" width=""{panel.Width}"" height=""{panel.Height}"" rx=""{panel.Radius}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.12"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.12""/>");
+        }
+
+        // Bottom accent bar — full width, solid accent color
+        svg.AppendLine($@"  <rect x=""0"" y=""{state.Height - accentBarHeight}"" width=""{state.Width}"" height=""{accentBarHeight}"" fill=""{state.Palette.Accent}""/>");
     }
 
-    private static void AppendSpotlightLayout(StringBuilder svg, SocialCardRenderState state)
+    // ── Shared layout helpers ──────────────────────────────────────────
+
+    private static void AppendBadge(StringBuilder svg, SocialCardRenderState state, int x, int y)
     {
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 38, 26, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 18, 12, "socialCard", "badgeFontSize");
-        var badgeWidth = MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 118, 240);
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 66, 34, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, 66, 34);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 28, 17, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 32, 20);
-        var contentWidth = Math.Max(320, (int)Math.Round(state.Width * 0.54));
-        var titleX = state.SafeMarginX;
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(contentWidth, titleFontSize), 2);
-        var badgeY = state.SafeMarginY;
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 28, 16);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 72, 42);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 16);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descriptionFontSize), 3);
-        var footerY = state.Height - state.SafeMarginY;
-        var markSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 228, 132, "socialCard", "logoSize");
-        var markX = state.Width - state.SafeMarginX - markSize;
-        var markY = state.SafeMarginY + GetScaledPixels(state.Width, state.Height, 42, 22);
-
-        AppendPill(svg, state, titleX, badgeY, badgeWidth, badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 26, 15, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
-        svg.AppendLine($@"  <rect x=""{titleX}"" y=""{footerY - GetScaledPixels(state.Width, state.Height, 30, 20)}"" width=""{Math.Max(220, contentWidth)}"" height=""2"" rx=""1"" fill=""url(#accentBand)"" fill-opacity=""0.56""/>");
-        svg.AppendLine($@"  <text x=""{titleX}"" y=""{footerY}"" fill=""{state.Palette.TextSecondary}"" font-size=""{ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 13, "socialCard", "footerFontSize")}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-weight=""600"">{EscapeXml(TrimSingleLine(state.FooterLabel, 56))}</text>");
-        AppendLogoMark(svg, state, markX, markY, markSize);
+        var badgeText = state.Badge.ToUpperInvariant();
+        var fontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 15, 11, "socialCard", "badgeFontSize");
+        var height = GetScaledPixels(state.Width, state.Height, 32, 22);
+        var paddingX = GetScaledPixels(state.Width, state.Height, 16, 10);
+        var textWidth = EstimateTextWidth(badgeText, fontSize, glyphFactor: 0.62);
+        var width = textWidth + (paddingX * 2);
+        var radius = GetScaledPixels(state.Width, state.Height, 4, 3);
+        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{radius}"" fill=""{state.Palette.Accent}""/>");
+        svg.AppendLine($@"  <text x=""{x + (width / 2)}"" y=""{y + (height / 2)}"" fill=""{state.Palette.BackgroundStart}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BadgeFontFamily)}"" font-weight=""800"" letter-spacing=""0.8"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(badgeText)}</text>");
     }
 
-    private static void AppendShelfLayout(StringBuilder svg, SocialCardRenderState state)
+    private static void AppendEyebrowText(StringBuilder svg, SocialCardRenderState state, int x, int y)
     {
-        var panel = GetPanelRect(state);
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 32, 24, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 12, "socialCard", "badgeFontSize");
-        var badgeWidth = MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 108, 220);
-        var routeWidth = MeasurePillWidth(state.FooterLabel, badgeFontSize, 136, 280);
-        var badgeX = panel.X + state.ContentPadding;
-        var badgeY = panel.Y + state.ContentPadding;
-        var titleX = badgeX + GetScaledPixels(state.Width, state.Height, 34, 22);
-        var titleWidth = Math.Max(260, panel.Width - (state.ContentPadding * 2) - GetScaledPixels(state.Width, state.Height, 40, 24));
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 28, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, 52, 30);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 16, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 30, 20);
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 26, 16);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 58, 38);
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(titleWidth, titleFontSize), 3);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 20, 14);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(titleWidth, descriptionFontSize), 4);
-
-        AppendSurfacePanel(svg, state, panel, true);
-        AppendPill(svg, state, badgeX, badgeY, badgeWidth, badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendPill(svg, state, panel.X + panel.Width - state.ContentPadding - routeWidth, badgeY, routeWidth, badgeHeight, state.FooterLabel, false);
-        svg.AppendLine($@"  <rect x=""{badgeX}"" y=""{eyebrowY - GetScaledPixels(state.Width, state.Height, 14, 10)}"" width=""6"" height=""{panel.Height - (state.ContentPadding * 2) - badgeHeight}"" rx=""3"" fill=""url(#accentBand)""/>");
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
+        var fontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize");
+        svg.AppendLine($@"  <text x=""{x}"" y=""{y}"" fill=""{state.Palette.Accent}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.EyebrowFontFamily)}"" font-weight=""700"">{EscapeXml(TrimSingleLine(state.Eyebrow, 56))}</text>");
     }
 
-    private static void AppendReferenceLayout(StringBuilder svg, SocialCardRenderState state)
-    {
-        var panel = GetPanelRect(state);
-        var codeWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 320, 210), (int)Math.Round(panel.Width * 0.32));
-        var codeX = panel.X + panel.Width - state.ContentPadding - codeWidth;
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 32, 24, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 12, "socialCard", "badgeFontSize");
-        var badgeWidth = MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 102, 204);
-        var titleX = panel.X + state.ContentPadding;
-        var titleWidth = Math.Max(240, codeX - titleX - GetScaledPixels(state.Width, state.Height, 30, 18));
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 46, 28, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, 50, 30);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 15, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 29, 19);
-        var badgeY = panel.Y + state.ContentPadding;
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 26, 16);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 60, 36);
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(titleWidth, titleFontSize), 3);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 18, 12);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(titleWidth, descriptionFontSize), 3);
-
-        AppendSurfacePanel(svg, state, panel, true);
-        AppendPill(svg, state, titleX, badgeY, badgeWidth, badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
-        AppendPill(svg, state, titleX, panel.Y + panel.Height - state.ContentPadding - badgeHeight, MeasurePillWidth(state.FooterLabel, badgeFontSize, 144, 280), badgeHeight, state.FooterLabel, false);
-        AppendCodePane(svg, state, codeX, panel.Y + state.ContentPadding + GetScaledPixels(state.Width, state.Height, 16, 10), codeWidth, panel.Height - (state.ContentPadding * 2) - GetScaledPixels(state.Width, state.Height, 16, 10));
-    }
-
-    private static void AppendInlineImageLayout(StringBuilder svg, SocialCardRenderState state)
-    {
-        var panel = GetPanelRect(state);
-        var media = GetInlineMediaFrame(state);
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 32, 24, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 12, "socialCard", "badgeFontSize");
-        var titleX = panel.X + state.ContentPadding;
-        var titleWidth = Math.Max(240, media.X - titleX - GetScaledPixels(state.Width, state.Height, 30, 18));
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 28, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, 52, 30);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 16, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 29, 19);
-        var badgeY = panel.Y + state.ContentPadding;
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 28, 18);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 56, 36);
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(titleWidth, titleFontSize), 3);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 18, 12);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(titleWidth, descriptionFontSize), 4);
-
-        AppendSurfacePanel(svg, state, panel, false);
-        AppendPill(svg, state, titleX, badgeY, MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 108, 220), badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
-        AppendPill(svg, state, titleX, panel.Y + panel.Height - state.ContentPadding - badgeHeight, MeasurePillWidth(state.FooterLabel, badgeFontSize, 144, 280), badgeHeight, state.FooterLabel, false);
-        svg.AppendLine($@"  <rect x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" rx=""{media.Radius}"" ry=""{media.Radius}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.28"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.28""/>");
-        svg.AppendLine($@"  <image href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" xlink:href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" preserveAspectRatio=""xMidYMid slice"" clip-path=""url(#mediaClip)""/>");
-    }
-
-    private static void AppendConnectLayout(StringBuilder svg, SocialCardRenderState state)
-    {
-        var panel = GetPanelRect(state);
-        var railWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 260, 180), (int)Math.Round(panel.Width * 0.28));
-        var railX = panel.X + panel.Width - railWidth;
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 34, 24, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 12, "socialCard", "badgeFontSize");
-        var titleX = panel.X + state.ContentPadding;
-        var titleWidth = Math.Max(240, railX - titleX - GetScaledPixels(state.Width, state.Height, 36, 22));
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 52, 30, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, 56, 32);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 16, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 30, 19);
-        var badgeY = panel.Y + state.ContentPadding;
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 30, 18);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 60, 38);
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(titleWidth, titleFontSize), 3);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 18, 12);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(titleWidth, descriptionFontSize), 4);
-
-        AppendSurfacePanel(svg, state, panel, true);
-        AppendPill(svg, state, titleX, badgeY, MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 118, 220), badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
-        AppendPill(svg, state, titleX, panel.Y + panel.Height - state.ContentPadding - badgeHeight, MeasurePillWidth(state.FooterLabel, badgeFontSize, 150, 300), badgeHeight, state.FooterLabel, false);
-        AppendRailMark(svg, state, railX, panel.Y, railWidth, panel.Height);
-    }
-
-    private static void AppendEditorialOrProductLayout(StringBuilder svg, SocialCardRenderState state)
-    {
-        var panel = GetPanelRect(state);
-        var badgeHeight = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 34, 24, "socialCard", "badgeHeight");
-        var badgeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 17, 12, "socialCard", "badgeFontSize");
-        var titleX = panel.X + state.ContentPadding;
-        var titleWidth = panel.Width - (state.ContentPadding * 2);
-        var titleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase) ? 52 : 54, string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase) ? 30 : 32, "socialCard", "titleFontSize");
-        var titleLineHeight = GetScaledPixels(state.Width, state.Height, string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase) ? 56 : 58, string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase) ? 32 : 34);
-        var descriptionFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 25, 16, "socialCard", "descriptionFontSize");
-        var descriptionLineHeight = GetScaledPixels(state.Width, state.Height, 30, 19);
-        var badgeY = panel.Y + state.ContentPadding;
-        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 28, 18);
-        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 58, 38);
-        var titleLines = WrapText(state.Title, GetTitleWrapWidth(titleWidth, titleFontSize), 3);
-        var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 18, 12);
-        var descriptionLines = WrapText(state.Description, GetDescriptionWrapWidth(titleWidth, descriptionFontSize), 4);
-
-        AppendSurfacePanel(svg, state, panel, !string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase));
-        AppendPill(svg, state, titleX, badgeY, MeasurePillWidth(state.Badge.ToUpperInvariant(), badgeFontSize, 112, 220), badgeHeight, state.Badge.ToUpperInvariant(), true);
-        AppendEyebrow(svg, state, titleX, eyebrowY, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize"));
-        AppendTitleLines(svg, state, titleLines, titleX, titleY, titleFontSize, titleLineHeight);
-        AppendDescriptionLines(svg, state, descriptionLines, titleX, descriptionY, descriptionFontSize, descriptionLineHeight);
-        AppendPill(svg, state, titleX, panel.Y + panel.Height - state.ContentPadding - badgeHeight, MeasurePillWidth(state.FooterLabel, badgeFontSize, 146, 300), badgeHeight, state.FooterLabel, false);
-        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
-            AppendLogoMark(svg, state, panel.X + panel.Width - state.ContentPadding - ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 52, 34, "socialCard", "logoSize"), badgeY - 2, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 52, 34, "socialCard", "logoSize"));
-    }
-
-    private static void AppendSurfacePanel(StringBuilder svg, SocialCardRenderState state, SocialRect panel, bool showTopBand)
-    {
-        svg.AppendLine($@"  <rect x=""{panel.X}"" y=""{panel.Y}"" width=""{panel.Width}"" height=""{panel.Height}"" rx=""{panel.Radius}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.48"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.34""/>");
-        if (showTopBand)
-            svg.AppendLine($@"  <rect x=""{panel.X}"" y=""{panel.Y}"" width=""{panel.Width}"" height=""{ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 8, 4, "socialCard", "topBandHeight")}"" rx=""3"" fill=""url(#accentBand)"" fill-opacity=""0.74""/>");
-    }
-
-    private static void AppendPill(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int height, string text, bool filled)
-    {
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 18, 10, "badgeRadius")}"" fill=""{(filled ? state.Palette.ChipBackground : state.Palette.Surface)}"" fill-opacity=""{(filled ? "0.86" : "0.38")}"" stroke=""{state.Palette.ChipBorder}"" stroke-opacity=""{(filled ? "0.74" : "0.42")}""/>");
-        svg.AppendLine($@"  <text x=""{x + (width / 2)}"" y=""{y + (height / 2)}"" fill=""{state.Palette.ChipText}"" font-size=""{ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 12, "socialCard", "badgeFontSize")}"" font-family=""{EscapeXml(state.Typography.BadgeFontFamily)}"" font-weight=""700"" dominant-baseline=""middle"" text-anchor=""middle"">{EscapeXml(TrimSingleLine(text, 48))}</text>");
-    }
-
-    private static void AppendEyebrow(StringBuilder svg, SocialCardRenderState state, int x, int y, int fontSize)
-        => svg.AppendLine($@"  <text x=""{x}"" y=""{y}"" fill=""{state.Palette.AccentSoft}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.EyebrowFontFamily)}"" font-weight=""700"">{EscapeXml(TrimSingleLine(state.Eyebrow, 56))}</text>");
-
-    private static void AppendTitleLines(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
+    private static void AppendTitle(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
     {
         for (var i = 0; i < lines.Count; i++)
             svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"">{EscapeXml(lines[i])}</text>");
     }
 
-    private static void AppendDescriptionLines(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
+    private static void AppendDescription(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
     {
         for (var i = 0; i < lines.Count; i++)
             svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextSecondary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""500"">{EscapeXml(lines[i])}</text>");
     }
 
-    private static void AppendLogoMark(StringBuilder svg, SocialCardRenderState state, int x, int y, int size)
+    private static void AppendFooterRoute(StringBuilder svg, SocialCardRenderState state, int x, int y)
     {
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{size}"" height=""{size}"" rx=""{ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 26, 12, "panelRadius")}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.46"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.34""/>");
+        var label = TrimSingleLine(state.FooterLabel, 64).Trim();
+        if (string.IsNullOrWhiteSpace(label) || label == "/")
+            return;
+        var fontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "footerFontSize");
+        svg.AppendLine($@"  <text x=""{x}"" y=""{y}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.6"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-weight=""500"">{EscapeXml(label)}</text>");
+    }
+
+    private static void AppendLogo(StringBuilder svg, SocialCardRenderState state, int x, int y, int size)
+    {
+        var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
+        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{size}"" height=""{size}"" rx=""{radius}"" fill=""{state.Palette.Surface}""/>");
         if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
         {
-            var inset = Math.Max(8, size / 7);
+            var inset = Math.Max(6, size / 8);
             svg.AppendLine($@"  <image href=""{EscapeXml(state.LogoDataUri)}"" xlink:href=""{EscapeXml(state.LogoDataUri)}"" x=""{x + inset}"" y=""{y + inset}"" width=""{Math.Max(12, size - (inset * 2))}"" height=""{Math.Max(12, size - (inset * 2))}"" preserveAspectRatio=""xMidYMid meet""/>");
             return;
         }
 
         var monogram = BuildMonogram(state.Eyebrow, state.Badge);
-        svg.AppendLine($@"  <text x=""{x + (size / 2)}"" y=""{y + (size / 2)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{Math.Max(20, size / 2)}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""middle"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
+        svg.AppendLine($@"  <text x=""{x + (size / 2)}"" y=""{y + (size / 2)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{Math.Max(18, size * 2 / 5)}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
     }
 
-    private static void AppendRailMark(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int height)
+    private static void AppendSeparator(StringBuilder svg, SocialCardRenderState state, int x, int y, int width)
     {
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 24, 12, "panelRadius")}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.56"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.42""/>");
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""6"" rx=""3"" fill=""url(#accentBand)""/>");
-        var markSize = Math.Min(width - GetScaledPixels(state.Width, state.Height, 56, 36), GetScaledPixels(state.Width, state.Height, 160, 110));
-        var markX = x + ((width - markSize) / 2);
-        var markY = y + state.ContentPadding + GetScaledPixels(state.Width, state.Height, 44, 28);
-        AppendLogoMark(svg, state, markX, markY, markSize);
-        svg.AppendLine($@"  <text x=""{x + (width / 2)}"" y=""{markY + markSize + GetScaledPixels(state.Width, state.Height, 52, 32)}"" fill=""{state.Palette.AccentSoft}"" font-size=""{ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "eyebrowFontSize")}"" font-family=""{EscapeXml(state.Typography.EyebrowFontFamily)}"" font-weight=""700"" text-anchor=""middle"">Reach Out</text>");
+        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""1"" fill=""{state.Palette.SurfaceStroke}"" fill-opacity=""0.3""/>");
     }
 
-    private static void AppendCodePane(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int height)
+    // ── Layout: Spotlight (Home) ───────────────────────────────────────
+
+    private static void AppendSpotlightLayout(StringBuilder svg, SocialCardRenderState state)
     {
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 18, 10, "panelRadius")}"" fill=""{state.Palette.Surface}"" fill-opacity=""0.62"" stroke=""{state.Palette.SurfaceStroke}"" stroke-opacity=""0.46""/>");
-        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""6"" rx=""3"" fill=""url(#accentBand)""/>");
-        var lines = BuildReferenceLines(state);
-        var fontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 13, "socialCard", "codeFontSize");
-        var lineHeight = GetScaledPixels(state.Width, state.Height, 34, 21);
-        for (var i = 0; i < lines.Count; i++)
+        var pad = state.SafeMarginX;
+        var contentWidth = Math.Max(320, (int)Math.Round(state.Width * 0.58));
+        var x = pad;
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 62, 32, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 68, 36);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 30, 19);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 28, 16);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+
+        // Footer route
+        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        AppendFooterRoute(svg, state, x, footerY);
+
+        // Logo on right
+        var logoSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 160, 90, "socialCard", "logoSize");
+        var logoX = state.Width - pad - logoSize;
+        var logoY = pad;
+        AppendLogo(svg, state, logoX, logoY, logoSize);
+    }
+
+    // ── Layout: Shelf (Docs) ───────────────────────────────────────────
+
+    private static void AppendShelfLayout(StringBuilder svg, SocialCardRenderState state)
+    {
+        var pad = state.SafeMarginX;
+        var x = pad;
+        var contentWidth = state.Width - (pad * 2);
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 26, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 54, 30);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 28, 18);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Route label on the right
+        var routeLabel = TrimSingleLine(state.FooterLabel, 40).Trim();
+        if (!string.IsNullOrWhiteSpace(routeLabel) && routeLabel != "/")
         {
-            var color = i == 0 ? state.Palette.AccentSoft : state.Palette.TextSecondary;
-            svg.AppendLine($@"  <text x=""{x + GetScaledPixels(state.Width, state.Height, 20, 14)}"" y=""{y + GetScaledPixels(state.Width, state.Height, 54, 34) + (i * lineHeight)}"" fill=""{color}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.MonoFontFamily)}"" font-weight=""{(i == 0 ? "700" : "500")}"">{EscapeXml(lines[i])}</text>");
+            var routeFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "footerFontSize");
+            svg.AppendLine($@"  <text x=""{state.Width - pad}"" y=""{badgeY + (badgeHeight / 2)}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.5"" font-size=""{routeFontSize}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-weight=""500"" dominant-baseline=""central"" text-anchor=""end"">{EscapeXml(routeLabel)}</text>");
+        }
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+    }
+
+    // ── Layout: Reference (API) ────────────────────────────────────────
+
+    private static void AppendReferenceLayout(StringBuilder svg, SocialCardRenderState state)
+    {
+        var pad = state.SafeMarginX;
+        var codeWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 340, 220), (int)Math.Round(state.Width * 0.35));
+        var codeX = state.Width - pad - codeWidth;
+        var gapX = GetScaledPixels(state.Width, state.Height, 32, 18);
+        var x = pad;
+        var contentWidth = Math.Max(240, codeX - x - gapX);
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 44, 26, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 50, 28);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 27, 18);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+
+        // Footer route
+        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        AppendFooterRoute(svg, state, x, footerY);
+
+        // Code pane on right
+        AppendCodePane(svg, state, codeX, pad, codeWidth, state.Height - (pad * 2) - GetScaledPixels(state.Width, state.Height, 6, 4));
+    }
+
+    // ── Layout: Inline Image (Blog with image) ────────────────────────
+
+    private static void AppendInlineImageLayout(StringBuilder svg, SocialCardRenderState state)
+    {
+        var pad = state.SafeMarginX;
+        var media = GetInlineMediaFrame(state);
+        var gapX = GetScaledPixels(state.Width, state.Height, 28, 16);
+        var x = pad;
+        var contentWidth = Math.Max(240, media.X - x - gapX);
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 44, 26, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 50, 28);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 27, 18);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+
+        // Footer route
+        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        AppendFooterRoute(svg, state, x, footerY);
+
+        // Inline image on right
+        var imgRadius = GetScaledPixels(state.Width, state.Height, 12, 6);
+        svg.AppendLine($@"  <rect x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" rx=""{imgRadius}"" fill=""{state.Palette.Surface}""/>");
+        svg.AppendLine($@"  <image href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" xlink:href=""{EscapeXml(state.InlineImageDataUri ?? string.Empty)}"" x=""{media.X}"" y=""{media.Y}"" width=""{media.Width}"" height=""{media.Height}"" preserveAspectRatio=""xMidYMid slice"" clip-path=""url(#mediaClip)""/>");
+    }
+
+    // ── Layout: Connect (Contact) ──────────────────────────────────────
+
+    private static void AppendConnectLayout(StringBuilder svg, SocialCardRenderState state)
+    {
+        var pad = state.SafeMarginX;
+        var mapWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 380, 220), (int)Math.Round(state.Width * 0.38));
+        var mapX = state.Width - mapWidth;
+        var gapX = GetScaledPixels(state.Width, state.Height, 28, 16);
+        var x = pad;
+        var contentWidth = Math.Max(240, mapX - x - gapX);
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 28, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 54, 30);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 27, 18);
+
+        // Stylized map on the right side (behind content)
+        AppendMapVisual(svg, state, mapX, 0, mapWidth, state.Height);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+
+        // Footer route
+        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        AppendFooterRoute(svg, state, x, footerY);
+
+        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
+        {
+            var frame = ResolveLogoFrame(state);
+            if (frame is not null)
+                AppendLogo(svg, state, frame.X, frame.Y, frame.Width);
         }
     }
 
-    private static SocialRect GetPanelRect(SocialCardRenderState state)
-        => new(state.PanelInset, state.PanelInset, state.Width - (state.PanelInset * 2), state.Height - (state.PanelInset * 2), state.PanelRadius);
+    private static void AppendMapVisual(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int height)
+    {
+        // Subtle grid pattern resembling a map
+        var gridSpacing = GetScaledPixels(state.Width, state.Height, 48, 30);
+        var lineOpacity = "0.06";
+        var accentLineOpacity = "0.12";
+
+        // Vertical grid lines
+        for (var gx = x + gridSpacing; gx < x + width; gx += gridSpacing)
+            svg.AppendLine($@"  <rect x=""{gx}"" y=""{y}"" width=""1"" height=""{height}"" fill=""{state.Palette.Accent}"" fill-opacity=""{lineOpacity}""/>");
+
+        // Horizontal grid lines
+        for (var gy = y + gridSpacing; gy < y + height; gy += gridSpacing)
+            svg.AppendLine($@"  <rect x=""{x}"" y=""{gy}"" width=""{width}"" height=""1"" fill=""{state.Palette.Accent}"" fill-opacity=""{lineOpacity}""/>");
+
+        // Accent "roads" - a few thicker diagonal/crossing lines
+        var roadWidth = GetScaledPixels(state.Width, state.Height, 3, 2);
+        var cx = x + (width / 2);
+        var cy = y + (height / 2);
+        svg.AppendLine($@"  <rect x=""{x}"" y=""{cy - (roadWidth / 2)}"" width=""{width}"" height=""{roadWidth}"" fill=""{state.Palette.Accent}"" fill-opacity=""{accentLineOpacity}""/>");
+        svg.AppendLine($@"  <rect x=""{cx - (roadWidth / 2)}"" y=""{y}"" width=""{roadWidth}"" height=""{height}"" fill=""{state.Palette.Accent}"" fill-opacity=""{accentLineOpacity}""/>");
+        // Diagonal
+        svg.AppendLine($@"  <line x1=""{x}"" y1=""{y + height}"" x2=""{x + width}"" y2=""{y}"" stroke=""{state.Palette.Accent}"" stroke-opacity=""{accentLineOpacity}"" stroke-width=""{roadWidth}""/>");
+
+        // Location pin
+        var pinSize = GetScaledPixels(state.Width, state.Height, 36, 22);
+        var pinX = cx + GetScaledPixels(state.Width, state.Height, 20, 12);
+        var pinY = cy - GetScaledPixels(state.Width, state.Height, 40, 24);
+        // Pin circle
+        svg.AppendLine($@"  <circle cx=""{pinX}"" cy=""{pinY}"" r=""{pinSize}"" fill=""{state.Palette.Accent}"" fill-opacity=""0.22""/>");
+        svg.AppendLine($@"  <circle cx=""{pinX}"" cy=""{pinY}"" r=""{pinSize * 2 / 3}"" fill=""{state.Palette.Accent}"" fill-opacity=""0.4""/>");
+        svg.AppendLine($@"  <circle cx=""{pinX}"" cy=""{pinY}"" r=""{Math.Max(4, pinSize / 3)}"" fill=""{state.Palette.Accent}""/>");
+    }
+
+    // ── Layout: Editorial / Product (Default) ──────────────────────────
+
+    private static void AppendEditorialOrProductLayout(StringBuilder svg, SocialCardRenderState state)
+    {
+        var pad = state.SafeMarginX;
+        var x = pad;
+        var contentWidth = state.Width - (pad * 2);
+
+        var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 50, 28, "socialCard", "titleFontSize");
+        var baseTitleLineHeight = GetScaledPixels(state.Width, state.Height, 56, 32);
+        var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
+        var descLineHeight = GetScaledPixels(state.Width, state.Height, 28, 18);
+
+        // Badge
+        var badgeY = pad;
+        AppendBadge(svg, state, x, badgeY);
+        var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
+
+        // Eyebrow
+        var eyebrowY = badgeY + badgeHeight + GetScaledPixels(state.Width, state.Height, 40, 24);
+        AppendEyebrowText(svg, state, x, eyebrowY);
+
+        // Title
+        var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
+        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
+
+        // Description
+        var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
+        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
+
+        // Footer route
+        var footerY = state.Height - pad - GetScaledPixels(state.Width, state.Height, 6, 4);
+        AppendFooterRoute(svg, state, x, footerY);
+
+        // Small logo top-right if available
+        if (!string.IsNullOrWhiteSpace(state.LogoDataUri))
+        {
+            var logoSize = GetScaledPixels(state.Width, state.Height, 48, 30);
+            AppendLogo(svg, state, state.Width - pad - logoSize, pad, logoSize);
+        }
+    }
+
+    // ── Code pane (API reference) ──────────────────────────────────────
+
+    private static void AppendCodePane(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int height)
+    {
+        var radius = GetScaledPixels(state.Width, state.Height, 16, 8);
+        svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{radius}"" fill=""{state.Palette.Surface}""/>");
+
+        var lang = ResolveLanguageMark(state.FooterLabel, state.Title);
+        var cx = x + (width / 2);
+        var cy = y + (height / 2);
+
+        // Large language mark - centered, bold, modern
+        var markFontSize = Math.Min(width, height) * 2 / 5;
+        svg.AppendLine($@"  <text x=""{cx}"" y=""{cy}"" fill=""{state.Palette.Accent}"" fill-opacity=""0.18"" font-size=""{markFontSize}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(lang)}</text>");
+
+        // Smaller label below the mark
+        var labelFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "codeFontSize");
+        var labelText = ResolveLanguageLabel(state.FooterLabel, state.Title);
+        svg.AppendLine($@"  <text x=""{cx}"" y=""{cy + (markFontSize / 2) + GetScaledPixels(state.Width, state.Height, 24, 14)}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.5"" font-size=""{labelFontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""600"" text-anchor=""middle"">{EscapeXml(labelText)}</text>");
+    }
+
+    private static string ResolveLanguageMark(string footerLabel, string title)
+    {
+        var combined = string.Concat(footerLabel ?? "", " ", title ?? "").ToLowerInvariant();
+        if (combined.Contains("powershell", StringComparison.Ordinal) || combined.Contains("/ps/", StringComparison.Ordinal))
+            return "PS";
+        if (combined.Contains("csharp", StringComparison.Ordinal) || combined.Contains("c#", StringComparison.Ordinal) || combined.Contains("/dotnet/", StringComparison.Ordinal))
+            return "C#";
+        if (combined.Contains("python", StringComparison.Ordinal) || combined.Contains("/py/", StringComparison.Ordinal))
+            return "PY";
+        if (combined.Contains("javascript", StringComparison.Ordinal) || combined.Contains("/js/", StringComparison.Ordinal))
+            return "JS";
+        if (combined.Contains("typescript", StringComparison.Ordinal) || combined.Contains("/ts/", StringComparison.Ordinal))
+            return "TS";
+        if (combined.Contains("rust", StringComparison.Ordinal))
+            return "RS";
+        if (combined.Contains("golang", StringComparison.Ordinal) || combined.Contains("/go/", StringComparison.Ordinal))
+            return "GO";
+        return "API";
+    }
+
+    private static string ResolveLanguageLabel(string footerLabel, string title)
+    {
+        var mark = ResolveLanguageMark(footerLabel, title);
+        return mark switch
+        {
+            "PS" => "PowerShell",
+            "C#" => "C# / .NET",
+            "PY" => "Python",
+            "JS" => "JavaScript",
+            "TS" => "TypeScript",
+            "RS" => "Rust",
+            "GO" => "Go",
+            _ => "API Reference"
+        };
+    }
+
+    // ── Geometry helpers ────────────────────────────────────────────────
 
     private static SocialRect GetInlineMediaFrame(SocialCardRenderState state)
     {
-        var panel = GetPanelRect(state);
-        var width = Math.Max(GetScaledPixels(state.Width, state.Height, 320, 220), (int)Math.Round(panel.Width * 0.34));
+        var pad = state.SafeMarginX;
+        var width = Math.Max(GetScaledPixels(state.Width, state.Height, 340, 220), (int)Math.Round(state.Width * 0.35));
+        var imgHeight = state.Height - (pad * 2) - GetScaledPixels(state.Width, state.Height, 6, 4);
         return new SocialRect(
-            panel.X + panel.Width - state.ContentPadding - width,
-            panel.Y + state.ContentPadding,
+            state.Width - pad - width,
+            pad,
             width,
-            Math.Max(160, panel.Height - (state.ContentPadding * 2)),
-            ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 22, 12, "panelRadius"));
+            Math.Max(160, imgHeight),
+            GetScaledPixels(state.Width, state.Height, 12, 6));
     }
 
-    private static List<string> BuildReferenceLines(SocialCardRenderState state)
+    private static List<string> BuildReferenceLines(SocialCardRenderState state, int maxChars = 32)
     {
-        var route = TrimSingleLine(state.FooterLabel.Trim('/').Replace('/', '.'), 32);
+        var routeMaxChars = Math.Max(12, maxChars - "namespace ".Length - 1);
+        var route = TrimSingleLine(state.FooterLabel.Trim('/').Replace('/', '.'), routeMaxChars);
         if (string.IsNullOrWhiteSpace(route))
             route = "api.reference";
 
@@ -448,16 +646,18 @@ internal static partial class WebSocialCardGenerator
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Take(4)
             .ToArray();
+        var signatureMaxChars = Math.Max(12, maxChars - "public sealed class ".Length);
         var signature = titleTokens.Length == 0
             ? "Invoke.Reference()"
             : string.Concat(titleTokens.Select(static token => char.ToUpperInvariant(token[0]) + token[1..])) + "()";
 
+        var commentMaxChars = Math.Max(8, maxChars - 2);
         return
         [
-            $"namespace {route};",
-            $"public sealed class {TrimSingleLine(signature, 28)}",
+            TrimSingleLine($"namespace {route};", maxChars),
+            TrimSingleLine($"public sealed class {TrimSingleLine(signature, signatureMaxChars)}", maxChars),
             "{",
-            "  // docs, examples, and parameters",
+            TrimSingleLine("  // docs, examples, and parameters", commentMaxChars),
             "}"
         ];
     }
@@ -485,6 +685,8 @@ internal static partial class WebSocialCardGenerator
             maximumWidth);
     }
 
+    // ── Image compositing (PNG pass) ───────────────────────────────────
+
     private static void CompositeMedia(MagickImage canvas, SocialCardRenderState state)
     {
         if (!string.IsNullOrWhiteSpace(state.InlineImageDataUri) &&
@@ -511,7 +713,7 @@ internal static partial class WebSocialCardGenerator
         if (logo is null)
             return;
 
-        var inset = Math.Max(8, frame.Width / 7);
+        var inset = Math.Max(6, frame.Width / 8);
         var targetWidth = Math.Max(12, frame.Width - (inset * 2));
         var targetHeight = Math.Max(12, frame.Height - (inset * 2));
         logo.Resize(new MagickGeometry((uint)targetWidth, (uint)targetHeight));
@@ -522,41 +724,30 @@ internal static partial class WebSocialCardGenerator
 
     private static SocialRect? ResolveLogoFrame(SocialCardRenderState state)
     {
+        var pad = state.SafeMarginX;
+        var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
+
         if (string.Equals(state.LayoutKey, "spotlight", StringComparison.OrdinalIgnoreCase))
         {
-            var size = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 228, 132, "socialCard", "logoSize");
-            return new SocialRect(
-                state.Width - state.SafeMarginX - size,
-                state.SafeMarginY + GetScaledPixels(state.Width, state.Height, 42, 22),
-                size,
-                size,
-                ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 26, 12, "panelRadius"));
+            var size = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 160, 90, "socialCard", "logoSize");
+            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
         }
 
         if (string.Equals(state.LayoutKey, "connect", StringComparison.OrdinalIgnoreCase))
         {
-            var panel = GetPanelRect(state);
-            var railWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 260, 180), (int)Math.Round(panel.Width * 0.28));
-            var markSize = Math.Min(railWidth - GetScaledPixels(state.Width, state.Height, 56, 36), GetScaledPixels(state.Width, state.Height, 160, 110));
-            return new SocialRect(
-                panel.X + panel.Width - railWidth + ((railWidth - markSize) / 2),
-                panel.Y + state.ContentPadding + GetScaledPixels(state.Width, state.Height, 44, 28),
-                markSize,
-                markSize,
-                ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 26, 12, "panelRadius"));
+            var mapWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 380, 220), (int)Math.Round(state.Width * 0.38));
+            var maxSize = Math.Max(48, mapWidth - GetScaledPixels(state.Width, state.Height, 64, 40));
+            var size = Math.Min(
+                ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 96, 56, "socialCard", "logoSize"),
+                maxSize);
+            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
         }
 
         if (string.Equals(state.LayoutKey, "product", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(state.LayoutKey, "editorial", StringComparison.OrdinalIgnoreCase))
         {
-            var panel = GetPanelRect(state);
-            var size = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 52, 34, "socialCard", "logoSize");
-            return new SocialRect(
-                panel.X + panel.Width - state.ContentPadding - size,
-                panel.Y + state.ContentPadding - 2,
-                size,
-                size,
-                ResolveRadiusPixels(state.ThemeTokens, state.Width, state.Height, 18, 10, "panelRadius"));
+            var size = GetScaledPixels(state.Width, state.Height, 48, 30);
+            return new SocialRect(state.Width - pad - size, pad, size, size, radius);
         }
 
         return null;
@@ -595,6 +786,8 @@ internal static partial class WebSocialCardGenerator
         }
     }
 
+    // ── Types ──────────────────────────────────────────────────────────
+
     internal sealed class SocialCardRenderOptions
     {
         public string? Title { get; set; }
@@ -609,6 +802,8 @@ internal static partial class WebSocialCardGenerator
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; set; }
         public string? LogoDataUri { get; set; }
         public string? InlineImageDataUri { get; set; }
+        /// <summary>"light", "dark", or null (auto = dark).</summary>
+        public string? ColorScheme { get; set; }
     }
 
     private sealed class SocialCardRenderState
@@ -632,10 +827,24 @@ internal static partial class WebSocialCardGenerator
         public required int PanelRadius { get; init; }
         public required int SafeMarginX { get; init; }
         public required int SafeMarginY { get; init; }
+        public required string CtaLabel { get; init; }
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; init; }
         public string? LogoDataUri { get; init; }
         public string? InlineImageDataUri { get; init; }
     }
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);
+
+    // ── Compatibility shims for old Append* names used in tests ────────
+
+    private static SocialRect GetPanelRect(SocialCardRenderState state)
+    {
+        var inset = Math.Max(0, state.FrameInset + state.PanelInset);
+        return new(
+            inset,
+            inset,
+            Math.Max(1, state.Width - (inset * 2)),
+            Math.Max(1, state.Height - (inset * 2)),
+            state.PanelRadius);
+    }
 }

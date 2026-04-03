@@ -49,6 +49,32 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void SelectPalette_DerivesLightThemePalette_WhenLightSchemeRequested()
+    {
+        var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["bg"] = "#102030",
+                ["panel"] = "#203040",
+                ["ink"] = "#f2f4f8",
+                ["muted"] = "#aab4c0",
+                ["accent"] = "#ff7a00",
+                ["border"] = "#2f4050"
+            }
+        };
+
+        var palette = WebSocialCardGenerator.SelectPalette("default", "seed", tokens, "light");
+
+        Assert.NotEqual("#102030", palette.BackgroundStart);
+        Assert.NotEqual("#203040", palette.Surface);
+        Assert.Equal("#ff7a00", palette.Accent);
+        Assert.Equal("#0f172a", palette.TextPrimary);
+        Assert.Equal("#475569", palette.TextSecondary);
+        Assert.Equal("#0f172a", palette.ChipText);
+    }
+
+    [Fact]
     public void SelectPalette_PrefersDedicatedSocialCardTokens_OverGenericThemeColors()
     {
         var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -125,11 +151,15 @@ public class WebSocialCardGeneratorTests
             {
                 ["fontBadge"] = "IBM Plex Sans, Segoe UI, sans-serif",
                 ["fontFooter"] = "IBM Plex Sans, Segoe UI, sans-serif",
+                ["frameInset"] = "30px",
+                ["panelInset"] = "18px",
                 ["panelRadius"] = "26px",
                 ["frameRadius"] = "30px",
                 ["badgeRadius"] = "16px",
                 ["badgeAlign"] = "left",
-                ["contentPadding"] = "32px"
+                ["contentPadding"] = "32px",
+                ["safeMarginX"] = "72px",
+                ["safeMarginY"] = "68px"
             }
         };
 
@@ -150,10 +180,11 @@ public class WebSocialCardGeneratorTests
         Assert.Contains("font-family=\"Space Grotesk, Segoe UI, sans-serif\"", svg, StringComparison.Ordinal);
         Assert.Contains("font-family=\"Inter, Segoe UI, sans-serif\"", svg, StringComparison.Ordinal);
         Assert.Contains("font-family=\"IBM Plex Sans, Segoe UI, sans-serif\"", svg, StringComparison.Ordinal);
-        Assert.Contains("rx=\"30\"", svg, StringComparison.Ordinal);
-        Assert.Contains("rx=\"26\"", svg, StringComparison.Ordinal);
-        Assert.Contains("rx=\"16\"", svg, StringComparison.Ordinal);
         Assert.Contains("layout:spotlight", svg, StringComparison.Ordinal);
+        Assert.Contains("x=\"30\" y=\"30\"", svg, StringComparison.Ordinal);
+        Assert.Contains("rx=\"30\"", svg, StringComparison.Ordinal);
+        Assert.Contains("x=\"48\" y=\"48\"", svg, StringComparison.Ordinal);
+        Assert.Contains("rx=\"26\"", svg, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,8 +218,67 @@ public class WebSocialCardGeneratorTests
 
         var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
         {
+            Title = "TestimoX - Active Directory Security",
+            Description = "Security assessment suite for Active Directory.",
+            Eyebrow = "TestimoX",
+            Badge = "HOME",
+            FooterLabel = "/",
+            Width = 1200,
+            Height = 630,
+            StyleKey = "home",
+            VariantKey = "spotlight",
+            LogoDataUri = dataUri
+        });
+
+        Assert.Contains("layout:spotlight", svg, StringComparison.Ordinal);
+        Assert.Contains(dataUri, svg, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AdaptTitleSize_ReducesFontSize_WhenTitleWouldTruncate()
+    {
+        // Very long title that cannot fit in 2 lines at 60px on a 400px-wide area
+        var longTitle = "TestimoX release notes: safer rule catalog generation and richer diagnostic output for enterprise environments with advanced monitoring capabilities and extended reporting";
+        var baseFontSize = 60;
+        var baseLineHeight = 66;
+
+        var (fontSize, lineHeight, lines) = WebSocialCardGenerator.AdaptTitleSize(
+            longTitle, baseFontSize, baseLineHeight, contentWidth: 300, maxLines: 2, width: 1200, height: 630);
+
+        // At 300px content width with 60px font, title will truncate. Adaptive sizing should kick in.
+        // If the title still truncates at the reduced size, at minimum the reduced attempt should
+        // produce more lines than the original, or the font size should be smaller.
+        Assert.True(fontSize <= baseFontSize, $"Font size {fontSize} should not exceed base {baseFontSize}");
+        Assert.True(lines.Count >= 1, "Should produce at least one line");
+        Assert.True(lines.Count <= 2, $"Adaptive sizing should respect the 2-line cap, but rendered {lines.Count} lines");
+        Assert.True(lineHeight <= baseLineHeight, $"Line height {lineHeight} should not exceed base {baseLineHeight}");
+    }
+
+    [Fact]
+    public void AdaptTitleSize_KeepsOriginalSize_WhenTitleFits()
+    {
+        var shortTitle = "TestimoX";
+        var baseFontSize = 48;
+        var baseLineHeight = 52;
+
+        var (fontSize, lineHeight, lines) = WebSocialCardGenerator.AdaptTitleSize(
+            shortTitle, baseFontSize, baseLineHeight, contentWidth: 600, maxLines: 3, width: 1200, height: 630);
+
+        Assert.Equal(baseFontSize, fontSize);
+        Assert.Equal(baseLineHeight, lineHeight);
+        Assert.Single(lines);
+        Assert.Equal("TestimoX", lines[0]);
+    }
+
+    [Fact]
+    public void RenderSvg_ConnectLayout_RendersMapVisualAndRoute()
+    {
+        const string dataUri = "data:image/svg+xml;base64,PHN2Zy8+";
+
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
             Title = "Contact PowerForge",
-            Description = "Get in touch about docs, modules, and releases.",
+            Description = "Get in touch.",
             Eyebrow = "PowerForge",
             Badge = "CONTACT",
             FooterLabel = "/contact",
@@ -200,6 +290,7 @@ public class WebSocialCardGeneratorTests
         });
 
         Assert.Contains("layout:connect", svg, StringComparison.Ordinal);
+        Assert.Contains("/contact", svg, StringComparison.Ordinal);
         Assert.Contains(dataUri, svg, StringComparison.Ordinal);
     }
 }

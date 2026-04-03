@@ -80,12 +80,14 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
 
+        var colorSchemeForHash = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
         var hashInput = string.Join("|", new[]
         {
             routeForSlug,
             title ?? string.Empty,
             description ?? string.Empty,
-            siteName ?? string.Empty
+            siteName ?? string.Empty,
+            colorSchemeForHash
         });
         var hash = ComputeSocialHash(hashInput);
         var fileName = $"{routeSlug}-{hash}.png";
@@ -98,6 +100,7 @@ public static partial class WebSiteBuilder
         var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
         var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
+        var colorScheme = ResolveSocialCardColorScheme(spec, item);
         var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
         var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
         {
@@ -110,6 +113,7 @@ public static partial class WebSiteBuilder
             Height = spec.Social.GeneratedCardHeight,
             StyleKey = styleKey,
             VariantKey = variantKey,
+            ColorScheme = colorScheme,
             ThemeTokens = themeTokens,
             LogoDataUri = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item)),
             InlineImageDataUri = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
@@ -246,6 +250,25 @@ public static partial class WebSiteBuilder
             return spec.Social.GeneratedCardVariant!.Trim();
 
         return InferSocialCardVariant(item, styleKey, route);
+    }
+
+    private static string? ResolveSocialCardColorScheme(SiteSpec spec, ContentItem item)
+    {
+        var colorSchemeOverride =
+            GetMetaString(item.Meta, "social_card_color_scheme") ??
+            GetMetaString(item.Meta, "social.color_scheme");
+        if (!string.IsNullOrWhiteSpace(colorSchemeOverride))
+            return colorSchemeOverride!.Trim();
+
+        var collection = item.Collection?.Trim();
+        if (!string.IsNullOrWhiteSpace(collection) &&
+            TryResolveCollectionCardPreset(spec.Social?.GeneratedCardColorSchemesByCollection, collection!, out var collectionScheme))
+            return collectionScheme;
+
+        if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardColorScheme))
+            return spec.Social.GeneratedCardColorScheme!.Trim();
+
+        return null;
     }
 
     private static bool TryResolveCollectionCardPreset(

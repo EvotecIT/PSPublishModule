@@ -75,6 +75,70 @@ internal static partial class WebSocialCardGenerator
             "#fef3c7")
     ];
 
+    private static readonly SocialPalette[] LightPalettes =
+    [
+        // Blue accent (home/default)
+        new(
+            "#ffffff",
+            "#f8fafc",
+            "#f1f5f9",
+            "#f1f5f9",
+            "#e2e8f0",
+            "#2563eb",
+            "#3b82f6",
+            "#1d4ed8",
+            "#0f172a",
+            "#475569",
+            "#e0e7ff",
+            "#c7d2fe",
+            "#1e3a5f"),
+        // Violet accent (contact)
+        new(
+            "#ffffff",
+            "#faf5ff",
+            "#f3e8ff",
+            "#f3e8ff",
+            "#e9d5ff",
+            "#7c3aed",
+            "#8b5cf6",
+            "#6d28d9",
+            "#1e1b4b",
+            "#6b7280",
+            "#ede9fe",
+            "#ddd6fe",
+            "#4c1d95"),
+        // Teal accent (api/docs)
+        new(
+            "#ffffff",
+            "#f0fdfa",
+            "#ccfbf1",
+            "#ecfdf5",
+            "#d1fae5",
+            "#0d9488",
+            "#14b8a6",
+            "#0f766e",
+            "#0f172a",
+            "#475569",
+            "#ccfbf1",
+            "#99f6e4",
+            "#134e4a"),
+        // Amber accent (blog/editorial)
+        new(
+            "#ffffff",
+            "#fffbeb",
+            "#fef3c7",
+            "#fefce8",
+            "#fde68a",
+            "#d97706",
+            "#f59e0b",
+            "#b45309",
+            "#1c1917",
+            "#57534e",
+            "#fef3c7",
+            "#fde68a",
+            "#78350f")
+    ];
+
     internal static byte[]? RenderPng(
         string? title,
         string? description,
@@ -403,6 +467,58 @@ internal static partial class WebSocialCardGenerator
         return Math.Max(minimum, (int)Math.Round(basePixels * scale));
     }
 
+    internal static (int FontSize, int LineHeight, List<string> Lines) AdaptTitleSize(
+        string title,
+        int baseFontSize,
+        int baseLineHeight,
+        int contentWidth,
+        int maxLines,
+        int width,
+        int height)
+    {
+        var minFontSize = Math.Max(24, (int)Math.Round(baseFontSize * 0.75));
+        var fontSize = baseFontSize;
+        var lineHeight = baseLineHeight;
+        var lines = WrapText(title, GetTitleWrapWidth(contentWidth, fontSize), maxLines);
+
+        if (lines.Count > 0 && lines[^1].EndsWith("...", StringComparison.Ordinal))
+        {
+            var reducedFontSize = Math.Max(minFontSize, (int)Math.Round(baseFontSize * 0.82));
+            var reducedLineHeight = Math.Max(24, (int)Math.Round(baseLineHeight * 0.82));
+            var reducedLines = WrapText(title, GetTitleWrapWidth(contentWidth, reducedFontSize), maxLines);
+            if (reducedLines.Count > 0)
+            {
+                var currentVisibleChars = CountVisibleCharacters(lines);
+                var reducedVisibleChars = CountVisibleCharacters(reducedLines);
+                var reducedStillTruncates = reducedLines[^1].EndsWith("...", StringComparison.Ordinal);
+                if (!reducedStillTruncates || reducedVisibleChars > currentVisibleChars)
+                {
+                    fontSize = reducedFontSize;
+                    lineHeight = reducedLineHeight;
+                    lines = reducedLines;
+                }
+            }
+        }
+
+        return (fontSize, lineHeight, lines);
+    }
+
+    private static int CountVisibleCharacters(IReadOnlyList<string> lines)
+    {
+        var count = 0;
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            count += line.EndsWith("...", StringComparison.Ordinal)
+                ? Math.Max(0, line.Length - 3)
+                : line.Length;
+        }
+
+        return count;
+    }
+
     private static int GetTitleWrapWidth(int safeWidth, int fontSize)
     {
         return EstimateCharsFromWidth(safeWidth, fontSize, minChars: 20, maxChars: 42);
@@ -443,43 +559,33 @@ internal static partial class WebSocialCardGenerator
         return NormalizeDisplayTextForWrap(value);
     }
 
-    internal static SocialPalette SelectPalette(string styleKey, string seed, IReadOnlyDictionary<string, object?>? themeTokens = null)
+    internal static SocialPalette SelectPalette(string styleKey, string seed, IReadOnlyDictionary<string, object?>? themeTokens = null, string? colorScheme = null)
     {
-        if (TryResolveThemePalette(themeTokens, out var themed))
+        if (TryResolveThemePalette(themeTokens, colorScheme, out var themed))
             return themed;
 
-        if (Palettes.Length == 0)
-            return new SocialPalette(
-                "#070f25",
-                "#102b57",
-                "#0b1732",
-                "#0b1732",
-                "#2b4b7f",
-                "#38bdf8",
-                "#67e8f9",
-                "#bae6fd",
-                "#f8fafc",
-                "#cbd5e1",
-                "#0b1f3f",
-                "#2b4b7f",
-                "#dbeafe");
+        var isLight = string.Equals(colorScheme, "light", StringComparison.OrdinalIgnoreCase);
+        var pool = isLight ? LightPalettes : Palettes;
+
+        if (pool.Length == 0)
+            return Palettes[0];
 
         var input = Encoding.UTF8.GetBytes(seed ?? string.Empty);
         var hash = SHA256.HashData(input);
         var candidates = styleKey switch
         {
-            "api" => new[] { 0, 2 },
-            "docs" => new[] { 2, 0 },
-            "blog" => new[] { 3, 1 },
-            "contact" => new[] { 3, 0 },
-            "home" => new[] { 1, 0 },
-            _ => new[] { 1, 0 }
+            "api" => new[] { isLight ? 2 : 0, isLight ? 2 : 2 },
+            "docs" => new[] { isLight ? 2 : 2, isLight ? 2 : 0 },
+            "blog" => new[] { isLight ? 3 : 3, isLight ? 3 : 1 },
+            "contact" => new[] { isLight ? 1 : 3, isLight ? 1 : 0 },
+            "home" => new[] { isLight ? 0 : 1, isLight ? 0 : 0 },
+            _ => new[] { isLight ? 0 : 1, isLight ? 0 : 0 }
         };
         var candidate = candidates[hash[0] % candidates.Length];
-        return Palettes[candidate % Palettes.Length];
+        return pool[candidate % pool.Length];
     }
 
-    private static bool TryResolveThemePalette(IReadOnlyDictionary<string, object?>? themeTokens, out SocialPalette palette)
+    private static bool TryResolveThemePalette(IReadOnlyDictionary<string, object?>? themeTokens, string? colorScheme, out SocialPalette palette)
     {
         palette = default!;
         if (themeTokens is null || themeTokens.Count == 0)
@@ -516,7 +622,7 @@ internal static partial class WebSocialCardGenerator
         var chipBorder = ReadThemeToken(themeTokens, "socialCard", "chipBorder") ?? resolvedSurfaceStroke;
         var chipText = ReadThemeToken(themeTokens, "socialCard", "chipText") ?? textPrimary;
 
-        palette = new SocialPalette(
+        var basePalette = new SocialPalette(
             backgroundStart,
             backgroundMid,
             backgroundEnd,
@@ -530,6 +636,74 @@ internal static partial class WebSocialCardGenerator
             chipBackground,
             chipBorder,
             chipText);
+
+        palette = string.Equals(colorScheme, "light", StringComparison.OrdinalIgnoreCase)
+            ? BuildLightThemePalette(themeTokens, basePalette)
+            : basePalette;
+        return true;
+    }
+
+    private static SocialPalette BuildLightThemePalette(IReadOnlyDictionary<string, object?>? themeTokens, SocialPalette basePalette)
+    {
+        return new SocialPalette(
+            ReadThemeToken(themeTokens, "socialCardLight", "backgroundStart") ?? BlendHexColor(basePalette.BackgroundStart, "#ffffff", 0.92),
+            ReadThemeToken(themeTokens, "socialCardLight", "backgroundMid") ?? BlendHexColor(basePalette.BackgroundMid, "#ffffff", 0.88),
+            ReadThemeToken(themeTokens, "socialCardLight", "backgroundEnd") ?? BlendHexColor(basePalette.BackgroundEnd, "#ffffff", 0.84),
+            ReadThemeToken(themeTokens, "socialCardLight", "surface") ?? BlendHexColor(basePalette.Surface, "#ffffff", 0.82),
+            ReadThemeToken(themeTokens, "socialCardLight", "surfaceStroke") ?? BlendHexColor(basePalette.SurfaceStroke, "#cbd5e1", 0.4),
+            ReadThemeToken(themeTokens, "socialCardLight", "accent") ?? basePalette.Accent,
+            ReadThemeToken(themeTokens, "socialCardLight", "accentSoft") ?? BlendHexColor(basePalette.AccentSoft, "#ffffff", 0.32),
+            ReadThemeToken(themeTokens, "socialCardLight", "accentStrong") ?? BlendHexColor(basePalette.AccentStrong, "#0f172a", 0.18),
+            ReadThemeToken(themeTokens, "socialCardLight", "textPrimary") ?? "#0f172a",
+            ReadThemeToken(themeTokens, "socialCardLight", "textSecondary") ?? "#475569",
+            ReadThemeToken(themeTokens, "socialCardLight", "chipBackground") ?? BlendHexColor(basePalette.ChipBackground, "#ffffff", 0.7),
+            ReadThemeToken(themeTokens, "socialCardLight", "chipBorder") ?? BlendHexColor(basePalette.ChipBorder, "#cbd5e1", 0.28),
+            ReadThemeToken(themeTokens, "socialCardLight", "chipText") ?? "#0f172a");
+    }
+
+    private static string BlendHexColor(string source, string target, double amount)
+    {
+        if (!TryParseHexColor(source, out var sourceRed, out var sourceGreen, out var sourceBlue) ||
+            !TryParseHexColor(target, out var targetRed, out var targetGreen, out var targetBlue))
+        {
+            return source;
+        }
+
+        var mix = Math.Clamp(amount, 0d, 1d);
+        var red = (int)Math.Round(sourceRed + ((targetRed - sourceRed) * mix));
+        var green = (int)Math.Round(sourceGreen + ((targetGreen - sourceGreen) * mix));
+        var blue = (int)Math.Round(sourceBlue + ((targetBlue - sourceBlue) * mix));
+        return $"#{red:X2}{green:X2}{blue:X2}";
+    }
+
+    private static bool TryParseHexColor(string? value, out int red, out int green, out int blue)
+    {
+        red = 0;
+        green = 0;
+        blue = 0;
+
+        var candidate = (value ?? string.Empty).Trim();
+        if (candidate.StartsWith('#'))
+            candidate = candidate[1..];
+
+        if (candidate.Length == 3)
+        {
+            candidate = string.Concat(candidate.Select(static ch => new string(ch, 2)));
+        }
+
+        if (candidate.Length != 6)
+            return false;
+
+        if (!int.TryParse(candidate[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out red) ||
+            !int.TryParse(candidate.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out green) ||
+            !int.TryParse(candidate.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out blue))
+        {
+            red = 0;
+            green = 0;
+            blue = 0;
+            return false;
+        }
+
         return true;
     }
 
