@@ -1,11 +1,20 @@
 namespace PowerForge;
 
-internal static class ModulePathTokenFormatter
+/// <summary>
+/// Replaces common module/version path tokens used across packaging and publish workflows.
+/// </summary>
+public static class ModulePathTokenFormatter
 {
-    internal static string FormatVersionWithPreRelease(string moduleVersion, string? preRelease = null)
+    /// <summary>
+    /// Formats a module version and optional prerelease suffix.
+    /// </summary>
+    public static string FormatVersionWithPreRelease(string moduleVersion, string? preRelease = null)
         => string.IsNullOrWhiteSpace(preRelease) ? (moduleVersion ?? string.Empty) : (moduleVersion ?? string.Empty) + "-" + preRelease;
 
-    internal static string ReplacePathTokens(string? replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
+    /// <summary>
+    /// Replaces common PSPublishModule path tokens (for example <c>&lt;ModuleName&gt;</c> and <c>&lt;ModuleVersion&gt;</c>).
+    /// </summary>
+    public static string ReplacePathTokens(string? replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
     {
         if (replacementPath is null)
             return string.Empty;

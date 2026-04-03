@@ -9,6 +9,7 @@ public sealed class ModuleInstaller
 {
     private readonly ILogger _logger;
     private static readonly char[] PathSeparators = { '/', '\\' };
+    private static readonly ModuleManifestMetadataReader ManifestMetadataReader = new();
 
     /// <summary>
     /// Creates a new installer.
@@ -171,8 +172,8 @@ public sealed class ModuleInstaller
         if (handling != LegacyFlatModuleHandling.Convert)
             return;
 
-        if (!ManifestEditor.TryGetTopLevelString(flatManifest, "ModuleVersion", out var version) ||
-            string.IsNullOrWhiteSpace(version))
+        var metadata = TryReadManifestMetadata(flatManifest);
+        if (string.IsNullOrWhiteSpace(metadata?.ModuleVersion))
         {
             var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "unknown");
             _logger.Warn($"Legacy flat install detected but ModuleVersion could not be read. Quarantining to '{target}'.");
@@ -180,7 +181,7 @@ public sealed class ModuleInstaller
             return;
         }
 
-        var legacyVersion = version!.Trim();
+        var legacyVersion = metadata!.ModuleVersion.Trim();
         try { ValidatePathSegment(legacyVersion, nameof(legacyVersion)); }
         catch
         {
@@ -269,6 +270,19 @@ public sealed class ModuleInstaller
 
         var basePart = name.Split(new[] { '-' }, 2)[0];
         return Version.TryParse(basePart, out _);
+    }
+
+    private ModuleManifestMetadata? TryReadManifestMetadata(string manifestPath)
+    {
+        try
+        {
+            return ManifestMetadataReader.Read(manifestPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to read manifest metadata from '{manifestPath}': {ex.Message}");
+            return null;
+        }
     }
 
     private void TryMoveFile(string sourcePath, string destPath)

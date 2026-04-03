@@ -13,6 +13,7 @@ public sealed class ModuleVersionStepper
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGalleryVersionFeedClient _powerShellGalleryFeed;
+    private static readonly ModuleManifestMetadataReader ManifestMetadataReader = new();
 
     /// <summary>
     /// Creates a new instance using the provided logger and an out-of-process PowerShell runner.
@@ -101,9 +102,9 @@ public sealed class ModuleVersionStepper
                     return (null, ModuleVersionSource.LocalPsd1);
                 }
 
-                if (ManifestEditor.TryGetTopLevelString(full, "ModuleVersion", out var v) &&
-                    !string.IsNullOrWhiteSpace(v) &&
-                    Version.TryParse(v, out var parsed))
+                var metadata = ManifestMetadataReader.Read(full);
+                if (!string.IsNullOrWhiteSpace(metadata.ModuleVersion) &&
+                    Version.TryParse(metadata.ModuleVersion, out var parsed))
                 {
                     return (parsed, ModuleVersionSource.LocalPsd1);
                 }

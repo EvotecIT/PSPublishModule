@@ -10,11 +10,22 @@ namespace PowerForge;
 public sealed class ModuleBuildPipeline
 {
     private readonly ILogger _logger;
+    private readonly IModuleManifestMutator _manifestMutator;
+    private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
 
     /// <summary>
-    /// Creates a new pipeline that logs progress via <paramref name="logger"/>.
+    /// Creates a new pipeline that logs progress via <paramref name="logger"/> and builds modules using the supplied
+    /// manifest mutator and script export detector seams.
     /// </summary>
-    public ModuleBuildPipeline(ILogger logger) => _logger = logger;
+    public ModuleBuildPipeline(
+        ILogger logger,
+        IModuleManifestMutator manifestMutator,
+        IScriptFunctionExportDetector scriptFunctionExportDetector)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _manifestMutator = manifestMutator ?? throw new ArgumentNullException(nameof(manifestMutator));
+        _scriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
+    }
 
     internal sealed class StagingResult
     {
@@ -105,7 +116,10 @@ public sealed class ModuleBuildPipeline
         var staging = Path.GetFullPath(stagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
-        var builder = new ModuleBuilder(_logger);
+        var builder = new ModuleBuilder(
+            _logger,
+            _manifestMutator,
+            _scriptFunctionExportDetector);
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
         var buildNotes = builder.BuildInPlace(new ModuleBuilder.Options
         {
@@ -134,7 +148,7 @@ public sealed class ModuleBuildPipeline
         if (!File.Exists(psd1))
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
-        var exports = ReadExportsFromManifest(psd1);
+        var exports = ModuleManifestExportReader.ReadExports(psd1);
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
@@ -174,7 +188,7 @@ public sealed class ModuleBuildPipeline
         var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
         if (patchManifest)
         {
-            try { ManifestEditor.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
+            try { _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
             catch { /* best effort */ }
         }
 
@@ -195,7 +209,7 @@ public sealed class ModuleBuildPipeline
         try
         {
             if (File.Exists(manifestPath) &&
-                ManifestEditor.TryGetTopLevelString(manifestPath, "ModuleVersion", out var v) &&
+                ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var v) &&
                 !string.IsNullOrWhiteSpace(v))
             {
                 _logger.Verbose($"Resolved ModuleVersion from manifest: {manifestPath} -> {v}");
@@ -280,11 +294,6 @@ public sealed class ModuleBuildPipeline
         return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ExportSet ReadExportsFromManifest(string psd1Path)
-        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
-            ReadStringOrArray(psd1Path, "CmdletsToExport"),
-            ReadStringOrArray(psd1Path, "AliasesToExport"));
-
     private (int Converted, int Errors) NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {
         try
@@ -326,14 +335,5 @@ public sealed class ModuleBuildPipeline
             // approximate "normalization failed" signal rather than an exact count of failed files.
             return (0, 1);
         }
-    }
-
-    private static string[] ReadStringOrArray(string psd1Path, string key)
-    {
-        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
-            return values;
-        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
-            return new[] { value! };
-        return Array.Empty<string>();
     }
 }

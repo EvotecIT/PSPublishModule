@@ -41,41 +41,18 @@
     <Compile Include="..\PowerForge\BuildServices.cs" Link="BuildServices.cs" />
     <Compile Include="..\PowerForge\Models\Analysis\MissingFunctionCommand.cs" Link="Models\Analysis\MissingFunctionCommand.cs" />
     <Compile Include="..\PowerForge\Models\Analysis\MissingFunctionsReport.cs" Link="Models\Analysis\MissingFunctionsReport.cs" />
-    <Compile Include="..\PowerForge\Models\ArtefactBuildResult.cs" Link="Models\ArtefactBuildResult.cs" />
-    <Compile Include="..\PowerForge\Models\ModuleInformation.cs" Link="Models\ModuleInformation.cs" />
-    <Compile Include="..\PowerForge\Models\ModulePipelineDiagnosticsPolicyException.cs" Link="Models\ModulePipelineDiagnosticsPolicyException.cs" />
-    <Compile Include="..\PowerForge\Models\ModulePipelinePlan.cs" Link="Models\ModulePipelinePlan.cs" />
-    <Compile Include="..\PowerForge\Models\ModulePipelineResult.cs" Link="Models\ModulePipelineResult.cs" />
-    <Compile Include="..\PowerForge\Models\ModulePipelineStep.cs" Link="Models\ModulePipelineStep.cs" />
-    <Compile Include="..\PowerForge\Models\ModulePublishResult.cs" Link="Models\ModulePublishResult.cs" />
-    <Compile Include="..\PowerForge\Models\ModuleTestSuiteResult.cs" Link="Models\ModuleTestSuiteResult.cs" />
-    <Compile Include="..\PowerForge\Models\ProjectCleanupOutput.cs" Link="Models\ProjectCleanupOutput.cs" />
-    <Compile Include="..\PowerForge\Models\ProjectCleanupSpec.cs" Link="Models\ProjectCleanupSpec.cs" />
-    <Compile Include="..\PowerForge\Models\ProjectCleanupSummary.cs" Link="Models\ProjectCleanupSummary.cs" />
-    <Compile Include="..\PowerForge\Models\ProjectDeleteMethod.cs" Link="Models\ProjectDeleteMethod.cs" />
-    <Compile Include="..\PowerForge\Services\ArtefactBuilder*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\AuthenticodeSigningService.cs" Link="Services\AuthenticodeSigningService.cs" />
-    <Compile Include="..\PowerForge\Services\BinaryConflictDetectionService.cs" Link="Services\BinaryConflictDetectionService.cs" />
     <Compile Include="..\PowerForge\Services\BinaryDependencyPreflightService.cs" Link="Services\BinaryDependencyPreflightService.cs" />
-    <Compile Include="..\PowerForge\Services\BuildDiagnosticsFactory.cs" Link="Services\BuildDiagnosticsFactory.cs" />
     <Compile Include="..\PowerForge\Services\DocumentationEngine.cs" Link="Services\DocumentationEngine.cs" />
-    <Compile Include="..\PowerForge\Services\ExportDetector.cs" Link="Services\ExportDetector.cs" />
-    <Compile Include="..\PowerForge\Services\IModulePipelineProgressReporter.cs" Link="Services\IModulePipelineProgressReporter.cs" />
     <Compile Include="..\PowerForge\Services\LegacySegmentAdapter.cs" Link="Services\LegacySegmentAdapter.cs" />
     <Compile Include="..\PowerForge\Services\ManifestEditor*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\MissingFunctionsAnalyzer.cs" Link="Services\MissingFunctionsAnalyzer.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleBuildPipeline.cs" Link="Services\ModuleBuildPipeline.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleBuilder.cs" Link="Services\ModuleBuilder.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleInformationReader.cs" Link="Services\ModuleInformationReader.cs" />
-    <Compile Include="..\PowerForge\Services\ModuleInstaller.cs" Link="Services\ModuleInstaller.cs" />
     <Compile Include="..\PowerForge\Services\ModulePipelineRunner*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\Services\ModulePublisher.cs" Link="Services\ModulePublisher.cs" />
     <Compile Include="..\PowerForge\Services\ModuleTestFailureAnalyzer.cs" Link="Services\ModuleTestFailureAnalyzer.cs" />
     <Compile Include="..\PowerForge\Services\ModuleTestFailureWorkflowService.cs" Link="Services\ModuleTestFailureWorkflowService.cs" />
     <Compile Include="..\PowerForge\Services\ModuleTestSuiteService.cs" Link="Services\ModuleTestSuiteService.cs" />
     <Compile Include="..\PowerForge\Services\ModuleValidationService*.cs" Link="Services\%(Filename)%(Extension)" />
-    <Compile Include="..\PowerForge\Services\ModuleVersionStepper.cs" Link="Services\ModuleVersionStepper.cs" />
-    <Compile Include="..\PowerForge\Services\ProjectCleanupService.cs" Link="Services\ProjectCleanupService.cs" />
   </ItemGroup>
 
 </Project>

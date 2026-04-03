@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Defines the deletion method used by <see cref="ProjectCleanupService"/>.
+/// Defines the deletion method used by the project cleanup workflow.
 /// </summary>
 public enum ProjectDeleteMethod
 {
@@ -14,4 +14,3 @@ public enum ProjectDeleteMethod
     /// <summary>Move items to the Recycle Bin (Windows only).</summary>
     RecycleBin
 }
-

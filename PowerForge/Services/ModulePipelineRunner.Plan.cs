@@ -122,7 +122,7 @@ public sealed partial class ModulePipelineRunner
                     continue;
 
                 var requiredModuleName = module.ModuleName.Trim();
-                if (ShouldSkipManifestDependencyModule(requiredModuleName))
+                if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(requiredModuleName))
                     continue;
                 if (externalIndex.Contains(requiredModuleName))
                     continue;
@@ -285,7 +285,7 @@ public sealed partial class ModulePipelineRunner
                     if (moduleSeg.Kind is not ModuleDependencyKind.RequiredModule)
                         break;
 
-                    if (ShouldSkipManifestDependencyModule(name))
+                    if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(name))
                         break;
 
                     var draft = new RequiredModuleDraft(
@@ -397,7 +397,7 @@ public sealed partial class ModulePipelineRunner
                 }
                 case ConfigurationFormattingSegment formattingSegment:
                 {
-                    formatting = MergeFormattingSegments(formatting, formattingSegment);
+                    formatting = ModulePipelinePlanningHelpers.MergeFormattingSegments(formatting, formattingSegment);
                     break;
                 }
                 case ConfigurationPlaceHolderSegment placeHolder:
@@ -448,7 +448,7 @@ public sealed partial class ModulePipelineRunner
             try
             {
                 if (File.Exists(psd1) &&
-                    ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var v) &&
+                    ModuleManifestValueReader.TryGetTopLevelString(psd1, "ModuleVersion", out var v) &&
                     !string.IsNullOrWhiteSpace(v))
                 {
                     expectedVersion = v;
@@ -475,7 +475,7 @@ public sealed partial class ModulePipelineRunner
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
         var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
             ? spec.Build.CsprojPath
-            : TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+            : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
 
         var dotnetConfig = !string.IsNullOrWhiteSpace(dotnetConfigFromSegments)
             ? dotnetConfigFromSegments!
@@ -555,7 +555,7 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
 
         if (roots.Length == 0 && compatible is { Length: > 0 })
-            roots = ResolveInstallRootsFromCompatiblePSEditions(compatible);
+            roots = ModulePipelinePlanningHelpers.ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
         if (!resolveMissingModulesOnlineSet && HasAutoRequiredModules(requiredModulesDraft))
         {
@@ -652,7 +652,7 @@ public sealed partial class ModulePipelineRunner
         if (formatting is not null &&
             formatting.Options is not null &&
             !formatting.Options.UpdateProjectRoot &&
-            HasStandardFormattingConfiguration(formatting))
+            ModulePipelinePlanningHelpers.HasStandardFormattingConfiguration(formatting))
         {
             formatting.Options.UpdateProjectRoot = true;
             _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
@@ -766,7 +766,7 @@ public sealed partial class ModulePipelineRunner
         HashSet<string> externalIndex,
         List<string> externalModules)
     {
-        if (ShouldSkipManifestDependencyModule(moduleName))
+        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(moduleName))
         {
             _logger.Info($"Skipping built-in PowerShell module '{moduleName}' from manifest dependency output.");
             return false;
@@ -777,14 +777,4 @@ public sealed partial class ModulePipelineRunner
 
         return true;
     }
-
-    private static bool ShouldSkipManifestDependencyModule(string? moduleName)
-    {
-        var normalizedModuleName = moduleName?.Trim();
-        if (normalizedModuleName is null || normalizedModuleName.Length == 0)
-            return true;
-
-        return normalizedModuleName.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
-    }
-
 }

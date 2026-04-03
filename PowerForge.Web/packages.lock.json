@@ -32,9 +32,9 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[0.5.2, )",
-        "resolved": "0.5.2",
-        "contentHash": "+IS8x7YBs89NEHaJ9z+1ayVrfb1y0Z3xGVeNCK5eu9EmUd2CWtppBwn8RUmn7x95EurfJR1oxv2/UuwnGONV0A=="
+        "requested": "[0.6.7, )",
+        "resolved": "0.6.7",
+        "contentHash": "YlmytY2evEQf+nNg0Lw2Jb5J2lYx41XGUI11hpdIbNVzX5JxkNsUKxA1DpjdzaxKI9XpZQIBC8qxKOymx/k/yA=="
       },
       "Scriban": {
         "type": "Direct",
@@ -202,9 +202,9 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[0.5.2, )",
-        "resolved": "0.5.2",
-        "contentHash": "+IS8x7YBs89NEHaJ9z+1ayVrfb1y0Z3xGVeNCK5eu9EmUd2CWtppBwn8RUmn7x95EurfJR1oxv2/UuwnGONV0A=="
+        "requested": "[0.6.7, )",
+        "resolved": "0.6.7",
+        "contentHash": "YlmytY2evEQf+nNg0Lw2Jb5J2lYx41XGUI11hpdIbNVzX5JxkNsUKxA1DpjdzaxKI9XpZQIBC8qxKOymx/k/yA=="
       },
       "Scriban": {
         "type": "Direct",

@@ -22,59 +22,20 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private static void SafeStart(IModulePipelineProgressReporter reporter, HashSet<string> startedKeys, ModulePipelineStep? step)
-    {
-        if (step is null) return;
-        if (!string.IsNullOrWhiteSpace(step.Key)) startedKeys.Add(step.Key);
-        try { reporter.StepStarting(step); } catch { /* best effort */ }
-    }
-
-    private static void SafeDone(IModulePipelineProgressReporter reporter, ModulePipelineStep? step)
-    {
-        if (step is null) return;
-        try { reporter.StepCompleted(step); } catch { /* best effort */ }
-    }
-
-    private static void SafeFail(IModulePipelineProgressReporter reporter, ModulePipelineStep? step, Exception ex)
-    {
-        if (step is null) return;
-        try { reporter.StepFailed(step, ex); } catch { /* best effort */ }
-    }
-
     private ModulePipelineResult BuildPipelineResult(
         ModulePipelineSpec spec,
         ModulePipelinePlan plan,
-        ModuleBuildResult buildResult,
-        BuildDiagnostic[] automaticBinaryConflictDiagnostics,
-        ModuleInstallerResult? installResult,
-        DocumentationBuildResult? documentationResult,
-        ProjectConsistencyReport? fileConsistencyReport,
-        CheckStatus? fileConsistencyStatus,
-        ProjectConversionResult? fileConsistencyEncodingFix,
-        ProjectConversionResult? fileConsistencyLineEndingFix,
-        PowerShellCompatibilityReport? compatibilityReport,
-        ModuleValidationReport? validationReport,
-        ModulePublishResult[] publishResults,
-        ArtefactBuildResult[] artefactResults,
-        FormatterResult[]? formattingStagingResults,
-        FormatterResult[]? formattingProjectResults,
-        ProjectConsistencyReport? projectRootFileConsistencyReport,
-        CheckStatus? projectRootFileConsistencyStatus,
-        ProjectConversionResult? projectRootFileConsistencyEncodingFix,
-        ProjectConversionResult? projectRootFileConsistencyLineEndingFix,
-        ModuleSigningResult? signingResult,
-        ModuleDependencyInstallResult[] dependencyInstallResults,
-        ModuleBuildPipeline.StagingResult stagingResult,
-        MergeExecutionResult mergeExecution,
-        string? projectManifestSyncMessage)
+        ModulePipelineRunState state)
     {
+        var buildResult = state.RequireBuildResult();
+        var stagingResult = state.RequireStaged();
         var diagnostics = new List<BuildDiagnostic>(BuildDiagnosticsFactory.CreatePipelineDiagnostics(
-            fileConsistencyReport,
+            state.FileConsistencyReport,
             plan.FileConsistencySettings,
-            projectRootFileConsistencyReport,
-            compatibilityReport,
-            validationReport));
-        diagnostics.AddRange(automaticBinaryConflictDiagnostics ?? Array.Empty<BuildDiagnostic>());
+            state.ProjectFileConsistencyReport,
+            state.CompatibilityReport,
+            state.ValidationReport));
+        diagnostics.AddRange(state.AutomaticBinaryConflictDiagnostics ?? Array.Empty<BuildDiagnostic>());
         diagnostics.AddRange(CreateBinaryConflictDiagnostics(spec.Diagnostics, plan, buildResult));
         var diagnosticsBaseline = BuildDiagnosticsBaselineStore.Evaluate(
             plan.ProjectRoot,
@@ -88,34 +49,34 @@ public sealed partial class ModulePipelineRunner
         var result = new ModulePipelineResult(
             plan,
             buildResult,
-            installResult,
-            documentationResult,
-            fileConsistencyReport,
-            fileConsistencyStatus,
-            fileConsistencyEncodingFix,
-            fileConsistencyLineEndingFix,
-            compatibilityReport,
-            validationReport,
+            state.InstallResult,
+            state.DocumentationResult,
+            state.FileConsistencyReport,
+            state.FileConsistencyStatus,
+            state.FileConsistencyEncodingFix,
+            state.FileConsistencyLineEndingFix,
+            state.CompatibilityReport,
+            state.ValidationReport,
             diagnostics.ToArray(),
             diagnosticsBaseline,
             diagnosticsPolicy,
-            publishResults,
-            artefactResults,
-            formattingStagingResults,
-            formattingProjectResults,
-            projectRootFileConsistencyReport,
-            projectRootFileConsistencyStatus,
-            projectRootFileConsistencyEncodingFix,
-            projectRootFileConsistencyLineEndingFix,
-            signingResult,
+            state.PublishResults.ToArray(),
+            state.ArtefactResults.ToArray(),
+            state.FormattingStagingResults,
+            state.FormattingProjectResults,
+            state.ProjectFileConsistencyReport,
+            state.ProjectFileConsistencyStatus,
+            state.ProjectFileConsistencyEncodingFix,
+            state.ProjectFileConsistencyLineEndingFix,
+            state.SigningResult,
             BuildOwnerNotes(
                 plan,
                 buildResult,
-                documentationResult,
-                dependencyInstallResults,
+                state.DocumentationResult,
+                state.DependencyInstallResults,
                 stagingResult,
-                mergeExecution,
-                projectManifestSyncMessage));
+                state.MergeExecution,
+                state.ProjectManifestSyncMessage));
 
         if (diagnosticsPolicy?.PolicyViolated == true)
             throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);
@@ -326,19 +287,4 @@ public sealed partial class ModulePipelineRunner
         return diagnostics.ToArray();
     }
 
-    private static void NotifySkippedStepsOnFailure(
-        IModulePipelineProgressReporterV2? reporterV2,
-        IEnumerable<ModulePipelineStep> steps,
-        HashSet<string> startedKeys)
-    {
-        if (reporterV2 is null) return;
-
-        foreach (var step in steps)
-        {
-            if (step is null) continue;
-            if (string.IsNullOrWhiteSpace(step.Key)) continue;
-            if (startedKeys.Contains(step.Key)) continue;
-            try { reporterV2.StepSkipped(step); } catch { /* best effort */ }
-        }
-    }
 }
