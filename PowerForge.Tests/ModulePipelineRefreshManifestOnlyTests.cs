@@ -368,6 +368,63 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
+    public void Run_RefreshPSD1Only_ClearsStalePrereleaseWhenManifestSegmentOmitsIt()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var projectManifest = Path.Combine(root.FullName, moduleName + ".psd1");
+            Assert.True(ManifestEditor.TrySetTopLevelString(projectManifest, "Prerelease", "Preview1"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            ModuleVersion = "1.0.0",
+                            Author = "Tests"
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            Assert.Null(plan.PreRelease);
+
+            var result = runner.Run(spec, plan);
+
+            Assert.NotNull(result.BuildResult);
+            Assert.False(ManifestEditor.TryGetTopLevelString(projectManifest, "Prerelease", out _));
+            Assert.False(ManifestEditor.TryGetPsDataStringArray(projectManifest, "Prerelease", out _));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_NormalBuild_UpdatesProjectRootManifestOnly()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

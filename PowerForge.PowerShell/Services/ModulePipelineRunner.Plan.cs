@@ -202,7 +202,7 @@ public sealed partial class ModulePipelineRunner
 
                     if (!string.IsNullOrWhiteSpace(m.ModuleVersion)) expectedVersion = m.ModuleVersion;
                     if (m.CompatiblePSEditions is { Length: > 0 }) compatible = m.CompatiblePSEditions;
-                    if (!string.IsNullOrWhiteSpace(m.Prerelease)) preRelease = m.Prerelease;
+                    preRelease = string.IsNullOrWhiteSpace(m.Prerelease) ? null : m.Prerelease.Trim();
 
                     if (!string.IsNullOrWhiteSpace(m.Author)) author = m.Author;
                     if (!string.IsNullOrWhiteSpace(m.CompanyName)) companyName = m.CompanyName;
