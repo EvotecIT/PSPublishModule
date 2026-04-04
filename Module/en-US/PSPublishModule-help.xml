@@ -397,6 +397,9 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         <dev:type>
           <maml:name>PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
         </dev:type>
+        <maml:description>
+          <maml:para>Result returned when registering or refreshing a private module repository.</maml:para>
+        </maml:description>
       </command:returnValue>
     </command:returnValues>
     <maml:alertSet>
@@ -1026,21 +1029,30 @@ It can also export a post-conversion report so you can validate what remains inc
     <command:examples>
       <command:example>
         <maml:title>Convert a PowerShell project to UTF-8 BOM + CRLF</maml:title>
-        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups</dev:code>
         <dev:remarks>
           <maml:para>Ensures PowerShell-friendly encoding and line endings, creating backups before changes.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Convert line endings only for a cross-platform repo</maml:title>
-        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'</dev:code>
         <dev:remarks>
           <maml:para>Normalizes line endings to LF and skips non-source folders.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Convert encoding only with per-extension overrides</maml:title>
-        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'</dev:code>
         <dev:remarks>
           <maml:para>Uses UTF-8 BOM by default but keeps XML files UTF-8 without BOM, and writes a report.</maml:para>
         </dev:remarks>
@@ -1225,14 +1237,20 @@ This cmdlet exports the selected certificate from the local certificate store.</
     <command:examples>
       <command:example>
         <maml:title>Export by thumbprint</maml:title>
-        <dev:code>PS&gt;Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'</dev:code>
         <dev:remarks>
           <maml:para>Exports the certificate in DER format to the given path.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Export by SHA256 hash</maml:title>
-        <dev:code>PS&gt;Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'</dev:code>
         <dev:remarks>
           <maml:para>Useful when you have the SHA256 fingerprint but not the Windows thumbprint.</maml:para>
         </dev:remarks>
@@ -1635,14 +1653,20 @@ It is useful when building “portable” scripts/modules where you want to dete
     <command:examples>
       <command:example>
         <maml:title>List missing function dependencies for a script</maml:title>
-        <dev:code>PS&gt;Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary</dev:code>
         <dev:remarks>
           <maml:para>Returns a list of functions referenced by the script that are not part of the script itself.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Analyze a scriptblock and return inlineable helper definitions</maml:title>
-        <dev:code>PS&gt;$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'</dev:code>
         <dev:remarks>
           <maml:para>Returns a structured report that can include helper function bodies sourced from approved modules.</maml:para>
         </dev:remarks>
@@ -1718,14 +1742,20 @@ containing common fields such as module name, version, required modules, and the
     <command:examples>
       <command:example>
         <maml:title>Read module information from a module folder</maml:title>
-        <dev:code>PS&gt;Get-ModuleInformation -Path 'C:\Git\MyModule\Module'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ModuleInformation -Path 'C:\Git\MyModule\Module'</dev:code>
         <dev:remarks>
           <maml:para>Returns the parsed manifest and convenience properties such as module name and version.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Use in a build script (relative to the script root)</maml:title>
-        <dev:code>PS&gt;$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath</dev:code>
         <dev:remarks>
           <maml:para>Loads the manifest from the folder where the build script resides.</maml:para>
         </dev:remarks>
@@ -1988,21 +2018,30 @@ or a precomputed ModuleTestFailureAnalysis.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Analyze test failures from the default results location</maml:title>
-        <dev:code>PS&gt;Get-ModuleTestFailures</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ModuleTestFailures</dev:code>
         <dev:remarks>
           <maml:para>Searches for TestResults.xml under the project and prints a detailed failure report.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Analyze failures from a specific NUnit XML file</maml:title>
-        <dev:code>PS&gt;Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary</dev:code>
         <dev:remarks>
           <maml:para>Writes a compact summary that is suitable for CI logs.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Pipe results from Invoke-ModuleTestSuite</maml:title>
-        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru</dev:code>
         <dev:remarks>
           <maml:para>Uses the in-memory results and returns the analysis object for further processing.</maml:para>
         </dev:remarks>
@@ -2078,14 +2117,20 @@ the PowerShell surface.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Inspect a compiled PowerShell module assembly</maml:title>
-        <dev:code>PS&gt;Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'</dev:code>
         <dev:remarks>
           <maml:para>Returns discovered cmdlet and alias names based on PowerShell attributes.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Inspect an assembly in a build artifact folder</maml:title>
-        <dev:code>PS&gt;Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'</dev:code>
         <dev:remarks>
           <maml:para>Useful when validating what will be exported before publishing.</maml:para>
         </dev:remarks>
@@ -2281,21 +2326,30 @@ when supporting Windows PowerShell 5.1.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Analyze a module folder</maml:title>
-        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-PowerShellCompatibility -Path 'C:\MyModule'</dev:code>
         <dev:remarks>
           <maml:para>Analyzes PowerShell files in the folder and returns a compatibility report.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Recursively analyze and include detailed findings</maml:title>
-        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails</dev:code>
         <dev:remarks>
           <maml:para>Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Export compatibility findings to CSV</maml:title>
-        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'</dev:code>
         <dev:remarks>
           <maml:para>Creates a report that can be attached to CI artifacts.</maml:para>
         </dev:remarks>
@@ -2552,21 +2606,30 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
     <command:examples>
       <command:example>
         <maml:title>Analyze a PowerShell project with defaults</maml:title>
-        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
         <dev:remarks>
           <maml:para>Reports encoding and line ending consistency using PowerShell-friendly defaults.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Analyze with explicit recommendations and detailed output</maml:title>
-        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails</dev:code>
         <dev:remarks>
           <maml:para>Useful when you want to enforce a policy (e.g. UTF-8 BOM for PS 5.1 compatibility and LF for cross-platform repos).</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Export a detailed report to CSV</maml:title>
-        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'</dev:code>
         <dev:remarks>
           <maml:para>Exports the per-file details so you can review issues outside the console.</maml:para>
         </dev:remarks>
@@ -2690,14 +2753,20 @@ and returns one record per discovered version entry.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Get version information for all projects in the current directory</maml:title>
-        <dev:code>PS&gt;Get-ProjectVersion</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ProjectVersion</dev:code>
         <dev:remarks>
           <maml:para>Returns entries for discovered .csproj/.psd1/build scripts under the current folder.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Filter results to one module name</maml:title>
-        <dev:code>PS&gt;Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
         <dev:remarks>
           <maml:para>Useful when a repository contains multiple modules/projects but you need only one.</maml:para>
         </dev:remarks>
@@ -3970,9 +4039,9 @@ PowerForge.DotNetPublishResult</maml:name>
     <command:examples>
       <command:example>
         <maml:title>Generate DotNet publish JSON from DSL without execution</maml:title>
-        <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {
-    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
-    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+        <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {&#xD;
+    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'&#xD;
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6105,8 +6174,8 @@ Defaults to powerforge.json in the project root.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Build a module (DSL) and keep docs in sync</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {&#xD;
+    New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6121,9 +6190,9 @@ Defaults to powerforge.json in the project root.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Enforce consistency and compatibility during build (fail CI on issues)</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
-    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {&#xD;
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport&#xD;
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6131,8 +6200,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Publish a .NET project into the module as part of the build</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
-    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `&#xD;
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `&#xD;
     -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6140,8 +6209,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Fail CI only on new diagnostics compared to a committed baseline</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
-    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `&#xD;
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `&#xD;
     -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6149,10 +6218,10 @@ Defaults to powerforge.json in the project root.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Install missing dependencies during the build and bundle required modules into the package</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
-    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
-    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {&#xD;
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'&#xD;
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline&#xD;
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -6582,21 +6651,30 @@ local development and CI pipelines.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Run the full test suite for a module</maml:title>
-        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'</dev:code>
         <dev:remarks>
           <maml:para>Runs tests under the module project folder, installs dependencies, and prints a summary.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Run in CI mode and return the result object</maml:title>
-        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru</dev:code>
         <dev:remarks>
           <maml:para>Optimizes output for CI and returns a structured result object.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Pipe results into Get-ModuleTestFailures</maml:title>
-        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</dev:code>
         <dev:remarks>
           <maml:para>Produces a concise failure summary that can be used in CI logs.</maml:para>
         </dev:remarks>
@@ -12973,14 +13051,20 @@ This helps make build scripts deterministic and explicit about their dependencie
     <command:examples>
       <command:example>
         <maml:title>Reference a single command from a module</maml:title>
-        <dev:code>PS&gt;New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'</dev:code>
         <dev:remarks>
           <maml:para>Declares a dependency on Invoke-Pester from the Pester module.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Reference multiple commands</maml:title>
-        <dev:code>PS&gt;New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'</dev:code>
         <dev:remarks>
           <maml:para>Declares multiple command references from the same module.</maml:para>
         </dev:remarks>
@@ -13270,14 +13354,20 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Require cross-version compatibility and fail the build on issues</maml:title>
-        <dev:code>PS&gt;New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport</dev:code>
         <dev:remarks>
           <maml:para>Enables validation and exports a CSV report when issues are detected.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Require PowerShell 7 compatibility only</maml:title>
-        <dev:code>PS&gt;New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -13922,21 +14012,30 @@ Example: Config/**.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Bundle Internals and generate Install/Update commands</maml:title>
-        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand -Sign</dev:code>
         <dev:remarks>
           <maml:para>Generates public Install/Update helpers, bundles README/CHANGELOG into the module, and requests signing for bundled internals during build.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Configure repository-backed docs display</maml:title>
-        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'</dev:code>
         <dev:remarks>
           <maml:para>Helps modules expose docs from a repository path in a consistent order.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Configure merge policies and custom helper names</maml:title>
-        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationDelivery -Enable -GenerateInstallCommand -GenerateUpdateCommand -InstallCommandName 'Install-ContosoToolkit' -UpdateCommandName 'Update-ContosoToolkit' -PreservePaths 'Config/**','Data/LocalSettings.json' -OverwritePaths 'Bin/**','Templates/**'</dev:code>
         <dev:remarks>
           <maml:para>Generates custom delivery helpers and preserves selected local files while refreshing binaries and templates during merge installs.</maml:para>
         </dev:remarks>
@@ -14673,7 +14772,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Create benchmark gate with metrics</maml:title>
-        <dev:code>$m = New-ConfigurationDotNetBenchmarkMetric -Name 'storage.ms' -Source JsonPath -Path 'storage.ms'
+        <dev:code>$m = New-ConfigurationDotNetBenchmarkMetric -Name 'storage.ms' -Source JsonPath -Path 'storage.ms'&#xD;
 New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.json' -BaselinePath 'Build\Baselines\storage.json' -Metrics $m</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -16612,8 +16711,8 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
     <command:examples>
       <command:example>
         <maml:title>Create a basic DotNet publish spec from DSL</maml:title>
-        <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {
-    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+        <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {&#xD;
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -16927,7 +17026,7 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
     <command:examples>
       <command:example>
         <maml:title>Create service package options</maml:title>
-        <dev:code>$lifecycle = New-ConfigurationDotNetServiceLifecycle -Enabled
+        <dev:code>$lifecycle = New-ConfigurationDotNetServiceLifecycle -Enabled&#xD;
 New-ConfigurationDotNetService -ServiceName 'My.Service' -GenerateInstallScript -GenerateUninstallScript -Lifecycle $lifecycle</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -17994,7 +18093,7 @@ New-ConfigurationDotNetService -ServiceName 'My.Service' -GenerateInstallScript 
     <command:examples>
       <command:example>
         <maml:title>Create state preservation options</maml:title>
-        <dev:code>$rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite
+        <dev:code>$rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite&#xD;
 New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -18834,7 +18933,10 @@ It emits no configuration segment and has no effect.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Call the placeholder cmdlet (no output)</maml:title>
-        <dev:code>PS&gt;New-ConfigurationExecute</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationExecute</dev:code>
         <dev:remarks>
           <maml:para>No action is performed and nothing is emitted to the pipeline.</maml:para>
         </dev:remarks>
@@ -19400,14 +19502,20 @@ and (optionally) auto-fix issues during a build.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Enforce UTF-8 BOM + CRLF and auto-fix during build</maml:title>
-        <dev:code>PS&gt;New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport</dev:code>
         <dev:remarks>
           <maml:para>Enforces consistency and exports a CSV report; backups are created before fixes are applied.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Audit project root consistency (no fixes)</maml:title>
-        <dev:code>PS&gt;New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject</dev:code>
         <dev:remarks>
           <maml:para>Runs validation on staging and project root, exports a report, and does not apply automatic fixes.</maml:para>
         </dev:remarks>
@@ -20273,14 +20381,20 @@ and (optionally) auto-fix issues during a build.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Remove comments and normalize whitespace during merge</maml:title>
-        <dev:code>PS&gt;New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines</dev:code>
         <dev:remarks>
           <maml:para>Formats the merged module output and removes comments while keeping readability.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Also update files in the project root</maml:title>
-        <dev:code>PS&gt;New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot</dev:code>
         <dev:remarks>
           <maml:para>Applies formatting rules to the project sources as well as generated output.</maml:para>
         </dev:remarks>
@@ -20450,14 +20564,20 @@ This is primarily used by test and documentation steps that execute PowerShell c
     <command:examples>
       <command:example>
         <maml:title>Import the module under build and its RequiredModules</maml:title>
-        <dev:code>PS&gt;New-ConfigurationImportModule -ImportSelf -ImportRequiredModules</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules</dev:code>
         <dev:remarks>
           <maml:para>Ensures the pipeline imports the module and required dependencies before running tests or generating docs.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Import only the module under build</maml:title>
-        <dev:code>PS&gt;New-ConfigurationImportModule -ImportSelf</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationImportModule -ImportSelf</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -20770,14 +20890,20 @@ This is primarily used by test and documentation steps that execute PowerShell c
     <command:examples>
       <command:example>
         <maml:title>Customize include/exclude rules for packaging</maml:title>
-        <dev:code>PS&gt;New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'</dev:code>
         <dev:remarks>
           <maml:para>Controls what ends up in packaged artefacts while keeping staging lean.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Add custom files during staging</maml:title>
-        <dev:code>PS&gt;New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }</dev:code>
         <dev:remarks>
           <maml:para>Injects additional content into the staging folder before packaging.</maml:para>
         </dev:remarks>
@@ -21283,14 +21409,20 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
     <command:examples>
       <command:example>
         <maml:title>Create a minimal manifest segment</maml:title>
-        <dev:code>PS&gt;New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'</dev:code>
         <dev:remarks>
           <maml:para>Defines the core identity fields required for a module manifest.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Create a manifest with tags and links</maml:title>
-        <dev:code>PS&gt;New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'</dev:code>
         <dev:remarks>
           <maml:para>Populates common PSGallery metadata that shows up on the gallery and in generated docs.</maml:para>
         </dev:remarks>
@@ -21522,35 +21654,50 @@ ApprovedModule is merge-only.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Add a required module dependency</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'</dev:code>
         <dev:remarks>
           <maml:para>Declares a required dependency that is written into the manifest.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Add an external module (required but not packaged)</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'</dev:code>
         <dev:remarks>
           <maml:para>Declares a dependency that is expected to be installed separately (not bundled into artefacts).</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Pin an exact required version</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'</dev:code>
         <dev:remarks>
           <maml:para>Uses RequiredVersion when an exact match is required.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Declare an approved helper module for merge-time reuse</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods','PSWriteColor'</dev:code>
         <dev:remarks>
           <maml:para>Allows approved helper functions to be copied into the built module when they are actually used.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Declare a dependency whose version can be resolved online later</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</dev:code>
         <dev:remarks>
           <maml:para>Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.</maml:para>
         </dev:remarks>
@@ -21696,14 +21843,20 @@ ApprovedModule is merge-only.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Ignore an optional module and continue on missing dependency</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force</dev:code>
         <dev:remarks>
           <maml:para>Prevents build failure when the module is not installed in the environment.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Ignore specific functions for cross-platform builds</maml:title>
-        <dev:code>PS&gt;New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -21828,14 +21981,20 @@ without hardcoding them into source files.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Replace a single placeholder token</maml:title>
-        <dev:code>PS&gt;New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'</dev:code>
         <dev:remarks>
           <maml:para>Replaces all occurrences of {{ModuleVersion}} in merged content.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Provide multiple replacements</maml:title>
-        <dev:code>PS&gt;New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }</dev:code>
         <dev:remarks>
           <maml:para>Emits multiple placeholder replacement segments in one call.</maml:para>
         </dev:remarks>
@@ -25052,14 +25211,20 @@ Use this when you want builds to fail fast on test failures.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Enable Pester tests during the build</maml:title>
-        <dev:code>PS&gt;New-ConfigurationTest -Enable -TestsPath 'Tests'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationTest -Enable -TestsPath 'Tests'</dev:code>
         <dev:remarks>
           <maml:para>Runs tests from the Tests folder after the build/merge step.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Force test execution (ignore caching)</maml:title>
-        <dev:code>PS&gt;New-ConfigurationTest -Enable -TestsPath 'Tests' -Force</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationTest -Enable -TestsPath 'Tests' -Force</dev:code>
         <dev:remarks>
           <maml:para>Useful in CI when you always want a fresh test run.</maml:para>
         </dev:remarks>
@@ -25321,9 +25486,33 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinParameterDescriptionPercent</maml:name>
+          <maml:description>
+            <maml:para>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MinSynopsisPercent</maml:name>
           <maml:description>
             <maml:para>Minimum synopsis coverage percentage (default 100).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinTypeDescriptionPercent</maml:name>
+          <maml:description>
+            <maml:para>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
@@ -25863,9 +26052,33 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinParameterDescriptionPercent</maml:name>
+        <maml:description>
+          <maml:para>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MinSynopsisPercent</maml:name>
         <maml:description>
           <maml:para>Minimum synopsis coverage percentage (default 100).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinTypeDescriptionPercent</maml:name>
+        <maml:description>
+          <maml:para>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
@@ -26188,14 +26401,20 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
     <command:examples>
       <command:example>
         <maml:title>Enable validation with warnings for docs and errors for structure</maml:title>
-        <dev:code>PS&gt;New-ConfigurationValidation -Enable -StructureSeverity Error -DocumentationSeverity Warning</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationValidation -Enable -StructureSeverity Error -DocumentationSeverity Warning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Run tests and fail the build on test failures</maml:title>
-        <dev:code>PS&gt;New-ConfigurationValidation -Enable -EnableTests -TestsSeverity Error -TestsPath 'Tests'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>New-ConfigurationValidation -Enable -EnableTests -TestsSeverity Error -TestsPath 'Tests'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -27717,14 +27936,20 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Create a release and upload the default ZIP asset</maml:title>
-        <dev:code>PS&gt;Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN</dev:code>
         <dev:remarks>
           <maml:para>Creates a GitHub release and uploads bin\Release\&lt;Project&gt;.&lt;Version&gt;.zip.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Publish a pre-release with a custom tag template</maml:title>
-        <dev:code>PS&gt;Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'</dev:code>
         <dev:remarks>
           <maml:para>Useful when your repository uses a specific tag naming convention.</maml:para>
         </dev:remarks>
@@ -27872,14 +28097,20 @@ This makes repeated publishing runs idempotent when the package already exists.<
     <command:examples>
       <command:example>
         <maml:title>Publish all packages from a Release folder</maml:title>
-        <dev:code>PS&gt;Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate</dev:code>
         <dev:remarks>
           <maml:para>Publishes all .nupkg files under the folder; safe to rerun in CI.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Publish to a custom feed</maml:title>
-        <dev:code>PS&gt;Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</dev:code>
         <dev:remarks>
           <maml:para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</maml:para>
         </dev:remarks>
@@ -28261,14 +28492,20 @@ When running in CI, prefer using a certificate from the Windows certificate stor
     <command:examples>
       <command:example>
         <maml:title>Sign a module using a certificate from the current user store</maml:title>
-        <dev:code>PS&gt;Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf</dev:code>
         <dev:remarks>
           <maml:para>Previews which files would be signed.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Sign using a PFX file</maml:title>
-        <dev:code>PS&gt;Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'</dev:code>
         <dev:remarks>
           <maml:para>Uses a PFX directly (useful for local testing; store-based is recommended for CI).</maml:para>
         </dev:remarks>
@@ -28677,6 +28914,9 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <dev:type>
           <maml:name>PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
         </dev:type>
+        <maml:description>
+          <maml:para>Result returned when registering or refreshing a private module repository.</maml:para>
+        </maml:description>
       </command:returnValue>
     </command:returnValues>
     <maml:alertSet>
@@ -29004,14 +29244,20 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Remove comments from a file and write to a new file</maml:title>
-        <dev:code>PS&gt;Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'</dev:code>
         <dev:remarks>
           <maml:para>Writes the cleaned content to the destination file.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Remove comments from content and return the processed text</maml:title>
-        <dev:code>PS&gt;$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)</dev:code>
         <dev:remarks>
           <maml:para>Returns the processed content when no destination file is specified.</maml:para>
         </dev:remarks>
@@ -29573,14 +29819,20 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
     <command:examples>
       <command:example>
         <maml:title>Preview cleanup of build artifacts</maml:title>
-        <dev:code>PS&gt;Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf</dev:code>
         <dev:remarks>
           <maml:para>Shows what would be removed for the selected cleanup type.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Remove custom patterns with backups enabled</maml:title>
-        <dev:code>PS&gt;Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'</dev:code>
         <dev:remarks>
           <maml:para>Creates backups before deletion and stores them under the backup directory.</maml:para>
         </dev:remarks>
@@ -29921,14 +30173,20 @@ When false, the cmdlet fails on existing tags.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Create a release and upload a ZIP asset</maml:title>
-        <dev:code>PS&gt;Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'</dev:code>
         <dev:remarks>
           <maml:para>Creates the release and uploads the specified asset file.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Create a prerelease as a draft</maml:title>
-        <dev:code>PS&gt;Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true</dev:code>
         <dev:remarks>
           <maml:para>Creates a draft prerelease that can be reviewed before publishing.</maml:para>
         </dev:remarks>
@@ -30123,14 +30381,20 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
     <command:examples>
       <command:example>
         <maml:title>Increment minor version across the repository</maml:title>
-        <dev:code>PS&gt;Set-ProjectVersion -VersionType Minor -WhatIf</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Set-ProjectVersion -VersionType Minor -WhatIf</dev:code>
         <dev:remarks>
           <maml:para>Previews the version update for all discovered project files.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Set a specific version for one module</maml:title>
-        <dev:code>PS&gt;Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
         <dev:remarks>
           <maml:para>Updates only files related to the selected module name.</maml:para>
         </dev:remarks>
@@ -30278,21 +30542,30 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:examples>
       <command:example>
         <maml:title>Step a version using a local module manifest</maml:title>
-        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'</dev:code>
         <dev:remarks>
           <maml:para>Reads the current version from the PSD1 and returns the next patch version.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Return the full step result object</maml:title>
-        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced</dev:code>
         <dev:remarks>
           <maml:para>Returns a structured object that includes whether auto-versioning was used.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Step based on the latest published module</maml:title>
-        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'</dev:code>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'</dev:code>
         <dev:remarks>
           <maml:para>Resolves the next patch version by looking up the current version of the module.</maml:para>
         </dev:remarks>
@@ -30699,6 +30972,9 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <dev:type>
           <maml:name>PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
         </dev:type>
+        <maml:description>
+          <maml:para>Result returned when registering or refreshing a private module repository.</maml:para>
+        </maml:description>
       </command:returnValue>
     </command:returnValues>
     <maml:alertSet>

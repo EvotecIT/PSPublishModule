@@ -27,14 +27,14 @@ When running in CI, prefer using a certificate from the Windows certificate stor
 
 ### EXAMPLE 1
 ```powershell
-PS>Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf
+PS> Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf
 ```
 
 Previews which files would be signed.
 
 ### EXAMPLE 2
 ```powershell
-PS>Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'
+PS> Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'
 ```
 
 Uses a PFX directly (useful for local testing; store-based is recommended for CI).

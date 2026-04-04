@@ -21,6 +21,8 @@ internal sealed class ValidationConfigurationRequest
     public int MinSynopsisPercent { get; set; } = 100;
     public int MinDescriptionPercent { get; set; } = 100;
     public int MinExamplesPerCommand { get; set; } = 1;
+    public int MinParameterDescriptionPercent { get; set; }
+    public int MinTypeDescriptionPercent { get; set; }
     public string[] ExcludeCommands { get; set; } = Array.Empty<string>();
     public bool EnableScriptAnalyzer { get; set; }
     public string[] ScriptAnalyzerExcludeDirectories { get; set; } = new[] { "tests", "TestResults", ".git", ".vs", "bin", "obj", "packages", "node_modules", "Artefacts", "Ignore" };

@@ -22,14 +22,14 @@ This is primarily used by test and documentation steps that execute PowerShell c
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+PS> New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 ```
 
 Ensures the pipeline imports the module and required dependencies before running tests or generating docs.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationImportModule -ImportSelf
+PS> New-ConfigurationImportModule -ImportSelf
 ```
 
 ## PARAMETERS

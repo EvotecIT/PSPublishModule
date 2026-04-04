@@ -27,14 +27,14 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.
 
 ### EXAMPLE 1
 ```powershell
-PS>Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf
+PS> Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf
 ```
 
 Shows what would be removed for the selected cleanup type.
 
 ### EXAMPLE 2
 ```powershell
-PS>Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'
+PS> Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'
 ```
 
 Creates backups before deletion and stores them under the backup directory.

@@ -24,14 +24,14 @@ Use -VersionType to increment one component, or -NewVersion to set an explicit v
 
 ### EXAMPLE 1
 ```powershell
-PS>Set-ProjectVersion -VersionType Minor -WhatIf
+PS> Set-ProjectVersion -VersionType Minor -WhatIf
 ```
 
 Previews the version update for all discovered project files.
 
 ### EXAMPLE 2
 ```powershell
-PS>Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'
+PS> Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
 
 Updates only files related to the selected module name.

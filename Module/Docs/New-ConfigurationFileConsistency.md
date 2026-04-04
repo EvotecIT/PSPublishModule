@@ -22,14 +22,14 @@ and (optionally) auto-fix issues during a build.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport
+PS> New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport
 ```
 
 Enforces consistency and exports a CSV report; backups are created before fixes are applied.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject
+PS> New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject
 ```
 
 Runs validation on staging and project root, exports a report, and does not apply automatic fixes.

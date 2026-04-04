@@ -24,21 +24,21 @@ For fixing issues during builds, use New-ConfigurationFileConsistency with -Auto
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell
 ```
 
 Reports encoding and line ending consistency using PowerShell-friendly defaults.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails
 ```
 
 Useful when you want to enforce a policy (e.g. UTF-8 BOM for PS 5.1 compatibility and LF for cross-platform repos).
 
 ### EXAMPLE 3
 ```powershell
-PS>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'
+PS> Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'
 ```
 
 Exports the per-file details so you can review issues outside the console.

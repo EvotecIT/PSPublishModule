@@ -25,21 +25,21 @@ when supporting Windows PowerShell 5.1.
 
 ### EXAMPLE 1
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule'
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule'
 ```
 
 Analyzes PowerShell files in the folder and returns a compatibility report.
 
 ### EXAMPLE 2
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
 ```
 
 Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.
 
 ### EXAMPLE 3
 ```powershell
-PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
+PS> Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
 ```
 
 Creates a report that can be attached to CI artifacts.

@@ -21,14 +21,14 @@ This configuration segment controls:
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'
+PS> New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'
 ```
 
 Controls what ends up in packaged artefacts while keeping staging lean.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }
+PS> New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }
 ```
 
 Injects additional content into the staging folder before packaging.

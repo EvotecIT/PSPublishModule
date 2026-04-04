@@ -27,14 +27,14 @@ without hardcoding them into source files.
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'
+PS> New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'
 ```
 
 Replaces all occurrences of {{ModuleVersion}} in merged content.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }
+PS> New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }
 ```
 
 Emits multiple placeholder replacement segments in one call.

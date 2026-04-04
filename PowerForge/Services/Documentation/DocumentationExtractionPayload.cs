@@ -101,6 +101,10 @@ internal sealed class DocumentationCommandHelp
     /// <summary>Related links (from Get-Help).</summary>
     [DataMember(Name = "relatedLinks")]
     public List<DocumentationLinkHelp> RelatedLinks { get; set; } = new();
+
+    /// <summary>Optional notes / alerts for the command.</summary>
+    [DataMember(Name = "notes")]
+    public List<DocumentationNoteHelp> Notes { get; set; } = new();
 }
 
 /// <summary>
@@ -112,6 +116,12 @@ internal sealed class DocumentationTypeHelp
     /// <summary>Type name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// CLR full type name when known. This is used for binary-module XML doc enrichment.
+    /// </summary>
+    [DataMember(Name = "clrTypeName")]
+    public string ClrTypeName { get; set; } = string.Empty;
 
     /// <summary>Type description.</summary>
     [DataMember(Name = "description")]
@@ -131,6 +141,21 @@ internal sealed class DocumentationLinkHelp
     /// <summary>Link URI.</summary>
     [DataMember(Name = "uri")]
     public string Uri { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Extracted note / alert entry for a command.
+/// </summary>
+[DataContract]
+internal sealed class DocumentationNoteHelp
+{
+    /// <summary>Optional note title.</summary>
+    [DataMember(Name = "title")]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Note body text.</summary>
+    [DataMember(Name = "text")]
+    public string Text { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -212,6 +237,10 @@ internal sealed class DocumentationExampleHelp
     /// <summary>Example title.</summary>
     [DataMember(Name = "title")]
     public string Title { get; set; } = string.Empty;
+
+    /// <summary>Optional introduction / prefix rendered before the code block.</summary>
+    [DataMember(Name = "introduction")]
+    public string Introduction { get; set; } = string.Empty;
 
     /// <summary>Example code.</summary>
     [DataMember(Name = "code")]

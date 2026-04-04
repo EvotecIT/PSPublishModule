@@ -24,21 +24,21 @@ For build-time enforcement, use New-ConfigurationFileConsistency -AutoFix in the
 
 ### EXAMPLE 1
 ```powershell
-PS>Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups
+PS> Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups
 ```
 
 Ensures PowerShell-friendly encoding and line endings, creating backups before changes.
 
 ### EXAMPLE 2
 ```powershell
-PS>Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'
+PS> Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'
 ```
 
 Normalizes line endings to LF and skips non-source folders.
 
 ### EXAMPLE 3
 ```powershell
-PS>Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'
+PS> Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'
 ```
 
 Uses UTF-8 BOM by default but keeps XML files UTF-8 without BOM, and writes a report.

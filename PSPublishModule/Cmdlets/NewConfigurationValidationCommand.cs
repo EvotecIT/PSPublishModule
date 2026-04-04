@@ -80,6 +80,12 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
     /// <summary>Minimum examples per command (default 1).</summary>
     [Parameter] public int MinExamplesPerCommand { get; set; } = 1;
 
+    /// <summary>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</summary>
+    [Parameter] public int MinParameterDescriptionPercent { get; set; }
+
+    /// <summary>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</summary>
+    [Parameter] public int MinTypeDescriptionPercent { get; set; }
+
     /// <summary>Command names to exclude from documentation checks.</summary>
     [Parameter] public string[] ExcludeCommands { get; set; } = Array.Empty<string>();
 
@@ -178,6 +184,8 @@ public sealed class NewConfigurationValidationCommand : PSCmdlet
             MinSynopsisPercent = MinSynopsisPercent,
             MinDescriptionPercent = MinDescriptionPercent,
             MinExamplesPerCommand = MinExamplesPerCommand,
+            MinParameterDescriptionPercent = MinParameterDescriptionPercent,
+            MinTypeDescriptionPercent = MinTypeDescriptionPercent,
             ExcludeCommands = ExcludeCommands,
             EnableScriptAnalyzer = EnableScriptAnalyzer.IsPresent,
             ScriptAnalyzerExcludeDirectories = ScriptAnalyzerExcludeDirectories,
