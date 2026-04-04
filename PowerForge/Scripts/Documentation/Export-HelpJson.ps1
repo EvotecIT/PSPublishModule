@@ -18,7 +18,9 @@ function EmitError([string]$msg) {
 function GetText([object]$obj) {
   if ($null -eq $obj) { return '' }
   if ($obj -is [string]) { return [string]$obj }
-  try { if ($obj.PSObject -and $obj.PSObject.Properties['Text']) { return [string]$obj.Text } } catch { }
+  try { if ($obj.PSObject -and $obj.PSObject.Properties['Text']) { return [string]$obj.Text } } catch {
+    # best effort: Get-Help payload shapes vary across PowerShell versions and object types
+  }
   try { return [string]$obj } catch { return '' }
 }
 
@@ -92,13 +94,17 @@ try {
       try {
         $n = [string]$hp.Name
         if ($n) { $helpParamByName[$n] = $hp }
-      } catch { }
+      } catch {
+        # best effort: some help parameter entries expose Name dynamically or not at all
+      }
     }
 
     $commonParamNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable','InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
     $paramNames = @()
     try { if ($c -and $c.Parameters) { $paramNames = @($c.Parameters.Keys) } } catch { $paramNames = @() }
-    foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch { } }
+    foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
+      # best effort: keep extracting other parameters even when one help node is incomplete
+    } }
     $paramNames = @($paramNames | Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Sort-Object -Unique)
 
     $parameters = @()
@@ -146,7 +152,9 @@ try {
             }
           }
         }
-      } catch { }
+      } catch {
+        # best effort: parameter-set metadata can differ between hosts and proxy commands
+      }
       try {
         if ($pmeta -and $pmeta.Attributes) {
           foreach ($attr in @($pmeta.Attributes)) {
@@ -158,7 +166,9 @@ try {
             }
           }
         }
-      } catch { }
+      } catch {
+        # best effort: not every parameter exposes validation attributes in help metadata
+      }
       try {
         $enumType = $parameterType
         if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
@@ -167,7 +177,9 @@ try {
             if ($enumName) { $possibleValues += [string]$enumName }
           }
         }
-      } catch { }
+      } catch {
+        # best effort: enum reflection can fail for remoted/proxy metadata or unresolved types
+      }
 
       $desc = ''
       $hp = $null
@@ -178,7 +190,9 @@ try {
           $t = (GetText $d).Trim()
           if ($t) { if ($desc) { $desc += "`n`n" }; $desc += $t }
         }
-        if (-not $typeName) { try { $typeName = [string]$hp.Type.Name } catch { } }
+        if (-not $typeName) { try { $typeName = [string]$hp.Type.Name } catch {
+          # best effort: some help objects omit structured type metadata
+        } }
         if ((-not $aliases -or $aliases.Count -eq 0) -and $hp.Aliases) {
           foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
         }
@@ -188,7 +202,9 @@ try {
               if ($null -ne $value) { $possibleValues += [string]$value }
             }
           }
-        } catch { }
+        } catch {
+          # best effort: ValidValues is not consistently present across Get-Help payloads
+        }
         try { $defaultValue = [string]$hp.DefaultValue } catch { $defaultValue = '' }
         try { $acceptWild = [bool]$hp.Globbing } catch { $acceptWild = $false }
       }
@@ -289,11 +305,15 @@ try {
             $t = (GetText $d).Trim()
             if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
           }
-        } catch { }
+        } catch {
+          # best effort: description collections are not guaranteed on every input type entry
+        }
 
         $inputs += [ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
       }
-    } catch { }
+    } catch {
+      # best effort: older hosts can omit or reshape InputTypes entirely
+    }
     if (-not $inputs -or $inputs.Count -eq 0) {
       $seenInputs = @{}
       foreach ($pn in $paramNames) {
@@ -310,7 +330,9 @@ try {
               break
             }
           }
-        } catch { }
+        } catch {
+          # best effort: pipeline metadata can differ between hosts and proxy commands
+        }
 
         if (-not $supportsPipeline) { continue }
 
@@ -321,7 +343,9 @@ try {
             $inputTypeName = [string]$pmeta.ParameterType.Name
             $inputTypeClrName = [string]$pmeta.ParameterType.FullName
           }
-        } catch { }
+        } catch {
+          # best effort: pipeline parameter type metadata is not always available on proxy commands
+        }
 
         if (-not $inputTypeName) { continue }
         $key = if ($inputTypeClrName) { $inputTypeClrName } else { $inputTypeName }
@@ -350,11 +374,15 @@ try {
             $t = (GetText $d).Trim()
             if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
           }
-        } catch { }
+        } catch {
+          # best effort: description collections are not guaranteed on every output type entry
+        }
 
         $outputs += [ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
       }
-    } catch { }
+    } catch {
+      # best effort: older hosts can omit or reshape ReturnValues entirely
+    }
     if (-not $outputs -or $outputs.Count -eq 0) {
       $seenOutputs = @{}
       try {
@@ -364,7 +392,9 @@ try {
           try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
           try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { $outputTypeClrName = '' }
           if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' } }
-          if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { } }
+          if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.Type.FullName } catch {
+            # best effort: OutputType wrappers differ between hosts and command kinds
+          } }
           if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
           if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
           if (-not $outputTypeName) { continue }
@@ -374,7 +404,9 @@ try {
           $seenOutputs[$key] = $true
           $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = '' }
         }
-      } catch { }
+      } catch {
+        # best effort: command metadata may not expose OutputType uniformly across hosts
+      }
     }
 
     $links = @()
@@ -390,7 +422,9 @@ try {
           $links += [ordered]@{ text = $text; uri = $uri }
         }
       }
-    } catch { }
+    } catch {
+      # best effort: RelatedLinks is optional and shaped differently between PowerShell versions
+    }
 
     $result.commands += [ordered]@{
       name = [string]$c.Name

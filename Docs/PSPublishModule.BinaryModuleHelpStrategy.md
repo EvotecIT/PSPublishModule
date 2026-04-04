@@ -1,6 +1,6 @@
 # Binary Module Help Strategy
 
-This note captures the current recommendation for binary PowerShell module help inside PSPublishModule / PowerForge after comparing the existing pipeline with `C:\Support\GitHub\XmlDoc2CmdletDoc`.
+This note captures the current recommendation for binary PowerShell module help inside PSPublishModule / PowerForge after comparing the existing pipeline with `XmlDoc2CmdletDoc`.
 
 ## Recommendation
 
@@ -71,7 +71,7 @@ Before this change, the main remaining binary-focused gaps were:
 
 `XmlDoc2CmdletDoc` also has a nice strict-warning model and a focused binary-only reflection path. Those are useful patterns to absorb into PowerForge without adopting the package itself.
 
-After scanning the current module repos under `C:\Support\GitHub`, the most relevant real-world remaining gap was the warning model, not extra XML syntax:
+After scanning the current module repos that still use `XmlDoc2CmdletDoc`, the most relevant real-world remaining gap was the warning model, not extra XML syntax:
 
 - several repos use `-strict`
 - some repos explicitly relax strictness with `XmlDoc2CmdletDocStrict=false`
