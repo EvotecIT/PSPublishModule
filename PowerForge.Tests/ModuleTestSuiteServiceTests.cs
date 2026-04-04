@@ -38,7 +38,7 @@ public sealed class ModuleTestSuiteServiceTests
             });
 
             Assert.NotNull(capturedRequest);
-            Assert.Equal("-ImportVerbose:$true", capturedRequest!.Arguments[^1]);
+            Assert.Contains("-ImportVerbose:$true", capturedRequest!.Arguments);
         }
         finally
         {

@@ -29,7 +29,7 @@ public sealed class PowerForgeScriptsTests
 
         Assert.Matches(@"\[bool\]\s*\$ImportVerbose\b", script);
         Assert.Contains("function Import-TestSuiteModule", script, StringComparison.Ordinal);
-        Assert.Contains("-Verbose:$ImportVerbose", script, StringComparison.Ordinal);
+        Assert.Contains("-ShowVerbose:$ImportVerbose", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$importModulesVerboseEnabled", script, StringComparison.Ordinal);
     }
 }

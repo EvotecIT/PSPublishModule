@@ -30,14 +30,14 @@ function Import-TestSuiteModule {
     [string]$RequiredVersion,
     [string]$MinimumVersion,
     [bool]$Force = $true,
-    [bool]$Verbose = $false
+    [bool]$ShowVerbose = $false
   )
 
   $importParams = @{
     Name = $Name
     Force = $Force
     ErrorAction = 'Stop'
-    Verbose = $Verbose
+    Verbose = $ShowVerbose
   }
 
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
@@ -46,7 +46,7 @@ function Import-TestSuiteModule {
     $importParams.MinimumVersion = $MinimumVersion
   }
 
-  Import-Module @importParams | Out-Null
+  Import-Module @importParams
 }
 
 try {
@@ -60,13 +60,13 @@ try {
   if ($importModules) {
     foreach ($m in $importModules) {
       if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
-      Import-TestSuiteModule -Name $m.Name -RequiredVersion $m.RequiredVersion -MinimumVersion $m.MinimumVersion -Verbose:$ImportVerbose
+      Import-TestSuiteModule -Name $m.Name -RequiredVersion $m.RequiredVersion -MinimumVersion $m.MinimumVersion -ShowVerbose:$ImportVerbose
     }
   }
 
   $doImport = ($SkipImport -ne '1') -and (-not [string]::IsNullOrWhiteSpace($ModuleImportPath))
   if ($doImport) {
-    Import-TestSuiteModule -Name $ModuleImportPath -Force:($ForceImport -eq '1') -Verbose:$ImportVerbose
+    Import-TestSuiteModule -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ShowVerbose:$ImportVerbose
     Write-Output 'PFTEST::IMPORT::OK'
     try {
       $m = Get-Module -Name $ModuleName | Select-Object -First 1
