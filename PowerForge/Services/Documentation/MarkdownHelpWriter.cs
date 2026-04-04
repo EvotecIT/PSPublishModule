@@ -347,7 +347,7 @@ internal sealed class MarkdownHelpWriter
         if (string.IsNullOrWhiteSpace(introduction))
             return code.Replace("\n", Environment.NewLine);
 
-        if (code.StartsWith(introduction, StringComparison.OrdinalIgnoreCase))
+        if (code.StartsWith(introduction, StringComparison.Ordinal))
             return code.Replace("\n", Environment.NewLine);
 
         var lines = code.Split('\n');

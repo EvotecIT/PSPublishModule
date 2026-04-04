@@ -94,8 +94,8 @@
       </command:returnValue>
     </command:returnValues>
     <maml:alertSet>
-      <maml:title>Important</maml:title>
       <maml:alert>
+        <maml:para>Important</maml:para>
         <maml:para>Only use this command with fixture input.</maml:para>
         <maml:para>It exists to validate generated help fidelity.</maml:para>
       </maml:alert>

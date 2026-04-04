@@ -615,6 +615,122 @@ Invoke-Demo -Settings {
     }
 
     [Fact]
+    public void XmlDocCommentEnricher_PrefersClrTypeName_ForTypeLookup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.Other.Result">
+      <summary>Other result description.</summary>
+    </member>
+    <member name="T:Demo.Namespace.Real.Result">
+      <summary>Real result description.</summary>
+    </member>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Outputs = new List<DocumentationTypeHelp>
+                        {
+                            new() { Name = "Result", ClrTypeName = "Demo.Namespace.Real.Result", Description = string.Empty }
+                        }
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
+            Assert.Equal("Real result description.", output.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void XmlDocCommentEnricher_DoesNotUseAmbiguousSimpleTypeFallback()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-ambiguous-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.One.Result">
+      <summary>First result description.</summary>
+    </member>
+    <member name="T:Demo.Namespace.Two.Result">
+      <summary>Second result description.</summary>
+    </member>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Outputs = new List<DocumentationTypeHelp>
+                        {
+                            new() { Name = "Result", Description = string.Empty }
+                        }
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
+            Assert.Equal(string.Empty, output.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void XmlDocCommentEnricher_PreservesLegacyTopLevelParas_AndExamplePrefix()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-legacy-compat-" + Guid.NewGuid().ToString("N"));
@@ -715,8 +831,62 @@ Invoke-Demo -Settings {
             var doc = XDocument.Load(path);
             XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
 
-            Assert.Contains(doc.Descendants(mamlNs + "title"), element => element.Value == "Caution");
+            var alertSet = Assert.Single(doc.Descendants(mamlNs + "alertSet"));
+            var alert = Assert.Single(alertSet.Elements(mamlNs + "alert"));
+            var paras = alert.Elements(mamlNs + "para").Select(element => element.Value).ToArray();
+            Assert.Contains("Caution", paras);
             Assert.Contains(doc.Descendants(mamlNs + "para"), element => element.Value == "This modifies generated help files.");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void MamlHelpWriter_WritesMultipleNotes_AsSeparateAlerts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-maml-notes-multi-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Thing",
+                        CommandType = "Cmdlet",
+                        Synopsis = "Does a thing.",
+                        Description = "Does a thing.",
+                        Notes = new List<DocumentationNoteHelp>
+                        {
+                            new() { Title = "First", Text = "First note body." },
+                            new() { Title = "Second", Text = "Second note body." }
+                        }
+                    }
+                }
+            };
+
+            var writer = new MamlHelpWriter();
+            var path = writer.WriteExternalHelpFile(payload, "TestModule", root);
+            var doc = XDocument.Load(path);
+            XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
+
+            var alertSet = Assert.Single(doc.Descendants(mamlNs + "alertSet"));
+            Assert.Empty(alertSet.Elements(mamlNs + "title"));
+
+            var alerts = alertSet.Elements(mamlNs + "alert").ToArray();
+            Assert.Equal(2, alerts.Length);
+
+            var firstParas = alerts[0].Elements(mamlNs + "para").Select(element => element.Value).ToArray();
+            var secondParas = alerts[1].Elements(mamlNs + "para").Select(element => element.Value).ToArray();
+            Assert.Equal(new[] { "First", "First note body." }, firstParas);
+            Assert.Equal(new[] { "Second", "Second note body." }, secondParas);
         }
         finally
         {

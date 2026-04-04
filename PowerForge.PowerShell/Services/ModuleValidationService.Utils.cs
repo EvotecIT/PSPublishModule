@@ -112,8 +112,8 @@ public sealed partial class ModuleValidationService
     private static string GetDocumentationTypeKey(DocumentationTypeHelp? type)
     {
         if (type is null) return string.Empty;
-        if (!string.IsNullOrWhiteSpace(type.ClrTypeName)) return type.ClrTypeName.Trim();
-        if (!string.IsNullOrWhiteSpace(type.Name)) return type.Name.Trim();
+        if (!string.IsNullOrWhiteSpace(type.ClrTypeName)) return NormalizeDocumentationTypeKey(type.ClrTypeName);
+        if (!string.IsNullOrWhiteSpace(type.Name)) return NormalizeDocumentationTypeKey(type.Name);
         return string.Empty;
     }
 
@@ -123,6 +123,26 @@ public sealed partial class ModuleValidationService
         if (!string.IsNullOrWhiteSpace(type.Name)) return type.Name.Trim();
         if (!string.IsNullOrWhiteSpace(type.ClrTypeName)) return type.ClrTypeName.Trim();
         return string.Empty;
+    }
+
+    private static string NormalizeDocumentationTypeKey(string? typeName)
+    {
+        var candidate = (typeName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            return string.Empty;
+
+        while (candidate.EndsWith("[]", StringComparison.Ordinal))
+            candidate = candidate.Substring(0, candidate.Length - 2);
+
+        var genericTick = candidate.IndexOf('`');
+        if (genericTick >= 0)
+            candidate = candidate.Substring(0, genericTick);
+
+        var genericBracket = candidate.IndexOf('[');
+        if (genericBracket >= 0)
+            candidate = candidate.Substring(0, genericBracket);
+
+        return candidate.Trim();
     }
 
     private static void AppendIssues(List<string> issues, IEnumerable<string> newIssues, int maxItems = 25)

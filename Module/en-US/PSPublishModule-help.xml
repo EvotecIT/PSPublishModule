@@ -25486,9 +25486,33 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinParameterDescriptionPercent</maml:name>
+          <maml:description>
+            <maml:para>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MinSynopsisPercent</maml:name>
           <maml:description>
             <maml:para>Minimum synopsis coverage percentage (default 100).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinTypeDescriptionPercent</maml:name>
+          <maml:description>
+            <maml:para>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
@@ -26028,9 +26052,33 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinParameterDescriptionPercent</maml:name>
+        <maml:description>
+          <maml:para>Minimum percentage of parameters that must have descriptions (default 0 = disabled).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MinSynopsisPercent</maml:name>
         <maml:description>
           <maml:para>Minimum synopsis coverage percentage (default 100).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinTypeDescriptionPercent</maml:name>
+        <maml:description>
+          <maml:para>Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>

@@ -9,15 +9,15 @@ public sealed class DocumentationBinaryFixtureTests
     public void DocumentationEngine_GeneratesExpectedOutputs_ForBinaryFixture()
     {
         var fixtureRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Tests", "Fixtures", "BinaryDocFixture"));
-        var buildResult = BuildFixtureProject(fixtureRoot);
+        var outputDirectory = BuildFixtureProject(fixtureRoot);
         var tempRoot = Path.Combine(Path.GetTempPath(), "pf-binary-doc-fixture-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         try
         {
             var moduleName = "BinaryDocFixture";
-            var assemblyPath = Path.Combine(buildResult.OutputDirectory, moduleName + ".dll");
-            var xmlPath = Path.Combine(buildResult.OutputDirectory, moduleName + ".xml");
+            var assemblyPath = Path.Combine(outputDirectory, moduleName + ".dll");
+            var xmlPath = Path.Combine(outputDirectory, moduleName + ".xml");
             var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
 
             Assert.True(File.Exists(assemblyPath), $"Expected built fixture assembly at '{assemblyPath}'.");
@@ -76,13 +76,33 @@ public sealed class DocumentationBinaryFixtureTests
         }
         finally
         {
-            if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, true);
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+
+            try
+            {
+                if (Directory.Exists(outputDirectory))
+                    Directory.Delete(outputDirectory, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
         }
     }
 
-    private static (string OutputDirectory, string StdOut, string StdErr) BuildFixtureProject(string fixtureRoot)
+    private static string BuildFixtureProject(string fixtureRoot)
     {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "pf-binary-doc-fixture-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
@@ -97,6 +117,7 @@ public sealed class DocumentationBinaryFixtureTests
         psi.ArgumentList.Add("--nologo");
         psi.ArgumentList.Add("--verbosity");
         psi.ArgumentList.Add("minimal");
+        psi.ArgumentList.Add("-p:OutputPath=" + outputDirectory + Path.DirectorySeparatorChar);
 
         using var process = Process.Start(psi);
         Assert.NotNull(process);
@@ -107,7 +128,7 @@ public sealed class DocumentationBinaryFixtureTests
 
         Assert.True(process.ExitCode == 0, $"Fixture build failed.{Environment.NewLine}STDOUT:{Environment.NewLine}{stdOut}{Environment.NewLine}STDERR:{Environment.NewLine}{stdErr}");
 
-        return (Path.Combine(fixtureRoot, "bin", "Release", "net8.0"), stdOut, stdErr);
+        return outputDirectory;
     }
 
     private static string NormalizeText(string text)

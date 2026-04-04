@@ -182,19 +182,23 @@ internal sealed class XmlDocCommentEnricher
 
     private static IEnumerable<string> GetTypeLookupKeys(DocumentationTypeHelp entry)
     {
+        var ordered = new List<string>(2);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         void AddCandidate(string? value)
         {
             var candidate = NormalizeTypeLookupKey(value);
-            if (!string.IsNullOrWhiteSpace(candidate))
-                seen.Add(candidate);
+            if (string.IsNullOrWhiteSpace(candidate))
+                return;
+
+            if (seen.Add(candidate))
+                ordered.Add(candidate);
         }
 
         AddCandidate(entry.ClrTypeName);
         AddCandidate(entry.Name);
 
-        foreach (var value in seen)
+        foreach (var value in ordered)
             yield return value;
     }
 
@@ -328,7 +332,8 @@ internal sealed class XmlDocCommentEnricher
             if (lastDot >= 0 && lastDot < simpleName.Length - 1)
                 simpleName = simpleName.Substring(lastDot + 1);
 
-            foreach (var pair in _members)
+            XmlDocMember? singleMatch = null;
+            foreach (var pair in _members.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
             {
                 if (!pair.Key.StartsWith("T:", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -343,10 +348,18 @@ internal sealed class XmlDocCommentEnricher
                     : current;
 
                 if (currentSimple.Equals(simpleName, StringComparison.OrdinalIgnoreCase))
-                    return pair.Value;
+                {
+                    // PowerShell help sometimes only reports short type names. Use that as a best-effort fallback
+                    // only when it uniquely identifies one XML-doc type member; otherwise prefer no enrichment
+                    // over an arbitrary first-match-wins description.
+                    if (singleMatch is not null)
+                        return null;
+
+                    singleMatch = pair.Value;
+                }
             }
 
-            return null;
+            return singleMatch;
         }
 
         private static IEnumerable<XmlDocExample> ExtractExamples(XElement member)

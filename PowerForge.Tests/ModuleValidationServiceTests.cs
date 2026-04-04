@@ -8,6 +8,8 @@ namespace PowerForge.Tests;
 
 public sealed class ModuleValidationServiceTests
 {
+    private const string TestPowerShellExecutable = "pwsh";
+
     [Fact]
     public void Run_DocumentationValidation_CanRequireParameterAndTypeDescriptions()
     {
@@ -168,6 +170,75 @@ public sealed class ModuleValidationServiceTests
     }
 
     [Fact]
+    public void Run_DocumentationValidation_TruncatesLongMissingItemLists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var manifestPath = Path.Combine(root.FullName, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{}");
+
+            var command = new DocumentationCommandHelp
+            {
+                Name = "Get-Thing",
+                Synopsis = "Gets a thing."
+            };
+
+            for (var i = 1; i <= 30; i++)
+            {
+                command.Parameters.Add(new DocumentationParameterHelp
+                {
+                    Name = "Param" + i,
+                    Description = string.Empty
+                });
+            }
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = { command }
+            };
+
+            var settings = new ModuleValidationSettings
+            {
+                Enable = true,
+                Structure = new ModuleStructureValidationSettings { Severity = ValidationSeverity.Off },
+                Documentation = new DocumentationValidationSettings
+                {
+                    Severity = ValidationSeverity.Warning,
+                    MinSynopsisPercent = 100,
+                    MinParameterDescriptionPercent = 100,
+                    MinExampleCountPerCommand = 0
+                },
+                ScriptAnalyzer = new ScriptAnalyzerValidationSettings { Severity = ValidationSeverity.Off },
+                FileIntegrity = new FileIntegrityValidationSettings { Severity = ValidationSeverity.Off },
+                Tests = new TestSuiteValidationSettings { Severity = ValidationSeverity.Off },
+                Binary = new BinaryModuleValidationSettings { Severity = ValidationSeverity.Off },
+                Csproj = new CsprojValidationSettings { Severity = ValidationSeverity.Off }
+            };
+
+            var service = new ModuleValidationService(
+                new NullLogger(),
+                new DocumentationPayloadRunner(payload));
+
+            var report = service.Run(new ModuleValidationSpec
+            {
+                ProjectRoot = root.FullName,
+                StagingPath = root.FullName,
+                ModuleName = "TestModule",
+                ManifestPath = manifestPath,
+                Settings = settings
+            });
+
+            var check = Assert.Single(report.Checks);
+            Assert.Contains(check.Issues, issue => issue.Contains("... and 5 more issue(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_ScriptAnalyzerNoOutput_ReportsRunnerDetails()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -201,7 +272,7 @@ public sealed class ModuleValidationServiceTests
                     0,
                     "stdout-text",
                     "stderr-text",
-                    @"C:\Program Files\PowerShell\7\pwsh.exe")));
+                    TestPowerShellExecutable)));
 
             var report = service.Run(new ModuleValidationSpec
             {
@@ -218,7 +289,7 @@ public sealed class ModuleValidationServiceTests
             Assert.Equal("no output", check.Summary);
             var issue = Assert.Single(check.Issues);
             Assert.Contains("without writing the results file", issue, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("runner=pwsh.exe", issue, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("runner=pwsh", issue, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("stdout=stdout-text", issue, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("stderr=stderr-text", issue, StringComparison.OrdinalIgnoreCase);
         }
@@ -264,7 +335,7 @@ public sealed class ModuleValidationServiceTests
                     0,
                     "PFVALID::SKIP::PSSA",
                     string.Empty,
-                    @"C:\Program Files\PowerShell\7\pwsh.exe")),
+                    TestPowerShellExecutable)),
                 (dependencies, options) =>
                 {
                     installCalled = true;
@@ -341,7 +412,7 @@ public sealed class ModuleValidationServiceTests
                     0,
                     "PFVALID::SKIP::PSSA",
                     string.Empty,
-                    @"C:\Program Files\PowerShell\7\pwsh.exe")),
+                    TestPowerShellExecutable)),
                 (_, _) => new[]
                 {
                     new ModuleDependencyInstallResult(
@@ -408,7 +479,7 @@ public sealed class ModuleValidationServiceTests
                     0,
                     "PFVALID::SKIP::PSSA-CONFLICT",
                     string.Empty,
-                    @"C:\Program Files\PowerShell\7\pwsh.exe")));
+                    TestPowerShellExecutable)));
 
             var report = service.Run(new ModuleValidationSpec
             {
@@ -464,7 +535,7 @@ public sealed class ModuleValidationServiceTests
                     0,
                     "PFVALID::SKIP::PSSA-CONFLICT",
                     string.Empty,
-                    @"C:\Program Files\PowerShell\7\pwsh.exe")));
+                    TestPowerShellExecutable)));
 
             var report = service.Run(new ModuleValidationSpec
             {
@@ -525,7 +596,7 @@ public sealed class ModuleValidationServiceTests
                 0,
                 string.Empty,
                 string.Empty,
-                @"C:\Program Files\PowerShell\7\pwsh.exe");
+                TestPowerShellExecutable);
         }
     }
 }

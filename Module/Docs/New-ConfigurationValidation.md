@@ -11,7 +11,7 @@ Creates configuration for module validation checks during build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationValidation [-Enable] [-StructureSeverity <ValidationSeverity>] [-DocumentationSeverity <ValidationSeverity>] [-ScriptAnalyzerSeverity <ValidationSeverity>] [-FileIntegritySeverity <ValidationSeverity>] [-TestsSeverity <ValidationSeverity>] [-BinarySeverity <ValidationSeverity>] [-CsprojSeverity <ValidationSeverity>] [-PublicFunctionPaths <string[]>] [-InternalFunctionPaths <string[]>] [-ValidateManifestFiles <bool>] [-ValidateExports <bool>] [-ValidateInternalNotExported <bool>] [-AllowWildcardExports <bool>] [-MinSynopsisPercent <int>] [-MinDescriptionPercent <int>] [-MinExamplesPerCommand <int>] [-ExcludeCommands <string[]>] [-EnableScriptAnalyzer] [-ScriptAnalyzerExcludeDirectories <string[]>] [-ScriptAnalyzerExcludeRules <string[]>] [-ScriptAnalyzerSkipIfUnavailable <bool>] [-ScriptAnalyzerInstallIfUnavailable <bool>] [-ScriptAnalyzerTimeoutSeconds <int>] [-FileIntegrityExcludeDirectories <string[]>] [-FileIntegrityCheckTrailingWhitespace <bool>] [-FileIntegrityCheckSyntax <bool>] [-BannedCommands <string[]>] [-AllowBannedCommandsIn <string[]>] [-EnableTests] [-TestsPath <string>] [-TestAdditionalModules <string[]>] [-TestSkipModules <string[]>] [-TestSkipDependencies] [-TestSkipImport] [-TestForce] [-TestTimeoutSeconds <int>] [-ValidateBinaryAssemblies <bool>] [-ValidateBinaryExports <bool>] [-AllowBinaryWildcardExports <bool>] [-RequireTargetFramework <bool>] [-RequireLibraryOutput <bool>] [<CommonParameters>]
+New-ConfigurationValidation [-Enable] [-StructureSeverity <ValidationSeverity>] [-DocumentationSeverity <ValidationSeverity>] [-ScriptAnalyzerSeverity <ValidationSeverity>] [-FileIntegritySeverity <ValidationSeverity>] [-TestsSeverity <ValidationSeverity>] [-BinarySeverity <ValidationSeverity>] [-CsprojSeverity <ValidationSeverity>] [-PublicFunctionPaths <string[]>] [-InternalFunctionPaths <string[]>] [-ValidateManifestFiles <bool>] [-ValidateExports <bool>] [-ValidateInternalNotExported <bool>] [-AllowWildcardExports <bool>] [-MinSynopsisPercent <int>] [-MinDescriptionPercent <int>] [-MinExamplesPerCommand <int>] [-MinParameterDescriptionPercent <int>] [-MinTypeDescriptionPercent <int>] [-ExcludeCommands <string[]>] [-EnableScriptAnalyzer] [-ScriptAnalyzerExcludeDirectories <string[]>] [-ScriptAnalyzerExcludeRules <string[]>] [-ScriptAnalyzerSkipIfUnavailable <bool>] [-ScriptAnalyzerInstallIfUnavailable <bool>] [-ScriptAnalyzerTimeoutSeconds <int>] [-FileIntegrityExcludeDirectories <string[]>] [-FileIntegrityCheckTrailingWhitespace <bool>] [-FileIntegrityCheckSyntax <bool>] [-BannedCommands <string[]>] [-AllowBannedCommandsIn <string[]>] [-EnableTests] [-TestsPath <string>] [-TestAdditionalModules <string[]>] [-TestSkipModules <string[]>] [-TestSkipDependencies] [-TestSkipImport] [-TestForce] [-TestTimeoutSeconds <int>] [-ValidateBinaryAssemblies <bool>] [-ValidateBinaryExports <bool>] [-AllowBinaryWildcardExports <bool>] [-RequireTargetFramework <bool>] [-RequireLibraryOutput <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -322,8 +322,40 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -MinParameterDescriptionPercent
+Minimum percentage of parameters that must have descriptions (default 0 = disabled).
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -MinSynopsisPercent
 Minimum synopsis coverage percentage (default 100).
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MinTypeDescriptionPercent
+Minimum percentage of unique input/output types that must have descriptions (default 0 = disabled).
 
 ```yaml
 Type: Int32

@@ -283,11 +283,8 @@ internal sealed class MamlHelpWriter
 
         foreach (var note in notes)
         {
-            if (!string.IsNullOrWhiteSpace(note.Title))
-                writer.WriteElementString("maml", "title", MamlNs, note.Title.Trim());
-
             writer.WriteStartElement("maml", "alert", MamlNs);
-            WriteParas(writer, note.Text);
+            WriteNoteAlert(writer, note);
             writer.WriteEndElement(); // alert
         }
 
@@ -419,6 +416,24 @@ internal sealed class MamlHelpWriter
         {
             writer.WriteStartElement("maml", "para", MamlNs);
             writer.WriteString(para);
+            writer.WriteEndElement();
+        }
+    }
+
+    private static void WriteNoteAlert(XmlWriter writer, DocumentationNoteHelp note)
+    {
+        var title = note.Title?.Trim();
+        if (!string.IsNullOrWhiteSpace(title))
+            writer.WriteElementString("maml", "para", MamlNs, title);
+
+        var textParas = SplitParas(note.Text);
+        foreach (var para in textParas)
+            writer.WriteElementString("maml", "para", MamlNs, para);
+
+        if (string.IsNullOrWhiteSpace(title) && textParas.Length == 0)
+        {
+            writer.WriteStartElement("maml", "para", MamlNs);
+            writer.WriteString(string.Empty);
             writer.WriteEndElement();
         }
     }
