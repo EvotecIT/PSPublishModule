@@ -21,4 +21,14 @@ public sealed class PowerForgeScriptsTests
         Assert.True(initializeCallIndex > resetIndex);
         Assert.True(importRequiredIndex > initializeCallIndex);
     }
+
+    [Fact]
+    public void Load_InvokeTestSuiteScript_UsesDedicatedBooleanForVerboseSwitch()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Tests/Invoke-TestSuite.ps1");
+
+        Assert.Contains("$importModulesVerboseEnabled = ($ImportVerbose -eq '1')", script, StringComparison.Ordinal);
+        Assert.Contains("-Verbose:$importModulesVerboseEnabled", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-Verbose:$importVerbose", script, StringComparison.Ordinal);
+    }
 }

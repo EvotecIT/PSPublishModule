@@ -31,24 +31,24 @@ try {
     Write-Output ('PFTEST::PESTER::' + $p.Version.ToString())
   }
 
-  $importVerbose = ($ImportVerbose -eq '1')
+  $importModulesVerboseEnabled = ($ImportVerbose -eq '1')
   $importModules = DecodeModules $ImportModulesB64
   if ($importModules) {
     foreach ($m in $importModules) {
       if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
       if ($m.RequiredVersion) {
-        Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+        Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importModulesVerboseEnabled
       } elseif ($m.MinimumVersion) {
-        Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+        Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importModulesVerboseEnabled
       } else {
-        Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importVerbose
+        Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importModulesVerboseEnabled
       }
     }
   }
 
   $doImport = ($SkipImport -ne '1') -and (-not [string]::IsNullOrWhiteSpace($ModuleImportPath))
   if ($doImport) {
-    Import-Module -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ErrorAction Stop -Verbose:$importVerbose | Out-Null
+    Import-Module -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ErrorAction Stop -Verbose:$importModulesVerboseEnabled | Out-Null
     Write-Output 'PFTEST::IMPORT::OK'
     try {
       $m = Get-Module -Name $ModuleName | Select-Object -First 1
