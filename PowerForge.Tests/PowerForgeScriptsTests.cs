@@ -27,8 +27,9 @@ public sealed class PowerForgeScriptsTests
     {
         var script = PowerForgeScripts.Load("Scripts/Tests/Invoke-TestSuite.ps1");
 
-        Assert.Contains("$importModulesVerboseEnabled = ($ImportVerbose -eq '1')", script, StringComparison.Ordinal);
-        Assert.Contains("-Verbose:$importModulesVerboseEnabled", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("-Verbose:$importVerbose", script, StringComparison.Ordinal);
+        Assert.Matches(@"\[bool\]\s*\$ImportVerbose\b", script);
+        Assert.Contains("function Import-TestSuiteModule", script, StringComparison.Ordinal);
+        Assert.Contains("-Verbose:$ImportVerbose", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$importModulesVerboseEnabled", script, StringComparison.Ordinal);
     }
 }
