@@ -82,7 +82,7 @@ public sealed class ModuleTestSuiteService
             spec.SkipImport ? "1" : "0",
             spec.Force ? "1" : "0",
             importModulesB64,
-            spec.ImportModulesVerbose ? "1" : "0"
+            spec.ImportModulesVerbose ? "-ImportVerbose:$true" : "-ImportVerbose:$false"
         };
 
         PowerShellRunResult runResult;
