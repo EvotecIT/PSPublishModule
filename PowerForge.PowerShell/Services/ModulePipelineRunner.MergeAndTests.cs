@@ -282,15 +282,18 @@ public sealed partial class ModulePipelineRunner
         var message = $"TestsAfterMerge failed ({result.FailedCount} failed).";
         if (result.FailureAnalysis is { FailedTests.Length: > 0 } analysis)
         {
-            var lines = analysis.FailedTests
+            var filteredFailures = analysis.FailedTests
                 .Where(static failure => !string.IsNullOrWhiteSpace(failure.Name) || !string.IsNullOrWhiteSpace(failure.ErrorMessage))
+                .ToArray();
+
+            var lines = filteredFailures
                 .Take(5)
-                .Select(static failure => FormatTestsAfterMergeFailureLine(failure))
+                .Select(FormatTestsAfterMergeFailureLine)
                 .ToArray();
 
             if (lines.Length > 0)
             {
-                var omittedCount = analysis.FailedTests.Length - lines.Length;
+                var omittedCount = filteredFailures.Length - lines.Length;
                 var details = string.Join(Environment.NewLine, lines);
                 if (omittedCount > 0)
                     details = $"{details}{Environment.NewLine}Additional failed tests omitted: {omittedCount}.";
@@ -321,11 +324,10 @@ public sealed partial class ModulePipelineRunner
 
     private static string? GetFirstMeaningfulLine(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (text is null || text.Length == 0 || string.IsNullOrWhiteSpace(text))
             return null;
 
-        var nonEmptyText = text!;
-        foreach (var line in nonEmptyText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = line.Trim();
             if (trimmed.Length > 0)
