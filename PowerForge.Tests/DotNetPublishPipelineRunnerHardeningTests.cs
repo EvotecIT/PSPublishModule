@@ -138,8 +138,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             };
 
             var runner = new DotNetPublishPipelineRunner(new NullLogger());
-            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.NotNull(method);
+            var method = GetTrySignOutputMethod();
 
             var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(runner, new object[] { outputDir, sign }));
             Assert.IsType<InvalidOperationException>(ex.InnerException);
@@ -171,14 +170,13 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             var sign = new DotNetPublishSignOptions
             {
                 Enabled = true,
-                ToolPath = Environment.GetEnvironmentVariable("ComSpec"),
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
                 OnMissingTool = DotNetPublishPolicyMode.Fail,
                 OnSignFailure = DotNetPublishPolicyMode.Skip
             };
 
             var runner = new DotNetPublishPipelineRunner(logger);
-            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.NotNull(method);
+            var method = GetTrySignOutputMethod();
 
             _ = method!.Invoke(runner, new object[] { outputDir, sign });
             Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
@@ -207,14 +205,13 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             {
                 Enabled = true,
                 IncludeDlls = true,
-                ToolPath = Environment.GetEnvironmentVariable("ComSpec"),
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
                 OnMissingTool = DotNetPublishPolicyMode.Fail,
                 OnSignFailure = DotNetPublishPolicyMode.Skip
             };
 
             var runner = new DotNetPublishPipelineRunner(logger);
-            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.NotNull(method);
+            var method = GetTrySignOutputMethod();
 
             _ = method!.Invoke(runner, new object[] { outputDir, sign });
             Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
@@ -444,6 +441,15 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         var projectPath = Path.Combine(root, fileName);
         File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
         return projectPath;
+    }
+
+    private static MethodInfo GetTrySignOutputMethod()
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "TrySignOutput",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "TrySignOutput private method not found. Was it renamed or made public?");
+        return method!;
     }
 
     private static string CreateTempRoot()

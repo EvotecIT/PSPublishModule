@@ -222,7 +222,7 @@ public sealed class DotNetPublishSignPatch
     /// <summary>Optional enable/disable override.</summary>
     public bool? Enabled { get; set; }
 
-    /// <summary>Optional include-DLLs override.</summary>
+    /// <summary>Optional include-DLLs override. Set <c>false</c> to explicitly disable DLL signing even if the base profile enables it.</summary>
     public bool? IncludeDlls { get; set; }
 
     /// <summary>Optional path to signtool.exe override.</summary>
