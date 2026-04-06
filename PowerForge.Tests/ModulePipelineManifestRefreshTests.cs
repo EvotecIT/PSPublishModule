@@ -246,6 +246,113 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
+    public void Run_RefreshesProjectManifestBeforeTestsAfterMergeCanFail()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteModuleWithStaleManifest(root.FullName, moduleName, "1.0.0");
+            var testsPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Tests")).FullName;
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "3.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            ModuleVersion = "3.0.0",
+                            Guid = "22222222-2222-2222-2222-222222222222",
+                            Author = "New Author",
+                            Prerelease = null
+                        }
+                    },
+                    new ConfigurationTestSegment
+                    {
+                        Configuration = new TestConfiguration
+                        {
+                            TestsPath = testsPath,
+                            Force = false
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeDependencyMetadataProvider(),
+                new FakeHostedOperations
+                {
+                    NextTestSuiteResult = new ModuleTestSuiteResult(
+                        projectPath: root.FullName,
+                        testPath: testsPath,
+                        moduleName: moduleName,
+                        moduleVersion: "3.0.0",
+                        manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                        requiredModules: Array.Empty<RequiredModuleReference>(),
+                        dependencyResults: Array.Empty<ModuleDependencyInstallResult>(),
+                        moduleImported: true,
+                        exportedFunctionCount: null,
+                        exportedCmdletCount: null,
+                        exportedAliasCount: null,
+                        pesterVersion: "5.7.1",
+                        totalCount: 2,
+                        passedCount: 1,
+                        failedCount: 1,
+                        skippedCount: 0,
+                        duration: null,
+                        coveragePercent: null,
+                        failureAnalysis: new ModuleTestFailureAnalysis
+                        {
+                            Source = "PesterResults",
+                            Timestamp = DateTime.Now,
+                            TotalCount = 2,
+                            PassedCount = 1,
+                            FailedCount = 1,
+                            FailedTests = new[]
+                            {
+                                new ModuleTestFailureInfo
+                                {
+                                    Name = "Broken.Test",
+                                    ErrorMessage = "boom"
+                                }
+                            }
+                        },
+                        exitCode: 1,
+                        stdOut: string.Empty,
+                        stdErr: string.Empty,
+                        resultsXmlPath: null)
+                });
+
+            var plan = runner.Plan(spec);
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+            Assert.Contains("Broken.Test", ex.Message, StringComparison.Ordinal);
+
+            var projectManifestPath = Path.Combine(root.FullName, $"{moduleName}.psd1");
+            Assert.False(ManifestEditor.TryGetTopLevelString(projectManifestPath, "Prerelease", out _));
+            Assert.False(ManifestEditor.TryGetPsDataStringArray(projectManifestPath, "Prerelease", out _));
+            Assert.True(ManifestEditor.TryGetTopLevelString(projectManifestPath, "ModuleVersion", out var version));
+            Assert.Equal("3.0.0", version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_RemovesInboxAndDuplicatedExternalDependenciesFromManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -415,6 +522,8 @@ public sealed class ModulePipelineManifestRefreshTests
 
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
+        public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
+
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
             ModuleSkipConfiguration? skipModules,
@@ -443,7 +552,7 @@ public sealed class ModulePipelineManifestRefreshTests
             => throw new InvalidOperationException("Not used in this test.");
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
-            => throw new InvalidOperationException("Not used in this test.");
+            => NextTestSuiteResult ?? throw new InvalidOperationException("Not used in this test.");
 
         public ModulePublishResult PublishModule(
             PublishConfiguration publish,

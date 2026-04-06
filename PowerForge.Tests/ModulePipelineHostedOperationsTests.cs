@@ -147,11 +147,181 @@ public sealed class ModulePipelineHostedOperationsTests
         Assert.Equal(1, result.SignedNew);
     }
 
+    [Fact]
+    public void RunTestsAfterMerge_IncludesFailedTestNamesAndMessages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var testsPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Tests")).FullName;
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var hostedOperations = new FakeHostedOperations
+            {
+                NextTestSuiteResult = new ModuleTestSuiteResult(
+                    projectPath: root.FullName,
+                    testPath: testsPath,
+                    moduleName: moduleName,
+                    moduleVersion: "1.0.0",
+                    manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                    requiredModules: Array.Empty<RequiredModuleReference>(),
+                    dependencyResults: Array.Empty<ModuleDependencyInstallResult>(),
+                    moduleImported: true,
+                    exportedFunctionCount: null,
+                    exportedCmdletCount: null,
+                    exportedAliasCount: null,
+                    pesterVersion: "5.7.1",
+                    totalCount: 3,
+                    passedCount: 2,
+                    failedCount: 1,
+                    skippedCount: 0,
+                    duration: null,
+                    coveragePercent: null,
+                    failureAnalysis: new ModuleTestFailureAnalysis
+                    {
+                        Source = "PesterResults",
+                        Timestamp = DateTime.Now,
+                        TotalCount = 3,
+                        PassedCount = 2,
+                        FailedCount = 1,
+                        FailedTests = new[]
+                        {
+                            new ModuleTestFailureInfo
+                            {
+                                Name = "Broken.Test",
+                                ErrorMessage = "boom"
+                            }
+                        }
+                    },
+                    exitCode: 1,
+                    stdOut: string.Empty,
+                    stdErr: string.Empty,
+                    resultsXmlPath: null)
+            };
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var ex = Assert.Throws<TargetInvocationException>(() =>
+                InvokeRunTestsAfterMerge(runner, plan, buildResult, new TestConfiguration { TestsPath = testsPath }));
+
+            var actual = Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("TestsAfterMerge failed (1 failed).", actual.Message, StringComparison.Ordinal);
+            Assert.Contains("Broken.Test", actual.Message, StringComparison.Ordinal);
+            Assert.Contains("boom", actual.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunTestsAfterMerge_FallsBackToCapturedErrorOutput()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var testsPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Tests")).FullName;
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var hostedOperations = new FakeHostedOperations
+            {
+                NextTestSuiteResult = new ModuleTestSuiteResult(
+                    projectPath: root.FullName,
+                    testPath: testsPath,
+                    moduleName: moduleName,
+                    moduleVersion: "1.0.0",
+                    manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                    requiredModules: Array.Empty<RequiredModuleReference>(),
+                    dependencyResults: Array.Empty<ModuleDependencyInstallResult>(),
+                    moduleImported: true,
+                    exportedFunctionCount: null,
+                    exportedCmdletCount: null,
+                    exportedAliasCount: null,
+                    pesterVersion: "5.7.1",
+                    totalCount: 3,
+                    passedCount: 2,
+                    failedCount: 1,
+                    skippedCount: 0,
+                    duration: null,
+                    coveragePercent: null,
+                    failureAnalysis: null,
+                    exitCode: 1,
+                    stdOut: "ignored output",
+                    stdErr: "\r\nfirst error line\r\nsecond error line",
+                    resultsXmlPath: null)
+            };
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var ex = Assert.Throws<TargetInvocationException>(() =>
+                InvokeRunTestsAfterMerge(runner, plan, buildResult, new TestConfiguration { TestsPath = testsPath }));
+
+            var actual = Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("stderr: first error line", actual.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModuleDependencyInstallResult[] InvokeEnsureBuildDependenciesInstalledIfNeeded(ModulePipelineRunner runner, ModulePipelinePlan plan)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "EnsureBuildDependenciesInstalledIfNeeded method signature may have changed.");
         return (ModuleDependencyInstallResult[])method!.Invoke(runner, new object?[] { plan })!;
+    }
+
+    private static void InvokeRunTestsAfterMerge(ModulePipelineRunner runner, ModulePipelinePlan plan, ModuleBuildResult buildResult, TestConfiguration configuration)
+    {
+        var method = typeof(ModulePipelineRunner).GetMethod("RunTestsAfterMerge", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "RunTestsAfterMerge method signature may have changed.");
+        method!.Invoke(runner, new object?[] { plan, buildResult, configuration });
     }
 
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
@@ -199,6 +369,7 @@ public sealed class ModulePipelineHostedOperationsTests
         public int DependencyInstallCalls { get; private set; }
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
         public string? LastRepository { get; private set; }
+        public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -245,7 +416,7 @@ public sealed class ModulePipelineHostedOperationsTests
             => throw new InvalidOperationException("Not used in this test.");
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
-            => throw new InvalidOperationException("Not used in this test.");
+            => NextTestSuiteResult ?? throw new InvalidOperationException("Not used in this test.");
 
         public ModulePublishResult PublishModule(
             PublishConfiguration publish,
