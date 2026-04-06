@@ -173,8 +173,11 @@ public sealed class DotNetPublishStyleOverride
 /// </summary>
 public sealed class DotNetPublishSignOptions
 {
-    /// <summary>Enables Authenticode signing of *.exe and *.dll under the output folder.</summary>
+    /// <summary>Enables Authenticode signing of executables under the output folder.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>Opts into signing *.dll files in addition to executables.</summary>
+    public bool IncludeDlls { get; set; }
 
     /// <summary>Optional path to signtool.exe (defaults to "signtool.exe").</summary>
     public string? ToolPath { get; set; } = "signtool.exe";
@@ -218,6 +221,9 @@ public sealed class DotNetPublishSignPatch
 {
     /// <summary>Optional enable/disable override.</summary>
     public bool? Enabled { get; set; }
+
+    /// <summary>Optional include-DLLs override.</summary>
+    public bool? IncludeDlls { get; set; }
 
     /// <summary>Optional path to signtool.exe override.</summary>
     public string? ToolPath { get; set; }

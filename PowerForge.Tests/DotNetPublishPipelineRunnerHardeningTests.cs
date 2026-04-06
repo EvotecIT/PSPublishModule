@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Xunit;
@@ -146,6 +147,81 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                 ex.InnerException!.Message.Contains("Signing requested", StringComparison.OrdinalIgnoreCase)
                 || ex.InnerException!.Message.Contains("Signing failed", StringComparison.OrdinalIgnoreCase),
                 $"Unexpected message: {ex.InnerException!.Message}");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_DefaultsToExecutablesOnly()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Environment.GetEnvironmentVariable("ComSpec"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            var signed = (int)method!.Invoke(runner, new object[] { outputDir, sign })!;
+
+            Assert.Equal(1, signed);
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_IncludeDllsSignsExecutablesAndLibraries()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                IncludeDlls = true,
+                ToolPath = Environment.GetEnvironmentVariable("ComSpec"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            var signed = (int)method!.Invoke(runner, new object[] { outputDir, sign })!;
+
+            Assert.Equal(2, signed);
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -392,5 +468,16 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         {
             // best effort
         }
+    }
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> InfoMessages { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) => InfoMessages.Add(message);
+        public void Success(string message) { }
+        public void Warn(string message) { }
+        public void Error(string message) { }
+        public void Verbose(string message) { }
     }
 }

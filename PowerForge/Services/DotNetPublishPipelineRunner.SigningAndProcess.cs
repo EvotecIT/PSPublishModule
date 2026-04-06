@@ -14,7 +14,8 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             targets.AddRange(Directory.EnumerateFiles(outputDir, "*.exe", SearchOption.AllDirectories));
-            targets.AddRange(Directory.EnumerateFiles(outputDir, "*.dll", SearchOption.AllDirectories));
+            if (sign.IncludeDlls)
+                targets.AddRange(Directory.EnumerateFiles(outputDir, "*.dll", SearchOption.AllDirectories));
         }
         catch
         {
