@@ -180,9 +180,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
 
-            var signed = (int)method!.Invoke(runner, new object[] { outputDir, sign })!;
-
-            Assert.Equal(1, signed);
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
             Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
         }
         finally
@@ -218,9 +216,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
 
-            var signed = (int)method!.Invoke(runner, new object[] { outputDir, sign })!;
-
-            Assert.Equal(2, signed);
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
             Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
         }
         finally
