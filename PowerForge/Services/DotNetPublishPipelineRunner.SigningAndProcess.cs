@@ -14,7 +14,8 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             targets.AddRange(Directory.EnumerateFiles(outputDir, "*.exe", SearchOption.AllDirectories));
-            targets.AddRange(Directory.EnumerateFiles(outputDir, "*.dll", SearchOption.AllDirectories));
+            if (sign.IncludeDlls)
+                targets.AddRange(Directory.EnumerateFiles(outputDir, "*.dll", SearchOption.AllDirectories));
         }
         catch
         {
@@ -67,7 +68,13 @@ public sealed partial class DotNetPublishPipelineRunner
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (targets.Length == 0)
+        {
+            var noTargetsScope = string.IsNullOrWhiteSpace(scope) ? "outputs" : scope!.Trim();
+            HandlePolicy(
+                sign.OnSignFailure,
+                $"Signing requested for {noTargetsScope}, but no matching files were found. Set IncludeDlls=true to include DLL outputs when a publish produces no executables.");
             return Array.Empty<string>();
+        }
 
         var label = string.IsNullOrWhiteSpace(scope) ? string.Empty : $" ({scope!.Trim()})";
         _logger.Info($"Signing {targets.Length} file(s){label} using {Path.GetFileName(signToolPath)}");

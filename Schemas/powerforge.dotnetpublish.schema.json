@@ -156,6 +156,7 @@
       "additionalProperties": false,
       "properties": {
         "Enabled": { "type": "boolean" },
+        "IncludeDlls": { "type": "boolean" },
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
         "OnSignFailure": { "$ref": "#/$defs/DotNetPublishPolicyMode" },
@@ -173,6 +174,7 @@
       "additionalProperties": false,
       "properties": {
         "Enabled": { "type": ["boolean", "null"] },
+        "IncludeDlls": { "type": ["boolean", "null"] },
         "ToolPath": { "type": ["string", "null"] },
         "OnMissingTool": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },
         "OnSignFailure": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishPolicyMode" }, { "type": "null" }] },

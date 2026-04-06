@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Xunit;
@@ -137,8 +138,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             };
 
             var runner = new DotNetPublishPipelineRunner(new NullLogger());
-            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TrySignOutput", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.NotNull(method);
+            var method = GetTrySignOutputMethod();
 
             var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(runner, new object[] { outputDir, sign }));
             Assert.IsType<InvalidOperationException>(ex.InnerException);
@@ -146,6 +146,109 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                 ex.InnerException!.Message.Contains("Signing requested", StringComparison.OrdinalIgnoreCase)
                 || ex.InnerException!.Message.Contains("Signing failed", StringComparison.OrdinalIgnoreCase),
                 $"Unexpected message: {ex.InnerException!.Message}");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_DefaultsToExecutablesOnly()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = GetTrySignOutputMethod();
+
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_IncludeDllsSignsExecutablesAndLibraries()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var logger = new CollectingLogger();
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                IncludeDlls = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Skip
+            };
+
+            var runner = new DotNetPublishPipelineRunner(logger);
+            var method = GetTrySignOutputMethod();
+
+            _ = method!.Invoke(runner, new object[] { outputDir, sign });
+            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TrySignOutput_WhenDllOnlyAndIncludeDllsDisabled_HonorsFailurePolicy()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Fail
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = GetTrySignOutputMethod();
+
+            var ex = Assert.Throws<TargetInvocationException>(() => method.Invoke(runner, new object[] { outputDir, sign }));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("no matching files were found", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("IncludeDlls=true", ex.InnerException.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -374,6 +477,15 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         return projectPath;
     }
 
+    private static MethodInfo GetTrySignOutputMethod()
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "TrySignOutput",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(method is not null, "TrySignOutput private method not found. Was it renamed or made public?");
+        return method!;
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -392,5 +504,16 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         {
             // best effort
         }
+    }
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> InfoMessages { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) => InfoMessages.Add(message);
+        public void Success(string message) { }
+        public void Warn(string message) { }
+        public void Error(string message) { }
+        public void Verbose(string message) { }
     }
 }
