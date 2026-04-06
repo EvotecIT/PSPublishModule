@@ -223,6 +223,40 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void TrySignOutput_WhenDllOnlyAndIncludeDllsDisabled_HonorsFailurePolicy()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
+
+            var sign = new DotNetPublishSignOptions
+            {
+                Enabled = true,
+                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                OnMissingTool = DotNetPublishPolicyMode.Fail,
+                OnSignFailure = DotNetPublishPolicyMode.Fail
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = GetTrySignOutputMethod();
+
+            var ex = Assert.Throws<TargetInvocationException>(() => method.Invoke(runner, new object[] { outputDir, sign }));
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("no matching files were found", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("IncludeDlls=true", ex.InnerException.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
     {
         var plan = new DotNetPublishPlan
