@@ -34,11 +34,10 @@ public sealed partial class ModulePipelineRunner
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             ExecuteFormattingAndSigningPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, state);
+            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
             ExecuteValidationPhases(plan, session, state);
             ExecuteTestPhases(plan, session, state);
             ExecutePackagingPublishAndInstallPhases(spec, plan, session, packagingRequiredModules, pipeline, state);
-
-            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
 
             return BuildPipelineResult(spec, plan, state);
         }
