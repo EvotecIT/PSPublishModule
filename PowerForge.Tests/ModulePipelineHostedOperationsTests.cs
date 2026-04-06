@@ -310,6 +310,97 @@ public sealed class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Fact]
+    public void RunTestsAfterMerge_OmittedCount_IgnoresBlankFailuresFilteredOutOfOutput()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var testsPath = Directory.CreateDirectory(Path.Combine(root.FullName, "Tests")).FullName;
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var hostedOperations = new FakeHostedOperations
+            {
+                NextTestSuiteResult = new ModuleTestSuiteResult(
+                    projectPath: root.FullName,
+                    testPath: testsPath,
+                    moduleName: moduleName,
+                    moduleVersion: "1.0.0",
+                    manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                    requiredModules: Array.Empty<RequiredModuleReference>(),
+                    dependencyResults: Array.Empty<ModuleDependencyInstallResult>(),
+                    moduleImported: true,
+                    exportedFunctionCount: null,
+                    exportedCmdletCount: null,
+                    exportedAliasCount: null,
+                    pesterVersion: "5.7.1",
+                    totalCount: 7,
+                    passedCount: 0,
+                    failedCount: 7,
+                    skippedCount: 0,
+                    duration: null,
+                    coveragePercent: null,
+                    failureAnalysis: new ModuleTestFailureAnalysis
+                    {
+                        Source = "PesterResults",
+                        Timestamp = DateTime.Now,
+                        TotalCount = 7,
+                        PassedCount = 0,
+                        FailedCount = 7,
+                        FailedTests = new[]
+                        {
+                            new ModuleTestFailureInfo { Name = "Broken.Test1", ErrorMessage = "boom1" },
+                            new ModuleTestFailureInfo { Name = "Broken.Test2", ErrorMessage = "boom2" },
+                            new ModuleTestFailureInfo { Name = "Broken.Test3", ErrorMessage = "boom3" },
+                            new ModuleTestFailureInfo { Name = "Broken.Test4", ErrorMessage = "boom4" },
+                            new ModuleTestFailureInfo { Name = "Broken.Test5", ErrorMessage = "boom5" },
+                            new ModuleTestFailureInfo(),
+                            new ModuleTestFailureInfo()
+                        }
+                    },
+                    exitCode: 1,
+                    stdOut: string.Empty,
+                    stdErr: string.Empty,
+                    resultsXmlPath: null)
+            };
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var ex = Assert.Throws<TargetInvocationException>(() =>
+                InvokeRunTestsAfterMerge(runner, plan, buildResult, new TestConfiguration { TestsPath = testsPath }));
+
+            var actual = Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.DoesNotContain("Additional failed tests omitted", actual.Message, StringComparison.Ordinal);
+            Assert.Contains("Broken.Test5", actual.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModuleDependencyInstallResult[] InvokeEnsureBuildDependenciesInstalledIfNeeded(ModulePipelineRunner runner, ModulePipelinePlan plan)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded", BindingFlags.Instance | BindingFlags.NonPublic);
