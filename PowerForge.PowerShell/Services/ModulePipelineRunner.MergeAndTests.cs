@@ -265,15 +265,74 @@ public sealed partial class ModulePipelineRunner
         var result = _hostedOperations.RunModuleTestSuite(spec);
         if (result.FailedCount > 0)
         {
+            var failureMessage = BuildTestsAfterMergeFailureMessage(result);
             if (testConfiguration.Force)
             {
-                _logger.Warn($"TestsAfterMerge failed ({result.FailedCount} failed) but Force was set; continuing.");
+                _logger.Warn($"{failureMessage}{Environment.NewLine}Force was set; continuing.");
             }
             else
             {
-                throw new InvalidOperationException($"TestsAfterMerge failed ({result.FailedCount} failed).");
+                throw new InvalidOperationException(failureMessage);
             }
         }
+    }
+
+    private static string BuildTestsAfterMergeFailureMessage(ModuleTestSuiteResult result)
+    {
+        var message = $"TestsAfterMerge failed ({result.FailedCount} failed).";
+        if (result.FailureAnalysis is { FailedTests.Length: > 0 } analysis)
+        {
+            var lines = analysis.FailedTests
+                .Where(static failure => !string.IsNullOrWhiteSpace(failure.Name) || !string.IsNullOrWhiteSpace(failure.ErrorMessage))
+                .Take(5)
+                .Select(static failure => FormatTestsAfterMergeFailureLine(failure))
+                .ToArray();
+
+            if (lines.Length > 0)
+            {
+                var omittedCount = analysis.FailedTests.Length - lines.Length;
+                var details = string.Join(Environment.NewLine, lines);
+                if (omittedCount > 0)
+                    details = $"{details}{Environment.NewLine}Additional failed tests omitted: {omittedCount}.";
+
+                return $"{message}{Environment.NewLine}Failed tests:{Environment.NewLine}{details}";
+            }
+        }
+
+        var stdErrLine = GetFirstMeaningfulLine(result.StdErr);
+        if (!string.IsNullOrWhiteSpace(stdErrLine))
+            return $"{message}{Environment.NewLine}stderr: {stdErrLine}";
+
+        var stdOutLine = GetFirstMeaningfulLine(result.StdOut);
+        if (!string.IsNullOrWhiteSpace(stdOutLine))
+            return $"{message}{Environment.NewLine}stdout: {stdOutLine}";
+
+        return message;
+    }
+
+    private static string FormatTestsAfterMergeFailureLine(ModuleTestFailureInfo failure)
+    {
+        var testName = string.IsNullOrWhiteSpace(failure.Name) ? "<unnamed test>" : failure.Name.Trim();
+        var errorLine = GetFirstMeaningfulLine(failure.ErrorMessage);
+        return string.IsNullOrWhiteSpace(errorLine)
+            ? $"- {testName}"
+            : $"- {testName}: {errorLine}";
+    }
+
+    private static string? GetFirstMeaningfulLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var nonEmptyText = text!;
+        foreach (var line in nonEmptyText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length > 0)
+                return trimmed;
+        }
+
+        return null;
     }
 
     private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
