@@ -788,11 +788,27 @@ public sealed partial class ModulePipelineRunner
         bool binaryModuleDocumentationRequested)
     {
         var reasons = new List<string>();
+        var hasFrameworks = HasAnyConfiguredValues(dotnetFrameworksFromSegments)
+                            || HasAnyConfiguredValues(spec.Build.Frameworks);
+        var hasBinaryModules = HasAnyConfiguredValues(exportAssembliesFromSegments)
+                               || HasAnyConfiguredValues(spec.Build.ExportAssemblies);
+        var hasExplicitBinaryIntentBeyondFramework =
+            syncNETProjectVersion
+            || hasBinaryModules
+            || !string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName)
+            || HasAnyConfiguredValues(excludeLibraryFilterFromSegments)
+            || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
+            || doNotCopyLibrariesRecursivelyFromSegments == true
+            || spec.Build.DoNotCopyLibrariesRecursively
+            || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
             reasons.Add("SyncNETProjectVersion");
 
-        if (exportAssembliesFromSegments is { Length: > 0 } || spec.Build.ExportAssemblies is { Length: > 0 })
+        if (hasFrameworks && hasExplicitBinaryIntentBeyondFramework)
+            reasons.Add("NETFramework");
+
+        if (hasBinaryModules)
             reasons.Add("NETBinaryModule");
 
         if (!string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName))
@@ -811,6 +827,10 @@ public sealed partial class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private static bool HasAnyConfiguredValues(string[]? values)
+        => values is { Length: > 0 } &&
+           values.Any(static value => !string.IsNullOrWhiteSpace(value));
 
     private bool TryAddExternalModuleDependency(
         string moduleName,
