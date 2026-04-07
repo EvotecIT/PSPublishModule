@@ -15,7 +15,7 @@ internal static class ModuleBootstrapperGenerator
         string moduleName,
         ExportSet exports,
         IReadOnlyList<string>? exportAssemblies,
-        bool handleRuntimes = false)
+        bool handleRuntimes)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
@@ -245,27 +245,36 @@ internal static class ModuleBootstrapperGenerator
     private static string BuildRuntimeHandlerBlock()
     {
         return string.Join(
-            "\r\n",
-            new[]
-            {
-                "# Ensure native runtime libraries are discoverable on Windows",
-                "if ($IsWindows -and $LibFolder) {",
-                "    $Arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
-                "    $ArchFolder = switch ($Arch) {",
-                "        'X64'   { 'win-x64' }",
-                "        'X86'   { 'win-x86' }",
-                "        'Arm64' { 'win-arm64' }",
-                "        'Arm'   { 'win-arm' }",
-                "        Default { 'win-x64' }",
-                "    }",
-                string.Empty,
-                "    $NativePath = Join-Path -Path $PSScriptRoot -ChildPath (\"Lib\\{0}\\runtimes\\{1}\\native\" -f $LibFolder, $ArchFolder)",
-                "    if ((Test-Path -LiteralPath $NativePath) -and ($env:PATH -notlike \"*$NativePath*\")) {",
-                "        $env:PATH = \"$NativePath;$env:PATH\"",
-                "    }",
-                "}",
-                string.Empty
-            });
+                   "\r\n",
+                   new[]
+                   {
+                       "# Ensure native runtime libraries are discoverable on Windows",
+                       "$IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
+                       "if ($IsWindowsPlatform -and $LibFolder) {",
+                       "    $Arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                       "    $ArchFolder = switch ($Arch) {",
+                       "        'X64'   { 'win-x64' }",
+                       "        'X86'   { 'win-x86' }",
+                       "        'Arm64' { 'win-arm64' }",
+                       "        'Arm'   { 'win-arm' }",
+                       "        Default {",
+                       "            Write-Warning -Message (\"Unknown Windows architecture '{0}'. Falling back to win-x64 native runtime probing.\" -f $Arch)",
+                       "            'win-x64'",
+                       "        }",
+                       "    }",
+                       string.Empty,
+                       "    $NativePath = Join-Path -Path $PSScriptRoot -ChildPath (\"Lib\\{0}\\runtimes\\{1}\\native\" -f $LibFolder, $ArchFolder)",
+                       "    $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
+                       "    if ((Test-Path -LiteralPath $NativePath) -and ($PathEntries -notcontains $NativePath)) {",
+                       "        if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
+                       "            $env:PATH = $NativePath",
+                       "        } else {",
+                       "            $env:PATH = \"$NativePath$([IO.Path]::PathSeparator)$env:PATH\"",
+                       "        }",
+                       "    }",
+                       "}",
+                       string.Empty
+                   });
     }
 
     private static string RenderModuleBootstrapperTemplate(

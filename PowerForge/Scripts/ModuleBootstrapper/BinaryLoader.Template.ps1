@@ -48,8 +48,7 @@ if ($PSEdition -eq 'Core') {
     $LibFolder = $FrameworkNet
 }
 
-{{RuntimeHandlerBlock}}
-try {
+{{RuntimeHandlerBlock}}try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 
     if (-not ($Class -as [type])) {

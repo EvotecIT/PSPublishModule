@@ -12,7 +12,7 @@ public class ModuleBootstrapperGeneratorTests
         try
         {
             var exports = new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), new[] { "gdemo" });
-            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" });
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" }, handleRuntimes: false);
 
             var librariesPath = Path.Combine(root, "DemoModule.Libraries.ps1");
             var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
@@ -51,8 +51,12 @@ public class ModuleBootstrapperGeneratorTests
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("ProcessArchitecture", bootstrapper);
+            Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
             Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
-            Assert.Contains("$env:PATH = \"$NativePath;$env:PATH\"", bootstrapper);
+            Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
+            Assert.Contains("($PathEntries -notcontains $NativePath)", bootstrapper);
+            Assert.Contains("Unknown Windows architecture", bootstrapper);
+            Assert.DoesNotContain("\r\n\r\ntry {", bootstrapper);
         }
         finally
         {
@@ -71,7 +75,7 @@ public class ModuleBootstrapperGeneratorTests
         try
         {
             var exports = new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>());
-            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null);
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null, handleRuntimes: false);
 
             var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
             Assert.True(File.Exists(bootstrapperPath));
@@ -101,7 +105,7 @@ public class ModuleBootstrapperGeneratorTests
         try
         {
             var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
-            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null);
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null, handleRuntimes: false);
 
             var after = File.ReadAllText(psm1Path);
             Assert.Equal(existing, after);
