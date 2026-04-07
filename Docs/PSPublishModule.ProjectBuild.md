@@ -114,7 +114,8 @@ Unified release entrypoint
   - `Outputs.Staging` in `release.json` for default folder names when you want the same categorized layout without repeating CLI switches
   - `Outputs.Staging.*Path` values may point multiple categories at the same folder when you want a flat `UploadReady` layout such as `NuGet` + `GitHub`
   - `Outputs.Staging.*NameTemplate` values let the staged copies use release-facing names instead of raw internal build names
-  - `Winget` in `release.json` when you want PowerForge to emit portable/signed release manifests from the same staged assets
+- `Winget` in `release.json` when you want PowerForge to emit portable/signed release manifests from the same staged assets
+- top-level `GitHub` in `release.json` when you want the unified staged release itself uploaded as one repo release instead of using package-host or per-target tool release publishing
   - `--keep-symbols` for symbol-preserving tool/app outputs
   - `--skip-release-checksums` when you want the staged release folder but do not want a top-level `SHA256SUMS.txt`
   - `--sign`, `--sign-profile`, and raw overrides such as `--sign-thumbprint`, `--sign-subject-name`, `--sign-timestamp-url`, `--sign-tool-path`
@@ -197,7 +198,22 @@ Example Winget generation from staged assets:
 
 - `InstallerUrlTemplate` tokens are URL-encoded automatically
 - `{FileName}` resolves to the staged filename after any `*NameTemplate` rewrite, not the raw internal artifact filename
+- when `--stage-root` (or `Outputs.Staging.RootPath`) is active, a relative `Winget.OutputPath` is resolved under that active staged release root so per-run `UploadReady\<release-id>\Winget` layouts work without hard-coded absolute paths
 - set `NestedInstallerType` explicitly for archive-based installers when you want a reusable config that is not implicitly “portable zip only”
+
+Example unified GitHub release publishing from staged assets:
+
+```json
+"GitHub": {
+  "Publish": true,
+  "TagTemplate": "v{Version}",
+  "ReleaseNameTemplate": "{Repository} {Version}"
+}
+```
+
+- use `--publish-project-github` (or set `GitHub.Publish: true`) to upload the unified staged release as one repo release
+- when top-level `GitHub` is active, package-host GitHub publishing is suppressed and the staged release assets are uploaded instead
+- uploaded assets include staged `NuGet`, `Portable`, `Installer`, `Tool`, metadata files, top-level `release-manifest.json` / `SHA256SUMS.txt`, and any generated Winget manifests
 
 - Plan or build preview executables only:
 

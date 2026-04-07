@@ -22,6 +22,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public PowerForgeReleaseOutputsOptions Outputs { get; set; } = new();
 
+    public PowerForgeReleaseGitHubOptions? GitHub { get; set; }
+
     public PowerForgeReleaseWingetOptions? Winget { get; set; }
 }
 
@@ -176,6 +178,8 @@ internal sealed class PowerForgeReleaseResult
 
     public PowerForgeReleaseAssetEntry[] ReleaseAssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
 
+    public PowerForgeUnifiedGitHubReleaseResult? UnifiedGitHubRelease { get; set; }
+
     public string? ReleaseManifestPath { get; set; }
 
     public string? ReleaseChecksumsPath { get; set; }
@@ -230,6 +234,29 @@ internal sealed class PowerForgeReleaseStagingOptions
     public string? MetadataNameTemplate { get; set; }
 
     public string? OtherNameTemplate { get; set; }
+}
+
+internal sealed class PowerForgeReleaseGitHubOptions
+{
+    public bool Publish { get; set; }
+
+    public string? Owner { get; set; }
+
+    public string? Repository { get; set; }
+
+    public string? Token { get; set; }
+
+    public string? TokenFilePath { get; set; }
+
+    public string? TokenEnvName { get; set; }
+
+    public bool GenerateReleaseNotes { get; set; } = true;
+
+    public bool IsPreRelease { get; set; }
+
+    public string? TagTemplate { get; set; }
+
+    public string? ReleaseNameTemplate { get; set; }
 }
 
 internal sealed class PowerForgeReleaseWingetOptions
@@ -415,6 +442,31 @@ internal sealed class PowerForgeToolGitHubReleaseResult
     public string Repository { get; set; } = string.Empty;
 
     public string Target { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string TagName { get; set; } = string.Empty;
+
+    public string ReleaseName { get; set; } = string.Empty;
+
+    public string[] AssetPaths { get; set; } = Array.Empty<string>();
+
+    public bool Success { get; set; }
+
+    public string? ReleaseUrl { get; set; }
+
+    public bool ReusedExistingRelease { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
+    public string[] SkippedExistingAssets { get; set; } = Array.Empty<string>();
+}
+
+internal sealed class PowerForgeUnifiedGitHubReleaseResult
+{
+    public string Owner { get; set; } = string.Empty;
+
+    public string Repository { get; set; } = string.Empty;
 
     public string Version { get; set; } = string.Empty;
 
