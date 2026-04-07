@@ -105,6 +105,12 @@ public sealed class ModuleBuilder
         /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
         /// </summary>
         public bool DoNotCopyLibrariesRecursively { get; set; }
+
+        /// <summary>
+        /// Explicit binary-build settings that require a resolvable .csproj path for this build.
+        /// When populated and <see cref="CsprojPath"/> is empty, the builder fails instead of reusing an existing Lib payload.
+        /// </summary>
+        public IReadOnlyList<string> CsprojRequiredReasons { get; set; } = Array.Empty<string>();
     }
 
     /// <summary>
@@ -189,6 +195,19 @@ public sealed class ModuleBuilder
         }
         else
         {
+            var csprojRequiredReasons = (opts.CsprojRequiredReasons ?? Array.Empty<string>())
+                .Where(static reason => !string.IsNullOrWhiteSpace(reason))
+                .Select(static reason => reason.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (csprojRequiredReasons.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"No CsprojPath could be resolved for '{opts.ModuleName}', but the build explicitly configured binary module settings that require a .NET project: {string.Join(", ", csprojRequiredReasons)}. " +
+                    "Configure Build.CsprojPath or NETProjectPath, or remove those binary build settings if this module intentionally ships a prebuilt Lib payload.");
+            }
+
             var existingLibRoot = Path.Combine(opts.ProjectRoot, "Lib");
             var hasExistingBinaryPayload = Directory.Exists(existingLibRoot) &&
                                            Directory.EnumerateFiles(existingLibRoot, "*.dll", SearchOption.AllDirectories).Any();

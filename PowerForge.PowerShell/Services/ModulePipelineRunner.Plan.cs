@@ -72,6 +72,7 @@ public sealed partial class ModulePipelineRunner
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
+        bool binaryModuleDocumentationRequested = false;
 
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
@@ -262,6 +263,7 @@ public sealed partial class ModulePipelineRunner
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
+                    if (bl.NETBinaryModuleDocumentation == true) binaryModuleDocumentationRequested = true;
                     break;
                 }
                 case ConfigurationModuleSegment moduleSeg:
@@ -495,9 +497,21 @@ public sealed partial class ModulePipelineRunner
                 resolveBinaryConflictsProjectName?.Trim()
                 ?? netProjectName?.Trim();
 
-            if (!string.IsNullOrWhiteSpace(inferred))
-                exportAssemblies = new[] { inferred! };
+        if (!string.IsNullOrWhiteSpace(inferred))
+            exportAssemblies = new[] { inferred! };
         }
+
+        var csprojRequiredReasons = refreshPsd1Only
+            ? Array.Empty<string>()
+            : BuildMissingCsprojReasonList(
+                spec,
+                syncNETProjectVersion,
+                dotnetFrameworksFromSegments,
+                exportAssembliesFromSegments,
+                excludeLibraryFilterFromSegments,
+                doNotCopyLibrariesRecursivelyFromSegments,
+                resolveBinaryConflictsProjectName,
+                binaryModuleDocumentationRequested);
 
         var buildSpec = new ModuleBuildSpec
         {
@@ -520,6 +534,7 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
+            CsprojRequiredReasons = string.IsNullOrWhiteSpace(csproj) ? csprojRequiredReasons : Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = requiredModulesDraft
                 .Select(static module => module.ModuleName)
                 .Where(static name => !string.IsNullOrWhiteSpace(name))
@@ -760,6 +775,44 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter);
+    }
+
+    private static string[] BuildMissingCsprojReasonList(
+        ModulePipelineSpec spec,
+        bool syncNETProjectVersion,
+        string[]? dotnetFrameworksFromSegments,
+        string[]? exportAssembliesFromSegments,
+        string[]? excludeLibraryFilterFromSegments,
+        bool? doNotCopyLibrariesRecursivelyFromSegments,
+        string? resolveBinaryConflictsProjectName,
+        bool binaryModuleDocumentationRequested)
+    {
+        var reasons = new List<string>();
+
+        if (syncNETProjectVersion)
+            reasons.Add("SyncNETProjectVersion");
+
+        if (dotnetFrameworksFromSegments is { Length: > 0 } || spec.Build.Frameworks is { Length: > 0 })
+            reasons.Add("NETFramework");
+
+        if (exportAssembliesFromSegments is { Length: > 0 } || spec.Build.ExportAssemblies is { Length: > 0 })
+            reasons.Add("NETBinaryModule");
+
+        if (!string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName))
+            reasons.Add("ResolveBinaryConflictsName");
+
+        if (excludeLibraryFilterFromSegments is { Length: > 0 } || spec.Build.ExcludeLibraryFilter is { Length: > 0 })
+            reasons.Add("NETExcludeLibraryFilter");
+
+        if (doNotCopyLibrariesRecursivelyFromSegments == true || spec.Build.DoNotCopyLibrariesRecursively)
+            reasons.Add("NETDoNotCopyLibrariesRecursively");
+
+        if (binaryModuleDocumentationRequested)
+            reasons.Add("NETBinaryModuleDocumentation");
+
+        return reasons
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private bool TryAddExternalModuleDependency(
