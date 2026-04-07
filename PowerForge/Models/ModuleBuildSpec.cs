@@ -105,6 +105,12 @@ public sealed class ModuleBuildSpec
     public bool KeepStaging { get; set; }
 
     /// <summary>
+    /// Explicit binary-build settings that require a resolvable .csproj path for this build.
+    /// When populated and <see cref="CsprojPath"/> is empty, the builder should fail rather than reuse a stale Lib payload.
+    /// </summary>
+    public string[] CsprojRequiredReasons { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, only refreshes the manifest (PSD1) and skips binary publish/merge operations.
     /// </summary>
     public bool RefreshManifestOnly { get; set; }

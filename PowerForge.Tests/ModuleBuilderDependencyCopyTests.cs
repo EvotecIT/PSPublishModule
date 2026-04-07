@@ -320,6 +320,49 @@ public sealed class ModuleBuilderDependencyCopyTests
     }
 
     [Fact]
+    public void BuildInPlace_ThrowsWhenExistingLibPayloadWouldMaskExplicitBinaryBuildIntent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "TestModule";
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), string.Empty);
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psd1"), "@{ RootModule = 'TestModule.psm1'; ModuleVersion = '1.0.0' }");
+
+            var libDefault = Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+            File.WriteAllText(Path.Combine(libDefault.FullName, "Existing.Binary.dll"), "placeholder");
+
+            var builder = ModuleBuilderTestDependencies.Create(new CollectingLogger());
+            var ex = Assert.Throws<InvalidOperationException>(() => builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "1.0.0",
+                CsprojPath = string.Empty,
+                CsprojRequiredReasons = new[] { "NETFramework", "NETBinaryModule" }
+            }));
+
+            Assert.Contains("No CsprojPath could be resolved", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("NETFramework", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("NETBinaryModule", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
+    }
+
+    [Fact]
     public void CopyPublishOutputBinaries_SkipsRuntimeTargets_WhenDoNotCopyLibrariesRecursively()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
