@@ -127,6 +127,7 @@ internal sealed class PowerForgeReleaseService
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
         var configurationOverride = NormalizeConfiguration(request.Configuration);
         var runWorkspaceValidation = spec.WorkspaceValidation is not null && !request.SkipWorkspaceValidation;
+        var publishUnifiedGitHub = ShouldPublishUnifiedGitHub(spec, request);
 
         if (!runModule && !runPackages && !runTools && !runWorkspaceValidation)
         {
@@ -190,7 +191,7 @@ internal sealed class PowerForgeReleaseService
                 ExecuteBuild = !request.PlanOnly && !request.ValidateOnly,
                 PlanOnly = request.PlanOnly || request.ValidateOnly ? true : null,
                 PublishNuget = request.PublishNuget,
-                PublishGitHub = request.PublishProjectGitHub
+                PublishGitHub = publishUnifiedGitHub ? false : request.PublishProjectGitHub
             };
 
             var packages = _executePackages(packageRequest, spec.Packages!, configPath);
@@ -279,7 +280,20 @@ internal sealed class PowerForgeReleaseService
         if (!request.PlanOnly && !request.ValidateOnly)
         {
             PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
-            GenerateWingetOutputs(spec, configDirectory, result);
+            GenerateWingetOutputs(spec, request, configDirectory, result);
+            IncludeWingetOutputsInReleaseAssets(result);
+            if (publishUnifiedGitHub)
+            {
+                var unifiedGitHubRelease = PublishUnifiedGitHubRelease(spec, configDirectory, result, sharedReleaseVersion);
+                result.UnifiedGitHubRelease = unifiedGitHubRelease;
+                if (!unifiedGitHubRelease.Success)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = unifiedGitHubRelease.ErrorMessage ?? "Unified GitHub release publishing failed.";
+                    return result;
+                }
+            }
+            RewriteReleaseSummaryFiles(result);
         }
 
         return result;
@@ -562,67 +576,37 @@ internal sealed class PowerForgeReleaseService
 
         if (!string.IsNullOrWhiteSpace(manifestPath))
         {
-            var resolvedManifestPath = manifestPath!;
-            var manifest = new
-            {
-                schemaVersion = 1,
-                createdUtc = DateTime.UtcNow.ToString("o"),
-                configPath = result.ConfigPath,
-                assets = result.ReleaseAssets,
-                assetEntries = assetEntries.Select(entry => new
-                {
-                    entry.Path,
-                    category = entry.Category.ToString(),
-                    entry.Source,
-                    entry.Target,
-                    entry.PackageId,
-                    entry.Version,
-                    entry.Runtime,
-                    entry.Framework,
-                    entry.Style,
-                    entry.BundleId,
-                    entry.RelativeStagePath,
-                    entry.StagedPath
-                }).ToArray(),
-                module = BuildModuleManifestSection(result.ModulePlan, result.Module, result.ModuleAssets),
-                packages = BuildPackageManifestSection(result.Packages),
-                legacyTools = BuildLegacyToolsManifestSection(result.Tools),
-                dotNetTools = BuildDotNetToolsManifestSection(result.DotNetTools),
-                githubReleases = result.ToolGitHubReleases
-            };
-
-            Directory.CreateDirectory(Path.GetDirectoryName(resolvedManifestPath)!);
-            var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
-            File.WriteAllText(resolvedManifestPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            result.ReleaseManifestPath = resolvedManifestPath;
+            result.ReleaseManifestPath = manifestPath!;
+            WriteReleaseManifest(result, manifestPath!);
         }
 
         if (!string.IsNullOrWhiteSpace(checksumsPath))
         {
-            var resolvedChecksumsPath = checksumsPath!;
-            var checksumInputs = new List<string>(result.ReleaseAssets);
-            var releaseManifestPath = result.ReleaseManifestPath;
-            if (!string.IsNullOrWhiteSpace(releaseManifestPath) && File.Exists(releaseManifestPath))
-                checksumInputs.Add(releaseManifestPath!);
-
-            var uniqueChecksumInputs = checksumInputs
-                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            Directory.CreateDirectory(Path.GetDirectoryName(resolvedChecksumsPath)!);
-            var relativeTo = Path.GetDirectoryName(resolvedChecksumsPath)!;
-            var lines = uniqueChecksumInputs
-                .Select(path => $"{ComputeSha256(path!)} *{GetRelativePathCompat(relativeTo, path!).Replace('\\', '/')}")
-                .ToArray();
-            File.WriteAllLines(resolvedChecksumsPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            result.ReleaseChecksumsPath = resolvedChecksumsPath;
+            result.ReleaseChecksumsPath = checksumsPath!;
+            WriteReleaseChecksums(result, checksumsPath!);
         }
+    }
+
+    private static bool ShouldPublishUnifiedGitHub(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    {
+        return spec.GitHub is not null && (request.PublishProjectGitHub ?? spec.GitHub.Publish);
+    }
+
+    private static string? ResolveConfiguredStageRoot(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        string configDirectory)
+    {
+        var stageRootTemplate = request.StageRoot ?? spec.Outputs?.Staging?.RootPath;
+        if (string.IsNullOrWhiteSpace(stageRootTemplate))
+            return null;
+
+        return ResolveOutputPath(configDirectory, stageRootTemplate!);
     }
 
     private void GenerateWingetOutputs(
         PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
         string configDirectory,
         PowerForgeReleaseResult result)
     {
@@ -630,9 +614,8 @@ internal sealed class PowerForgeReleaseService
         if (winget is null || !winget.Enabled || winget.Packages.Length == 0)
             return;
 
-        var outputPath = string.IsNullOrWhiteSpace(winget.OutputPath)
-            ? ResolveOutputPath(configDirectory, Path.Combine("Artifacts", "Winget"))
-            : ResolveOutputPath(configDirectory, winget.OutputPath!);
+        var stageRoot = ResolveConfiguredStageRoot(spec, request, configDirectory);
+        var outputPath = ResolveWingetOutputPath(winget, configDirectory, stageRoot);
         Directory.CreateDirectory(outputPath);
 
         var manifestPaths = new List<string>();
@@ -669,6 +652,162 @@ internal sealed class PowerForgeReleaseService
         }
 
         result.WingetManifestPaths = manifestPaths.ToArray();
+    }
+
+    private static string ResolveWingetOutputPath(
+        PowerForgeReleaseWingetOptions winget,
+        string configDirectory,
+        string? stageRoot)
+    {
+        if (string.IsNullOrWhiteSpace(winget.OutputPath))
+        {
+            return !string.IsNullOrWhiteSpace(stageRoot)
+                ? Path.Combine(stageRoot!, "Winget")
+                : ResolveOutputPath(configDirectory, Path.Combine("Artifacts", "Winget"));
+        }
+
+        if (!Path.IsPathRooted(winget.OutputPath) && !string.IsNullOrWhiteSpace(stageRoot))
+            return Path.GetFullPath(Path.Combine(stageRoot!, winget.OutputPath!));
+
+        return ResolveOutputPath(configDirectory, winget.OutputPath!);
+    }
+
+    private static void IncludeWingetOutputsInReleaseAssets(PowerForgeReleaseResult result)
+    {
+        if (result.WingetManifestPaths.Length == 0)
+            return;
+
+        var entries = result.ReleaseAssetEntries.ToList();
+        foreach (var path in result.WingetManifestPaths
+                     .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (entries.Any(entry => string.Equals(entry.Path, path, StringComparison.OrdinalIgnoreCase)
+                                     || string.Equals(entry.StagedPath, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            entries.Add(new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Other,
+                Source = "Winget"
+            });
+        }
+
+        result.ReleaseAssetEntries = entries.ToArray();
+        result.ReleaseAssets = result.ReleaseAssetEntries
+            .Select(entry => entry.StagedPath ?? entry.Path)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    private static void RewriteReleaseSummaryFiles(PowerForgeReleaseResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ReleaseManifestPath))
+            WriteReleaseManifest(result, result.ReleaseManifestPath!);
+        if (!string.IsNullOrWhiteSpace(result.ReleaseChecksumsPath))
+            WriteReleaseChecksums(result, result.ReleaseChecksumsPath!);
+    }
+
+    private PowerForgeUnifiedGitHubReleaseResult PublishUnifiedGitHubRelease(
+        PowerForgeReleaseSpec spec,
+        string configDirectory,
+        PowerForgeReleaseResult result,
+        string? sharedReleaseVersion)
+    {
+        var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
+        var version = ResolveUnifiedReleaseVersion(result, sharedReleaseVersion);
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Success = false,
+                ErrorMessage = "Unable to resolve a shared release version for unified GitHub publishing."
+            };
+        }
+
+        var resolved = ResolveUnifiedGitHubConfiguration(spec, gitHub, configDirectory);
+        if (resolved.Error is not null)
+            return resolved.Error;
+
+        var assets = result.ReleaseAssets
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Concat(new[]
+            {
+                result.ReleaseManifestPath,
+                result.ReleaseChecksumsPath
+            }.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path => path!)
+            .ToArray();
+        if (assets.Length == 0)
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                Success = false,
+                ErrorMessage = "No staged release assets were available for unified GitHub publishing."
+            };
+        }
+
+        var tagTemplate = string.IsNullOrWhiteSpace(gitHub.TagTemplate)
+            ? "v{Version}"
+            : gitHub.TagTemplate!;
+        var releaseNameTemplate = string.IsNullOrWhiteSpace(gitHub.ReleaseNameTemplate)
+            ? "{Repository} {Version}"
+            : gitHub.ReleaseNameTemplate!;
+        var tagName = ApplyUnifiedGitHubTemplate(tagTemplate, resolved.Repository!, version!);
+        var releaseName = ApplyUnifiedGitHubTemplate(releaseNameTemplate, resolved.Repository!, version!);
+
+        try
+        {
+            var publishResult = _publishGitHubRelease(new GitHubReleasePublishRequest
+            {
+                Owner = resolved.Owner!,
+                Repository = resolved.Repository!,
+                Token = resolved.Token!,
+                TagName = tagName,
+                ReleaseName = releaseName,
+                GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                IsPreRelease = gitHub.IsPreRelease,
+                ReuseExistingReleaseOnConflict = true,
+                AssetFilePaths = assets
+            });
+
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner!,
+                Repository = resolved.Repository!,
+                Version = version!,
+                TagName = tagName,
+                ReleaseName = releaseName,
+                AssetPaths = assets,
+                Success = publishResult.Succeeded,
+                ReleaseUrl = publishResult.HtmlUrl,
+                ReusedExistingRelease = publishResult.ReusedExistingRelease,
+                ErrorMessage = publishResult.Succeeded ? null : "Unified GitHub release publish failed.",
+                SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>()
+            };
+        }
+        catch (Exception ex)
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                TagName = tagName,
+                ReleaseName = releaseName,
+                AssetPaths = assets,
+                Success = false,
+                ErrorMessage = ex.Message
+            };
+        }
     }
 
     private PowerForgeToolGitHubReleaseResult[] PublishLegacyToolGitHubReleases(
@@ -1459,6 +1598,111 @@ internal sealed class PowerForgeReleaseService
             .Replace("{UtcTimestamp}", utcNow.ToString("yyyyMMddHHmmss"));
     }
 
+    private static string ApplyUnifiedGitHubTemplate(string template, string repository, string version)
+    {
+        var now = DateTime.Now;
+        var utcNow = DateTime.UtcNow;
+        return template
+            .Replace("{Target}", string.Empty)
+            .Replace("{Project}", string.Empty)
+            .Replace("{Version}", version)
+            .Replace("{Repo}", repository)
+            .Replace("{Repository}", repository)
+            .Replace("{Date}", now.ToString("yyyy.MM.dd"))
+            .Replace("{UtcDate}", utcNow.ToString("yyyy.MM.dd"))
+            .Replace("{DateTime}", now.ToString("yyyyMMddHHmmss"))
+            .Replace("{UtcDateTime}", utcNow.ToString("yyyyMMddHHmmss"))
+            .Replace("{Timestamp}", now.ToString("yyyyMMddHHmmss"))
+            .Replace("{UtcTimestamp}", utcNow.ToString("yyyyMMddHHmmss"));
+    }
+
+    private static string? ResolveUnifiedReleaseVersion(PowerForgeReleaseResult result, string? sharedReleaseVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+
+        var versions = result.ReleaseAssetEntries
+            .Select(entry => entry.Version)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (versions.Length == 1)
+            return versions[0];
+
+        return null;
+    }
+
+    private static (string? Owner, string? Repository, string? Token, PowerForgeUnifiedGitHubReleaseResult? Error) ResolveUnifiedGitHubConfiguration(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseGitHubOptions gitHub,
+        string configDirectory)
+    {
+        var owner = FirstNonEmpty(gitHub.Owner, spec.Packages?.GitHubUsername)?.Trim();
+        var repository = FirstNonEmpty(gitHub.Repository, spec.Packages?.GitHubRepositoryName)?.Trim();
+        var token = ResolveSecret(FirstNonEmpty(gitHub.Token, spec.Packages?.GitHubAccessToken), FirstNonEmpty(gitHub.TokenFilePath, spec.Packages?.GitHubAccessTokenFilePath), FirstNonEmpty(gitHub.TokenEnvName, spec.Packages?.GitHubAccessTokenEnvName), configDirectory);
+
+        if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repository))
+        {
+            return (owner, repository, token, new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = owner ?? string.Empty,
+                Repository = repository ?? string.Empty,
+                Success = false,
+                ErrorMessage = "Unified GitHub release publishing requires Owner and Repository (or package GitHub defaults)."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return (owner, repository, token, new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = owner!,
+                Repository = repository!,
+                Success = false,
+                ErrorMessage = "Unified GitHub release publishing requires a GitHub token (direct value, file, or environment variable)."
+            });
+        }
+
+        return (owner, repository, token, null);
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
+    }
+
+    private static string? ResolveSecret(string? directValue, string? filePath, string? envName, string configDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(directValue))
+            return directValue!.Trim();
+
+        if (!string.IsNullOrWhiteSpace(filePath))
+        {
+            var resolvedPath = ResolveOutputPath(configDirectory, filePath!);
+            if (File.Exists(resolvedPath))
+            {
+                var fileValue = File.ReadAllText(resolvedPath).Trim();
+                if (!string.IsNullOrWhiteSpace(fileValue))
+                    return fileValue;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(envName))
+        {
+            var envValue = Environment.GetEnvironmentVariable(envName!.Trim());
+            if (!string.IsNullOrWhiteSpace(envValue))
+                return envValue.Trim();
+        }
+
+        return null;
+    }
+
     private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
         PowerForgeReleaseResult result,
         DotNetPublishPlan? dotNetPlan,
@@ -1974,6 +2218,62 @@ internal sealed class PowerForgeReleaseService
                 project.ReleaseZipPath
             }).ToArray()
         };
+    }
+
+    private static void WriteReleaseManifest(PowerForgeReleaseResult result, string manifestPath)
+    {
+        var manifest = new
+        {
+            schemaVersion = 1,
+            createdUtc = DateTime.UtcNow.ToString("o"),
+            configPath = result.ConfigPath,
+            assets = result.ReleaseAssets,
+            assetEntries = result.ReleaseAssetEntries.Select(entry => new
+            {
+                entry.Path,
+                category = entry.Category.ToString(),
+                entry.Source,
+                entry.Target,
+                entry.PackageId,
+                entry.Version,
+                entry.Runtime,
+                entry.Framework,
+                entry.Style,
+                entry.BundleId,
+                entry.RelativeStagePath,
+                entry.StagedPath
+            }).ToArray(),
+            module = BuildModuleManifestSection(result.ModulePlan, result.Module, result.ModuleAssets),
+            packages = BuildPackageManifestSection(result.Packages),
+            legacyTools = BuildLegacyToolsManifestSection(result.Tools),
+            dotNetTools = BuildDotNetToolsManifestSection(result.DotNetTools),
+            githubReleases = result.ToolGitHubReleases,
+            unifiedGithubRelease = result.UnifiedGitHubRelease
+        };
+
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
+        File.WriteAllText(manifestPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static void WriteReleaseChecksums(PowerForgeReleaseResult result, string checksumsPath)
+    {
+        var checksumInputs = new List<string>(result.ReleaseAssets);
+        if (!string.IsNullOrWhiteSpace(result.ReleaseManifestPath) && File.Exists(result.ReleaseManifestPath))
+            checksumInputs.Add(result.ReleaseManifestPath!);
+
+        var uniqueChecksumInputs = checksumInputs
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Directory.CreateDirectory(Path.GetDirectoryName(checksumsPath)!);
+        var relativeTo = Path.GetDirectoryName(checksumsPath)!;
+        var lines = uniqueChecksumInputs
+            .Select(path => $"{ComputeSha256(path!)} *{GetRelativePathCompat(relativeTo, path!).Replace('\\', '/')}")
+            .ToArray();
+        File.WriteAllLines(checksumsPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     private static object? BuildLegacyToolsManifestSection(PowerForgeToolReleaseResult? tools)
