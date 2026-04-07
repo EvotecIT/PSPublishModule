@@ -72,7 +72,7 @@ public sealed partial class ModulePipelineRunner
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
-        bool binaryModuleDocumentationRequested = false;
+        bool? binaryModuleDocumentationRequested = null;
 
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
@@ -263,7 +263,7 @@ public sealed partial class ModulePipelineRunner
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
-                    if (bl.NETBinaryModuleDocumentation == true) binaryModuleDocumentationRequested = true;
+                    if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;
                 }
                 case ConfigurationModuleSegment moduleSeg:
@@ -511,7 +511,7 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 resolveBinaryConflictsProjectName,
-                binaryModuleDocumentationRequested);
+                binaryModuleDocumentationRequested == true);
 
         var buildSpec = new ModuleBuildSpec
         {
@@ -791,9 +791,6 @@ public sealed partial class ModulePipelineRunner
 
         if (syncNETProjectVersion)
             reasons.Add("SyncNETProjectVersion");
-
-        if (dotnetFrameworksFromSegments is { Length: > 0 } || spec.Build.Frameworks is { Length: > 0 })
-            reasons.Add("NETFramework");
 
         if (exportAssembliesFromSegments is { Length: > 0 } || spec.Build.ExportAssemblies is { Length: > 0 })
             reasons.Add("NETBinaryModule");

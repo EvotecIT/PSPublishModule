@@ -142,7 +142,7 @@ public sealed class ModuleBuildPipeline
             BinaryConflictReportRoot = spec.BinaryConflictReportRoot,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
-            CsprojRequiredReasons = spec.CsprojRequiredReasons ?? Array.Empty<string>(),
+            CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
         });
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");
