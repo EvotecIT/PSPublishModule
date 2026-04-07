@@ -100,7 +100,8 @@ public sealed class ModuleBuildSpec
     public bool DoNotCopyLibrariesRecursively { get; set; }
 
     /// <summary>
-    /// When true, the generated binary bootstrapper adds supported runtime-native folders to PATH.
+    /// When true, the generated binary bootstrapper adds supported Windows runtime-native folders to PATH.
+    /// Non-Windows platforms keep their default native library probing behavior.
     /// </summary>
     public bool HandleRuntimes { get; set; }
 
