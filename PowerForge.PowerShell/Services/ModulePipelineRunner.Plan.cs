@@ -814,7 +814,7 @@ public sealed partial class ModulePipelineRunner
         if (!string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName))
             reasons.Add("ResolveBinaryConflictsName");
 
-        if (excludeLibraryFilterFromSegments is { Length: > 0 } || spec.Build.ExcludeLibraryFilter is { Length: > 0 })
+        if (HasAnyConfiguredValues(excludeLibraryFilterFromSegments) || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter))
             reasons.Add("NETExcludeLibraryFilter");
 
         if (doNotCopyLibrariesRecursivelyFromSegments == true || spec.Build.DoNotCopyLibrariesRecursively)
