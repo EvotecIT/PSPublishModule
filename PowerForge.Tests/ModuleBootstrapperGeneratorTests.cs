@@ -28,6 +28,31 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
+            Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithHandleRuntimes_EmitsRuntimeBootstrapperBlock()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-runtime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" }, handleRuntimes: true);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("ProcessArchitecture", bootstrapper);
+            Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
+            Assert.Contains("$env:PATH = \"$NativePath;$env:PATH\"", bootstrapper);
         }
         finally
         {

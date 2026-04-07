@@ -100,6 +100,11 @@ public sealed class ModuleBuildSpec
     public bool DoNotCopyLibrariesRecursively { get; set; }
 
     /// <summary>
+    /// When true, the generated binary bootstrapper adds supported runtime-native folders to PATH.
+    /// </summary>
+    public bool HandleRuntimes { get; set; }
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }
