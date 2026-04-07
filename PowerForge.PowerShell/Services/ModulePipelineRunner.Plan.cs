@@ -792,14 +792,15 @@ public sealed partial class ModulePipelineRunner
                             || HasAnyConfiguredValues(spec.Build.Frameworks);
         var hasBinaryModules = HasAnyConfiguredValues(exportAssembliesFromSegments)
                                || HasAnyConfiguredValues(spec.Build.ExportAssemblies);
+        var effectiveDoNotCopyLibrariesRecursively =
+            doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
             || !string.IsNullOrWhiteSpace(resolveBinaryConflictsProjectName)
             || HasAnyConfiguredValues(excludeLibraryFilterFromSegments)
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
-            || doNotCopyLibrariesRecursivelyFromSegments == true
-            || spec.Build.DoNotCopyLibrariesRecursively
+            || effectiveDoNotCopyLibrariesRecursively
             || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
@@ -817,7 +818,7 @@ public sealed partial class ModulePipelineRunner
         if (HasAnyConfiguredValues(excludeLibraryFilterFromSegments) || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter))
             reasons.Add("NETExcludeLibraryFilter");
 
-        if (doNotCopyLibrariesRecursivelyFromSegments == true || spec.Build.DoNotCopyLibrariesRecursively)
+        if (effectiveDoNotCopyLibrariesRecursively)
             reasons.Add("NETDoNotCopyLibrariesRecursively");
 
         if (binaryModuleDocumentationRequested)

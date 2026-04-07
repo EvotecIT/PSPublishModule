@@ -366,6 +366,48 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void Plan_UsesLastBuildLibrariesValue_ForDoNotCopyLibrariesRecursivelyReason()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    DoNotCopyLibrariesRecursively = true
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            NETDoNotCopyLibrariesRecursively = false
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_UsesLastBuildLibrariesValue_ForBinaryModuleDocumentationReason()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
