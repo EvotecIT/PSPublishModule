@@ -70,6 +70,7 @@ public sealed partial class ModulePipelineRunner
         string[]? exportAssembliesFromSegments = null;
         string[]? excludeLibraryFilterFromSegments = null;
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
+        bool? handleRuntimesFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
         bool? binaryModuleDocumentationRequested = null;
@@ -262,6 +263,7 @@ public sealed partial class ModulePipelineRunner
                     if (bl.BinaryModule is { Length: > 0 }) exportAssembliesFromSegments = bl.BinaryModule;
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
+                    if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;
@@ -510,6 +512,7 @@ public sealed partial class ModulePipelineRunner
                 exportAssembliesFromSegments,
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
+                handleRuntimesFromSegments,
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true);
 
@@ -533,6 +536,7 @@ public sealed partial class ModulePipelineRunner
             ExportAssemblies = exportAssemblies,
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
+            HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             CsprojRequiredReasons = string.IsNullOrWhiteSpace(csproj) ? csprojRequiredReasons : Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = requiredModulesDraft
@@ -784,6 +788,7 @@ public sealed partial class ModulePipelineRunner
         string[]? exportAssembliesFromSegments,
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
+        bool? handleRuntimesFromSegments,
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested)
     {
@@ -794,6 +799,8 @@ public sealed partial class ModulePipelineRunner
                                || HasAnyConfiguredValues(spec.Build.ExportAssemblies);
         var effectiveDoNotCopyLibrariesRecursively =
             doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
+        var effectiveHandleRuntimes =
+            handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
@@ -801,6 +808,7 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(excludeLibraryFilterFromSegments)
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
+            || effectiveHandleRuntimes
             || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
@@ -820,6 +828,9 @@ public sealed partial class ModulePipelineRunner
 
         if (effectiveDoNotCopyLibrariesRecursively)
             reasons.Add("NETDoNotCopyLibrariesRecursively");
+
+        if (effectiveHandleRuntimes)
+            reasons.Add("NETHandleRuntimes");
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");

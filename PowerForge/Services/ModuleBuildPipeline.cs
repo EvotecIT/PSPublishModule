@@ -155,7 +155,7 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
-            ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies);
+            ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies, spec.HandleRuntimes);
         }
         else
         {
