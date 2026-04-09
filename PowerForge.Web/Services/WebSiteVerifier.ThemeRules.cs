@@ -73,10 +73,19 @@ public static partial class WebSiteVerifier
                 if (apiContract is null)
                 {
                     warnings.Add($"Theme contract: site enables 'apiDocs' but theme '{manifest.Name}' does not define featureContracts.apiDocs. " +
-                                 "Add requiredPartials (api-header/api-footer), cssHrefs (feature entrypoints), and requiredCssSelectors to prevent regressions across sites.");
+                                 "Add requiredPartials (api-header/api-footer" +
+                                 $"{(manifest.Tokens is { Count: > 0 } ? "/theme-tokens" : string.Empty)}), cssHrefs (feature entrypoints), and requiredCssSelectors to prevent regressions across sites.");
                 }
                 else
                 {
+                    if (manifest.Tokens is { Count: > 0 } &&
+                        !(apiContract.RequiredPartials ?? Array.Empty<string>())
+                            .Any(static partial => partial.Equals("theme-tokens", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        warnings.Add($"Theme contract: theme '{manifest.Name}' defines tokens and supports 'apiDocs', but featureContracts.apiDocs.requiredPartials does not include 'theme-tokens'. " +
+                                     "API pages can silently lose layout tokens such as max-width when the API head path drifts.");
+                    }
+
                     if ((apiContract.RequiredCssSelectors ?? Array.Empty<string>()).Length == 0)
                     {
                         warnings.Add($"Theme contract: theme '{manifest.Name}' featureContracts.apiDocs does not declare requiredCssSelectors. " +

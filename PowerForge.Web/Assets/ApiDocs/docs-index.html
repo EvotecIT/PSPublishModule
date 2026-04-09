@@ -12,21 +12,23 @@
 </head>
 <body class="{{BODY_CLASS}}">
 {{HEADER}}
-<div class="ev-project-split-frame ev-docs-workspace-frame ev-api-workspace-frame">
-  <div class="api-layout ev-docs-layout{{SIDEBAR_CLASS}}">
-  <button class="sidebar-toggle" type="button" aria-label="Toggle API navigation">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-      <path d="M4 6h16M4 12h16M4 18h16"/>
-    </svg>
-    <span>API Navigation</span>
-  </button>
-  <div class="sidebar-overlay"></div>
-  <aside class="api-sidebar ev-docs-sidebar">
+<div class="ev-container ev-api-shell-container">
+  <div class="ev-project-split-frame ev-docs-workspace-frame ev-api-workspace-frame">
+    <div class="api-layout ev-docs-layout{{SIDEBAR_CLASS}}">
+    <button class="sidebar-toggle" type="button" aria-label="Toggle API navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+      <span>API Navigation</span>
+    </button>
+    <div class="sidebar-overlay"></div>
+    <aside class="api-sidebar ev-docs-sidebar">
 {{SIDEBAR}}
-  </aside>
-  <main class="api-content ev-docs-card ev-article-body">
+    </aside>
+    <main class="api-content ev-docs-card ev-article-body">
 {{MAIN}}
-  </main>
+    </main>
+    </div>
   </div>
 </div>
 {{FOOTER}}

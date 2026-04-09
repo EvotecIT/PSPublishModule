@@ -85,7 +85,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - set `schemaVersion: 2`
    - declare `features`
    - define `featureContracts` for drift-prone features:
-     - `apiDocs`: required `api-header/api-footer` and required CSS selectors
+     - `apiDocs`: required `api-header/api-footer/theme-tokens` and required CSS selectors
      - `docs`: required `docs` layout and required slots/partials
    - for Scriban editorial layouts (`blog`/`news`), prefer `{{ pf.editorial_cards ... }}` + `{{ pf.editorial_pager ... }}` in list layouts so verify can detect regressions early
    - `pf.editorial_cards` supports variants (`default`, `compact`, `hero`, `featured`) plus optional `grid_class`/`card_class` overrides so themes can evolve layout style without duplicating list rendering loops
@@ -100,6 +100,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `{{ extra_scripts_html }}`
 7. API docs rule:
    - API pages must use the same global CSS as normal pages plus API-specific CSS.
+   - If the theme defines tokens, API docs must receive the same token partial/context as normal layouts so width, color, and spacing variables stay aligned.
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
    - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
 

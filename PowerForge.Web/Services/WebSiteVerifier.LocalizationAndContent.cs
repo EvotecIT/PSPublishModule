@@ -59,6 +59,7 @@ public static partial class WebSiteVerifier
                     Code = code,
                     Prefix = prefix,
                     BaseUrl = languageBaseUrl,
+                    RenderAtRoot = language.RenderAtRoot,
                     IsDefault = language.Default
                 });
                 if (language.Default)

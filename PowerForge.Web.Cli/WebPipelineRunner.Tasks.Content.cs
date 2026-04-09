@@ -372,6 +372,7 @@ internal static partial class WebPipelineRunner
                 GitFreshnessUpdatedDays = gitFreshnessUpdatedDays,
                 IncludeUndocumentedTypes = includeUndocumented,
                 NavJsonPath = nav,
+                SiteConfigPath = configPath,
                 // Default to root context for profile selection to avoid accidental "API header has different nav"
                 // when sites define /api profiles that override menus. Sites that want /api-specific menus can set navContextPath explicitly.
                 NavContextPath = navContextPath,

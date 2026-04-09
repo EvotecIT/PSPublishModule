@@ -16,6 +16,10 @@ public static partial class WebSiteVerifier
         RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
     private static readonly Regex MarkdownRawHtmlRegex = new("<\\s*(b|i|strong|em|u|h[1-6]|p|ul|ol|li|br)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex MarkdownBlockSyntaxRegex = new(
+        "^\\s*(#{1,6}\\s+|[-*+]\\s+|\\d+\\.\\s+)",
+        RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
     private static readonly Regex MarkdownMultilineMediaHtmlRegex = new(
         "<\\s*(img|iframe|video|source|picture)\\b(?=[^>]*\\r?\\n)[\\s\\S]*?>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -75,7 +79,7 @@ public static partial class WebSiteVerifier
                 {
                     errors.Add($"Missing title in: {file}");
                 }
-                ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, body, warnings);
+                ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, matter?.Meta, body, warnings);
 
                 var collectionRoot = WebSiteBuilder.ResolveCollectionRootForDiscovery(plan, collection, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
@@ -151,7 +155,7 @@ public static partial class WebSiteVerifier
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
-        ValidateNavigationLint(spec, plan, routes.Keys, warnings);
+        ValidateNavigationLint(spec, localization, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

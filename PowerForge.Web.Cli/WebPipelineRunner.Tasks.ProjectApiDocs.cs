@@ -48,11 +48,7 @@ internal static partial class WebPipelineRunner
             "./projects-sources");
         sourcesRoot = string.IsNullOrWhiteSpace(sourcesRoot) ? string.Empty : Path.GetFullPath(sourcesRoot);
 
-        var apiRoot = ResolvePath(baseDir,
-            GetString(step, "apiRoot") ??
-            GetString(step, "api-root") ??
-            "./data/project-api");
-        apiRoot = string.IsNullOrWhiteSpace(apiRoot) ? string.Empty : Path.GetFullPath(apiRoot);
+        var apiRoot = ResolveProjectApiArtifactRoot(step, baseDir, logger);
 
         var siteRoot = ResolvePath(baseDir,
             GetString(step, "siteRoot") ??
@@ -332,11 +328,11 @@ internal static partial class WebPipelineRunner
                     suiteEntries,
                     defaultCssHref,
                     siteConfigPath,
-                    generateSuiteSearch ? suiteSearchPath : null,
-                    generateSuiteXrefMap ? suiteXrefMapPath : null,
-                    generateSuiteCoverageReport ? suiteCoveragePath : null,
-                    generateSuiteRelatedContent ? suiteRelatedContentPath : null,
-                    suiteNarrativeManifestPaths.Length > 0 ? suiteNarrativePath : null,
+                    suiteArtifacts?.SearchOutputPath,
+                    suiteArtifacts?.XrefMapOutputPath,
+                    suiteArtifacts?.CoverageOutputPath,
+                    suiteArtifacts?.RelatedContentOutputPath,
+                    suiteArtifacts?.NarrativeOutputPath,
                     logger);
             }
             WriteProjectApiSuiteManifest(
@@ -1189,6 +1185,12 @@ internal static partial class WebPipelineRunner
 
         try
         {
+            var headHtmlPath = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html"));
+            var headerHtmlPath = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
+            var footerHtmlPath = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
+            if (!string.IsNullOrWhiteSpace(siteConfigPath))
+                TryResolveApiSuiteFragmentsFromTheme(siteConfigPath, ref headHtmlPath, ref headerHtmlPath, ref footerHtmlPath);
+
             var options = new WebApiDocsOptions
             {
                 OutputPath = landingRoot,
@@ -1196,12 +1198,13 @@ internal static partial class WebPipelineRunner
                 BaseUrl = suiteLandingUrl,
                 CssHref = cssHref,
                 CriticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css")),
-                HeadHtmlPath = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html")),
-                HeaderHtmlPath = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html")),
-                FooterHtmlPath = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html")),
+                HeadHtmlPath = headHtmlPath,
+                HeaderHtmlPath = headerHtmlPath,
+                FooterHtmlPath = footerHtmlPath,
                 TemplateRootPath = ResolvePath(baseDir, GetString(step, "templateRoot") ?? GetString(step, "template-root")),
                 DocsScriptPath = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script")),
                 NavJsonPath = siteConfigPath,
+                SiteConfigPath = siteConfigPath,
                 NavContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ?? "/",
                 NavContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection"),
                 NavContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout"),
@@ -1254,27 +1257,32 @@ internal static partial class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(suiteSearchPath))
         {
-            artifacts.SearchPath = WriteProjectApiSuiteSearch(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteSearchPath, logger);
+            artifacts.SearchOutputPath = WriteProjectApiSuiteSearch(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteSearchPath, logger);
+            artifacts.SearchPath = artifacts.SearchOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteXrefMapPath))
         {
-            artifacts.XrefMapPath = WriteProjectApiSuiteXref(preparedInputs, suiteXrefMapPath, logger);
+            artifacts.XrefMapOutputPath = WriteProjectApiSuiteXref(preparedInputs, suiteXrefMapPath, logger);
+            artifacts.XrefMapPath = artifacts.XrefMapOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteCoveragePath))
         {
-            artifacts.CoveragePath = WriteProjectApiSuiteCoverage(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteCoveragePath, logger);
+            artifacts.CoverageOutputPath = WriteProjectApiSuiteCoverage(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteCoveragePath, logger);
+            artifacts.CoveragePath = artifacts.CoverageOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteRelatedContentPath))
         {
-            artifacts.RelatedContentPath = WriteProjectApiSuiteRelatedContent(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteRelatedContentPath, logger);
+            artifacts.RelatedContentOutputPath = WriteProjectApiSuiteRelatedContent(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteRelatedContentPath, logger);
+            artifacts.RelatedContentPath = artifacts.RelatedContentOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteNarrativePath))
         {
-            artifacts.NarrativePath = WriteProjectApiSuiteNarrative(suiteNarrativeManifestPaths, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteNarrativePath, logger);
+            artifacts.NarrativeOutputPath = WriteProjectApiSuiteNarrative(suiteNarrativeManifestPaths, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteNarrativePath, logger);
+            artifacts.NarrativePath = artifacts.NarrativeOutputPath;
         }
 
         artifacts.SearchPath = BuildSuiteArtifactRelativePath(suiteManifestPath, artifacts.SearchPath);
@@ -2412,6 +2420,28 @@ internal static partial class WebPipelineRunner
         return File.Exists(defaultSiteConfig) ? defaultSiteConfig : null;
     }
 
+    private static string ResolveProjectApiArtifactRoot(JsonElement step, string baseDir, WebConsoleLogger? logger)
+    {
+        var explicitApiRoot = ResolvePath(baseDir,
+            GetString(step, "apiRoot") ??
+            GetString(step, "api-root"));
+        if (!string.IsNullOrWhiteSpace(explicitApiRoot))
+            return Path.GetFullPath(explicitApiRoot);
+
+        var defaultRoot = Path.GetFullPath(Path.Combine(baseDir, "data", "project-api"));
+        if (Directory.Exists(defaultRoot))
+            return defaultRoot;
+
+        var artifactRoot = Path.GetFullPath(Path.Combine(baseDir, "data", "project-api-artifacts"));
+        if (Directory.Exists(artifactRoot))
+        {
+            logger?.Warn($"project-apidocs: apiRoot not configured; using detected artifact root '{artifactRoot}' instead of missing default '{defaultRoot}'.");
+            return artifactRoot;
+        }
+
+        return defaultRoot;
+    }
+
     private static string ResolveProjectApiSuiteLandingUrl(
         string? explicitLandingUrl,
         string? suiteHomeUrl,
@@ -2580,6 +2610,11 @@ internal static partial class WebPipelineRunner
 
     private sealed class ProjectApiSuiteArtifacts
     {
+        public string? SearchOutputPath { get; set; }
+        public string? XrefMapOutputPath { get; set; }
+        public string? CoverageOutputPath { get; set; }
+        public string? RelatedContentOutputPath { get; set; }
+        public string? NarrativeOutputPath { get; set; }
         public string? SearchPath { get; set; }
         public string? XrefMapPath { get; set; }
         public string? CoveragePath { get; set; }

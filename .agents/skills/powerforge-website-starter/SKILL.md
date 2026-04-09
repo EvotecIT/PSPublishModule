@@ -35,6 +35,28 @@ Follow a deterministic "golden path" so agents can build sites without guessing.
 9. Update agent handoff docs so the next agent knows where everything is.
    - Paths to sibling repos, theme structure, and the site’s “rules”.
 
+## Regression Hotspots
+
+Check these explicitly when reviewing or refactoring an existing site:
+
+- Localization routing:
+  - Verify `localization.languages[].baseUrl`, `renderAtRoot`, and menu URLs agree.
+  - For languages rendered at their domain root (for example `evotec.pl/kontakt/`), do not keep public menu links under `/<lang>/...`.
+  - For localhost preview, check both the deployed public route intent and the generated local route/alias behavior.
+- Navigation consistency:
+  - Compare header, footer, docs, and API surfaces; do not assume `build -serve` validated them.
+  - Prefer running `verify` plus a rendered smoke pass or CI-mode pipeline, not just a fast preview build.
+- API docs shell parity:
+  - Compare `/projects/<slug>/` and `/projects/<slug>/api/` for shared width, spacing, nav alignment, and action rendering.
+  - If API header uses `{{NAV_ACTIONS}}`, confirm actions have the right icon/text contract for that theme.
+  - Keep `project-docs-sync.apiRoot` and `project-apidocs.apiRoot` aligned so local project tabs do not advertise API routes that the pipeline never generated.
+- Markdown hygiene:
+  - Watch for `meta.raw_html: true` on pages that still contain Markdown headings/lists.
+  - When pages mix components and Markdown, verify the rendered output instead of trusting front matter alone.
+- Localized smoke paths:
+  - Add CI audit coverage for key language routes and at least one API page.
+  - Use required routes for generated files and rendered smoke pages for user-facing navigation paths.
+
 ## Reference Files (Read As Needed)
 
 - `references/blueprint.md`: minimal recommended `site.json`/`pipeline.json`/theme contract patterns.

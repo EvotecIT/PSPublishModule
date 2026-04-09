@@ -416,7 +416,7 @@ $@"{{
         {
             featureContracts["apiDocs"] = new ThemeFeatureContractSpec
             {
-                RequiredPartials = new[] { "api-header", "api-footer" },
+                RequiredPartials = new[] { "api-header", "api-footer", "theme-tokens" },
                 CssHrefs = new[]
                 {
                     $"/themes/{themeName}/assets/app.css",
@@ -900,13 +900,18 @@ body.pf-api-body { background:
                   "sarif": true,
                   "baseline": "./.powerforge/audit-baseline.json",
                   "failOnNewIssues": true,
+                  "requiredRoutes": "/404.html,/",
                   "requireExplicitChecks": true,
                   "checkSeoMeta": false,
                   "checkNetworkHints": true,
                   "checkRenderBlockingResources": true,
                   "checkHeadingOrder": true,
                   "checkLinkPurposeConsistency": true,
-                  "checkMediaEmbeds": true
+                  "checkMediaEmbeds": true,
+                  "rendered": true,
+                  "renderedMaxPages": 2,
+                  "renderedEnsureInstalled": true,
+                  "renderedInclude": "index.html,404.html"
                 }
               ]
             }

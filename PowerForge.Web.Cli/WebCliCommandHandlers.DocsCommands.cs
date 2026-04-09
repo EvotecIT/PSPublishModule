@@ -185,6 +185,7 @@ internal static partial class WebCliCommandHandlers
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = navJson,
+            SiteConfigPath = navJson,
             NavSurfaceName = navSurface,
             GenerateCoverageReport = generateCoverageReport,
             CoverageReportPath = coverageReport,

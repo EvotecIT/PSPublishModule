@@ -346,11 +346,9 @@ public static partial class WebApiDocsGenerator
         {
             sb.AppendLine("      <div class=\"type-detail-shell\">");
             sb.AppendLine("        <div class=\"type-detail-main\">");
+            sb.Append(BuildTypeTocHtml(toc));
             sb.Append(detailBody.ToString());
             sb.AppendLine("        </div>");
-            sb.AppendLine("        <aside class=\"type-detail-rail\">");
-            sb.Append(BuildTypeTocHtml(toc));
-            sb.AppendLine("        </aside>");
             sb.AppendLine("      </div>");
         }
         else

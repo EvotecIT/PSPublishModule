@@ -21,6 +21,7 @@ public static partial class WebSiteBuilder
         foreach (var language in localization.Languages)
         {
             var route = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
+            var localRoute = string.IsNullOrWhiteSpace(route) ? currentPath : route;
             var publicRoute = route;
             if (!string.IsNullOrWhiteSpace(route) &&
                 !route.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
@@ -41,7 +42,8 @@ public static partial class WebSiteBuilder
                 RenderAtRoot = language.RenderAtRoot,
                 IsDefault = language.IsDefault,
                 IsCurrent = language.Code.Equals(currentCode, StringComparison.OrdinalIgnoreCase),
-                Url = string.IsNullOrWhiteSpace(url) ? currentPath : url
+                Url = string.IsNullOrWhiteSpace(url) ? currentPath : url,
+                LocalUrl = localRoute
             });
         }
 
@@ -56,7 +58,8 @@ public static partial class WebSiteBuilder
                 RenderAtRoot = true,
                 IsDefault = true,
                 IsCurrent = true,
-                Url = currentPath
+                Url = currentPath,
+                LocalUrl = currentPath
             });
         }
 

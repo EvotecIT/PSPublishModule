@@ -186,6 +186,8 @@ public static class WebStaticServer
         var rawPath = request.Url?.AbsolutePath ?? "/";
         var path = Uri.UnescapeDataString(rawPath);
         var filePath = ResolveFilePath(basePath, path);
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            filePath = ResolveLocalizedAliasFilePath(basePath, path);
 
         if (filePath is null || !File.Exists(filePath))
         {
@@ -257,6 +259,73 @@ public static class WebStaticServer
         }
 
         return candidate;
+    }
+
+    private static string? ResolveLocalizedAliasFilePath(string basePath, string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath) ||
+            string.Equals(urlPath, "/", StringComparison.Ordinal) ||
+            Path.HasExtension(urlPath))
+        {
+            return null;
+        }
+
+        if (HasLeadingLanguagePrefix(urlPath))
+            return null;
+
+        string[] languageDirectories;
+        try
+        {
+            languageDirectories = Directory.GetDirectories(basePath)
+                .Select(Path.GetFileName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name) && IsLanguageDirectoryName(name!))
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (languageDirectories.Length == 0)
+            return null;
+
+        string? match = null;
+        foreach (var languageDirectory in languageDirectories)
+        {
+            var candidatePath = ResolveFilePath(basePath, "/" + languageDirectory + urlPath);
+            if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(match))
+                return null;
+
+            match = candidatePath;
+        }
+
+        return match;
+    }
+
+    private static bool HasLeadingLanguagePrefix(string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath))
+            return false;
+
+        var trimmed = urlPath.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        var firstSegmentEnd = trimmed.IndexOf('/');
+        var firstSegment = firstSegmentEnd >= 0 ? trimmed[..firstSegmentEnd] : trimmed;
+        return IsLanguageDirectoryName(firstSegment);
+    }
+
+    private static bool IsLanguageDirectoryName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length != 2)
+            return false;
+
+        return char.IsLetter(value[0]) && char.IsLetter(value[1]);
     }
 
     private static string NormalizeRootPath(string path)

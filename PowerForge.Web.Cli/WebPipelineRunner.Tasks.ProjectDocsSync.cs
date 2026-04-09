@@ -507,9 +507,9 @@ internal static partial class WebPipelineRunner
                 continue;
 
             var slug = project.Slug.Trim().ToLowerInvariant();
-            var docsAvailable = HasProjectSurfaceContent(docsRoot, slug);
-            var apiAvailable = HasProjectSurfaceContent(apiRoot, slug);
-            var examplesAvailable = HasProjectSurfaceContent(examplesRoot, slug);
+            var docsAvailable = HasProjectMarkdownSurfaceContent(docsRoot, slug);
+            var apiAvailable = HasProjectArtifactSurfaceContent(apiRoot, slug);
+            var examplesAvailable = HasProjectMarkdownSurfaceContent(examplesRoot, slug);
 
             UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".md"), docsAvailable, apiAvailable, examplesAvailable);
             UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".docs.md"), docsAvailable, apiAvailable, examplesAvailable);
@@ -523,7 +523,7 @@ internal static partial class WebPipelineRunner
         }
     }
 
-    private static bool HasProjectSurfaceContent(string root, string slug)
+    private static bool HasProjectMarkdownSurfaceContent(string root, string slug)
     {
         if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(slug))
             return false;
@@ -535,6 +535,21 @@ internal static partial class WebPipelineRunner
             return false;
 
         return Directory.EnumerateFiles(projectRoot, "*.md", SearchOption.AllDirectories).Any();
+    }
+
+    private static bool HasProjectArtifactSurfaceContent(string root, string slug)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(slug))
+            return false;
+        if (!Directory.Exists(root))
+            return false;
+
+        var projectRoot = Path.Combine(root, slug);
+        if (!Directory.Exists(projectRoot))
+            return false;
+
+        return Directory.EnumerateFiles(projectRoot, "*", SearchOption.AllDirectories)
+            .Any(static path => !string.IsNullOrWhiteSpace(Path.GetFileName(path)));
     }
 
     private static void UpdateProjectLocalSurfaceFlags(

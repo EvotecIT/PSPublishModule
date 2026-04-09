@@ -170,12 +170,25 @@ public static partial class WebSiteAuditor
                 return true;
             }
 
+            if (TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: true, out var localizedIndexPath))
+            {
+                resolvedPath = localizedIndexPath;
+                return true;
+            }
+
             resolvedPath = indexPath;
             return true;
         }
 
         if (Path.HasExtension(candidate))
         {
+            if (!File.Exists(candidate) &&
+                TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: false, out var localizedFilePath))
+            {
+                resolvedPath = localizedFilePath;
+                return true;
+            }
+
             resolvedPath = candidate;
             return true;
         }
@@ -191,8 +204,99 @@ public static partial class WebSiteAuditor
         }
 
         var indexCandidate = Path.Combine(candidate, "index.html");
+        if (!File.Exists(indexCandidate) &&
+            TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: true, out var localizedIndexFallback))
+        {
+            resolvedPath = localizedIndexFallback;
+            return true;
+        }
+
         resolvedPath = indexCandidate;
         return true;
+    }
+
+    private static bool TryResolveLocalizedAliasTarget(
+        string siteRoot,
+        string baseDir,
+        string relative,
+        bool isDirectoryHint,
+        out string resolvedPath)
+    {
+        resolvedPath = string.Empty;
+        var languagePrefix = TryResolveAuditLanguagePrefix(siteRoot, baseDir);
+        if (string.IsNullOrWhiteSpace(languagePrefix) || string.IsNullOrWhiteSpace(relative))
+            return false;
+
+        var combinedRelative = Path.Combine(languagePrefix, relative.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var candidate = Path.GetFullPath(Path.Combine(siteRoot, combinedRelative));
+        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (isDirectoryHint)
+        {
+            var indexPath = Path.Combine(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), "index.html");
+            if (File.Exists(indexPath))
+            {
+                resolvedPath = indexPath;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (File.Exists(candidate))
+        {
+            resolvedPath = candidate;
+            return true;
+        }
+
+        if (Path.HasExtension(candidate))
+            return false;
+
+        foreach (var ext in DefaultHtmlExtensions)
+        {
+            var htmlCandidate = candidate + ext;
+            if (File.Exists(htmlCandidate))
+            {
+                resolvedPath = htmlCandidate;
+                return true;
+            }
+        }
+
+        var indexCandidate = Path.Combine(candidate, "index.html");
+        if (File.Exists(indexCandidate))
+        {
+            resolvedPath = indexCandidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? TryResolveAuditLanguagePrefix(string siteRoot, string baseDir)
+    {
+        if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(baseDir))
+            return null;
+
+        var relativeBase = Path.GetRelativePath(siteRoot, baseDir).Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(relativeBase) || relativeBase.StartsWith("..", StringComparison.Ordinal))
+            return null;
+
+        var slashIndex = relativeBase.IndexOf('/');
+        var firstSegment = slashIndex >= 0 ? relativeBase.Substring(0, slashIndex) : relativeBase;
+        return LooksLikeAuditLanguagePrefix(firstSegment) ? firstSegment : null;
+    }
+
+    private static bool LooksLikeAuditLanguagePrefix(string segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment))
+            return false;
+
+        var trimmed = segment.Trim();
+        if (trimmed.Length < 2 || trimmed.Length > 8)
+            return false;
+
+        return trimmed.All(ch => char.IsLetter(ch) || ch == '-');
     }
 
     private static string? ResolveBaseHref(AngleSharp.Dom.IDocument doc)
