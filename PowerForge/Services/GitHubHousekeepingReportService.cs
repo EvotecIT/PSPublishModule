@@ -69,34 +69,37 @@ public sealed class GitHubHousekeepingReportService
         if (report is null)
             throw new ArgumentNullException(nameof(report));
 
-        var markdown = new StringBuilder();
-        markdown.AppendLine("# PowerForge GitHub Housekeeping Report");
-        markdown.AppendLine();
+        var markdown = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: true);
+        markdown.RawLine("# PowerForge GitHub Housekeeping Report");
+        markdown.BlankLine();
 
         if (report.Result is null)
         {
-            markdown.AppendLine("> ❌ **Housekeeping failed before section results were produced**");
-            markdown.AppendLine();
-            markdown.AppendLine("| Field | Value |");
-            markdown.AppendLine("| --- | --- |");
-            markdown.AppendLine($"| Success | {(report.Success ? "Yes" : "No")} |");
-            markdown.AppendLine($"| Exit code | {report.ExitCode} |");
-            markdown.AppendLine($"| Error | {EscapeCell(report.Error)} |");
+            markdown.RawLine("> ❌ **Housekeeping failed before section results were produced**");
+            markdown.BlankLine();
+            markdown.RawLine(BuildFieldTable(new[]
+            {
+                new[] { "Success", report.Success ? "Yes" : "No" },
+                new[] { "Exit code", report.ExitCode.ToString() },
+                new[] { "Error", EscapeCell(report.Error) }
+            }).TrimEnd());
             return markdown.ToString();
         }
 
         var result = report.Result;
         var repository = string.IsNullOrWhiteSpace(result.Repository) ? "(runner-only)" : result.Repository;
-        markdown.AppendLine($"> {(report.Success ? "✅" : "❌")} **{repository}** ran in **{(result.DryRun ? "dry-run" : "apply")}** mode");
-        markdown.AppendLine();
-        markdown.AppendLine("| Field | Value |");
-        markdown.AppendLine("| --- | --- |");
-        markdown.AppendLine($"| Success | {(report.Success ? "Yes" : "No")} |");
-        markdown.AppendLine($"| Requested sections | {EscapeCell(string.Join(", ", result.RequestedSections))} |");
-        markdown.AppendLine($"| Completed sections | {EscapeCell(string.Join(", ", result.CompletedSections))} |");
-        markdown.AppendLine($"| Failed sections | {EscapeCell(string.Join(", ", result.FailedSections))} |");
+        markdown.RawLine($"> {(report.Success ? "✅" : "❌")} **{repository}** ran in **{(result.DryRun ? "dry-run" : "apply")}** mode");
+        markdown.BlankLine();
+        var summaryRows = new List<string[]>
+        {
+            new[] { "Success", report.Success ? "Yes" : "No" },
+            new[] { "Requested sections", EscapeCell(string.Join(", ", result.RequestedSections)) },
+            new[] { "Completed sections", EscapeCell(string.Join(", ", result.CompletedSections)) },
+            new[] { "Failed sections", EscapeCell(string.Join(", ", result.FailedSections)) }
+        };
         if (!string.IsNullOrWhiteSpace(result.Message))
-            markdown.AppendLine($"| Message | {EscapeCell(result.Message)} |");
+            summaryRows.Add(new[] { "Message", EscapeCell(result.Message) });
+        markdown.RawLine(BuildFieldTable(summaryRows).TrimEnd());
 
         AppendStorageSummary(markdown, result);
         AppendSelectionSummary(markdown, result);
@@ -130,64 +133,104 @@ public sealed class GitHubHousekeepingReportService
     public void WriteMarkdownReport(string path, string markdown)
         => WriteUtf8(path, markdown);
 
-    private static void AppendStorageSummary(StringBuilder markdown, GitHubHousekeepingResult result)
+    private static void AppendStorageSummary(MarkdownDocumentBuilder markdown, GitHubHousekeepingResult result)
     {
-        var rows = new List<string>();
+        var table = new MarkdownTableBuilder(
+            ["Section", "Status", "Planned", "Deleted", "Failed", "Before", "After"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left]);
+        var hasRows = false;
 
         if (result.Artifacts is not null)
         {
-            rows.Add($"| Artifacts | {StorageStatus(result.Artifacts.Success, result.Artifacts.FailedDeletes, result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.DeletedArtifacts)} | {CountAndBytes(result.Artifacts.PlannedDeletes, result.Artifacts.PlannedDeleteBytes)} | {CountAndBytes(result.Artifacts.DeletedArtifacts, result.Artifacts.DeletedBytes)} | {result.Artifacts.FailedDeletes} | - | - |");
+            table.AddRow(
+                "Artifacts",
+                StorageStatus(result.Artifacts.Success, result.Artifacts.FailedDeletes, result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.DeletedArtifacts),
+                CountAndBytes(result.Artifacts.PlannedDeletes, result.Artifacts.PlannedDeleteBytes),
+                CountAndBytes(result.Artifacts.DeletedArtifacts, result.Artifacts.DeletedBytes),
+                result.Artifacts.FailedDeletes.ToString(),
+                "-",
+                "-");
+            hasRows = true;
         }
 
         if (result.Caches is not null)
         {
-            rows.Add($"| Caches | {StorageStatus(result.Caches.Success, result.Caches.FailedDeletes, result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.DeletedCaches)} | {CountAndBytes(result.Caches.PlannedDeletes, result.Caches.PlannedDeleteBytes)} | {CountAndBytes(result.Caches.DeletedCaches, result.Caches.DeletedBytes)} | {result.Caches.FailedDeletes} | {CacheUsage(result.Caches.UsageBefore)} | {CacheUsage(result.Caches.UsageAfter)} |");
+            table.AddRow(
+                "Caches",
+                StorageStatus(result.Caches.Success, result.Caches.FailedDeletes, result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.DeletedCaches),
+                CountAndBytes(result.Caches.PlannedDeletes, result.Caches.PlannedDeleteBytes),
+                CountAndBytes(result.Caches.DeletedCaches, result.Caches.DeletedBytes),
+                result.Caches.FailedDeletes.ToString(),
+                CacheUsage(result.Caches.UsageBefore),
+                CacheUsage(result.Caches.UsageAfter));
+            hasRows = true;
         }
 
         if (result.Runner is not null)
         {
-            rows.Add($"| Runner | {(result.Runner.Success ? "ok" : "failed")} | - | - | {(result.Runner.Success ? "0" : "1")} | {FormatGiB(result.Runner.FreeBytesBefore)} | {FormatGiB(result.Runner.FreeBytesAfter)} |");
+            table.AddRow(
+                "Runner",
+                result.Runner.Success ? "ok" : "failed",
+                "-",
+                "-",
+                result.Runner.Success ? "0" : "1",
+                FormatGiB(result.Runner.FreeBytesBefore),
+                FormatGiB(result.Runner.FreeBytesAfter));
+            hasRows = true;
         }
 
-        if (rows.Count == 0)
+        if (!hasRows)
             return;
 
-        markdown.AppendLine();
-        markdown.AppendLine("## Storage Summary");
-        markdown.AppendLine();
-        markdown.AppendLine("| Section | Status | Planned | Deleted | Failed | Before | After |");
-        markdown.AppendLine("| --- | --- | ---: | ---: | ---: | --- | --- |");
-        foreach (var row in rows)
-            markdown.AppendLine(row);
+        markdown.BlankLine();
+        markdown.RawLine("## Storage Summary");
+        markdown.BlankLine();
+        markdown.RawLine(table.ToString().TrimEnd());
     }
 
-    private static void AppendSelectionSummary(StringBuilder markdown, GitHubHousekeepingResult result)
+    private static void AppendSelectionSummary(MarkdownDocumentBuilder markdown, GitHubHousekeepingResult result)
     {
-        var rows = new List<string>();
+        var table = new MarkdownTableBuilder(
+            ["Section", "Scanned", "Matched", "Kept recent", "Kept age", "Eligible", "Note"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Right, MarkdownTableAlignment.Left]);
+        var hasRows = false;
 
         if (result.Artifacts is not null)
         {
-            rows.Add($"| Artifacts | {result.Artifacts.ScannedArtifacts} | {result.Artifacts.MatchedArtifacts} | {result.Artifacts.KeptByRecentWindow} | {result.Artifacts.KeptByAgeThreshold} | {result.Artifacts.PlannedDeletes} | {SelectionNote(result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.KeptByRecentWindow, result.Artifacts.KeptByAgeThreshold)} |");
+            table.AddRow(
+                "Artifacts",
+                result.Artifacts.ScannedArtifacts.ToString(),
+                result.Artifacts.MatchedArtifacts.ToString(),
+                result.Artifacts.KeptByRecentWindow.ToString(),
+                result.Artifacts.KeptByAgeThreshold.ToString(),
+                result.Artifacts.PlannedDeletes.ToString(),
+                SelectionNote(result.Artifacts.MatchedArtifacts, result.Artifacts.PlannedDeletes, result.Artifacts.KeptByRecentWindow, result.Artifacts.KeptByAgeThreshold));
+            hasRows = true;
         }
 
         if (result.Caches is not null)
         {
-            rows.Add($"| Caches | {result.Caches.ScannedCaches} | {result.Caches.MatchedCaches} | {result.Caches.KeptByRecentWindow} | {result.Caches.KeptByAgeThreshold} | {result.Caches.PlannedDeletes} | {SelectionNote(result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.KeptByRecentWindow, result.Caches.KeptByAgeThreshold)} |");
+            table.AddRow(
+                "Caches",
+                result.Caches.ScannedCaches.ToString(),
+                result.Caches.MatchedCaches.ToString(),
+                result.Caches.KeptByRecentWindow.ToString(),
+                result.Caches.KeptByAgeThreshold.ToString(),
+                result.Caches.PlannedDeletes.ToString(),
+                SelectionNote(result.Caches.MatchedCaches, result.Caches.PlannedDeletes, result.Caches.KeptByRecentWindow, result.Caches.KeptByAgeThreshold));
+            hasRows = true;
         }
 
-        if (rows.Count == 0)
+        if (!hasRows)
             return;
 
-        markdown.AppendLine();
-        markdown.AppendLine("## Selection Breakdown");
-        markdown.AppendLine();
-        markdown.AppendLine("| Section | Scanned | Matched | Kept recent | Kept age | Eligible | Note |");
-        markdown.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | --- |");
-        foreach (var row in rows)
-            markdown.AppendLine(row);
+        markdown.BlankLine();
+        markdown.RawLine("## Selection Breakdown");
+        markdown.BlankLine();
+        markdown.RawLine(table.ToString().TrimEnd());
     }
 
-    private static void AppendArtifactDetails(StringBuilder markdown, GitHubArtifactCleanupResult? result)
+    private static void AppendArtifactDetails(MarkdownDocumentBuilder markdown, GitHubArtifactCleanupResult? result)
     {
         if (result is null)
             return;
@@ -197,29 +240,37 @@ public sealed class GitHubHousekeepingReportService
         AppendArtifactTable(markdown, "Failed artifacts", result.Failed);
     }
 
-    private static void AppendArtifactTable(StringBuilder markdown, string title, IReadOnlyList<GitHubArtifactCleanupItem> items)
+    private static void AppendArtifactTable(MarkdownDocumentBuilder markdown, string title, IReadOnlyList<GitHubArtifactCleanupItem> items)
     {
         if (items.Count == 0)
             return;
 
-        markdown.AppendLine();
-        markdown.AppendLine("<details>");
-        markdown.AppendLine($"<summary>{title} ({items.Count})</summary>");
-        markdown.AppendLine();
-        markdown.AppendLine("| Name | Size | Created | Updated | Reason | Delete status |");
-        markdown.AppendLine("| --- | ---: | --- | --- | --- | --- |");
+        var table = new MarkdownTableBuilder(
+            ["Name", "Size", "Created", "Updated", "Reason", "Delete status"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Right, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left]);
 
         foreach (var item in items.Take(20))
         {
-            markdown.AppendLine($"| {EscapeCell(item.Name)} | {FormatGiB(item.SizeInBytes)} | {FormatDate(item.CreatedAt)} | {FormatDate(item.UpdatedAt)} | {EscapeCell(item.Reason)} | {EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError))} |");
+            table.AddRow(
+                EscapeCell(item.Name),
+                FormatGiB(item.SizeInBytes),
+                FormatDate(item.CreatedAt),
+                FormatDate(item.UpdatedAt),
+                EscapeCell(item.Reason),
+                EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
         }
 
+        markdown.BlankLine();
+        markdown.RawLine("<details>");
+        markdown.RawLine($"<summary>{title} ({items.Count})</summary>");
+        markdown.BlankLine();
+        markdown.RawLine(table.ToString().TrimEnd());
         AppendTruncationNotice(markdown, items.Count);
-        markdown.AppendLine();
-        markdown.AppendLine("</details>");
+        markdown.BlankLine();
+        markdown.RawLine("</details>");
     }
 
-    private static void AppendCacheDetails(StringBuilder markdown, GitHubActionsCacheCleanupResult? result)
+    private static void AppendCacheDetails(MarkdownDocumentBuilder markdown, GitHubActionsCacheCleanupResult? result)
     {
         if (result is null)
             return;
@@ -229,57 +280,79 @@ public sealed class GitHubHousekeepingReportService
         AppendCacheTable(markdown, "Failed caches", result.Failed);
     }
 
-    private static void AppendCacheTable(StringBuilder markdown, string title, IReadOnlyList<GitHubActionsCacheCleanupItem> items)
+    private static void AppendCacheTable(MarkdownDocumentBuilder markdown, string title, IReadOnlyList<GitHubActionsCacheCleanupItem> items)
     {
         if (items.Count == 0)
             return;
 
-        markdown.AppendLine();
-        markdown.AppendLine("<details>");
-        markdown.AppendLine($"<summary>{title} ({items.Count})</summary>");
-        markdown.AppendLine();
-        markdown.AppendLine("| Key | Size | Created | Last accessed | Reason | Delete status |");
-        markdown.AppendLine("| --- | ---: | --- | --- | --- | --- |");
+        var table = new MarkdownTableBuilder(
+            ["Key", "Size", "Created", "Last accessed", "Reason", "Delete status"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Right, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Left]);
 
         foreach (var item in items.Take(20))
         {
-            markdown.AppendLine($"| {EscapeCell(item.Key)} | {FormatGiB(item.SizeInBytes)} | {FormatDate(item.CreatedAt)} | {FormatDate(item.LastAccessedAt)} | {EscapeCell(item.Reason)} | {EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError))} |");
+            table.AddRow(
+                EscapeCell(item.Key),
+                FormatGiB(item.SizeInBytes),
+                FormatDate(item.CreatedAt),
+                FormatDate(item.LastAccessedAt),
+                EscapeCell(item.Reason),
+                EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
         }
 
+        markdown.BlankLine();
+        markdown.RawLine("<details>");
+        markdown.RawLine($"<summary>{title} ({items.Count})</summary>");
+        markdown.BlankLine();
+        markdown.RawLine(table.ToString().TrimEnd());
         AppendTruncationNotice(markdown, items.Count);
-        markdown.AppendLine();
-        markdown.AppendLine("</details>");
+        markdown.BlankLine();
+        markdown.RawLine("</details>");
     }
 
-    private static void AppendRunnerDetails(StringBuilder markdown, RunnerHousekeepingResult? result)
+    private static void AppendRunnerDetails(MarkdownDocumentBuilder markdown, RunnerHousekeepingResult? result)
     {
         if (result is null || result.Steps.Length == 0)
             return;
 
-        markdown.AppendLine();
-        markdown.AppendLine("<details>");
-        markdown.AppendLine($"<summary>Runner steps ({result.Steps.Length})</summary>");
-        markdown.AppendLine();
-        markdown.AppendLine("| Step | Status | Entries | Message |");
-        markdown.AppendLine("| --- | --- | ---: | --- |");
+        var table = new MarkdownTableBuilder(
+            ["Step", "Status", "Entries", "Message"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Left, MarkdownTableAlignment.Right, MarkdownTableAlignment.Left]);
 
         foreach (var step in result.Steps.Take(20))
         {
-            markdown.AppendLine($"| {EscapeCell(step.Title)} | {(step.Success ? "ok" : "warning")} | {step.EntriesAffected} | {EscapeCell(step.Message)} |");
+            table.AddRow(
+                EscapeCell(step.Title),
+                step.Success ? "ok" : "warning",
+                step.EntriesAffected.ToString(),
+                EscapeCell(step.Message));
         }
 
+        markdown.BlankLine();
+        markdown.RawLine("<details>");
+        markdown.RawLine($"<summary>Runner steps ({result.Steps.Length})</summary>");
+        markdown.BlankLine();
+        markdown.RawLine(table.ToString().TrimEnd());
         AppendTruncationNotice(markdown, result.Steps.Length);
-        markdown.AppendLine();
-        markdown.AppendLine("</details>");
+        markdown.BlankLine();
+        markdown.RawLine("</details>");
     }
 
-    private static void AppendTruncationNotice(StringBuilder markdown, int count)
+    private static void AppendTruncationNotice(MarkdownDocumentBuilder markdown, int count)
     {
         if (count > 20)
         {
-            markdown.AppendLine();
-            markdown.AppendLine("_Showing first 20 items._");
+            markdown.BlankLine();
+            markdown.RawLine("_Showing first 20 items._");
         }
+    }
+
+    private static string BuildFieldTable(IEnumerable<string[]> rows)
+    {
+        var table = new MarkdownTableBuilder(["Field", "Value"]);
+        foreach (var row in rows)
+            table.AddRow(row[0], row[1]);
+        return table.ToString();
     }
 
     private static string CountAndBytes(int count, long bytes)

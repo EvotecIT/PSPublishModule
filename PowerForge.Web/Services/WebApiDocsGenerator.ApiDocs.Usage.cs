@@ -317,17 +317,76 @@ public static partial class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap)
     {
-        if (usage is null || !usage.HasEntries)
+        if (sb is null)
             return;
 
-        sb.AppendLine("      <section class=\"type-usage\" id=\"usage\">");
-        sb.AppendLine("        <h2>Usage</h2>");
-        sb.AppendLine("        <p class=\"type-usage-summary\">This type appears in these public API surfaces even when no hand-authored example is attached directly to the page.</p>");
-        if (usage.ReturnedOrExposedBy.Count > 0)
-            AppendUsageGroup(sb, "Returned or exposed by", usage.ReturnedOrExposedBy, baseUrl, slugMap);
-        if (usage.AcceptedByParameters.Count > 0)
-            AppendUsageGroup(sb, "Accepted by parameters", usage.AcceptedByParameters, baseUrl, slugMap);
-        sb.AppendLine("      </section>");
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        AppendUsageSection(html, usage, baseUrl, slugMap);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendUsageSection(
+        HtmlFragmentBuilder html,
+        ApiTypeUsageModel? usage,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (html is null || usage is null || !usage.HasEntries)
+            return;
+
+        html.Line("<section class=\"type-usage\" id=\"usage\">");
+        using (html.Indent())
+        {
+            html.Line("<h2>Usage</h2>");
+            html.Line("<p class=\"type-usage-summary\">This type appears in these public API surfaces even when no hand-authored example is attached directly to the page.</p>");
+            if (usage.ReturnedOrExposedBy.Count > 0)
+                AppendUsageGroup(html, "Returned or exposed by", usage.ReturnedOrExposedBy, baseUrl, slugMap);
+            if (usage.AcceptedByParameters.Count > 0)
+                AppendUsageGroup(html, "Accepted by parameters", usage.AcceptedByParameters, baseUrl, slugMap);
+        }
+        html.Line("</section>");
+    }
+
+    private static void AppendUsageGroup(
+        HtmlFragmentBuilder html,
+        string heading,
+        IReadOnlyList<ApiTypeUsageEntry> entries,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (html is null || entries.Count == 0)
+            return;
+
+        html.Line("<div class=\"usage-group\">");
+        using (html.Indent())
+        {
+            html.Line($"<h3>{System.Web.HttpUtility.HtmlEncode(heading)}</h3>");
+            html.Line("<ul class=\"usage-list\">");
+            using (html.Indent())
+            {
+                foreach (var entry in entries)
+                {
+                    var href = BuildDocsTypeUrl(baseUrl, entry.OwnerType.Slug) + "#" + entry.AnchorId;
+                    var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+                    var ownerName = System.Web.HttpUtility.HtmlEncode(GetDisplayTypeName(entry.OwnerType.FullName));
+                    var memberName = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(entry.Member.DisplayName) ? entry.Member.Name : entry.Member.DisplayName);
+                    var kindLabel = System.Web.HttpUtility.HtmlEncode(GetUsageKindLabel(entry));
+
+                    html.Line("<li class=\"usage-item\">");
+                    using (html.Indent())
+                    {
+                        html.Line($"<span class=\"usage-kind\">{kindLabel}</span>");
+                        html.Line($"<a class=\"usage-link\" href=\"{safeHref}\">{ownerName}.{memberName}</a>");
+                        if (!string.IsNullOrWhiteSpace(entry.ParameterName))
+                            html.Line($"<span class=\"usage-meta\">parameter <code>{System.Web.HttpUtility.HtmlEncode(entry.ParameterName)}</code></span>");
+                    }
+                    html.Line("</li>");
+                }
+            }
+            html.Line("</ul>");
+        }
+        html.Line("</div>");
     }
 
     private static void AppendUsageGroup(
@@ -337,29 +396,13 @@ public static partial class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap)
     {
-        if (entries.Count == 0)
+        if (sb is null)
             return;
 
-        sb.AppendLine("        <div class=\"usage-group\">");
-        sb.AppendLine($"          <h3>{System.Web.HttpUtility.HtmlEncode(heading)}</h3>");
-        sb.AppendLine("          <ul class=\"usage-list\">");
-        foreach (var entry in entries)
-        {
-            var href = BuildDocsTypeUrl(baseUrl, entry.OwnerType.Slug) + "#" + entry.AnchorId;
-            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
-            var ownerName = System.Web.HttpUtility.HtmlEncode(GetDisplayTypeName(entry.OwnerType.FullName));
-            var memberName = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(entry.Member.DisplayName) ? entry.Member.Name : entry.Member.DisplayName);
-            var kindLabel = System.Web.HttpUtility.HtmlEncode(GetUsageKindLabel(entry));
-
-            sb.AppendLine("            <li class=\"usage-item\">");
-            sb.AppendLine($"              <span class=\"usage-kind\">{kindLabel}</span>");
-            sb.AppendLine($"              <a class=\"usage-link\" href=\"{safeHref}\">{ownerName}.{memberName}</a>");
-            if (!string.IsNullOrWhiteSpace(entry.ParameterName))
-                sb.AppendLine($"              <span class=\"usage-meta\">parameter <code>{System.Web.HttpUtility.HtmlEncode(entry.ParameterName)}</code></span>");
-            sb.AppendLine("            </li>");
-        }
-        sb.AppendLine("          </ul>");
-        sb.AppendLine("        </div>");
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendUsageGroup(html, heading, entries, baseUrl, slugMap);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
     }
 
     private static string GetUsageKindLabel(ApiTypeUsageEntry entry)
