@@ -57,6 +57,17 @@ Check these explicitly when reviewing or refactoring an existing site:
   - Add CI audit coverage for key language routes and at least one API page.
   - Use required routes for generated files and rendered smoke pages for user-facing navigation paths.
 
+## Localization Guidance
+
+When editing localized websites:
+
+- localize for meaning, not word-for-word equivalence
+- preserve product and platform names such as `PowerShell`, `.NET`, `Entra Connect`, `Active Directory`, `Group Policy`, `GitHub`, and `PowerShell Gallery`
+- prefer local-language equivalents for business/process words like `delivery`, `engagement`, `workflow`, `cleanup`, `handoff`, `supportable`, and `output` when the English term is only convenience jargon
+- do not over-translate technical labels if the result becomes less natural for native technical readers
+- keep visible copy and any `.head.html` FAQ/schema snippets aligned; do not improve one and leave the other stale
+- remove SEO-internal phrasing from body copy (`buyer intent`, `search intent`, `shortest summary`, and similar wording)
+
 ## Reference Files (Read As Needed)
 
 - `references/blueprint.md`: minimal recommended `site.json`/`pipeline.json`/theme contract patterns.
