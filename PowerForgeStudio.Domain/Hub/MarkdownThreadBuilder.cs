@@ -31,6 +31,7 @@ internal sealed class MarkdownThreadBuilder
         if (level < 1 || level > 6)
             throw new ArgumentOutOfRangeException(nameof(level), "Markdown heading level must be between 1 and 6.");
 
+        // Thread output keeps headings tight so timeline entries do not accumulate extra vertical gaps.
         _builder.Append('#', level);
         _builder.Append(' ');
         _builder.AppendLine(text ?? string.Empty);

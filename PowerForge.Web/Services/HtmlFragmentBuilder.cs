@@ -27,7 +27,7 @@ internal sealed class HtmlFragmentBuilder
         return new IndentScope(this);
     }
 
-    public void Line(string text)
+    public void Line(string? text)
     {
         if (_indent > 0)
             _builder.Append(' ', _indent);

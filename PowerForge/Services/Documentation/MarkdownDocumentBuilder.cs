@@ -89,7 +89,7 @@ internal sealed class MarkdownDocumentBuilder
     {
         _body.Append("```");
         _body.AppendLine(infoString?.Trim() ?? string.Empty);
-        var normalized = Normalize(content);
+        var normalized = NormalizeCodeFence(content);
         if (!string.IsNullOrWhiteSpace(normalized))
             _body.AppendLine(normalized);
         _body.AppendLine("```");
@@ -124,4 +124,7 @@ internal sealed class MarkdownDocumentBuilder
 
     private static string Normalize(string text)
         => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim().Replace("\n", Environment.NewLine);
+
+    private static string NormalizeCodeFence(string text)
+        => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd().Replace("\n", Environment.NewLine);
 }

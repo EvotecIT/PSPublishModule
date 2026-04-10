@@ -12,6 +12,12 @@ internal static class WingetManifestWriter
         string packageVersion,
         IReadOnlyList<WingetManifestInstallerEntry> installers)
     {
+        if (installers is null || installers.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' does not define any installers, so a singleton manifest cannot be generated.");
+        }
+
         var writer = new YamlTextWriter();
         var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
         var manifestVersion = string.IsNullOrWhiteSpace(package.ManifestVersion) ? (winget.ManifestVersion ?? "1.12.0") : package.ManifestVersion!;

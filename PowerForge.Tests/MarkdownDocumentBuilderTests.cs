@@ -42,4 +42,26 @@ public class MarkdownDocumentBuilderTests
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             markdown);
     }
+
+    [Fact]
+    public void CodeFence_PreservesLeadingIndentationAndLeadingBlankLines()
+    {
+        var document = new MarkdownDocumentBuilder();
+        document.CodeFence("powershell", "\n    if ($true) {\n        Write-Host 'hi'\n    }\n");
+
+        var markdown = document.ToString();
+
+        Assert.Equal(
+            """
+            ```powershell
+
+                if ($true) {
+                    Write-Host 'hi'
+                }
+            ```
+            
+            """
+            .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
+            markdown);
+    }
 }
