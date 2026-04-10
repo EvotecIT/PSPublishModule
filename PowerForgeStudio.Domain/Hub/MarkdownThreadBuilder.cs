@@ -8,7 +8,12 @@ internal sealed class MarkdownThreadBuilder
 
     public void Paragraph(string text)
     {
-        _builder.AppendLine(text ?? string.Empty);
+        var normalized = Normalize(text);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        _builder.AppendLine(normalized);
+        _builder.AppendLine();
     }
 
     public void BlankLine()
@@ -23,6 +28,9 @@ internal sealed class MarkdownThreadBuilder
 
     public void Heading(int level, string text)
     {
+        if (level < 1 || level > 6)
+            throw new ArgumentOutOfRangeException(nameof(level), "Markdown heading level must be between 1 and 6.");
+
         _builder.Append('#', level);
         _builder.Append(' ');
         _builder.AppendLine(text ?? string.Empty);
@@ -37,4 +45,7 @@ internal sealed class MarkdownThreadBuilder
 
     public override string ToString()
         => _builder.ToString();
+
+    private static string Normalize(string text)
+        => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim().Replace("\n", Environment.NewLine);
 }

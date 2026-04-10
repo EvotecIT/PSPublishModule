@@ -105,15 +105,12 @@ public static partial class WebApiDocsGenerator
         if (items.Count == 0)
             return string.Empty;
 
-        return JoinHtmlFragments(items.Select(BuildNavItemHtml).ToArray());
+        return string.Concat(items.Select(BuildNavItemHtml));
     }
 
     private static string BuildNavItemHtml(NavItem item)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Text))
-            return string.Empty;
-
-        if (string.IsNullOrWhiteSpace(item.Text))
             return string.Empty;
 
         if (item.Items.Count == 0)
@@ -160,7 +157,7 @@ public static partial class WebApiDocsGenerator
                 fragments.Add(BuildDropdownItemsHtml(child.Items));
         }
 
-        return JoinHtmlFragments(fragments.ToArray());
+        return string.Concat(fragments);
     }
 
     private static string BuildDropdownTriggerHtml(NavItem item)
@@ -209,7 +206,7 @@ public static partial class WebApiDocsGenerator
         if (actions.Count == 0)
             return string.Empty;
 
-        return JoinHtmlFragments(actions.Select(BuildActionHtml).ToArray());
+        return string.Concat(actions.Select(BuildActionHtml));
     }
 
     private static string BuildActionHtml(NavAction action)

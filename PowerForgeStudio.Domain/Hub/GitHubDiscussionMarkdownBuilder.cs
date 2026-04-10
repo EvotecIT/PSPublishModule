@@ -26,14 +26,19 @@ public static class GitHubDiscussionMarkdownBuilder
             return builder.ToString().Trim();
         }
 
-        builder.BlankLine();
         builder.HorizontalRule();
         builder.BlankLine();
         builder.Heading(2, "Discussion");
 
+        var isFirstDiscussionEntry = true;
         foreach (var entry in entries.Skip(1))
         {
-            builder.BlankLine();
+            if (isFirstDiscussionEntry)
+            {
+                builder.BlankLine();
+                isFirstDiscussionEntry = false;
+            }
+
             builder.Heading(3, $"{entry.AuthorLogin ?? "Unknown actor"}{(entry.Kind == GitHubThreadEntryKind.TimelineEvent ? " activity on " : " commented on ")}{entry.CreatedAt:yyyy-MM-dd HH:mm}");
 
             if (!string.IsNullOrWhiteSpace(entry.Path))
