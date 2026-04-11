@@ -28,13 +28,13 @@ public class MarkdownTableBuilderTests
     {
         var table = new MarkdownTableBuilder(["Name | Alias", "Count"]);
 
-        table.AddRow("Widget | Gadget", "12");
+        table.AddRow(@"Widget \| Gadget", "12");
 
         Assert.Equal(
             """
             | Name \| Alias | Count |
             | --- | --- |
-            | Widget \| Gadget | 12 |
+            | Widget \\\| Gadget | 12 |
             """
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             table.ToString());

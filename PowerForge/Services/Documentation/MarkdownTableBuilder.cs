@@ -56,7 +56,7 @@ internal sealed class MarkdownTableBuilder
         };
 
     private static string EscapeCell(string? value)
-        => (value ?? string.Empty).Replace("|", "\\|");
+        => (value ?? string.Empty).Replace("\\", "\\\\").Replace("|", "\\|");
 }
 
 internal enum MarkdownTableAlignment

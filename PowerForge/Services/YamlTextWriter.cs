@@ -89,7 +89,8 @@ internal sealed class YamlTextWriter
         if (normalized.Length == 0)
             return "\"\"";
 
-        return normalized.StartsWith("-", StringComparison.Ordinal)
+        return normalized == "-"
+            || normalized.StartsWith("- ", StringComparison.Ordinal)
             || normalized.IndexOfAny(new[] { ':', '#', '{', '}', '[', ']', ',', '&', '*', '?', '|', '<', '>', '=', '!', '%', '@', '\\', '"' }) >= 0
             || normalized.Contains(' ')
             ? "\"" + normalized.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""

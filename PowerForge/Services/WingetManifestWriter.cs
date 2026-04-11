@@ -36,10 +36,9 @@ internal static class WingetManifestWriter
         writer.WriteSequence("Platform", package.Platform);
         writer.WriteOptionalScalar("MinimumOSVersion", package.MinimumOSVersion);
 
-        var installerType = installers[0].InstallerType;
+        var installerType = NormalizeInstallerType(installers[0].InstallerType);
         var distinctInstallerTypes = installers
-            .Select(entry => entry.InstallerType)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(entry => NormalizeInstallerType(entry.InstallerType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (distinctInstallerTypes.Length > 1)
@@ -70,6 +69,9 @@ internal static class WingetManifestWriter
         writer.WriteScalar("ManifestVersion", manifestVersion);
         return writer.ToString();
     }
+
+    private static string NormalizeInstallerType(string? installerType)
+        => string.IsNullOrWhiteSpace(installerType) ? "zip" : installerType.Trim();
 }
 
 internal sealed class WingetManifestInstallerEntry
