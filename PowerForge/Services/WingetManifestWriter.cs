@@ -36,9 +36,16 @@ internal static class WingetManifestWriter
         writer.WriteSequence("Platform", package.Platform);
         writer.WriteOptionalScalar("MinimumOSVersion", package.MinimumOSVersion);
 
-        var installerType = NormalizeInstallerType(installers[0].InstallerType);
+        var firstInstaller = installers.FirstOrDefault();
+        if (firstInstaller is null)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' does not define any installers, so a singleton manifest cannot be generated.");
+        }
+
+        var installerType = NormalizeInstallerType(firstInstaller.InstallerType);
         var distinctInstallerTypes = installers
-            .Select(entry => NormalizeInstallerType(entry.InstallerType))
+            .Select(static entry => NormalizeInstallerType(entry?.InstallerType))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (distinctInstallerTypes.Length > 1)
@@ -71,7 +78,7 @@ internal static class WingetManifestWriter
     }
 
     private static string NormalizeInstallerType(string? installerType)
-        => string.IsNullOrWhiteSpace(installerType) ? "zip" : installerType.Trim();
+        => string.IsNullOrWhiteSpace(installerType) ? "zip" : installerType!.Trim();
 }
 
 internal sealed class WingetManifestInstallerEntry
