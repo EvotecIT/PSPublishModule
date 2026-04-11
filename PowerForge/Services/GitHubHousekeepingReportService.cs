@@ -81,7 +81,7 @@ public sealed class GitHubHousekeepingReportService
             {
                 new[] { "Success", report.Success ? "Yes" : "No" },
                 new[] { "Exit code", report.ExitCode.ToString() },
-                new[] { "Error", EscapeCell(report.Error) }
+                new[] { "Error", NormalizeCell(report.Error) }
             }).TrimEnd());
             return markdown.ToString();
         }
@@ -93,12 +93,12 @@ public sealed class GitHubHousekeepingReportService
         var summaryRows = new List<string[]>
         {
             new[] { "Success", report.Success ? "Yes" : "No" },
-            new[] { "Requested sections", EscapeCell(string.Join(", ", result.RequestedSections)) },
-            new[] { "Completed sections", EscapeCell(string.Join(", ", result.CompletedSections)) },
-            new[] { "Failed sections", EscapeCell(string.Join(", ", result.FailedSections)) }
+            new[] { "Requested sections", NormalizeCell(string.Join(", ", result.RequestedSections)) },
+            new[] { "Completed sections", NormalizeCell(string.Join(", ", result.CompletedSections)) },
+            new[] { "Failed sections", NormalizeCell(string.Join(", ", result.FailedSections)) }
         };
         if (!string.IsNullOrWhiteSpace(result.Message))
-            summaryRows.Add(new[] { "Message", EscapeCell(result.Message) });
+            summaryRows.Add(new[] { "Message", NormalizeCell(result.Message) });
         markdown.RawLine(BuildFieldTable(summaryRows).TrimEnd());
 
         AppendStorageSummary(markdown, result);
@@ -252,12 +252,12 @@ public sealed class GitHubHousekeepingReportService
         foreach (var item in items.Take(20))
         {
             table.AddRow(
-                EscapeCell(item.Name),
+                NormalizeCell(item.Name),
                 FormatGiB(item.SizeInBytes),
                 FormatDate(item.CreatedAt),
                 FormatDate(item.UpdatedAt),
-                EscapeCell(item.Reason),
-                EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
+                NormalizeCell(item.Reason),
+                NormalizeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
         }
 
         markdown.BlankLine();
@@ -292,12 +292,12 @@ public sealed class GitHubHousekeepingReportService
         foreach (var item in items.Take(20))
         {
             table.AddRow(
-                EscapeCell(item.Key),
+                NormalizeCell(item.Key),
                 FormatGiB(item.SizeInBytes),
                 FormatDate(item.CreatedAt),
                 FormatDate(item.LastAccessedAt),
-                EscapeCell(item.Reason),
-                EscapeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
+                NormalizeCell(item.Reason),
+                NormalizeCell(DeleteState(item.DeleteStatusCode, item.DeleteError)));
         }
 
         markdown.BlankLine();
@@ -322,10 +322,10 @@ public sealed class GitHubHousekeepingReportService
         foreach (var step in result.Steps.Take(20))
         {
             table.AddRow(
-                EscapeCell(step.Title),
+                NormalizeCell(step.Title),
                 step.Success ? "ok" : "warning",
                 step.EntriesAffected.ToString(),
-                EscapeCell(step.Message));
+                NormalizeCell(step.Message));
         }
 
         markdown.BlankLine();
@@ -407,6 +407,15 @@ public sealed class GitHubHousekeepingReportService
         var text = value!;
         return text.Replace("|", "\\|")
             .Replace("\r", " ")
+            .Replace("\n", "<br/>");
+    }
+
+    private static string NormalizeCell(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "-";
+
+        return value!.Replace("\r", " ")
             .Replace("\n", "<br/>");
     }
 
