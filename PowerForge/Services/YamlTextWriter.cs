@@ -7,6 +7,20 @@ namespace PowerForge;
 
 internal sealed class YamlTextWriter
 {
+    private static readonly HashSet<string> ReservedScalars = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "true",
+        "false",
+        "yes",
+        "no",
+        "on",
+        "off",
+        "null",
+        "~",
+        "---",
+        "..."
+    };
+
     private readonly StringBuilder _builder;
     private int _indent;
 
@@ -91,6 +105,7 @@ internal sealed class YamlTextWriter
 
         return normalized == "-"
             || normalized.StartsWith("- ", StringComparison.Ordinal)
+            || ReservedScalars.Contains(normalized)
             || normalized.IndexOfAny(new[] { ':', '#', '{', '}', '[', ']', ',', '&', '*', '?', '|', '<', '>', '=', '!', '%', '@', '\\', '"' }) >= 0
             || normalized.Contains(' ')
             ? "\"" + normalized.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""

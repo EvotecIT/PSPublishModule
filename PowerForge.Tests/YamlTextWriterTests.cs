@@ -57,4 +57,30 @@ public class YamlTextWriterTests
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             yaml);
     }
+
+    [Fact]
+    public void WriteSequence_QuotesReservedScalars()
+    {
+        var writer = new YamlTextWriter();
+        writer.WriteSequence("Tags", new[] { "true", "false", "null", "~", "---", "...", "yes", "on", "off", "no" });
+
+        var yaml = writer.ToString();
+
+        Assert.Equal(
+            """
+            Tags:
+            - "true"
+            - "false"
+            - "null"
+            - "~"
+            - "---"
+            - "..."
+            - "yes"
+            - "on"
+            - "off"
+            - "no"
+            """
+            .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
+            yaml);
+    }
 }
