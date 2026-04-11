@@ -46,11 +46,6 @@ public static partial class WebApiDocsGenerator
         var indexRoute = NormalizeApiRoute(options.BaseUrl);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
-        var typeLinks = new StringBuilder();
-        foreach (var type in types)
-        {
-            typeLinks.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
-        }
         var searchScript = JoinHtmlFragments(
             WrapScript(LoadAsset(options, "search.js", options.SearchScriptPath)),
             prismScripts);
@@ -66,7 +61,7 @@ public static partial class WebApiDocsGenerator
             ["FOOTER"] = footer,
             ["BODY_CLASS"] = bodyClass,
             ["TYPE_COUNT"] = types.Count.ToString(),
-            ["TYPE_LINKS"] = typeLinks.ToString().TrimEnd(),
+            ["TYPE_LINKS"] = BuildSimpleTypeLinks(types),
             ["SEARCH_SCRIPT"] = searchScript
         });
 
@@ -76,19 +71,6 @@ public static partial class WebApiDocsGenerator
         Directory.CreateDirectory(typesDir);
         foreach (var type in types)
         {
-            var memberHtml = new StringBuilder();
-            AppendMembers(memberHtml, "Methods", type.Methods, codeLanguage);
-            AppendMembers(memberHtml, "Properties", type.Properties, codeLanguage);
-            AppendMembers(memberHtml, "Fields", type.Fields, codeLanguage);
-            AppendMembers(memberHtml, "Events", type.Events, codeLanguage);
-
-            var summaryHtml = string.IsNullOrWhiteSpace(type.Summary)
-                ? string.Empty
-                : $"    <p>{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>";
-            var remarksHtml = string.IsNullOrWhiteSpace(type.Remarks)
-                ? string.Empty
-                : $"    <div class=\"pf-api-remarks\">{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</div>";
-
             var typeTitle = $"{type.FullName} - {options.Title}";
             var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
             var typeRoute = $"{NormalizeApiRoute(options.BaseUrl).TrimEnd('/')}/types/{type.Slug}.html";
@@ -104,9 +86,9 @@ public static partial class WebApiDocsGenerator
                 ["HEADER"] = header,
                 ["FOOTER"] = footer,
                 ["BODY_CLASS"] = bodyClass,
-                ["TYPE_SUMMARY"] = summaryHtml,
-                ["TYPE_REMARKS"] = remarksHtml,
-                ["MEMBERS"] = memberHtml.ToString().TrimEnd(),
+                ["TYPE_SUMMARY"] = BuildSimpleTypeSummaryHtml(type),
+                ["TYPE_REMARKS"] = BuildSimpleTypeRemarksHtml(type),
+                ["MEMBERS"] = BuildSimpleTypeMemberSections(type, codeLanguage),
                 ["TYPE_SCRIPT"] = prismScripts
             });
 
@@ -454,52 +436,52 @@ $@"<!doctype html>
         var twitterCreator = NormalizeTwitterHandle(social.TwitterCreator);
         var languageCode = NormalizeApiLanguageCode(options.LanguageCode);
 
-        var sb = new StringBuilder();
+        var html = new HtmlFragmentBuilder();
         if (!string.IsNullOrWhiteSpace(url))
         {
-            sb.AppendLine($"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+            html.Line($"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
             if (!string.IsNullOrWhiteSpace(languageCode))
             {
-                sb.AppendLine($"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(languageCode)}\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
-                sb.AppendLine($"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+                html.Line($"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(languageCode)}\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+                html.Line($"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
             }
         }
-        sb.AppendLine("<!-- Open Graph -->");
-        sb.AppendLine($"<meta property=\"og:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
+        html.Line("<!-- Open Graph -->");
+        html.Line($"<meta property=\"og:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
         if (!string.IsNullOrWhiteSpace(desc))
-            sb.AppendLine($"<meta property=\"og:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
-        sb.AppendLine("<meta property=\"og:type\" content=\"website\" />");
+            html.Line($"<meta property=\"og:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
+        html.Line("<meta property=\"og:type\" content=\"website\" />");
         if (!string.IsNullOrWhiteSpace(url))
-            sb.AppendLine($"<meta property=\"og:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+            html.Line($"<meta property=\"og:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
         if (!string.IsNullOrWhiteSpace(image))
-            sb.AppendLine($"<meta property=\"og:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
+            html.Line($"<meta property=\"og:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
         if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
-            sb.AppendLine($"<meta property=\"og:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
+            html.Line($"<meta property=\"og:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
         if (imageWidth > 0)
-            sb.AppendLine($"<meta property=\"og:image:width\" content=\"{imageWidth}\" />");
+            html.Line($"<meta property=\"og:image:width\" content=\"{imageWidth}\" />");
         if (imageHeight > 0)
-            sb.AppendLine($"<meta property=\"og:image:height\" content=\"{imageHeight}\" />");
+            html.Line($"<meta property=\"og:image:height\" content=\"{imageHeight}\" />");
         if (!string.IsNullOrWhiteSpace(siteName))
-            sb.AppendLine($"<meta property=\"og:site_name\" content=\"{System.Web.HttpUtility.HtmlEncode(siteName)}\" />");
+            html.Line($"<meta property=\"og:site_name\" content=\"{System.Web.HttpUtility.HtmlEncode(siteName)}\" />");
 
-        sb.AppendLine();
-        sb.AppendLine("<!-- Twitter Card -->");
-        sb.AppendLine($"<meta name=\"twitter:card\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCard)}\" />");
-        sb.AppendLine($"<meta name=\"twitter:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
+        html.Line(string.Empty);
+        html.Line("<!-- Twitter Card -->");
+        html.Line($"<meta name=\"twitter:card\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCard)}\" />");
+        html.Line($"<meta name=\"twitter:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
         if (!string.IsNullOrWhiteSpace(twitterSite))
-            sb.AppendLine($"<meta name=\"twitter:site\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterSite)}\" />");
+            html.Line($"<meta name=\"twitter:site\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterSite)}\" />");
         if (!string.IsNullOrWhiteSpace(twitterCreator))
-            sb.AppendLine($"<meta name=\"twitter:creator\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCreator)}\" />");
+            html.Line($"<meta name=\"twitter:creator\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCreator)}\" />");
         if (!string.IsNullOrWhiteSpace(desc))
-            sb.AppendLine($"<meta name=\"twitter:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
+            html.Line($"<meta name=\"twitter:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
         if (!string.IsNullOrWhiteSpace(url))
-            sb.AppendLine($"<meta name=\"twitter:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+            html.Line($"<meta name=\"twitter:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
         if (!string.IsNullOrWhiteSpace(image))
-            sb.AppendLine($"<meta name=\"twitter:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
+            html.Line($"<meta name=\"twitter:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
         if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
-            sb.AppendLine($"<meta name=\"twitter:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
+            html.Line($"<meta name=\"twitter:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
 
-        return sb.ToString().TrimEnd();
+        return html.ToString().TrimEnd();
     }
 
     private static string NormalizeApiLanguageCode(string? value)
@@ -655,13 +637,7 @@ $@"<!doctype html>
         var hrefs = SplitCssHrefs(cssHref);
         if (hrefs.Length == 0) return string.Empty;
 
-        var sb = new StringBuilder();
-        foreach (var href in hrefs)
-        {
-            if (sb.Length > 0) sb.AppendLine();
-            sb.Append($"<link rel=\"stylesheet\" href=\"{href}\" />");
-        }
-        return sb.ToString();
+        return JoinHtmlFragments(hrefs.Select(static href => $"<link rel=\"stylesheet\" href=\"{href}\" />").ToArray());
     }
 
     private static string BuildCssBlockWithFallback(string fallbackCss, string cssLinks, string extraCssLinks = "")
@@ -891,46 +867,111 @@ $@"<!doctype html>
         return Path.GetFullPath(Path.Combine(root, relative));
     }
 
-    private static void AppendMembers(StringBuilder sb, string label, List<ApiMemberModel> members, string codeLanguage)
+    private static string BuildSimpleTypeLinks(IReadOnlyList<ApiTypeModel> types)
     {
-        if (members.Count == 0) return;
-        sb.AppendLine($"    <section class=\"pf-api-section\">");
-        sb.AppendLine($"      <h2>{label}</h2>");
-        sb.AppendLine("      <ul>");
-        foreach (var member in members)
+        if (types is null || types.Count == 0)
+            return string.Empty;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        foreach (var type in types)
         {
-            var summaryText = StripCrefTokens(member.Summary);
-            var summary = string.IsNullOrWhiteSpace(summaryText)
-                ? string.Empty
-                : $" - {System.Web.HttpUtility.HtmlEncode(summaryText)}";
-            sb.AppendLine("        <li>");
-            var signature = !string.IsNullOrWhiteSpace(member.Signature)
-                ? member.Signature
-                : BuildSignature(member, label);
-            sb.AppendLine($"          <strong>{System.Web.HttpUtility.HtmlEncode(signature)}</strong>{summary}");
-            if (member.Parameters.Count > 0)
-            {
-                sb.AppendLine("          <div class=\"pf-api-params\">");
-                sb.AppendLine("            <ul>");
-                foreach (var param in member.Parameters)
-                {
-                    var type = string.IsNullOrWhiteSpace(param.Type) ? string.Empty : $" ({System.Web.HttpUtility.HtmlEncode(param.Type)})";
-                    var psummaryText = StripCrefTokens(param.Summary);
-                    var psummary = string.IsNullOrWhiteSpace(psummaryText) ? string.Empty : $": {System.Web.HttpUtility.HtmlEncode(psummaryText)}";
-                    sb.AppendLine($"              <li><code>{System.Web.HttpUtility.HtmlEncode(param.Name)}</code>{type}{psummary}</li>");
-                }
-                sb.AppendLine("            </ul>");
-                sb.AppendLine("          </div>");
-            }
-            if (!string.IsNullOrWhiteSpace(member.Returns))
-            {
-                var returnsText = StripCrefTokens(member.Returns);
-                sb.AppendLine($"          <div class=\"pf-api-returns\">Returns: {System.Web.HttpUtility.HtmlEncode(returnsText)}</div>");
-            }
-            sb.AppendLine("        </li>");
+            html.Line($"<a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
         }
-        sb.AppendLine("      </ul>");
-        sb.AppendLine("    </section>");
+
+        return html.ToString().TrimEnd();
+    }
+
+    private static string BuildSimpleTypeSummaryHtml(ApiTypeModel type)
+    {
+        if (type is null || string.IsNullOrWhiteSpace(type.Summary))
+            return string.Empty;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 4);
+        html.Line($"<p>{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>");
+        return html.ToString().TrimEnd();
+    }
+
+    private static string BuildSimpleTypeRemarksHtml(ApiTypeModel type)
+    {
+        if (type is null || string.IsNullOrWhiteSpace(type.Remarks))
+            return string.Empty;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 4);
+        html.Line($"<div class=\"pf-api-remarks\">{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</div>");
+        return html.ToString().TrimEnd();
+    }
+
+    private static string BuildSimpleTypeMemberSections(ApiTypeModel type, string codeLanguage)
+    {
+        if (type is null)
+            return string.Empty;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 4);
+        AppendMembers(html, "Methods", type.Methods, codeLanguage);
+        AppendMembers(html, "Properties", type.Properties, codeLanguage);
+        AppendMembers(html, "Fields", type.Fields, codeLanguage);
+        AppendMembers(html, "Events", type.Events, codeLanguage);
+        return html.ToString().TrimEnd();
+    }
+
+    private static void AppendMembers(HtmlFragmentBuilder html, string label, List<ApiMemberModel> members, string codeLanguage)
+    {
+        if (html is null || members.Count == 0)
+            return;
+
+        html.Line($"<section class=\"pf-api-section\">");
+        using (html.Indent())
+        {
+            html.Line($"<h2>{label}</h2>");
+            html.Line("<ul>");
+            using (html.Indent())
+            {
+                foreach (var member in members)
+                {
+                    var summaryText = StripCrefTokens(member.Summary);
+                    var summary = string.IsNullOrWhiteSpace(summaryText)
+                        ? string.Empty
+                        : $" - {System.Web.HttpUtility.HtmlEncode(summaryText)}";
+                    var signature = !string.IsNullOrWhiteSpace(member.Signature)
+                        ? member.Signature
+                        : BuildSignature(member, label);
+
+                    html.Line("<li>");
+                    using (html.Indent())
+                    {
+                        html.Line($"<strong>{System.Web.HttpUtility.HtmlEncode(signature)}</strong>{summary}");
+                        if (member.Parameters.Count > 0)
+                        {
+                            html.Line("<div class=\"pf-api-params\">");
+                            using (html.Indent())
+                            {
+                                html.Line("<ul>");
+                                using (html.Indent())
+                                {
+                                    foreach (var param in member.Parameters)
+                                    {
+                                        var type = string.IsNullOrWhiteSpace(param.Type) ? string.Empty : $" ({System.Web.HttpUtility.HtmlEncode(param.Type)})";
+                                        var psummaryText = StripCrefTokens(param.Summary);
+                                        var psummary = string.IsNullOrWhiteSpace(psummaryText) ? string.Empty : $": {System.Web.HttpUtility.HtmlEncode(psummaryText)}";
+                                        html.Line($"<li><code>{System.Web.HttpUtility.HtmlEncode(param.Name)}</code>{type}{psummary}</li>");
+                                    }
+                                }
+                                html.Line("</ul>");
+                            }
+                            html.Line("</div>");
+                        }
+                        if (!string.IsNullOrWhiteSpace(member.Returns))
+                        {
+                            var returnsText = StripCrefTokens(member.Returns);
+                            html.Line($"<div class=\"pf-api-returns\">Returns: {System.Web.HttpUtility.HtmlEncode(returnsText)}</div>");
+                        }
+                    }
+                    html.Line("</li>");
+                }
+            }
+            html.Line("</ul>");
+        }
+        html.Line("</section>");
     }
 
     private static readonly string[] MainTypeOrder =
@@ -955,135 +996,208 @@ $@"<!doctype html>
         ApiSuiteContext? suite)
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
-        var sb = new StringBuilder();
-        sb.AppendLine("    <div class=\"ev-docs-menu api-sidebar-shell\">");
-        var primaryKindLabel = ResolvePrimaryKindLabel(types);
+        var html = new HtmlFragmentBuilder(initialIndent: 4);
         var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
         var primaryKindFilterLabel = ResolvePrimaryKindFilterLabel(types);
-        sb.AppendLine("    <div class=\"sidebar-project-indicator ev-docs-project-indicator\">");
-        sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link sidebar-back-link ev-docs-project-back\">");
-        sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
-        sb.AppendLine("          <path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
-        sb.AppendLine("        </svg>");
-        sb.AppendLine("        Back to project");
-        sb.AppendLine("      </a>");
-        sb.AppendLine("    </div>");
-        sb.AppendLine("    <div class=\"sidebar-header\">");
-        // Keep API reference chrome consistent between index and type pages.
-        var active = " active";
-        sb.AppendLine($"      <a href=\"{indexUrl}\" class=\"sidebar-title sidebar-menu-title ev-docs-menu-title{active}\">");
-        sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"18\" height=\"18\">");
-        sb.AppendLine("          <path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/>");
-        sb.AppendLine("          <path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/>");
-        sb.AppendLine("        </svg>");
-        sb.AppendLine("        <span>API Reference</span>");
-        sb.AppendLine("      </a>");
-        sb.AppendLine("    </div>");
-          AppendApiSuiteSidebar(sb, suite, indexUrl);
-          var totalTypes = types.Count;
-          sb.AppendLine("    <div class=\"sidebar-search\">");
-          sb.AppendLine("      <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-          sb.AppendLine("        <circle cx=\"11\" cy=\"11\" r=\"8\"/>");
-          sb.AppendLine("        <path d=\"M21 21l-4.35-4.35\"/>");
-          sb.AppendLine("      </svg>");
-          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindPluralLabel} ({totalTypes})...\" />");
-          sb.AppendLine("      <button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
-          sb.AppendLine("        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-          sb.AppendLine("          <path d=\"M18 6L6 18M6 6l12 12\"/>");
-          sb.AppendLine("        </svg>");
-          sb.AppendLine("      </button>");
-          sb.AppendLine("    </div>");
-
-          var kindFilters = BuildKindFilters(types);
-          if (kindFilters.Count > 0)
-          {
-              sb.AppendLine("    <div class=\"sidebar-filters\">");
-              sb.AppendLine($"      <div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindFilterLabel)} filters</div>");
-              sb.AppendLine("      <div class=\"filter-buttons\">");
-              sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
-              foreach (var kind in kindFilters)
-              {
-                  sb.AppendLine($"        <button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
-              }
-              sb.AppendLine("      </div>");
-              var namespaceGroups = types
-                  .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
-                  .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-                  .ToList();
-              if (namespaceGroups.Count > 0)
-              {
-                  sb.AppendLine("      <div class=\"filter-row\">");
-                  sb.AppendLine("        <label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
-                  sb.AppendLine("        <select id=\"api-namespace\" class=\"namespace-select\">");
-                  sb.AppendLine("          <option value=\"\">All namespaces</option>");
-                  foreach (var group in namespaceGroups)
-                  {
-                      var encoded = System.Web.HttpUtility.HtmlEncode(group.Key);
-                      sb.AppendLine($"          <option value=\"{encoded}\">{encoded} ({group.Count()})</option>");
-                  }
-                  sb.AppendLine("        </select>");
-                  sb.AppendLine("      </div>");
-              }
-              sb.AppendLine("      <div class=\"filter-row\">");
-              sb.AppendLine("        <button class=\"sidebar-reset\" type=\"button\">Reset filters</button>");
-              sb.AppendLine("      </div>");
-              sb.AppendLine("    </div>");
-          }
-          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
-          sb.AppendLine("    <div class=\"sidebar-tools\">");
-          sb.AppendLine("      <button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
-          sb.AppendLine("      <button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
-          sb.AppendLine("    </div>");
-          sb.AppendLine("    <nav class=\"sidebar-nav\">");
-
+        var totalTypes = types.Count;
+        var kindFilters = BuildKindFilters(types);
+        var namespaceGroups = types
+            .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
+            .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var mainTypes = GetMainTypes(types, options);
         var mainTypeNames = new HashSet<string>(mainTypes.Select(static t => t.Name), StringComparer.OrdinalIgnoreCase);
-        if (mainTypes.Count > 0)
-        {
-            sb.AppendLine("      <div class=\"nav-section\">");
-            sb.AppendLine("        <div class=\"nav-section-header main-api\">");
-            sb.AppendLine("          <svg class=\"chevron expanded\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-            sb.AppendLine("            <path d=\"M9 18l6-6-6-6\"/>");
-            sb.AppendLine("          </svg>");
-            sb.AppendLine("          <span>Main API</span>");
-            sb.AppendLine($"          <span class=\"type-count\">{mainTypes.Count}</span>");
-            sb.AppendLine("        </div>");
-            sb.AppendLine("        <div class=\"nav-section-content\">");
-            foreach (var type in mainTypes)
-            {
-                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
-            }
-            sb.AppendLine("        </div>");
-            sb.AppendLine("      </div>");
-        }
 
-        var grouped = types
-            .Where(t => !mainTypeNames.Contains(t.Name))
-            .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
-        foreach (var group in grouped)
+        html.Line("<div class=\"ev-docs-menu api-sidebar-shell\">");
+        using (html.Indent())
         {
-            sb.AppendLine("      <div class=\"nav-section\">");
-            sb.AppendLine("        <div class=\"nav-section-header\">");
-            sb.AppendLine("          <svg class=\"chevron expanded\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-            sb.AppendLine("            <path d=\"M9 18l6-6-6-6\"/>");
-            sb.AppendLine("          </svg>");
-            sb.AppendLine($"          <span>{System.Web.HttpUtility.HtmlEncode(GetShortNamespace(group.Key))}</span>");
-            sb.AppendLine($"          <span class=\"type-count\">{group.Count()}</span>");
-            sb.AppendLine("        </div>");
-            sb.AppendLine("        <div class=\"nav-section-content\">");
-            foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+            html.Line("<div class=\"sidebar-project-indicator ev-docs-project-indicator\">");
+            using (html.Indent())
             {
-                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
+                html.Line($"<a href=\"{docsHomeUrl}\" class=\"back-link sidebar-back-link ev-docs-project-back\">");
+                using (html.Indent())
+                {
+                    html.Line("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
+                    }
+                    html.Line("</svg>");
+                    html.Line("Back to project");
+                }
+                html.Line("</a>");
             }
-            sb.AppendLine("        </div>");
-            sb.AppendLine("      </div>");
+            html.Line("</div>");
+            html.Line("<div class=\"sidebar-header\">");
+            using (html.Indent())
+            {
+                // Keep API reference chrome consistent between index and type pages.
+                html.Line($"<a href=\"{indexUrl}\" class=\"sidebar-title sidebar-menu-title ev-docs-menu-title active\">");
+                using (html.Indent())
+                {
+                    html.Line("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"18\" height=\"18\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/>");
+                        html.Line("<path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/>");
+                    }
+                    html.Line("</svg>");
+                    html.Line("<span>API Reference</span>");
+                }
+                html.Line("</a>");
+            }
+            html.Line("</div>");
+            AppendApiSuiteSidebar(html, suite, indexUrl);
+            html.Line("<div class=\"sidebar-search\">");
+            using (html.Indent())
+            {
+                html.Line("<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                using (html.Indent())
+                {
+                    html.Line("<circle cx=\"11\" cy=\"11\" r=\"8\"/>");
+                    html.Line("<path d=\"M21 21l-4.35-4.35\"/>");
+                }
+                html.Line("</svg>");
+                html.Line($"<input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindPluralLabel} ({totalTypes})...\" />");
+                html.Line("<button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
+                using (html.Indent())
+                {
+                    html.Line("<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<path d=\"M18 6L6 18M6 6l12 12\"/>");
+                    }
+                    html.Line("</svg>");
+                }
+                html.Line("</button>");
+            }
+            html.Line("</div>");
+            if (kindFilters.Count > 0)
+            {
+                html.Line("<div class=\"sidebar-filters\">");
+                using (html.Indent())
+                {
+                    html.Line($"<div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindFilterLabel)} filters</div>");
+                    html.Line("<div class=\"filter-buttons\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
+                        foreach (var kind in kindFilters)
+                        {
+                            html.Line($"<button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
+                        }
+                    }
+                    html.Line("</div>");
+                    if (namespaceGroups.Count > 0)
+                    {
+                        html.Line("<div class=\"filter-row\">");
+                        using (html.Indent())
+                        {
+                            html.Line("<label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
+                            html.Line("<select id=\"api-namespace\" class=\"namespace-select\">");
+                            using (html.Indent())
+                            {
+                                html.Line("<option value=\"\">All namespaces</option>");
+                                foreach (var group in namespaceGroups)
+                                {
+                                    var encoded = System.Web.HttpUtility.HtmlEncode(group.Key);
+                                    html.Line($"<option value=\"{encoded}\">{encoded} ({group.Count()})</option>");
+                                }
+                            }
+                            html.Line("</select>");
+                        }
+                        html.Line("</div>");
+                    }
+                    html.Line("<div class=\"filter-row\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<button class=\"sidebar-reset\" type=\"button\">Reset filters</button>");
+                    }
+                    html.Line("</div>");
+                }
+                html.Line("</div>");
+            }
+            html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
+            html.Line("<div class=\"sidebar-tools\">");
+            using (html.Indent())
+            {
+                html.Line("<button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
+                html.Line("<button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
+            }
+            html.Line("</div>");
+            html.Line("<nav class=\"sidebar-nav\">");
+            using (html.Indent())
+            {
+                if (mainTypes.Count > 0)
+                {
+                    html.Line("<div class=\"nav-section\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<div class=\"nav-section-header main-api\">");
+                        using (html.Indent())
+                        {
+                            html.Line("<svg class=\"chevron expanded\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                            using (html.Indent())
+                            {
+                                html.Line("<path d=\"M9 18l6-6-6-6\"/>");
+                            }
+                            html.Line("</svg>");
+                            html.Line("<span>Main API</span>");
+                            html.Line($"<span class=\"type-count\">{mainTypes.Count}</span>");
+                        }
+                        html.Line("</div>");
+                        html.Line("<div class=\"nav-section-content\">");
+                        using (html.Indent())
+                        {
+                            foreach (var type in mainTypes)
+                            {
+                                html.Line(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
+                            }
+                        }
+                        html.Line("</div>");
+                    }
+                    html.Line("</div>");
+                }
+                var grouped = types
+                    .Where(t => !mainTypeNames.Contains(t.Name))
+                    .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
+                    .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+                foreach (var group in grouped)
+                {
+                    html.Line("<div class=\"nav-section\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<div class=\"nav-section-header\">");
+                        using (html.Indent())
+                        {
+                            html.Line("<svg class=\"chevron expanded\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                            using (html.Indent())
+                            {
+                                html.Line("<path d=\"M9 18l6-6-6-6\"/>");
+                            }
+                            html.Line("</svg>");
+                            html.Line($"<span>{System.Web.HttpUtility.HtmlEncode(GetShortNamespace(group.Key))}</span>");
+                            html.Line($"<span class=\"type-count\">{group.Count()}</span>");
+                        }
+                        html.Line("</div>");
+                        html.Line("<div class=\"nav-section-content\">");
+                        using (html.Indent())
+                        {
+                            foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+                            {
+                                html.Line(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
+                            }
+                        }
+                        html.Line("</div>");
+                    }
+                    html.Line("</div>");
+                }
+            }
+            html.Line("</nav>");
+            html.Line($"<div class=\"sidebar-empty\" hidden>No matching {primaryKindPluralLabel}.</div>");
         }
-
-          sb.AppendLine("    </nav>");
-          sb.AppendLine($"    <div class=\"sidebar-empty\" hidden>No matching {primaryKindPluralLabel}.</div>");
-          sb.AppendLine("    </div>");
-        return sb.ToString().TrimEnd();
+        html.Line("</div>");
+        return html.ToString().TrimEnd();
     }
 
     private static string BuildSidebarTypeItem(
@@ -1103,7 +1217,7 @@ $@"<!doctype html>
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
         var aliasAttr = BuildAliasTitleAttribute(type);
         var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-list-freshness");
-        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\"{aliasAttr}>" +
+        return $"<a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\"{aliasAttr}>" +
                $"{icon}<span class=\"type-name\">{name}</span>{freshnessBadge}</a>";
     }
 
@@ -1114,75 +1228,99 @@ $@"<!doctype html>
         IReadOnlyDictionary<string, string> typeDisplayNames,
         ApiSuiteContext? suite)
     {
-        var sb = new StringBuilder();
+        var html = new HtmlFragmentBuilder(initialIndent: 4);
         var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
         var namespaceGroups = types
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var primaryKindLabel = ResolvePrimaryKindLabel(types);
         var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
 
-        sb.AppendLine("    <div class=\"api-overview ev-page-body\">");
-        sb.AppendLine("      <header class=\"ev-docs-header api-overview-header\">");
-        sb.AppendLine("        <p class=\"ev-eyebrow\">API Reference</p>");
-        sb.AppendLine($"        <h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
-        sb.AppendLine("        <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
-        sb.AppendLine("      </header>");
-        sb.AppendLine("      <div class=\"api-overview-main api-overview-main--full\">");
-        AppendApiSuiteOverview(sb, suite, EnsureTrailingSlash(baseUrl));
-
-        var mainTypes = GetMainTypes(types, options);
-        if (mainTypes.Count > 0)
+        html.Line("<div class=\"api-overview ev-page-body\">");
+        using (html.Indent())
         {
-            sb.AppendLine("      <section class=\"quick-start\">");
-            sb.AppendLine("        <h2>Quick Start</h2>");
-            sb.AppendLine("        <p class=\"section-desc\">Frequently used types and entry points.</p>");
-            sb.AppendLine("        <div class=\"quick-grid\">");
-            foreach (var type in mainTypes.Take(6))
+            html.Line("<header class=\"ev-docs-header api-overview-header\">");
+            using (html.Indent())
             {
-                var summary = Truncate(StripCrefTokens(type.Summary), 100);
-                var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-                var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
-                var quickIcon = RenderApiGlyphSpan($"type-icon large {NormalizeKind(type.Kind)}", "type-icon-glyph", GetTypeIcon(type.Kind));
-                sb.AppendLine($"          <a href=\"{quickHref}\" class=\"quick-card\">");
-                sb.AppendLine("            <div class=\"quick-card-header\">");
-                sb.AppendLine($"              {quickIcon}");
-                sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(displayName)}</strong>");
-                var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "quick-card-freshness");
-                if (!string.IsNullOrWhiteSpace(freshnessBadge))
-                    sb.AppendLine($"              {freshnessBadge}");
-                sb.AppendLine("            </div>");
-                AppendAliasInlineMeta(sb, type, "quick-card-meta", "quick-card-aliases");
-                if (!string.IsNullOrWhiteSpace(summary))
-                {
-                    sb.AppendLine($"            <p>{System.Web.HttpUtility.HtmlEncode(summary)}</p>");
-                }
-                sb.AppendLine("          </a>");
+                html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
+                html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
+                html.Line("<p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
             }
-            sb.AppendLine("        </div>");
-            sb.AppendLine("      </section>");
-        }
+            html.Line("</header>");
+            html.Line("<div class=\"api-overview-main api-overview-main--full\">");
+            using (html.Indent())
+            {
+                AppendApiSuiteOverview(html, suite, EnsureTrailingSlash(baseUrl));
 
-        sb.AppendLine("      <section class=\"all-namespaces\">");
-        sb.AppendLine("        <h2>All Namespaces</h2>");
-        sb.AppendLine($"        <p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
-        foreach (var group in namespaceGroups)
-        {
-            AppendOverviewNamespaceGroup(sb, group, baseUrl, typeDisplayNames);
+                var mainTypes = GetMainTypes(types, options);
+                if (mainTypes.Count > 0)
+                {
+                    html.Line("<section class=\"quick-start\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<h2>Quick Start</h2>");
+                        html.Line("<p class=\"section-desc\">Frequently used types and entry points.</p>");
+                        html.Line("<div class=\"quick-grid\">");
+                        using (html.Indent())
+                        {
+                            foreach (var type in mainTypes.Take(6))
+                            {
+                                var summary = Truncate(StripCrefTokens(type.Summary), 100);
+                                var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+                                var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                                var quickIcon = RenderApiGlyphSpan($"type-icon large {NormalizeKind(type.Kind)}", "type-icon-glyph", GetTypeIcon(type.Kind));
+                                html.Line($"<a href=\"{quickHref}\" class=\"quick-card\">");
+                                using (html.Indent())
+                                {
+                                    html.Line("<div class=\"quick-card-header\">");
+                                    using (html.Indent())
+                                    {
+                                        html.Line(quickIcon);
+                                        html.Line($"<strong>{System.Web.HttpUtility.HtmlEncode(displayName)}</strong>");
+                                        var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "quick-card-freshness");
+                                        if (!string.IsNullOrWhiteSpace(freshnessBadge))
+                                            html.Line(freshnessBadge);
+                                    }
+                                    html.Line("</div>");
+                                    AppendAliasInlineMeta(html, type, "quick-card-meta", "quick-card-aliases");
+                                    if (!string.IsNullOrWhiteSpace(summary))
+                                        html.Line($"<p>{System.Web.HttpUtility.HtmlEncode(summary)}</p>");
+                                }
+                                html.Line("</a>");
+                            }
+                        }
+                        html.Line("</div>");
+                    }
+                    html.Line("</section>");
+                }
+
+                html.Line("<section class=\"all-namespaces\">");
+                using (html.Indent())
+                {
+                    html.Line("<h2>All Namespaces</h2>");
+                    html.Line($"<p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
+                    foreach (var group in namespaceGroups)
+                    {
+                        AppendOverviewNamespaceGroup(html, group, baseUrl, typeDisplayNames);
+                    }
+                }
+                html.Line("</section>");
+            }
+            html.Line("</div>");
         }
-        sb.AppendLine("      </section>");
-        sb.AppendLine("      </div>");
-        sb.AppendLine("    </div>");
-        return sb.ToString().TrimEnd();
+        html.Line("</div>");
+        return html.ToString().TrimEnd();
     }
 
     private static void AppendOverviewNamespaceGroup(
-        StringBuilder sb,
+        HtmlFragmentBuilder html,
         IGrouping<string, ApiTypeModel> group,
         string baseUrl,
         IReadOnlyDictionary<string, string> typeDisplayNames)
     {
+        if (html is null)
+            return;
+
         const int visibleLimit = 24;
         var namespaceName = group.Key;
         var anchor = BuildNamespaceAnchorId(namespaceName);
@@ -1191,43 +1329,63 @@ $@"<!doctype html>
         var hasOverflow = total > visibleLimit;
         var namespaceLabel = System.Web.HttpUtility.HtmlEncode(namespaceName);
 
-        sb.AppendLine($"        <div class=\"namespace-group\" id=\"{anchor}\" data-overview-group>");
-        sb.AppendLine("          <div class=\"namespace-group-header\">");
-        sb.AppendLine("            <div class=\"namespace-group-heading\">");
-        sb.AppendLine($"              <h3>{namespaceLabel} <span class=\"count\">({total.ToString("N0", CultureInfo.InvariantCulture)})</span></h3>");
-        sb.AppendLine("            </div>");
-        sb.AppendLine("          </div>");
-        sb.AppendLine("          <div class=\"type-chips\" data-overview-group-list>");
-        for (var index = 0; index < ordered.Count; index++)
+        html.Line($"<div class=\"namespace-group\" id=\"{anchor}\" data-overview-group>");
+        using (html.Indent())
         {
-            var type = ordered[index];
-            var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-            var search = BuildTypeSearchText(type, displayName);
-            var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
-            var kind = NormalizeKind(type.Kind);
-            var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
-            var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
-            var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
-            var aliasAttr = BuildAliasTitleAttribute(type);
-            var overflowAttr = hasOverflow && index >= visibleLimit ? " data-overview-extra hidden" : string.Empty;
-            var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-chip-freshness");
-            sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\"{aliasAttr}{overflowAttr}>");
-            sb.AppendLine($"              {chipIcon}");
-            sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
-            if (!string.IsNullOrWhiteSpace(freshnessBadge))
-                sb.AppendLine($"              {freshnessBadge}");
-            AppendAliasInlineMeta(sb, type, "type-chip-meta", "type-chip-aliases");
-            sb.AppendLine("            </a>");
+            html.Line("<div class=\"namespace-group-header\">");
+            using (html.Indent())
+            {
+                html.Line("<div class=\"namespace-group-heading\">");
+                using (html.Indent())
+                {
+                    html.Line($"<h3>{namespaceLabel} <span class=\"count\">({total.ToString("N0", CultureInfo.InvariantCulture)})</span></h3>");
+                }
+                html.Line("</div>");
+            }
+            html.Line("</div>");
+
+            html.Line("<div class=\"type-chips\" data-overview-group-list>");
+            using (html.Indent())
+            {
+                for (var index = 0; index < ordered.Count; index++)
+                {
+                    var type = ordered[index];
+                    var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+                    var search = BuildTypeSearchText(type, displayName);
+                    var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
+                    var kind = NormalizeKind(type.Kind);
+                    var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
+                    var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                    var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
+                    var aliasAttr = BuildAliasTitleAttribute(type);
+                    var overflowAttr = hasOverflow && index >= visibleLimit ? " data-overview-extra hidden" : string.Empty;
+                    var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-chip-freshness");
+                    html.Line($"<a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\"{aliasAttr}{overflowAttr}>");
+                    using (html.Indent())
+                    {
+                        html.Line(chipIcon);
+                        html.Line($"<span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
+                        if (!string.IsNullOrWhiteSpace(freshnessBadge))
+                            html.Line(freshnessBadge);
+                        AppendAliasInlineMeta(html, type, "type-chip-meta", "type-chip-aliases");
+                    }
+                    html.Line("</a>");
+                }
+            }
+            html.Line("</div>");
+
+            if (hasOverflow)
+            {
+                var expandLabel = $"Show all {total.ToString("N0", CultureInfo.InvariantCulture)} entries";
+                html.Line("<div class=\"namespace-group-actions\">");
+                using (html.Indent())
+                {
+                    html.Line($"<button class=\"overview-group-toggle\" type=\"button\" data-overview-group-toggle data-expand-label=\"{System.Web.HttpUtility.HtmlAttributeEncode(expandLabel)}\" data-collapse-label=\"Show fewer\" aria-expanded=\"false\">{System.Web.HttpUtility.HtmlEncode(expandLabel)}</button>");
+                }
+                html.Line("</div>");
+            }
         }
-        sb.AppendLine("          </div>");
-        if (hasOverflow)
-        {
-            var expandLabel = $"Show all {total.ToString("N0", CultureInfo.InvariantCulture)} entries";
-            sb.AppendLine("          <div class=\"namespace-group-actions\">");
-            sb.AppendLine($"            <button class=\"overview-group-toggle\" type=\"button\" data-overview-group-toggle data-expand-label=\"{System.Web.HttpUtility.HtmlAttributeEncode(expandLabel)}\" data-collapse-label=\"Show fewer\" aria-expanded=\"false\">{System.Web.HttpUtility.HtmlEncode(expandLabel)}</button>");
-            sb.AppendLine("          </div>");
-        }
-        sb.AppendLine("        </div>");
+        html.Line("</div>");
     }
 
     private static string BuildNamespaceAnchorId(string namespaceName)
@@ -1366,18 +1524,4 @@ $@"<!doctype html>
         return $"<span class=\"freshness-badge {System.Web.HttpUtility.HtmlEncode(status)} {System.Web.HttpUtility.HtmlEncode(cssClass)}\" title=\"{title}\">{System.Web.HttpUtility.HtmlEncode(label)}</span>";
     }
 
-    private static void AppendAliasInlineMeta(StringBuilder sb, ApiTypeModel type, string wrapperClass, string aliasesClass)
-    {
-        var aliases = type.Aliases
-            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
-            .Select(static alias => alias.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (aliases.Length == 0)
-            return;
-
-        sb.AppendLine($"            <span class=\"{System.Web.HttpUtility.HtmlEncode(wrapperClass)}\">");
-        sb.AppendLine($"              <span class=\"{System.Web.HttpUtility.HtmlEncode(aliasesClass)}\">Aliases: {System.Web.HttpUtility.HtmlEncode(string.Join(", ", aliases))}</span>");
-        sb.AppendLine("            </span>");
-    }
 }

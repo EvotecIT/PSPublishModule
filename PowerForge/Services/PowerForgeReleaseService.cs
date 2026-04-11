@@ -646,7 +646,7 @@ internal sealed class PowerForgeReleaseService
             var manifestPath = Path.Combine(outputPath, $"{package.PackageIdentifier}.yaml");
             if (File.Exists(manifestPath))
                 throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
-            var yaml = BuildWingetManifestYaml(winget, package, packageVersion!, installerEntries);
+            var yaml = WingetManifestWriter.Build(winget, package, packageVersion!, installerEntries);
             File.WriteAllText(manifestPath, yaml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             manifestPaths.Add(manifestPath);
         }
@@ -1955,7 +1955,7 @@ internal sealed class PowerForgeReleaseService
         return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
     }
 
-    private static ResolvedWingetInstallerEntry ResolveWingetInstallerEntry(
+    private static WingetManifestInstallerEntry ResolveWingetInstallerEntry(
         PowerForgeReleaseWingetInstaller installer,
         PowerForgeReleaseWingetOptions winget,
         PowerForgeReleaseWingetPackage package,
@@ -2000,7 +2000,7 @@ internal sealed class PowerForgeReleaseService
             throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' requires InstallerUrlTemplate, installer UrlTemplate, or matching PublishToolGitHub release output.");
         var resolvedUrl = url!;
 
-        return new ResolvedWingetInstallerEntry
+        return new WingetManifestInstallerEntry
         {
             Asset = asset,
             Architecture = architecture,
@@ -2029,93 +2029,6 @@ internal sealed class PowerForgeReleaseService
         return $"https://github.com/{release.Owner}/{release.Repository}/releases/download/{Uri.EscapeDataString(release.TagName)}/{Uri.EscapeDataString(fileName)}";
     }
 
-    private static string BuildWingetManifestYaml(
-        PowerForgeReleaseWingetOptions winget,
-        PowerForgeReleaseWingetPackage package,
-        string packageVersion,
-        IReadOnlyList<ResolvedWingetInstallerEntry> installers)
-    {
-        var builder = new StringBuilder();
-        var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
-        var manifestVersion = string.IsNullOrWhiteSpace(package.ManifestVersion) ? (winget.ManifestVersion ?? "1.12.0") : package.ManifestVersion!;
-        AppendYamlLine(builder, "PackageIdentifier", package.PackageIdentifier);
-        AppendYamlLine(builder, "PackageVersion", packageVersion);
-        AppendYamlLine(builder, "PackageLocale", packageLocale);
-        AppendYamlLine(builder, "Publisher", package.Publisher);
-        AppendOptionalYamlLine(builder, "PublisherUrl", package.PublisherUrl);
-        AppendYamlLine(builder, "PackageName", package.PackageName);
-        AppendOptionalYamlLine(builder, "PackageUrl", package.PackageUrl);
-        AppendYamlLine(builder, "License", package.License);
-        AppendOptionalYamlLine(builder, "LicenseUrl", package.LicenseUrl);
-        AppendYamlLine(builder, "ShortDescription", package.ShortDescription);
-        AppendOptionalYamlLine(builder, "Moniker", package.Moniker);
-        AppendYamlArray(builder, "Tags", package.Tags);
-        AppendYamlArray(builder, "Platform", package.Platform);
-        AppendOptionalYamlLine(builder, "MinimumOSVersion", package.MinimumOSVersion);
-        var installerType = installers[0].InstallerType;
-        var distinctInstallerTypes = installers
-            .Select(entry => entry.InstallerType)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (distinctInstallerTypes.Length > 1)
-            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values ({string.Join(", ", distinctInstallerTypes)}), which is not supported in singleton manifests.");
-        AppendYamlLine(builder, "InstallerType", installerType);
-        builder.AppendLine("Installers:");
-        foreach (var installer in installers)
-        {
-            AppendYamlSequenceLine(builder, "Architecture", installer.Architecture);
-            AppendYamlLine(builder, "InstallerUrl", installer.InstallerUrl, indent: 2);
-            AppendYamlLine(builder, "InstallerSha256", installer.InstallerSha256, indent: 2);
-            if (!string.IsNullOrWhiteSpace(installer.NestedInstallerType))
-                AppendYamlLine(builder, "NestedInstallerType", installer.NestedInstallerType!, indent: 2);
-            if (!string.IsNullOrWhiteSpace(installer.RelativeFilePath))
-            {
-                builder.AppendLine("  NestedInstallerFiles:");
-                AppendYamlSequenceLine(builder, "RelativeFilePath", installer.RelativeFilePath!, indent: 2);
-            }
-        }
-
-        AppendYamlLine(builder, "ManifestType", "singleton");
-        AppendYamlLine(builder, "ManifestVersion", manifestVersion);
-        return builder.ToString();
-    }
-
-    private static void AppendYamlLine(StringBuilder builder, string key, string value, int indent = 0)
-    {
-        if (indent > 0)
-            builder.Append(' ', indent);
-        builder.Append(key);
-        builder.Append(": ");
-        builder.AppendLine(EscapeYamlScalar(value));
-    }
-
-    private static void AppendOptionalYamlLine(StringBuilder builder, string key, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-            AppendYamlLine(builder, key, value!);
-    }
-
-    private static void AppendYamlArray(StringBuilder builder, string key, IReadOnlyList<string>? values)
-    {
-        if (values is null || values.Count == 0)
-            return;
-
-        builder.AppendLine($"{key}:");
-        foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
-            builder.AppendLine($"- {EscapeYamlScalar(value)}");
-    }
-
-    private static void AppendYamlSequenceLine(StringBuilder builder, string key, string value, int indent = 0)
-    {
-        if (indent > 0)
-            builder.Append(' ', indent);
-        builder.Append("- ");
-        builder.Append(key);
-        builder.Append(": ");
-        builder.AppendLine(EscapeYamlScalar(value));
-    }
-
     private static string ApplyWingetUrlTemplate(
         string template,
         string packageIdentifier,
@@ -2132,18 +2045,6 @@ internal sealed class PowerForgeReleaseService
             .Replace("{Target}", Uri.EscapeDataString(target ?? string.Empty))
             .Replace("{Runtime}", Uri.EscapeDataString(runtime ?? string.Empty))
             .Replace("{Framework}", Uri.EscapeDataString(framework ?? string.Empty));
-    }
-
-    private static string EscapeYamlScalar(string value)
-    {
-        var normalized = value.Replace("\r", string.Empty).Replace("\n", " ").Trim();
-        if (normalized.Length == 0)
-            return "\"\"";
-
-        return normalized.IndexOfAny(new[] { ':', '#', '{', '}', '[', ']', ',', '&', '*', '?', '|', '-', '<', '>', '=', '!', '%', '@', '\\', '"' }) >= 0
-            || normalized.Contains(' ')
-            ? "\"" + normalized.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
-            : normalized;
     }
 
     private static string InferWingetArchitecture(string? runtime)
@@ -2180,23 +2081,6 @@ internal sealed class PowerForgeReleaseService
             : null;
 
         return version;
-    }
-
-    private sealed class ResolvedWingetInstallerEntry
-    {
-        public PowerForgeReleaseAssetEntry Asset { get; set; } = new();
-
-        public string Architecture { get; set; } = string.Empty;
-
-        public string InstallerType { get; set; } = "zip";
-
-        public string? NestedInstallerType { get; set; }
-
-        public string? RelativeFilePath { get; set; }
-
-        public string InstallerUrl { get; set; } = string.Empty;
-
-        public string InstallerSha256 { get; set; } = string.Empty;
     }
 
     private static object? BuildPackageManifestSection(ProjectBuildHostExecutionResult? packages)

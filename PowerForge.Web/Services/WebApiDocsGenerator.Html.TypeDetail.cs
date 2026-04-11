@@ -41,29 +41,10 @@ public static partial class WebApiDocsGenerator
             : "type-detail ev-page-body";
         sb.AppendLine($"    <article class=\"{detailClasses}\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
-        sb.AppendLine("      <nav class=\"breadcrumb\">");
-        sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
-        sb.AppendLine("        <span class=\"sep\">/</span>");
-        sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
-        sb.AppendLine("      </nav>");
-
-        sb.AppendLine("      <header class=\"type-header ev-docs-header\" id=\"overview\">");
-        sb.AppendLine("        <p class=\"ev-eyebrow\">API Reference</p>");
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
-        sb.AppendLine("        <div class=\"type-title-row\">");
-        sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
-        AppendFreshnessBadge(sb, type.Freshness, "type-freshness-badge");
-        sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
-        sb.AppendLine("        </div>");
-        AppendAliasInlineMeta(sb, type, "type-header-meta", "type-header-aliases");
         var sourceAction = RenderTypeSourceAction(type.Source);
-        if (!isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
-        {
-            sb.AppendLine("        <div class=\"type-actions\">");
-            sb.AppendLine($"          {sourceAction}");
-            sb.AppendLine("        </div>");
-        }
-        sb.AppendLine("      </header>");
+        sb.AppendLine(BuildTypeBreadcrumbHtml(indexUrl, displayName).TrimEnd());
+        sb.AppendLine(BuildTypeHeaderHtml(type, displayName, kindLabel, isPowerShellCommand, sourceAction).TrimEnd());
 
         var flags = new List<string>();
         if (type.IsStatic) flags.Add("static");
@@ -72,156 +53,60 @@ public static partial class WebApiDocsGenerator
             if (type.IsAbstract) flags.Add("abstract");
             if (type.IsSealed) flags.Add("sealed");
         }
+        sb.AppendLine(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags).TrimEnd());
 
-        sb.AppendLine("      <div class=\"type-meta\">");
-        sb.AppendLine("        <div class=\"type-meta-row\">");
-        sb.AppendLine("          <span class=\"type-meta-label\">Namespace</span>");
-        sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
-        sb.AppendLine("        </div>");
-        if (type.Aliases.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-aliases\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Aliases</span>");
-            sb.AppendLine("          <div class=\"type-meta-list\">");
-            foreach (var alias in type.Aliases.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(alias)}</code>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
-        }
-        if (type.InputTypes.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-inputs\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Inputs</span>");
-            sb.AppendLine("          <div class=\"type-meta-list\">");
-            foreach (var input in type.InputTypes.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(input)}</code>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
-        }
-        if (type.OutputTypes.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-outputs\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Outputs</span>");
-            sb.AppendLine("          <div class=\"type-meta-list\">");
-            foreach (var output in type.OutputTypes.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(output)}</code>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
-        }
-        if (!string.IsNullOrWhiteSpace(type.Assembly))
-        {
-            sb.AppendLine("        <div class=\"type-meta-row\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Assembly</span>");
-            sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");
-            sb.AppendLine("        </div>");
-        }
-        if (type.Source is not null)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-source\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Source</span>");
-            if (isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
-            {
-                sb.AppendLine("          <div class=\"type-meta-list type-meta-source-links\">");
-                sb.AppendLine($"            {RenderSourceLink(type.Source)}");
-                sb.AppendLine($"            {sourceAction}");
-                sb.AppendLine("          </div>");
-            }
-            else
-            {
-                sb.AppendLine($"          {RenderSourceLink(type.Source)}");
-            }
-            sb.AppendLine("        </div>");
-        }
-        if (type.Freshness is not null)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-freshness\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Updated</span>");
-            sb.AppendLine($"          <span>{RenderFreshnessText(type.Freshness)}</span>");
-            sb.AppendLine("        </div>");
-        }
-        if (!string.IsNullOrWhiteSpace(type.BaseType))
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-inheritance\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Base</span>");
-            sb.AppendLine($"          <code>{LinkifyType(type.BaseType, baseUrl, slugMap)}</code>");
-            sb.AppendLine("        </div>");
-        }
-        if (type.Interfaces.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-interfaces\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Implements</span>");
-            sb.AppendLine("          <div class=\"type-meta-list\">");
-            foreach (var iface in type.Interfaces.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                sb.AppendLine($"            <code>{LinkifyType(iface, baseUrl, slugMap)}</code>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
-        }
-        if (flags.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-flags\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Modifiers</span>");
-            sb.AppendLine($"          <span class=\"type-meta-flags-list\">{System.Web.HttpUtility.HtmlEncode(string.Join(", ", flags))}</span>");
-            sb.AppendLine("        </div>");
-        }
-        if (type.Attributes.Count > 0)
-        {
-            sb.AppendLine("        <div class=\"type-meta-row type-meta-attributes\">");
-            sb.AppendLine("          <span class=\"type-meta-label\">Attributes</span>");
-            sb.AppendLine("          <div class=\"type-meta-list\">");
-            foreach (var attr in type.Attributes)
-            {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
-            }
-            sb.AppendLine("          </div>");
-            sb.AppendLine("        </div>");
-        }
-        sb.AppendLine("      </div>");
-
-        var detailBody = new StringBuilder();
+        var detailBody = new HtmlFragmentBuilder(initialIndent: 6);
 
         if (!string.IsNullOrWhiteSpace(type.Summary))
-            detailBody.AppendLine($"      <p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
+            detailBody.Line($"<p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
         if (inheritanceChain.Count > 0)
         {
-            detailBody.AppendLine("      <section class=\"type-inheritance\" id=\"inheritance\">");
-            detailBody.AppendLine("        <h2>Inheritance</h2>");
-            detailBody.AppendLine("        <ul class=\"inheritance-list\">");
-            foreach (var entry in inheritanceChain)
+            detailBody.Line("<section class=\"type-inheritance\" id=\"inheritance\">");
+            using (detailBody.Indent())
             {
-                detailBody.AppendLine($"          <li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
+                detailBody.Line("<h2>Inheritance</h2>");
+                detailBody.Line("<ul class=\"inheritance-list\">");
+                using (detailBody.Indent())
+                {
+                    foreach (var entry in inheritanceChain)
+                    {
+                        detailBody.Line($"<li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
+                    }
+                    detailBody.Line($"<li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
+                }
+                detailBody.Line("</ul>");
             }
-            detailBody.AppendLine($"          <li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
-            detailBody.AppendLine("        </ul>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("</section>");
         }
 
         if (derivedTypes.Count > 0)
         {
-            detailBody.AppendLine("      <section class=\"type-derived\" id=\"derived-types\">");
-            detailBody.AppendLine("        <h2>Derived Types</h2>");
-            detailBody.AppendLine("        <ul class=\"derived-list\">");
-            foreach (var derived in derivedTypes)
+            detailBody.Line("<section class=\"type-derived\" id=\"derived-types\">");
+            using (detailBody.Indent())
             {
-                detailBody.AppendLine($"          <li>{LinkifyType(derived.FullName, baseUrl, slugMap)}</li>");
+                detailBody.Line("<h2>Derived Types</h2>");
+                detailBody.Line("<ul class=\"derived-list\">");
+                using (detailBody.Indent())
+                {
+                    foreach (var derived in derivedTypes)
+                    {
+                        detailBody.Line($"<li>{LinkifyType(derived.FullName, baseUrl, slugMap)}</li>");
+                    }
+                }
+                detailBody.Line("</ul>");
             }
-            detailBody.AppendLine("        </ul>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("</section>");
         }
 
         if (!string.IsNullOrWhiteSpace(type.Remarks))
         {
-            detailBody.AppendLine("      <section class=\"remarks\" id=\"remarks\">");
-            detailBody.AppendLine("        <h2>Remarks</h2>");
-            detailBody.AppendLine($"        <p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("<section class=\"remarks\" id=\"remarks\">");
+            using (detailBody.Indent())
+            {
+                detailBody.Line("<h2>Remarks</h2>");
+                detailBody.Line($"<p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
+            }
+            detailBody.Line("</section>");
         }
 
         if (usage?.HasEntries == true)
@@ -237,93 +122,78 @@ public static partial class WebApiDocsGenerator
                 "guides-and-samples",
                 "Guides & Samples",
                 "Authored walkthroughs and practical samples linked to this API.",
-                "h2",
-                "      ");
+                "h2");
         }
 
         if (type.TypeParameters.Count > 0)
         {
-            detailBody.AppendLine("      <section class=\"type-parameters\" id=\"type-parameters\">");
-            detailBody.AppendLine("        <h2>Type Parameters</h2>");
-            detailBody.AppendLine("        <dl class=\"typeparam-list\">");
-            foreach (var tp in type.TypeParameters)
+            detailBody.Line("<section class=\"type-parameters\" id=\"type-parameters\">");
+            using (detailBody.Indent())
             {
-                detailBody.AppendLine($"          <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
-                if (!string.IsNullOrWhiteSpace(tp.Summary))
-                    detailBody.AppendLine($"          <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+                detailBody.Line("<h2>Type Parameters</h2>");
+                detailBody.Line("<dl class=\"typeparam-list\">");
+                using (detailBody.Indent())
+                {
+                    foreach (var tp in type.TypeParameters)
+                    {
+                        detailBody.Line($"<dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
+                        if (!string.IsNullOrWhiteSpace(tp.Summary))
+                            detailBody.Line($"<dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+                    }
+                }
+                detailBody.Line("</dl>");
             }
-            detailBody.AppendLine("        </dl>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("</section>");
         }
 
         if (type.Examples.Count > 0)
         {
-            detailBody.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
-            detailBody.AppendLine("        <h2>Examples</h2>");
-            AppendExamples(detailBody, type.Examples, baseUrl, slugMap, codeLanguage);
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("<section class=\"type-examples\" id=\"examples\">");
+            using (detailBody.Indent())
+            {
+                detailBody.Line("<h2>Examples</h2>");
+                AppendExamples(detailBody, type.Examples, baseUrl, slugMap, codeLanguage);
+            }
+            detailBody.Line("</section>");
         }
 
         if (type.SeeAlso.Count > 0)
         {
-            detailBody.AppendLine("      <section class=\"type-see-also\" id=\"see-also\">");
-            detailBody.AppendLine("        <h2>See Also</h2>");
-            detailBody.AppendLine("        <ul class=\"see-also-list\">");
-            foreach (var item in type.SeeAlso)
+            detailBody.Line("<section class=\"type-see-also\" id=\"see-also\">");
+            using (detailBody.Indent())
             {
-                detailBody.AppendLine($"          <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+                detailBody.Line("<h2>See Also</h2>");
+                detailBody.Line("<ul class=\"see-also-list\">");
+                using (detailBody.Indent())
+                {
+                    foreach (var item in type.SeeAlso)
+                    {
+                        detailBody.Line($"<li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+                    }
+                }
+                detailBody.Line("</ul>");
             }
-            detailBody.AppendLine("        </ul>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("</section>");
         }
 
         if (hasPowerShellCommonParameters)
         {
             var commonParametersLink = ResolvePowerShellCommonParametersUrl(baseUrl, slugMap);
             var commonParametersLinkTarget = IsExternal(commonParametersLink) ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
-            detailBody.AppendLine("      <section class=\"type-common-parameters\" id=\"common-parameters\">");
-            detailBody.AppendLine("        <h2>Common Parameters</h2>");
-            detailBody.AppendLine("        <p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
-            detailBody.AppendLine($"        <p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
-            detailBody.AppendLine("      </section>");
+            detailBody.Line("<section class=\"type-common-parameters\" id=\"common-parameters\">");
+            using (detailBody.Indent())
+            {
+                detailBody.Line("<h2>Common Parameters</h2>");
+                detailBody.Line("<p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
+                detailBody.Line($"<p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
+            }
+            detailBody.Line("</section>");
         }
 
         var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
         if (totalMembers > 0)
         {
-            detailBody.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
-            detailBody.AppendLine("        <div class=\"member-filter\">");
-            detailBody.AppendLine($"          <label for=\"api-member-filter\">{memberFilterLabel}</label>");
-            detailBody.AppendLine($"          <input id=\"api-member-filter\" type=\"text\" placeholder=\"{memberFilterPlaceholder}\" />");
-            detailBody.AppendLine("        </div>");
-            detailBody.AppendLine("        <div class=\"member-kind-filter\">");
-            detailBody.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
-            if (type.Constructors.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
-            if (type.Methods.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{methodSectionLabel} ({type.Methods.Count})</button>");
-            if (type.Properties.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
-            if (type.Fields.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
-            if (type.Events.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
-            if (type.ExtensionMethods.Count > 0)
-                detailBody.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
-            detailBody.AppendLine("        </div>");
-            if (!isPowerShellCommand)
-            {
-                detailBody.AppendLine("        <label class=\"member-toggle\">");
-                detailBody.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
-                detailBody.AppendLine("          Show inherited");
-                detailBody.AppendLine("        </label>");
-            }
-            detailBody.AppendLine("        <div class=\"member-actions\">");
-            detailBody.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
-            detailBody.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
-            detailBody.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
-            detailBody.AppendLine("        </div>");
-            detailBody.AppendLine("      </div>");
+            detailBody.AppendRaw(BuildMemberToolbarHtml(type, totalMembers, methodSectionLabel, memberFilterLabel, memberFilterPlaceholder, isPowerShellCommand) + Environment.NewLine);
 
             var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (isPowerShellCommand)
@@ -342,24 +212,228 @@ public static partial class WebApiDocsGenerator
             }
         }
 
-        if (toc.Count > 1)
-        {
-            sb.AppendLine("      <div class=\"type-detail-shell\">");
-            sb.AppendLine("        <div class=\"type-detail-main\">");
-            sb.Append(detailBody.ToString());
-            sb.AppendLine("        </div>");
-            sb.AppendLine("        <aside class=\"type-detail-rail\">");
-            sb.Append(BuildTypeTocHtml(toc));
-            sb.AppendLine("        </aside>");
-            sb.AppendLine("      </div>");
-        }
-        else
-        {
-            sb.Append(detailBody.ToString());
-        }
+        sb.Append(BuildTypeDetailShellHtml(detailBody.ToString(), toc));
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildTypeBreadcrumbHtml(string indexUrl, string displayName)
+    {
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        html.Line("<nav class=\"breadcrumb\">");
+        using (html.Indent())
+        {
+            html.Line($"<a href=\"{indexUrl}\">API Reference</a>");
+            html.Line("<span class=\"sep\">/</span>");
+            html.Line($"<span class=\"current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
+        }
+        html.Line("</nav>");
+        return html.ToString();
+    }
+
+    private static string BuildTypeHeaderHtml(ApiTypeModel type, string displayName, string kindLabel, bool isPowerShellCommand, string? sourceAction)
+    {
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        html.Line("<header class=\"type-header ev-docs-header\" id=\"overview\">");
+        using (html.Indent())
+        {
+            html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
+            html.Line("<div class=\"type-title-row\">");
+            using (html.Indent())
+            {
+                html.Line($"<span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
+                AppendFreshnessBadge(html, type.Freshness, "type-freshness-badge");
+                html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
+            }
+            html.Line("</div>");
+            AppendAliasInlineMeta(html, type, "type-header-meta", "type-header-aliases");
+            if (!isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
+            {
+                html.Line("<div class=\"type-actions\">");
+                using (html.Indent())
+                {
+                    html.Line(sourceAction);
+                }
+                html.Line("</div>");
+            }
+        }
+        html.Line("</header>");
+        return html.ToString();
+    }
+
+    private static string BuildTypeMetaHtml(
+        ApiTypeModel type,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        bool isPowerShellCommand,
+        string? sourceAction,
+        IReadOnlyList<string> flags)
+    {
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        html.Line("<div class=\"type-meta\">");
+        using (html.Indent())
+        {
+            AppendTypeMetaHtmlRow(html, "Namespace", $"<code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
+
+            AppendTypeMetaListRow(
+                html,
+                "Aliases",
+                type.Aliases.Distinct(StringComparer.OrdinalIgnoreCase),
+                "type-meta-aliases",
+                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+
+            AppendTypeMetaListRow(
+                html,
+                "Inputs",
+                type.InputTypes.Distinct(StringComparer.OrdinalIgnoreCase),
+                "type-meta-inputs",
+                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+
+            AppendTypeMetaListRow(
+                html,
+                "Outputs",
+                type.OutputTypes.Distinct(StringComparer.OrdinalIgnoreCase),
+                "type-meta-outputs",
+                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+
+            if (!string.IsNullOrWhiteSpace(type.Assembly))
+                AppendTypeMetaHtmlRow(html, "Assembly", $"<code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");
+
+            if (type.Source is not null)
+            {
+                if (isPowerShellCommand && !string.IsNullOrWhiteSpace(sourceAction))
+                {
+                    AppendTypeMetaListRow(
+                        html,
+                        "Source",
+                        new[] { RenderSourceLink(type.Source), sourceAction },
+                        "type-meta-source",
+                        static value => value,
+                        listClass: "type-meta-list type-meta-source-links");
+                }
+                else
+                {
+                    AppendTypeMetaHtmlRow(html, "Source", RenderSourceLink(type.Source), "type-meta-source");
+                }
+            }
+
+            if (type.Freshness is not null)
+                AppendTypeMetaHtmlRow(html, "Updated", $"<span>{RenderFreshnessText(type.Freshness)}</span>", "type-meta-freshness");
+
+            if (!string.IsNullOrWhiteSpace(type.BaseType))
+                AppendTypeMetaHtmlRow(html, "Base", $"<code>{LinkifyType(type.BaseType, baseUrl, slugMap)}</code>", "type-meta-inheritance");
+
+            AppendTypeMetaListRow(
+                html,
+                "Implements",
+                type.Interfaces.Distinct(StringComparer.OrdinalIgnoreCase),
+                "type-meta-interfaces",
+                iface => $"<code>{LinkifyType(iface, baseUrl, slugMap)}</code>");
+
+            if (flags.Count > 0)
+                AppendTypeMetaHtmlRow(html, "Modifiers", $"<span class=\"type-meta-flags-list\">{System.Web.HttpUtility.HtmlEncode(string.Join(", ", flags))}</span>", "type-meta-flags");
+
+            AppendTypeMetaListRow(
+                html,
+                "Attributes",
+                type.Attributes,
+                "type-meta-attributes",
+                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+        }
+        html.Line("</div>");
+        return html.ToString();
+    }
+
+    private static void AppendTypeMetaHtmlRow(HtmlFragmentBuilder html, string label, string valueHtml, string? rowClass = null)
+    {
+        if (html is null || string.IsNullOrWhiteSpace(valueHtml))
+            return;
+
+        var classSuffix = string.IsNullOrWhiteSpace(rowClass) ? string.Empty : $" {rowClass}";
+        html.Line($"<div class=\"type-meta-row{classSuffix}\">");
+        using (html.Indent())
+        {
+            html.Line($"<span class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+            html.Line(valueHtml);
+        }
+        html.Line("</div>");
+    }
+
+    private static void AppendTypeMetaListRow(
+        HtmlFragmentBuilder html,
+        string label,
+        IEnumerable<string> values,
+        string rowClass,
+        Func<string, string> renderItem,
+        string listClass = "type-meta-list")
+    {
+        if (html is null || values is null)
+            return;
+
+        var items = values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(renderItem)
+            .ToArray();
+        if (items.Length == 0)
+            return;
+
+        html.Line($"<div class=\"type-meta-row {rowClass}\">");
+        using (html.Indent())
+        {
+            html.Line($"<span class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+            html.Line($"<div class=\"{listClass}\">");
+            using (html.Indent())
+            {
+                foreach (var item in items)
+                {
+                    html.Line(item);
+                }
+            }
+            html.Line("</div>");
+        }
+        html.Line("</div>");
+    }
+
+    private static string BuildTypeDetailShellHtml(string detailBodyHtml, IReadOnlyList<(string id, string label)> toc)
+    {
+        if (toc is null || toc.Count <= 1)
+            return detailBodyHtml;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        html.Line("<div class=\"type-detail-shell\">");
+        using (html.Indent())
+        {
+            html.Line("<div class=\"type-detail-main\">");
+            html.AppendRaw(detailBodyHtml);
+            html.Line("</div>");
+            html.Line("<aside class=\"type-detail-rail\">");
+            html.AppendRaw(BuildTypeTocHtml(toc));
+            html.Line("</aside>");
+        }
+        html.Line("</div>");
+        return html.ToString();
+    }
+
+    private static void AppendAliasInlineMeta(HtmlFragmentBuilder html, ApiTypeModel type, string wrapperClass, string aliasesClass)
+    {
+        if (html is null || type is null)
+            return;
+
+        var aliases = type.Aliases
+            .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+            .Select(static alias => alias.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (aliases.Length == 0)
+            return;
+
+        html.Line($"<span class=\"{System.Web.HttpUtility.HtmlEncode(wrapperClass)}\">");
+        using (html.Indent())
+        {
+            html.Line($"<span class=\"{System.Web.HttpUtility.HtmlEncode(aliasesClass)}\">Aliases: {System.Web.HttpUtility.HtmlEncode(string.Join(", ", aliases))}</span>");
+        }
+        html.Line("</span>");
     }
 
     private static string BuildTypeTocHtml(IReadOnlyList<(string id, string label)> toc)
@@ -367,24 +441,102 @@ public static partial class WebApiDocsGenerator
         if (toc is null || toc.Count <= 1)
             return string.Empty;
 
-        var sb = new StringBuilder();
-        sb.AppendLine("          <nav class=\"type-toc\">");
-        sb.AppendLine("            <div class=\"type-toc-header\">");
-        sb.AppendLine("              <span class=\"type-toc-title\">On this page</span>");
-        sb.AppendLine("              <button class=\"type-toc-toggle\" type=\"button\" aria-label=\"Toggle table of contents\">");
-        sb.AppendLine("                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-        sb.AppendLine("                  <path d=\"M9 18l6-6-6-6\"/>");
-        sb.AppendLine("                </svg>");
-        sb.AppendLine("              </button>");
-        sb.AppendLine("            </div>");
-        sb.AppendLine("            <ul>");
-        foreach (var entry in toc)
+        var html = new HtmlFragmentBuilder(initialIndent: 10);
+        html.Line("<nav class=\"type-toc\">");
+        using (html.Indent())
         {
-            sb.AppendLine($"              <li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
+            html.Line("<div class=\"type-toc-header\">");
+            using (html.Indent())
+            {
+                html.Line("<span class=\"type-toc-title\">On this page</span>");
+                html.Line("<button class=\"type-toc-toggle\" type=\"button\" aria-label=\"Toggle table of contents\">");
+                using (html.Indent())
+                {
+                    html.Line("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<path d=\"M9 18l6-6-6-6\"/>");
+                    }
+                    html.Line("</svg>");
+                }
+                html.Line("</button>");
+            }
+            html.Line("</div>");
+            html.Line("<ul>");
+            using (html.Indent())
+            {
+                foreach (var entry in toc)
+                {
+                    html.Line($"<li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
+                }
+            }
+            html.Line("</ul>");
         }
-        sb.AppendLine("            </ul>");
-        sb.AppendLine("          </nav>");
-        return sb.ToString();
+        html.Line("</nav>");
+        return html.ToString();
+    }
+
+    private static string BuildMemberToolbarHtml(
+        ApiTypeModel type,
+        int totalMembers,
+        string methodSectionLabel,
+        string memberFilterLabel,
+        string memberFilterPlaceholder,
+        bool isPowerShellCommand)
+    {
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        html.Line($"<div class=\"member-toolbar\" data-member-total=\"{totalMembers}\">");
+        using (html.Indent())
+        {
+            html.Line("<div class=\"member-filter\">");
+            using (html.Indent())
+            {
+                html.Line($"<label for=\"api-member-filter\">{System.Web.HttpUtility.HtmlEncode(memberFilterLabel)}</label>");
+                html.Line($"<input id=\"api-member-filter\" type=\"text\" placeholder=\"{System.Web.HttpUtility.HtmlAttributeEncode(memberFilterPlaceholder)}\" />");
+            }
+            html.Line("</div>");
+
+            html.Line("<div class=\"member-kind-filter\">");
+            using (html.Indent())
+            {
+                html.Line($"<button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
+                if (type.Constructors.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
+                if (type.Methods.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{System.Web.HttpUtility.HtmlEncode(methodSectionLabel)} ({type.Methods.Count})</button>");
+                if (type.Properties.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+                if (type.Fields.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{System.Web.HttpUtility.HtmlEncode(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
+                if (type.Events.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+                if (type.ExtensionMethods.Count > 0)
+                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
+            }
+            html.Line("</div>");
+
+            if (!isPowerShellCommand)
+            {
+                html.Line("<label class=\"member-toggle\">");
+                using (html.Indent())
+                {
+                    html.Line("<input type=\"checkbox\" id=\"api-show-inherited\" />");
+                    html.Line("Show inherited");
+                }
+                html.Line("</label>");
+            }
+
+            html.Line("<div class=\"member-actions\">");
+            using (html.Indent())
+            {
+                html.Line("<button class=\"member-expand-all\" type=\"button\">Expand all</button>");
+                html.Line("<button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
+                html.Line("<button class=\"member-reset\" type=\"button\">Reset</button>");
+            }
+            html.Line("</div>");
+        }
+        html.Line("</div>");
+        return html.ToString().TrimEnd();
     }
 
     private static void AppendMemberSections(
@@ -401,16 +553,41 @@ public static partial class WebApiDocsGenerator
         bool groupOverloads = false,
         string? sectionId = null)
     {
-        if (members.Count == 0) return;
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        AppendMemberSections(html, label, memberKind, members, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited, groupOverloads, sectionId);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendMemberSections(
+        HtmlFragmentBuilder html,
+        string label,
+        string memberKind,
+        List<ApiMemberModel> members,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
+        string codeLanguage,
+        ISet<string> usedMemberIds,
+        bool treatAsInherited = true,
+        bool groupOverloads = false,
+        string? sectionId = null)
+    {
+        if (html is null || members.Count == 0)
+            return;
+
         var direct = members.Where(m => !m.IsInherited).ToList();
         var inherited = treatAsInherited ? members.Where(m => m.IsInherited).ToList() : new List<ApiMemberModel>();
 
         var directId = direct.Count > 0 ? sectionId : null;
         var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, false, groupOverloads, directId);
+            AppendMemberCards(html, label, memberKind, direct, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, true, groupOverloads, inheritedId);
+            AppendMemberCards(html, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -427,56 +604,107 @@ public static partial class WebApiDocsGenerator
         bool groupOverloads,
         string? sectionId)
     {
-        if (members.Count == 0) return;
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 6);
+        AppendMemberCards(html, label, memberKind, members, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, inheritedSection, groupOverloads, sectionId);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendMemberCards(
+        HtmlFragmentBuilder html,
+        string label,
+        string memberKind,
+        List<ApiMemberModel> members,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
+        string codeLanguage,
+        ISet<string> usedMemberIds,
+        bool inheritedSection,
+        bool groupOverloads,
+        string? sectionId)
+    {
+        if (html is null || members.Count == 0)
+            return;
+
         var collapsed = inheritedSection ? " collapsed" : string.Empty;
         var idAttribute = string.IsNullOrWhiteSpace(sectionId) ? string.Empty : $" id=\"{sectionId}\"";
-        sb.AppendLine($"      <section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\"{idAttribute}>");
-        sb.AppendLine("        <div class=\"member-section-header\">");
-        sb.AppendLine($"          <h2>{label}</h2>");
-        sb.AppendLine("          <button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
-        sb.AppendLine("            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-        sb.AppendLine("              <path d=\"M9 18l6-6-6-6\"/>");
-        sb.AppendLine("            </svg>");
-        sb.AppendLine("          </button>");
-        sb.AppendLine("        </div>");
+        html.Line($"<section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\"{idAttribute}>");
+        using (html.Indent())
+        {
+            html.Line("<div class=\"member-section-header\">");
+            using (html.Indent())
+            {
+                html.Line($"<h2>{System.Web.HttpUtility.HtmlEncode(label)}</h2>");
+                html.Line("<button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
+                using (html.Indent())
+                {
+                    html.Line("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+                    using (html.Indent())
+                    {
+                        html.Line("<path d=\"M9 18l6-6-6-6\"/>");
+                    }
+                    html.Line("</svg>");
+                }
+                html.Line("</button>");
+            }
+            html.Line("</div>");
+
         var hidden = inheritedSection ? " hidden" : string.Empty;
-        sb.AppendLine($"        <div class=\"member-section-body\"{hidden}>");
-        if (groupOverloads)
-        {
-            var grouped = members
-                .GroupBy(m => string.IsNullOrWhiteSpace(m.DisplayName) ? m.Name : m.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            foreach (var group in grouped)
+            html.Line($"<div class=\"member-section-body\"{hidden}>");
+            using (html.Indent())
             {
-                if (group.Count() == 1)
+                if (groupOverloads)
                 {
-                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
-                    continue;
+                    var grouped = members
+                        .GroupBy(m => string.IsNullOrWhiteSpace(m.DisplayName) ? m.Name : m.DisplayName, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    foreach (var group in grouped)
+                    {
+                        if (group.Count() == 1)
+                        {
+                            AppendMemberCard(html, memberKind, group.First(), baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
+                            continue;
+                        }
+
+                        html.Line("<div class=\"member-group\">");
+                        using (html.Indent())
+                        {
+                            html.Line("<div class=\"member-group-header\">");
+                            using (html.Indent())
+                            {
+                                html.Line($"<span class=\"member-group-name\">{System.Web.HttpUtility.HtmlEncode(group.Key)}</span>");
+                                html.Line($"<span class=\"member-group-count\">{group.Count()} overloads</span>");
+                            }
+                            html.Line("</div>");
+                            html.Line("<div class=\"member-group-body\">");
+                            using (html.Indent())
+                            {
+                                foreach (var member in group)
+                                {
+                                    AppendMemberCard(html, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
+                                }
+                            }
+                            html.Line("</div>");
+                        }
+                        html.Line("</div>");
+                    }
                 }
-                sb.AppendLine("          <div class=\"member-group\">");
-                sb.AppendLine("            <div class=\"member-group-header\">");
-                sb.AppendLine($"              <span class=\"member-group-name\">{System.Web.HttpUtility.HtmlEncode(group.Key)}</span>");
-                sb.AppendLine($"              <span class=\"member-group-count\">{group.Count()} overloads</span>");
-                sb.AppendLine("            </div>");
-                sb.AppendLine("            <div class=\"member-group-body\">");
-                foreach (var member in group)
+                else
                 {
-                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
+                    foreach (var member in members)
+                    {
+                        AppendMemberCard(html, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
+                    }
                 }
-                sb.AppendLine("            </div>");
-                sb.AppendLine("          </div>");
             }
+            html.Line("</div>");
         }
-        else
-        {
-            foreach (var member in members)
-            {
-                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, label);
-            }
-        }
-        sb.AppendLine("        </div>");
-        sb.AppendLine("      </section>");
+        html.Line("</section>");
     }
 
     private static void AppendMemberCard(
@@ -490,6 +718,29 @@ public static partial class WebApiDocsGenerator
         ISet<string> usedMemberIds,
         string sectionLabel)
     {
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendMemberCard(html, memberKind, member, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionLabel);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendMemberCard(
+        HtmlFragmentBuilder html,
+        string memberKind,
+        ApiMemberModel member,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        ApiTypeRelatedContentModel? relatedContent,
+        string codeLanguage,
+        ISet<string> usedMemberIds,
+        string sectionLabel)
+    {
+        if (html is null)
+            return;
+
         var memberId = BuildUniqueMemberId(BuildMemberId(memberKind, member), usedMemberIds);
         var signature = !string.IsNullOrWhiteSpace(member.Signature)
             ? member.Signature
@@ -501,112 +752,148 @@ public static partial class WebApiDocsGenerator
             ? $"Inherited from {member.DeclaringType}"
             : string.Empty;
 
-        sb.AppendLine($"        <div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
-        sb.AppendLine("          <div class=\"member-header\">");
-        sb.AppendLine($"            {BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage)}");
-        sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
-        sb.AppendLine("          </div>");
-        if (string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(member.ParameterSetName))
-            sb.AppendLine($"          <div class=\"member-parameter-set\">Parameter set: <code>{System.Web.HttpUtility.HtmlEncode(member.ParameterSetName)}</code></div>");
-        if (member.Source is not null)
-            sb.AppendLine($"          <div class=\"member-source\">{RenderSourceLink(member.Source)}</div>");
-        if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
-            sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
-        if (!string.IsNullOrWhiteSpace(inheritedNote))
+        html.Line($"<div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
+        using (html.Indent())
         {
-            var declaring = LinkifyType(member.DeclaringType, baseUrl, slugMap);
-            sb.AppendLine($"          <div class=\"member-inherited\">Inherited from {declaring}</div>");
-        }
-        if (member.Attributes.Count > 0)
-        {
-            sb.AppendLine("          <div class=\"member-attributes\">");
-            foreach (var attr in member.Attributes)
+            html.Line("<div class=\"member-header\">");
+            using (html.Indent())
             {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+                html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage));
+                html.Line($"<a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             }
-            sb.AppendLine("          </div>");
-        }
-        if (!string.IsNullOrWhiteSpace(member.Summary))
-            sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
-        if (relatedContent is not null &&
-            relatedContent.MemberEntries.TryGetValue(member, out var memberRelatedContent) &&
-            memberRelatedContent.Count > 0)
-        {
-            AppendMemberRelatedContent(sb, memberRelatedContent, baseUrl, slugMap);
-        }
-        if (member.TypeParameters.Count > 0)
-        {
-            sb.AppendLine("          <h3>Type Parameters</h3>");
-            sb.AppendLine("          <dl class=\"typeparam-list\">");
-            foreach (var tp in member.TypeParameters)
+            html.Line("</div>");
+
+            if (string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(member.ParameterSetName))
+                html.Line($"<div class=\"member-parameter-set\">Parameter set: <code>{System.Web.HttpUtility.HtmlEncode(member.ParameterSetName)}</code></div>");
+
+            if (member.Source is not null)
+                html.Line($"<div class=\"member-source\">{RenderSourceLink(member.Source)}</div>");
+
+            if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
+                html.Line($"<div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
+
+            if (!string.IsNullOrWhiteSpace(inheritedNote))
             {
-                sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
-                if (!string.IsNullOrWhiteSpace(tp.Summary))
-                    sb.AppendLine($"            <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+                var declaring = LinkifyType(member.DeclaringType, baseUrl, slugMap);
+                html.Line($"<div class=\"member-inherited\">Inherited from {declaring}</div>");
             }
-            sb.AppendLine("          </dl>");
-        }
-        if (member.Parameters.Count > 0)
-        {
-            sb.AppendLine("          <h3>Parameters</h3>");
-            sb.AppendLine("          <dl class=\"param-list\">");
-            foreach (var param in member.Parameters)
+
+            if (member.Attributes.Count > 0)
             {
-                var optional = param.IsOptional ? " optional" : string.Empty;
-                var defaultValue = param.DefaultValue;
-                var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
-                sb.AppendLine($"            <dt><span class=\"param-name\">{System.Web.HttpUtility.HtmlEncode(param.Name)}</span> <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span>{BuildParameterMetaChips(param)}</dt>");
-                if (!string.IsNullOrWhiteSpace(param.Summary))
-                    sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
-                if (param.PossibleValues.Count > 0)
-                    sb.AppendLine($"            <dd class=\"param-possible-values\">Possible values: {RenderPowerShellPossibleValues(param.PossibleValues)}</dd>");
+                html.Line("<div class=\"member-attributes\">");
+                using (html.Indent())
+                {
+                    foreach (var attr in member.Attributes)
+                    {
+                        html.Line($"<code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+                    }
+                }
+                html.Line("</div>");
             }
-            sb.AppendLine("          </dl>");
-        }
-        if (!string.IsNullOrWhiteSpace(member.ValueSummary))
-        {
-            sb.AppendLine("          <h3>Value</h3>");
-            sb.AppendLine($"          <p>{RenderLinkedText(member.ValueSummary, baseUrl, slugMap)}</p>");
-        }
-        if (sectionLabel == "Fields" || sectionLabel == "Values")
-        {
-            if (!string.IsNullOrWhiteSpace(member.Value))
-                sb.AppendLine($"          <div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
-        }
-        if (!string.IsNullOrWhiteSpace(member.Returns))
-        {
-            var returnsLabel = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) ? "Outputs" : "Returns";
-            sb.AppendLine($"          <h3>{returnsLabel}</h3>");
-            sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
-        }
-        if (member.Exceptions.Count > 0)
-        {
-            sb.AppendLine("          <h3>Exceptions</h3>");
-            sb.AppendLine("          <ul class=\"exception-list\">");
-            foreach (var ex in member.Exceptions)
+
+            if (!string.IsNullOrWhiteSpace(member.Summary))
+                html.Line($"<p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
+
+            if (relatedContent is not null &&
+                relatedContent.MemberEntries.TryGetValue(member, out var memberRelatedContent) &&
+                memberRelatedContent.Count > 0)
             {
-                var type = LinkifyType(ex.Type, baseUrl, slugMap);
-                var desc = string.IsNullOrWhiteSpace(ex.Summary) ? string.Empty : $" – {RenderLinkedText(ex.Summary, baseUrl, slugMap)}";
-                sb.AppendLine($"            <li><code>{type}</code>{desc}</li>");
+                AppendMemberRelatedContent(html, memberRelatedContent, baseUrl, slugMap);
             }
-            sb.AppendLine("          </ul>");
-        }
-        if (member.Examples.Count > 0)
-        {
-            sb.AppendLine("          <h3>Examples</h3>");
-            AppendExamples(sb, member.Examples, baseUrl, slugMap, codeLanguage);
-        }
-        if (member.SeeAlso.Count > 0)
-        {
-            sb.AppendLine("          <h3>See Also</h3>");
-            sb.AppendLine("          <ul class=\"see-also-list\">");
-            foreach (var item in member.SeeAlso)
+
+            if (member.TypeParameters.Count > 0)
             {
-                sb.AppendLine($"            <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+                html.Line("<h3>Type Parameters</h3>");
+                html.Line("<dl class=\"typeparam-list\">");
+                using (html.Indent())
+                {
+                    foreach (var tp in member.TypeParameters)
+                    {
+                        html.Line($"<dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
+                        if (!string.IsNullOrWhiteSpace(tp.Summary))
+                            html.Line($"<dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+                    }
+                }
+                html.Line("</dl>");
             }
-            sb.AppendLine("          </ul>");
+
+            if (member.Parameters.Count > 0)
+            {
+                html.Line("<h3>Parameters</h3>");
+                html.Line("<dl class=\"param-list\">");
+                using (html.Indent())
+                {
+                    foreach (var param in member.Parameters)
+                    {
+                        var optional = param.IsOptional ? " optional" : string.Empty;
+                        var defaultValue = param.DefaultValue;
+                        var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
+                        html.Line($"<dt><span class=\"param-name\">{System.Web.HttpUtility.HtmlEncode(param.Name)}</span> <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span>{BuildParameterMetaChips(param)}</dt>");
+                        if (!string.IsNullOrWhiteSpace(param.Summary))
+                            html.Line($"<dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
+                        if (param.PossibleValues.Count > 0)
+                            html.Line($"<dd class=\"param-possible-values\">Possible values: {RenderPowerShellPossibleValues(param.PossibleValues)}</dd>");
+                    }
+                }
+                html.Line("</dl>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(member.ValueSummary))
+            {
+                html.Line("<h3>Value</h3>");
+                html.Line($"<p>{RenderLinkedText(member.ValueSummary, baseUrl, slugMap)}</p>");
+            }
+
+            if (sectionLabel == "Fields" || sectionLabel == "Values")
+            {
+                if (!string.IsNullOrWhiteSpace(member.Value))
+                    html.Line($"<div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(member.Returns))
+            {
+                var returnsLabel = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) ? "Outputs" : "Returns";
+                html.Line($"<h3>{returnsLabel}</h3>");
+                html.Line($"<p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
+            }
+
+            if (member.Exceptions.Count > 0)
+            {
+                html.Line("<h3>Exceptions</h3>");
+                html.Line("<ul class=\"exception-list\">");
+                using (html.Indent())
+                {
+                    foreach (var ex in member.Exceptions)
+                    {
+                        var type = LinkifyType(ex.Type, baseUrl, slugMap);
+                        var desc = string.IsNullOrWhiteSpace(ex.Summary) ? string.Empty : $" – {RenderLinkedText(ex.Summary, baseUrl, slugMap)}";
+                        html.Line($"<li><code>{type}</code>{desc}</li>");
+                    }
+                }
+                html.Line("</ul>");
+            }
+
+            if (member.Examples.Count > 0)
+            {
+                html.Line("<h3>Examples</h3>");
+                AppendExamples(html, member.Examples, baseUrl, slugMap, codeLanguage);
+            }
+
+            if (member.SeeAlso.Count > 0)
+            {
+                html.Line("<h3>See Also</h3>");
+                html.Line("<ul class=\"see-also-list\">");
+                using (html.Indent())
+                {
+                    foreach (var item in member.SeeAlso)
+                    {
+                        html.Line($"<li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+                    }
+                }
+                html.Line("</ul>");
+            }
         }
-        sb.AppendLine("        </div>");
+        html.Line("</div>");
     }
 
     private static void AppendExamples(
@@ -616,29 +903,49 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage)
     {
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendExamples(html, examples, baseUrl, slugMap, codeLanguage);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendExamples(
+        HtmlFragmentBuilder html,
+        List<ApiExampleModel> examples,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage)
+    {
+        if (html is null || examples is null || examples.Count == 0)
+            return;
+
         string? lastOrigin = null;
         foreach (var example in examples)
         {
-            AppendExampleOriginBadge(sb, example, ref lastOrigin);
+            AppendExampleOriginBadge(html, example, ref lastOrigin);
             if (string.Equals(example.Kind, "media", StringComparison.OrdinalIgnoreCase) && example.Media is not null)
             {
-                AppendExampleMedia(sb, example.Media, baseUrl, slugMap);
+                AppendExampleMedia(html, example.Media, baseUrl, slugMap);
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(example.Text)) continue;
+            if (string.IsNullOrWhiteSpace(example.Text))
+                continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
-                AppendExampleCodeBlock(sb, example.Text, codeLanguage);
+                AppendExampleCodeBlock(html, example.Text, codeLanguage);
             }
             else if (string.Equals(example.Kind, "heading", StringComparison.OrdinalIgnoreCase))
             {
-                sb.AppendLine($"        <h3 class=\"example-title\">{System.Web.HttpUtility.HtmlEncode(example.Text)}</h3>");
+                html.Line($"<h3 class=\"example-title\">{System.Web.HttpUtility.HtmlEncode(example.Text)}</h3>");
             }
             else
             {
                 foreach (var paragraph in SplitExampleParagraphs(example.Text))
                 {
-                    sb.AppendLine($"        <p>{RenderLinkedText(paragraph, baseUrl, slugMap)}</p>");
+                    html.Line($"<p>{RenderLinkedText(paragraph, baseUrl, slugMap)}</p>");
                 }
             }
         }
@@ -646,7 +953,18 @@ public static partial class WebApiDocsGenerator
 
     private static void AppendExampleCodeBlock(StringBuilder sb, string? codeText, string codeLanguage)
     {
-        if (sb is null || string.IsNullOrWhiteSpace(codeText))
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendExampleCodeBlock(html, codeText, codeLanguage);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendExampleCodeBlock(HtmlFragmentBuilder html, string? codeText, string codeLanguage)
+    {
+        if (html is null || string.IsNullOrWhiteSpace(codeText))
             return;
 
         var normalizedCode = codeText
@@ -662,16 +980,21 @@ public static partial class WebApiDocsGenerator
 
         if (TrySplitPowerShellPrompt(normalizedCode, languageToken, out var prompt, out var body))
         {
-            sb.AppendLine($"        <pre class=\"language-{languageToken} example-code-block example-code-block--has-prompt\">");
-            sb.AppendLine($"          <span class=\"example-code__prompt\">{System.Web.HttpUtility.HtmlEncode(prompt)}</span>");
-            sb.AppendLine($"          <code class=\"language-{languageToken} example-code__body\">{System.Web.HttpUtility.HtmlEncode(body)}</code>");
-            sb.AppendLine("        </pre>");
+            html.Line($"<pre class=\"language-{languageToken} example-code-block example-code-block--has-prompt\">");
+            using (html.Indent())
+            {
+                html.Line($"<span class=\"example-code__prompt\">{System.Web.HttpUtility.HtmlEncode(prompt)}</span>");
+                html.Line($"<code class=\"language-{languageToken} example-code__body\">{System.Web.HttpUtility.HtmlEncode(body)}</code>");
+            }
+            html.Line("</pre>");
             return;
         }
 
-        sb.AppendLine($"        <pre{languageClass}><code{languageClass}>");
-        sb.AppendLine(System.Web.HttpUtility.HtmlEncode(normalizedCode));
-        sb.AppendLine("        </code></pre>");
+        html.Line($"<pre{languageClass}><code{languageClass}>");
+        html.AppendRaw(System.Web.HttpUtility.HtmlEncode(normalizedCode));
+        if (!normalizedCode.EndsWith('\n'))
+            html.AppendRaw(Environment.NewLine);
+        html.Line("</code></pre>");
     }
 
     private static bool TrySplitPowerShellPrompt(string codeText, string? languageToken, out string prompt, out string body)
@@ -698,7 +1021,21 @@ public static partial class WebApiDocsGenerator
         ApiExampleModel example,
         ref string? lastOrigin)
     {
-        if (sb is null || example is null)
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendExampleOriginBadge(html, example, ref lastOrigin);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendExampleOriginBadge(
+        HtmlFragmentBuilder html,
+        ApiExampleModel example,
+        ref string? lastOrigin)
+    {
+        if (html is null || example is null)
             return;
 
         if (string.IsNullOrWhiteSpace(example.Origin))
@@ -722,9 +1059,12 @@ public static partial class WebApiDocsGenerator
         var encodedLabel = System.Web.HttpUtility.HtmlEncode(label);
         var encodedDescription = System.Web.HttpUtility.HtmlEncode(description);
 
-        sb.AppendLine($"        <div class=\"example-origin\" data-example-origin=\"{encodedOrigin}\">");
-        sb.AppendLine($"          <span class=\"param-meta-chip example-origin-badge {encodedClass}\" title=\"{encodedDescription}\">{encodedLabel}</span>");
-        sb.AppendLine("        </div>");
+        html.Line($"<div class=\"example-origin\" data-example-origin=\"{encodedOrigin}\">");
+        using (html.Indent())
+        {
+            html.Line($"<span class=\"param-meta-chip example-origin-badge {encodedClass}\" title=\"{encodedDescription}\">{encodedLabel}</span>");
+        }
+        html.Line("</div>");
         lastOrigin = example.Origin;
     }
 
@@ -749,7 +1089,22 @@ public static partial class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap)
     {
-        if (media is null || string.IsNullOrWhiteSpace(media.Url))
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: 8);
+        AppendExampleMedia(html, media, baseUrl, slugMap);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendExampleMedia(
+        HtmlFragmentBuilder html,
+        ApiExampleMediaModel media,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (html is null || media is null || string.IsNullOrWhiteSpace(media.Url))
             return;
 
         var mediaType = string.IsNullOrWhiteSpace(media.Type) ? "link" : media.Type.Trim().ToLowerInvariant();
@@ -767,50 +1122,86 @@ public static partial class WebApiDocsGenerator
         var widthAttr = media.Width is > 0 ? $" width=\"{media.Width.Value}\"" : string.Empty;
         var heightAttr = media.Height is > 0 ? $" height=\"{media.Height.Value}\"" : string.Empty;
 
-        sb.AppendLine($"        <figure class=\"example-media example-media-{safeType}\" data-example-media-type=\"{safeType}\">");
-        switch (mediaType)
+        html.Line($"<figure class=\"example-media example-media-{safeType}\" data-example-media-type=\"{safeType}\">");
+        using (html.Indent())
         {
-            case "image":
-                sb.AppendLine("          <div class=\"example-media-frame\">");
-                sb.AppendLine($"            <img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
-                sb.AppendLine("          </div>");
-                break;
-            case "video":
-                sb.AppendLine("          <div class=\"example-media-frame\">");
-                sb.Append($"            <video controls preload=\"metadata\"");
-                if (!string.IsNullOrWhiteSpace(safePoster))
-                    sb.Append($" poster=\"{safePoster}\"");
-                if (!string.IsNullOrWhiteSpace(safeTitle))
-                    sb.Append($" title=\"{safeTitle}\"");
-                sb.AppendLine($"{widthAttr}{heightAttr}>");
-                sb.Append($"              <source src=\"{safeUrl}\"");
-                if (!string.IsNullOrWhiteSpace(safeMimeType))
-                    sb.Append($" type=\"{safeMimeType}\"");
-                sb.AppendLine(" />");
-                sb.AppendLine("            </video>");
-                sb.AppendLine("          </div>");
-                break;
-            case "terminal":
-                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-terminal\">");
-                if (!string.IsNullOrWhiteSpace(safePoster))
-                    sb.AppendLine($"            <img src=\"{safePoster}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\" class=\"example-media-poster\"{widthAttr}{heightAttr} />");
-                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? "Open terminal recording" : title)}</a>");
-                sb.AppendLine("          </div>");
-                break;
-            default:
-                sb.AppendLine("          <div class=\"example-media-frame example-media-frame-link\">");
-                sb.AppendLine($"            <a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? media.Url : title)}</a>");
-                sb.AppendLine("          </div>");
-                break;
+            switch (mediaType)
+            {
+                case "image":
+                    html.Line("<div class=\"example-media-frame\">");
+                    using (html.Indent())
+                    {
+                        html.Line($"<img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
+                    }
+                    html.Line("</div>");
+                    break;
+                case "video":
+                    html.Line("<div class=\"example-media-frame\">");
+                    using (html.Indent())
+                    {
+                        html.Line(BuildExampleVideoOpenTag(safePoster, safeTitle, widthAttr, heightAttr));
+
+                        using (html.Indent())
+                        {
+                            html.Line(BuildExampleVideoSourceTag(safeUrl, safeMimeType));
+                        }
+
+                        html.Line("</video>");
+                    }
+                    html.Line("</div>");
+                    break;
+                case "terminal":
+                    html.Line("<div class=\"example-media-frame example-media-frame-terminal\">");
+                    using (html.Indent())
+                    {
+                        if (!string.IsNullOrWhiteSpace(safePoster))
+                            html.Line($"<img src=\"{safePoster}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\" class=\"example-media-poster\"{widthAttr}{heightAttr} />");
+                        html.Line($"<a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? "Open terminal recording" : title)}</a>");
+                    }
+                    html.Line("</div>");
+                    break;
+                default:
+                    html.Line("<div class=\"example-media-frame example-media-frame-link\">");
+                    using (html.Indent())
+                    {
+                        html.Line($"<a class=\"example-media-link\" href=\"{safeUrl}\">{System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(title) ? media.Url : title)}</a>");
+                    }
+                    html.Line("</div>");
+                    break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(caption))
+                html.Line($"<figcaption class=\"example-media-caption\">{RenderLinkedText(caption, baseUrl, slugMap)}</figcaption>");
+            var mediaMeta = BuildExampleMediaMeta(media);
+            if (!string.IsNullOrWhiteSpace(mediaMeta))
+                html.Line($"<p class=\"example-media-meta\">{System.Web.HttpUtility.HtmlEncode(mediaMeta)}</p>");
         }
 
-        if (!string.IsNullOrWhiteSpace(caption))
-            sb.AppendLine($"          <figcaption class=\"example-media-caption\">{RenderLinkedText(caption, baseUrl, slugMap)}</figcaption>");
-        var mediaMeta = BuildExampleMediaMeta(media);
-        if (!string.IsNullOrWhiteSpace(mediaMeta))
-            sb.AppendLine($"          <p class=\"example-media-meta\">{System.Web.HttpUtility.HtmlEncode(mediaMeta)}</p>");
+        html.Line("</figure>");
+    }
 
-        sb.AppendLine("        </figure>");
+    private static string BuildExampleVideoOpenTag(string safePoster, string safeTitle, string widthAttr, string heightAttr)
+    {
+        var attributes = new List<string> { "controls", "preload=\"metadata\"" };
+        if (!string.IsNullOrWhiteSpace(safePoster))
+            attributes.Add($"poster=\"{safePoster}\"");
+        if (!string.IsNullOrWhiteSpace(safeTitle))
+            attributes.Add($"title=\"{safeTitle}\"");
+        if (!string.IsNullOrWhiteSpace(widthAttr))
+            attributes.Add(widthAttr.Trim());
+        if (!string.IsNullOrWhiteSpace(heightAttr))
+            attributes.Add(heightAttr.Trim());
+
+        return $"<video {string.Join(" ", attributes)}>";
+    }
+
+    private static string BuildExampleVideoSourceTag(string safeUrl, string safeMimeType)
+    {
+        var attributes = new List<string> { $"src=\"{safeUrl}\"" };
+        if (!string.IsNullOrWhiteSpace(safeMimeType))
+            attributes.Add($"type=\"{safeMimeType}\"");
+
+        return $"<source {string.Join(" ", attributes)} />";
     }
 
     private static string BuildExampleMediaMeta(ApiExampleMediaModel media)
@@ -1009,6 +1400,16 @@ public static partial class WebApiDocsGenerator
         var label = status.Equals("new", StringComparison.Ordinal) ? "New" : "Updated";
         var title = RenderFreshnessText(freshness);
         sb.AppendLine($"          <span class=\"freshness-badge {System.Web.HttpUtility.HtmlEncode(status)} {System.Web.HttpUtility.HtmlEncode(cssClass)}\" title=\"{System.Web.HttpUtility.HtmlAttributeEncode(title)}\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
+    }
+
+    private static void AppendFreshnessBadge(HtmlFragmentBuilder html, ApiFreshnessModel? freshness, string cssClass)
+    {
+        if (html is null)
+            return;
+
+        var badgeHtml = BuildFreshnessBadgeHtml(freshness, cssClass);
+        if (!string.IsNullOrWhiteSpace(badgeHtml))
+            html.Line(badgeHtml);
     }
 
     private static string RenderFreshnessText(ApiFreshnessModel freshness)

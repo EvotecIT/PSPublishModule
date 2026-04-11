@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 
 namespace PowerForge.Web;
 
@@ -103,44 +102,41 @@ public static partial class WebApiDocsGenerator
 
     private static string BuildLinkHtml(IReadOnlyList<NavItem> items)
     {
-        if (items.Count == 0) return string.Empty;
-        var sb = new StringBuilder();
-        foreach (var item in items)
-        {
-            AppendNavItemHtml(sb, item);
-        }
-        return sb.ToString();
+        if (items.Count == 0)
+            return string.Empty;
+
+        return string.Concat(items.Select(BuildNavItemHtml));
     }
 
-    private static void AppendNavItemHtml(StringBuilder sb, NavItem item)
+    private static string BuildNavItemHtml(NavItem item)
     {
-        if (sb is null || item is null)
-            return;
-        if (string.IsNullOrWhiteSpace(item.Text))
-            return;
+        if (item is null || string.IsNullOrWhiteSpace(item.Text))
+            return string.Empty;
 
         if (item.Items.Count == 0)
         {
             if (string.IsNullOrWhiteSpace(item.Href))
-                return;
-            AppendAnchorHtml(sb, item, cssClass: null);
-            return;
+                return string.Empty;
+
+            return BuildAnchorHtml(item, cssClass: null);
         }
 
         // Keep API docs header behavior consistent with normal site headers:
         // nested menu items are rendered as dropdowns instead of flattened links.
-        sb.Append("<div class=\"nav-dropdown\">");
-        AppendDropdownTriggerHtml(sb, item);
-        sb.Append("<div class=\"nav-dropdown-menu\">");
-        AppendDropdownItemsHtml(sb, item.Items);
-        sb.Append("</div></div>");
+        return JoinHtmlFragments(
+            "<div class=\"nav-dropdown\">",
+            BuildDropdownTriggerHtml(item),
+            "<div class=\"nav-dropdown-menu\">",
+            BuildDropdownItemsHtml(item.Items),
+            "</div></div>");
     }
 
-    private static void AppendDropdownItemsHtml(StringBuilder sb, IReadOnlyList<NavItem> items)
+    private static string BuildDropdownItemsHtml(IReadOnlyList<NavItem> items)
     {
-        if (sb is null || items is null || items.Count == 0)
-            return;
+        if (items is null || items.Count == 0)
+            return string.Empty;
 
+        var fragments = new List<string>(items.Count);
         foreach (var child in items)
         {
             if (child is null || string.IsNullOrWhiteSpace(child.Text))
@@ -148,43 +144,39 @@ public static partial class WebApiDocsGenerator
 
             if (!string.IsNullOrWhiteSpace(child.Href))
             {
-                AppendAnchorHtml(sb, child, cssClass: null);
+                fragments.Add(BuildAnchorHtml(child, cssClass: null));
             }
             else if (child.Items.Count > 0)
             {
                 // Group label for nested menu sections without direct link.
-                sb.Append("<div class=\"nav-dropdown-group\">")
-                  .Append("<span class=\"nav-dropdown-label\">")
-                  .Append(System.Web.HttpUtility.HtmlEncode(child.Text))
-                  .Append("</span></div>");
+                fragments.Add(
+                    $"<div class=\"nav-dropdown-group\"><span class=\"nav-dropdown-label\">{System.Web.HttpUtility.HtmlEncode(child.Text)}</span></div>");
             }
 
             if (child.Items.Count > 0)
-                AppendDropdownItemsHtml(sb, child.Items);
+                fragments.Add(BuildDropdownItemsHtml(child.Items));
         }
+
+        return string.Concat(fragments);
     }
 
-    private static void AppendDropdownTriggerHtml(StringBuilder sb, NavItem item)
+    private static string BuildDropdownTriggerHtml(NavItem item)
     {
-        if (sb is null || item is null || string.IsNullOrWhiteSpace(item.Text))
-            return;
+        if (item is null || string.IsNullOrWhiteSpace(item.Text))
+            return string.Empty;
 
         if (!string.IsNullOrWhiteSpace(item.Href))
         {
-            AppendAnchorHtml(sb, item, cssClass: "nav-dropdown-trigger", includeArrow: true);
-            return;
+            return BuildAnchorHtml(item, cssClass: "nav-dropdown-trigger", includeArrow: true);
         }
 
-        sb.Append("<button type=\"button\" class=\"nav-dropdown-trigger nav-dropdown-trigger-button\">")
-          .Append(System.Web.HttpUtility.HtmlEncode(item.Text))
-          .Append("<svg class=\"nav-dropdown-arrow\" viewBox=\"0 0 12 12\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 5l3 3 3-3\"/></svg>")
-          .Append("</button>");
+        return $"<button type=\"button\" class=\"nav-dropdown-trigger nav-dropdown-trigger-button\">{System.Web.HttpUtility.HtmlEncode(item.Text)}<svg class=\"nav-dropdown-arrow\" viewBox=\"0 0 12 12\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 5l3 3 3-3\"/></svg></button>";
     }
 
-    private static void AppendAnchorHtml(StringBuilder sb, NavItem item, string? cssClass, bool includeArrow = false)
+    private static string BuildAnchorHtml(NavItem item, string? cssClass, bool includeArrow = false)
     {
         if (string.IsNullOrWhiteSpace(item.Href))
-            return;
+            return string.Empty;
 
         var href = System.Web.HttpUtility.HtmlEncode(item.Href);
         var text = System.Web.HttpUtility.HtmlEncode(item.Text);
@@ -195,90 +187,86 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(rel) && item.External)
             rel = "noopener";
 
-        sb.Append("<a href=\"").Append(href).Append("\"");
+        var attributes = new List<string> { $"href=\"{href}\"" };
         if (!string.IsNullOrWhiteSpace(cssClass))
-            sb.Append(" class=\"").Append(System.Web.HttpUtility.HtmlEncode(cssClass)).Append("\"");
+            attributes.Add($"class=\"{System.Web.HttpUtility.HtmlEncode(cssClass)}\"");
         if (!string.IsNullOrWhiteSpace(target))
-            sb.Append(" target=\"").Append(System.Web.HttpUtility.HtmlEncode(target)).Append("\"");
+            attributes.Add($"target=\"{System.Web.HttpUtility.HtmlEncode(target)}\"");
         if (!string.IsNullOrWhiteSpace(rel))
-            sb.Append(" rel=\"").Append(System.Web.HttpUtility.HtmlEncode(rel)).Append("\"");
-        sb.Append(">").Append(text);
-        if (includeArrow)
-        {
-            sb.Append("<svg class=\"nav-dropdown-arrow\" viewBox=\"0 0 12 12\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 5l3 3 3-3\"/></svg>");
-        }
-        sb.Append("</a>");
+            attributes.Add($"rel=\"{System.Web.HttpUtility.HtmlEncode(rel)}\"");
+
+        var arrow = includeArrow
+            ? "<svg class=\"nav-dropdown-arrow\" viewBox=\"0 0 12 12\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 5l3 3 3-3\"/></svg>"
+            : string.Empty;
+        return $"<a {string.Join(" ", attributes)}>{text}{arrow}</a>";
     }
 
     private static string BuildActionHtml(IReadOnlyList<NavAction> actions)
     {
-        if (actions.Count == 0) return string.Empty;
-        var sb = new StringBuilder();
-        foreach (var action in actions)
+        if (actions.Count == 0)
+            return string.Empty;
+
+        return string.Concat(actions.Select(BuildActionHtml));
+    }
+
+    private static string BuildActionHtml(NavAction action)
+    {
+        if (action is null)
+            return string.Empty;
+
+        var isButton = string.Equals(action.Kind, "button", StringComparison.OrdinalIgnoreCase);
+        if (!isButton && string.IsNullOrWhiteSpace(action.Href))
+            return string.Empty;
+
+        var title = action.Title;
+        var ariaLabel = string.IsNullOrWhiteSpace(action.AriaLabel) ? title : action.AriaLabel;
+        var iconHtml = string.IsNullOrWhiteSpace(action.IconHtml) ? null : action.IconHtml;
+        var text = string.IsNullOrWhiteSpace(action.Text) ? null : action.Text;
+        var hasIcon = !string.IsNullOrWhiteSpace(iconHtml);
+        if (text is null && !hasIcon && !string.IsNullOrWhiteSpace(title))
+            text = title;
+
+        var content = hasIcon && !string.IsNullOrWhiteSpace(text)
+            ? $"{iconHtml} {System.Web.HttpUtility.HtmlEncode(text)}"
+            : hasIcon
+                ? iconHtml!
+                : !string.IsNullOrWhiteSpace(text)
+                    ? System.Web.HttpUtility.HtmlEncode(text)
+                    : string.Empty;
+
+        if (isButton)
         {
-            var isButton = string.Equals(action.Kind, "button", StringComparison.OrdinalIgnoreCase);
-            if (!isButton && string.IsNullOrWhiteSpace(action.Href))
-                continue;
-
-            var title = action.Title;
-            var ariaLabel = string.IsNullOrWhiteSpace(action.AriaLabel) ? title : action.AriaLabel;
-            var iconHtml = string.IsNullOrWhiteSpace(action.IconHtml) ? null : action.IconHtml;
-            var text = string.IsNullOrWhiteSpace(action.Text) ? null : action.Text;
-            var hasIcon = !string.IsNullOrWhiteSpace(iconHtml);
-            if (text is null && !hasIcon && !string.IsNullOrWhiteSpace(title))
-                text = title;
-
-            if (isButton)
-            {
-                sb.Append("<button type=\"button\"");
-                if (!string.IsNullOrWhiteSpace(action.CssClass))
-                    sb.Append(" class=\"").Append(System.Web.HttpUtility.HtmlEncode(action.CssClass)).Append("\"");
-                if (!string.IsNullOrWhiteSpace(title))
-                    sb.Append(" title=\"").Append(System.Web.HttpUtility.HtmlEncode(title)).Append("\"");
-                if (!string.IsNullOrWhiteSpace(ariaLabel))
-                    sb.Append(" aria-label=\"").Append(System.Web.HttpUtility.HtmlEncode(ariaLabel)).Append("\"");
-                sb.Append(">");
-                if (hasIcon)
-                    sb.Append(iconHtml);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    if (hasIcon) sb.Append(" ");
-                    sb.Append(System.Web.HttpUtility.HtmlEncode(text));
-                }
-                sb.Append("</button>");
-                continue;
-            }
-
-            var href = System.Web.HttpUtility.HtmlEncode(action.Href ?? string.Empty);
-            var external = action.External || IsExternal(action.Href ?? string.Empty);
-            var target = action.Target;
-            var rel = action.Rel;
-            if (external && string.IsNullOrWhiteSpace(target))
-                target = "_blank";
-            if (external && string.IsNullOrWhiteSpace(rel))
-                rel = "noopener";
-
-            sb.Append("<a href=\"").Append(href).Append("\"");
+            var attributes = new List<string> { "type=\"button\"" };
             if (!string.IsNullOrWhiteSpace(action.CssClass))
-                sb.Append(" class=\"").Append(System.Web.HttpUtility.HtmlEncode(action.CssClass)).Append("\"");
-            if (!string.IsNullOrWhiteSpace(target))
-                sb.Append(" target=\"").Append(System.Web.HttpUtility.HtmlEncode(target)).Append("\"");
-            if (!string.IsNullOrWhiteSpace(rel))
-                sb.Append(" rel=\"").Append(System.Web.HttpUtility.HtmlEncode(rel)).Append("\"");
+                attributes.Add($"class=\"{System.Web.HttpUtility.HtmlEncode(action.CssClass)}\"");
             if (!string.IsNullOrWhiteSpace(title))
-                sb.Append(" title=\"").Append(System.Web.HttpUtility.HtmlEncode(title)).Append("\"");
+                attributes.Add($"title=\"{System.Web.HttpUtility.HtmlEncode(title)}\"");
             if (!string.IsNullOrWhiteSpace(ariaLabel))
-                sb.Append(" aria-label=\"").Append(System.Web.HttpUtility.HtmlEncode(ariaLabel)).Append("\"");
-            sb.Append(">");
-            if (hasIcon)
-                sb.Append(iconHtml);
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                if (hasIcon) sb.Append(" ");
-                sb.Append(System.Web.HttpUtility.HtmlEncode(text));
-            }
-            sb.Append("</a>");
+                attributes.Add($"aria-label=\"{System.Web.HttpUtility.HtmlEncode(ariaLabel)}\"");
+            return $"<button {string.Join(" ", attributes)}>{content}</button>";
         }
-        return sb.ToString();
+
+        var href = System.Web.HttpUtility.HtmlEncode(action.Href ?? string.Empty);
+        var external = action.External || IsExternal(action.Href ?? string.Empty);
+        var target = action.Target;
+        var rel = action.Rel;
+        if (external && string.IsNullOrWhiteSpace(target))
+            target = "_blank";
+        if (external && string.IsNullOrWhiteSpace(rel))
+            rel = "noopener";
+
+        var linkAttributes = new List<string> { $"href=\"{href}\"" };
+        if (!string.IsNullOrWhiteSpace(action.CssClass))
+            linkAttributes.Add($"class=\"{System.Web.HttpUtility.HtmlEncode(action.CssClass)}\"");
+        if (!string.IsNullOrWhiteSpace(target))
+            linkAttributes.Add($"target=\"{System.Web.HttpUtility.HtmlEncode(target)}\"");
+        if (!string.IsNullOrWhiteSpace(rel))
+            linkAttributes.Add($"rel=\"{System.Web.HttpUtility.HtmlEncode(rel)}\"");
+        if (!string.IsNullOrWhiteSpace(title))
+            linkAttributes.Add($"title=\"{System.Web.HttpUtility.HtmlEncode(title)}\"");
+        if (!string.IsNullOrWhiteSpace(ariaLabel))
+            linkAttributes.Add($"aria-label=\"{System.Web.HttpUtility.HtmlEncode(ariaLabel)}\"");
+
+        return $"<a {string.Join(" ", linkAttributes)}>{content}</a>";
     }
 }

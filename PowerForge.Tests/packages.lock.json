@@ -861,6 +861,9 @@
           "PowerForge.Web": "[1.0.0, )"
         }
       },
+      "powerforgestudio.domain": {
+        "type": "Project"
+      },
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
