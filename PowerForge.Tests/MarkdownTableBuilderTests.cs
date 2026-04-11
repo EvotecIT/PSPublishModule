@@ -8,16 +8,33 @@ public class MarkdownTableBuilderTests
     public void ToString_RendersHeadersAlignmentAndRows()
     {
         var table = new MarkdownTableBuilder(
-            ["Name", "Count"],
-            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Right]);
+            ["Name", "Status", "Count"],
+            [MarkdownTableAlignment.Left, MarkdownTableAlignment.Center, MarkdownTableAlignment.Right]);
 
-        table.AddRow("Widgets", "12");
+        table.AddRow("Widgets", "stable", "12");
 
         Assert.Equal(
             """
-            | Name | Count |
-            | --- | ---: |
-            | Widgets | 12 |
+            | Name | Status | Count |
+            | --- | :---: | ---: |
+            | Widgets | stable | 12 |
+            """
+            .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
+            table.ToString());
+    }
+
+    [Fact]
+    public void ToString_EscapesPipesInHeadersAndCells()
+    {
+        var table = new MarkdownTableBuilder(["Name | Alias", "Count"]);
+
+        table.AddRow("Widget | Gadget", "12");
+
+        Assert.Equal(
+            """
+            | Name \| Alias | Count |
+            | --- | --- |
+            | Widget \| Gadget | 12 |
             """
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             table.ToString());

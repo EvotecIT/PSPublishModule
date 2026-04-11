@@ -40,7 +40,7 @@ public class YamlTextWriterTests
     public void WriteSequence_SkipsBlankItems_AndEscapesSpecialValues()
     {
         var writer = new YamlTextWriter();
-        writer.WriteSequence("Tags", new[] { "stable", "needs:quote", "", "two words" });
+        writer.WriteSequence("Tags", new[] { "stable", "my-package", "-leading-dash", "needs:quote", "", "two words" });
 
         var yaml = writer.ToString();
 
@@ -48,6 +48,8 @@ public class YamlTextWriterTests
             """
             Tags:
             - stable
+            - my-package
+            - "-leading-dash"
             - "needs:quote"
             - "two words"
             """

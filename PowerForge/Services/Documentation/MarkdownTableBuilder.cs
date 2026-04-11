@@ -13,7 +13,7 @@ internal sealed class MarkdownTableBuilder
         if (headers is null || headers.Count == 0)
             throw new ArgumentException("At least one markdown table header is required.", nameof(headers));
 
-        _headers = headers.Select(static header => header ?? string.Empty).ToArray();
+        _headers = headers.Select(EscapeCell).ToArray();
         _alignments = Enumerable.Range(0, _headers.Length)
             .Select(index => alignments is not null && index < alignments.Count ? alignments[index] : MarkdownTableAlignment.Left)
             .ToArray();
@@ -24,7 +24,7 @@ internal sealed class MarkdownTableBuilder
         if (cells.Length != _headers.Length)
             throw new ArgumentException("Markdown table row cell count must match the header count.", nameof(cells));
 
-        _rows.Add(cells.Select(static cell => cell ?? string.Empty).ToArray());
+        _rows.Add(cells.Select(EscapeCell).ToArray());
     }
 
     public override string ToString()
@@ -48,11 +48,20 @@ internal sealed class MarkdownTableBuilder
     }
 
     private static string ToSeparator(MarkdownTableAlignment alignment)
-        => alignment == MarkdownTableAlignment.Right ? "---:" : "---";
+        => alignment switch
+        {
+            MarkdownTableAlignment.Center => ":---:",
+            MarkdownTableAlignment.Right => "---:",
+            _ => "---"
+        };
+
+    private static string EscapeCell(string? value)
+        => (value ?? string.Empty).Replace("|", "\\|");
 }
 
 internal enum MarkdownTableAlignment
 {
     Left = 0,
-    Right = 1
+    Center = 1,
+    Right = 2
 }

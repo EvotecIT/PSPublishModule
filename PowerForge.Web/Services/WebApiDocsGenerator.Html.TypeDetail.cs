@@ -992,6 +992,8 @@ public static partial class WebApiDocsGenerator
 
         html.Line($"<pre{languageClass}><code{languageClass}>");
         html.AppendRaw(System.Web.HttpUtility.HtmlEncode(normalizedCode));
+        if (!normalizedCode.EndsWith('\n'))
+            html.AppendRaw(Environment.NewLine);
         html.Line("</code></pre>");
     }
 
