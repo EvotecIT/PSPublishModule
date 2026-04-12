@@ -2208,9 +2208,13 @@ internal static partial class WebPipelineRunner
         var changelogUrl = NormalizeOptionalString(GetProjectLink(project, "changelog"));
         if (IsDefaultGitHubChangelogLink(changelogUrl, project.GitHubRepo))
             changelogUrl = null;
-        var downloadsUrl = NormalizeOptionalString(GetProjectLink(project, "powerShellGallery")) ??
+        var downloadsSurfaceVisible = TryGetProjectSurfaceValue(project.Surfaces, "downloads") ?? true;
+        var downloadsUrl = NormalizeOptionalString(GetProjectLink(project, "downloads")) ??
+                           NormalizeOptionalString(GetProjectLink(project, "powerShellGallery")) ??
                            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.GalleryUrl) ??
                            NormalizeOptionalString(project.Metrics?.NuGet?.PackageUrl);
+        if (!downloadsSurfaceVisible)
+            downloadsUrl = null;
 
         var docsVisible = (TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false);
         var examplesVisible = (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false);
@@ -2221,7 +2225,7 @@ internal static partial class WebPipelineRunner
         var forks = FormatProjectMetric(project.Metrics?.GitHub?.Forks);
         var openIssues = FormatProjectMetric(project.Metrics?.GitHub?.OpenIssues);
         var (downloadsLabel, downloadsValue) = ResolveProjectDownloadsPresentation(project);
-        var downloads = FormatProjectMetric(downloadsValue);
+        var downloads = downloadsSurfaceVisible ? FormatProjectMetric(downloadsValue) : null;
         var release = NormalizeOptionalString(project.Metrics?.Release?.LatestTag) ?? NormalizeOptionalString(project.Version);
         var language = NormalizeOptionalString(project.Metrics?.GitHub?.Language);
         var lastPush = FormatProjectApiDate(project.Metrics?.GitHub?.LastPushedAt);
@@ -2244,7 +2248,8 @@ internal static partial class WebPipelineRunner
             ["PROJECT_CHANGELOG_URL"] = EncodeHrefToken(changelogUrl),
             ["PROJECT_CHANGELOG_HIDDEN"] = BuildHiddenAttribute(changelogUrl),
             ["PROJECT_DOWNLOADS_URL"] = EncodeHrefToken(downloadsUrl),
-            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
+            ["PROJECT_DOWNLOADS_ACTION_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
+            ["PROJECT_DOWNLOADS_TAB_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
             ["PROJECT_STARS"] = EncodeToken(stars),
             ["PROJECT_STARS_HIDDEN"] = BuildHiddenAttribute(stars),
             ["PROJECT_FORKS"] = EncodeToken(forks),
@@ -2253,7 +2258,8 @@ internal static partial class WebPipelineRunner
             ["PROJECT_OPEN_ISSUES_HIDDEN"] = BuildHiddenAttribute(openIssues),
             ["PROJECT_DOWNLOADS_LABEL"] = EncodeToken(downloadsLabel ?? "Downloads"),
             ["PROJECT_DOWNLOADS"] = EncodeToken(downloads),
-            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloads),
+            ["PROJECT_DOWNLOADS_METRIC_HIDDEN"] = BuildHiddenAttribute(downloads),
+            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
             ["PROJECT_RELEASE"] = EncodeToken(release),
             ["PROJECT_RELEASE_HIDDEN"] = BuildHiddenAttribute(release),
             ["PROJECT_LANGUAGE"] = EncodeToken(language),

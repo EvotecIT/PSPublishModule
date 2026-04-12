@@ -23,8 +23,8 @@ internal static partial class WebPipelineRunner
     private static readonly string[] AllowedProjectModes = { "hub-full", "dedicated-external" };
     private static readonly string[] AllowedProjectContentModes = { "hybrid", "external" };
     private static readonly string[] AllowedProjectStatuses = { "active", "archived", "deprecated", "experimental" };
-    private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases" };
-    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "source", "website", "nuget", "powerShellGallery", "blog" };
+    private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads" };
+    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "blog" };
 
     private static void ExecuteProjectCatalog(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
@@ -857,7 +857,8 @@ internal static partial class WebPipelineRunner
             ["apiPowerShell"] = isPowerShell,
             ["examples"] = false,
             ["changelog"] = false,
-            ["releases"] = true
+            ["releases"] = true,
+            ["downloads"] = true
         };
     }
 
@@ -1113,6 +1114,7 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        normalized.TryAdd("downloads", true);
         project.Surfaces = normalized;
         return normalized;
     }
@@ -2329,6 +2331,7 @@ internal static partial class WebPipelineRunner
             WriteMetaBoolean(lines, "meta.project_surface_examples", TryGetDictionaryBool(project.Surfaces, "examples"));
             WriteMetaBoolean(lines, "meta.project_surface_changelog", TryGetDictionaryBool(project.Surfaces, "changelog"));
             WriteMetaBoolean(lines, "meta.project_surface_releases", TryGetDictionaryBool(project.Surfaces, "releases"));
+            WriteMetaBoolean(lines, "meta.project_surface_downloads", TryGetDictionaryBool(project.Surfaces, "downloads"));
         }
 
         if (project.Artifacts is not null)
