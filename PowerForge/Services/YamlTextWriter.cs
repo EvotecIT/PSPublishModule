@@ -29,6 +29,11 @@ internal sealed class YamlTextWriter
         _builder = capacity > 0 ? new StringBuilder(capacity) : new StringBuilder();
     }
 
+    public YamlTextWriter(StringBuilder builder)
+    {
+        _builder = builder ?? throw new ArgumentNullException(nameof(builder));
+    }
+
     public IDisposable Indent()
     {
         _indent += 2;

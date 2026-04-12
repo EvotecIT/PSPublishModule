@@ -6,19 +6,19 @@ internal sealed class MarkdownDocumentBuilder
 {
     private readonly StringBuilder _body = new();
     private readonly StringBuilder _frontMatter = new();
+    private readonly YamlTextWriter _frontMatterWriter;
     private readonly bool _blankLineAfterFrontMatter;
     private bool _hasFrontMatter;
 
     public MarkdownDocumentBuilder(bool blankLineAfterFrontMatter = true)
     {
         _blankLineAfterFrontMatter = blankLineAfterFrontMatter;
+        _frontMatterWriter = new YamlTextWriter(_frontMatter);
     }
 
     public void FrontMatter(string key, string value)
     {
-        var yaml = new YamlTextWriter();
-        yaml.WriteScalar(key, value);
-        _frontMatter.Append(yaml.ToString());
+        _frontMatterWriter.WriteScalar(key, value);
         _hasFrontMatter = true;
     }
 
@@ -27,9 +27,7 @@ internal sealed class MarkdownDocumentBuilder
         if (values is null || values.Count == 0)
             return;
 
-        var yaml = new YamlTextWriter();
-        yaml.WriteSequence(key, values);
-        _frontMatter.Append(yaml.ToString());
+        _frontMatterWriter.WriteSequence(key, values);
         _hasFrontMatter = true;
     }
 
