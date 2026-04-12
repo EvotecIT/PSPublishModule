@@ -41,6 +41,10 @@ internal static partial class WebPipelineRunner
             parts.Add($"required-routes {result.RequiredRouteCount}");
         if (result.MissingRequiredRouteCount > 0)
             parts.Add($"missing-required-routes {result.MissingRequiredRouteCount}");
+        if (result.ForbiddenRouteCount > 0)
+            parts.Add($"forbidden-routes {result.ForbiddenRouteCount}");
+        if (result.PresentForbiddenRouteCount > 0)
+            parts.Add($"present-forbidden-routes {result.PresentForbiddenRouteCount}");
         if (result.RenderedContrastIssueCount > 0)
             parts.Add($"rendered-contrast {result.RenderedContrastIssueCount}");
         if (result.WarningCount > 0)

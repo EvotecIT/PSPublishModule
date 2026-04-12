@@ -684,13 +684,14 @@ public static partial class WebSiteBuilder
         var searchPath = Path.Combine(searchDir, "index.json");
         WriteAllTextIfChanged(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
 
-        // Emit per-language search shards when localization is used to keep client filtering cheap.
+        // Emit per-language search shards so the manifest and client-side fallbacks never
+        // advertise a language URL that is missing in root-language deployment artifacts.
         var languages = entries
             .Select(static entry => NormalizeLanguageToken(entry.Language))
             .Where(static language => !string.IsNullOrWhiteSpace(language))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (languages.Length > 1)
+        if (languages.Length > 0)
         {
             foreach (var language in languages)
             {

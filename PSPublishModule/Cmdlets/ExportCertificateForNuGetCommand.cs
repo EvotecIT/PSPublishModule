@@ -17,7 +17,7 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Export by thumbprint</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'</code>
+/// <code>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath (Join-Path $env:TEMP 'NuGetSigning.cer')</code>
 /// <para>Exports the certificate in DER format to the given path.</para>
 /// </example>
 /// <example>

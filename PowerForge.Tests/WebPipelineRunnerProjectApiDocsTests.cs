@@ -540,6 +540,193 @@ public class WebPipelineRunnerProjectApiDocsTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_ReplacesGenericArtifactDescription()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-generic-description-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "zeta",
+                      "name": "Zeta",
+                      "description": "Zeta website artifacts for the Evotec multi-project hub.",
+                      "githubRepo": "EvotecIT/Zeta",
+                      "mode": "hub-full",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var fragmentsRoot = Path.Combine(root, "fragments");
+            Directory.CreateDirectory(fragmentsRoot);
+            File.WriteAllText(Path.Combine(fragmentsRoot, "header.html"),
+                """
+                <header>
+                  <p>{{PROJECT_DESCRIPTION}}</p>
+                </header>
+                """);
+            File.WriteAllText(Path.Combine(fragmentsRoot, "footer.html"), "<footer>Footer</footer>");
+
+            var powerShellRoot = Path.Combine(root, "data", "project-api", "zeta", "powershell");
+            Directory.CreateDirectory(powerShellRoot);
+            File.WriteAllText(Path.Combine(powerShellRoot, "Zeta-help.xml"), SamplePowerShellHelpXml("Get-ZetaItem", "Returns zeta items."));
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "apiRoot": "./data/project-api",
+                      "siteRoot": "./_site",
+                      "template": "docs",
+                      "format": "html",
+                      "headerHtml": "./fragments/header.html",
+                      "footerHtml": "./fragments/footer.html"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var html = File.ReadAllText(Path.Combine(root, "_site", "projects", "zeta", "api", "index.html"));
+            Assert.Contains("Zeta is an open-source PowerShell project with packages, release history, and working documentation.", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("website artifacts for the Evotec multi-project hub", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_UsesLocalizedMenuWhenLanguageBuildSelectsRootNavigation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-localized-nav-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "alpha",
+                      "name": "Alpha",
+                      "mode": "hub-full",
+                      "surfaces": {
+                        "apiPowerShell": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var powerShellRoot = Path.Combine(root, "data", "project-api", "alpha", "powershell");
+            Directory.CreateDirectory(powerShellRoot);
+            File.WriteAllText(Path.Combine(powerShellRoot, "Alpha-help.xml"), SamplePowerShellHelpXml("Get-AlphaItem", "Returns alpha items."));
+
+            var navPath = Path.Combine(root, "_site-pl", "data", "site-nav.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(navPath)!);
+            File.WriteAllText(navPath,
+                """
+                {
+                  "schemaVersion": 2,
+                  "format": "powerforge.site-nav",
+                  "menus": {
+                    "main": [
+                      { "href": "/", "text": "Home" },
+                      { "href": "/contact/", "text": "Contact" }
+                    ],
+                    "main-pl": [
+                      { "href": "/", "text": "Start" },
+                      { "href": "/kontakt/", "text": "Kontakt" }
+                    ]
+                  },
+                  "menuModels": [
+                    {
+                      "name": "main",
+                      "items": [
+                        { "href": "/", "text": "Home" },
+                        { "href": "/contact/", "text": "Contact" }
+                      ]
+                    },
+                    {
+                      "name": "main-pl",
+                      "items": [
+                        { "href": "/", "text": "Start" },
+                        { "href": "/kontakt/", "text": "Kontakt" }
+                      ]
+                    }
+                  ],
+                  "surfaces": {
+                    "main": {
+                      "name": "main",
+                      "primaryMenu": "main",
+                      "primary": [
+                        { "href": "/", "text": "Home" },
+                        { "href": "/contact/", "text": "Contact" }
+                      ]
+                    }
+                  }
+                }
+                """);
+
+            var fragmentsRoot = Path.Combine(root, "fragments");
+            Directory.CreateDirectory(fragmentsRoot);
+            File.WriteAllText(Path.Combine(fragmentsRoot, "header.html"), "<header><nav>{{NAV_LINKS}}</nav></header>");
+            File.WriteAllText(Path.Combine(fragmentsRoot, "footer.html"), "<footer>Footer</footer>");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "apiRoot": "./data/project-api",
+                      "siteRoot": "./_site-pl",
+                      "nav": "./_site-pl/data/site-nav.json",
+                      "language": "pl",
+                      "template": "docs",
+                      "format": "html",
+                      "headerHtml": "./fragments/header.html",
+                      "footerHtml": "./fragments/footer.html"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var html = File.ReadAllText(Path.Combine(root, "_site-pl", "projects", "alpha", "api", "index.html"));
+            Assert.Contains("href=\"/kontakt/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Kontakt</a>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/contact/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">Contact</a>", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void WriteCatalog(string root, string content)
     {
         var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");

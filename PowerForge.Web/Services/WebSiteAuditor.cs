@@ -123,6 +123,8 @@ public static partial class WebSiteAuditor
         var duplicateIdCount = 0;
         var requiredRouteCount = 0;
         var missingRequiredRouteCount = 0;
+        var forbiddenRouteCount = 0;
+        var presentForbiddenRouteCount = 0;
         var renderedPageCount = 0;
         var renderedConsoleErrorCount = 0;
         var renderedConsoleWarningCount = 0;
@@ -204,12 +206,12 @@ public static partial class WebSiteAuditor
             .Select(route => route.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var htmlSet = new HashSet<string>(
+            htmlFiles.Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
+            StringComparer.OrdinalIgnoreCase);
         requiredRouteCount = requiredRoutes.Length;
         if (requiredRoutes.Length > 0)
         {
-            var htmlSet = new HashSet<string>(
-                htmlFiles.Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
-                StringComparer.OrdinalIgnoreCase);
             foreach (var requiredRoute in requiredRoutes)
             {
                 var candidates = ResolveRequiredRouteCandidates(requiredRoute);
@@ -225,6 +227,34 @@ public static partial class WebSiteAuditor
                 AddIssue("error", "route", null,
                     $"required route '{requiredRoute}' is missing. Expected one of: {expected}.",
                     $"required-route:{requiredRoute}");
+            }
+        }
+
+        var forbiddenRoutes = options.ForbiddenRoutes
+            .Where(route => !string.IsNullOrWhiteSpace(route))
+            .Select(route => route.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        forbiddenRouteCount = forbiddenRoutes.Length;
+        if (forbiddenRoutes.Length > 0)
+        {
+            foreach (var forbiddenRoute in forbiddenRoutes)
+            {
+                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute);
+                if (candidates.Length == 0)
+                    continue;
+
+                var matches = candidates
+                    .Where(candidate => htmlSet.Contains(candidate))
+                    .ToArray();
+                if (matches.Length == 0)
+                    continue;
+
+                presentForbiddenRouteCount++;
+                var matched = string.Join(", ", matches.Select(path => "/" + path));
+                AddIssue("error", "route", null,
+                    $"forbidden route '{forbiddenRoute}' exists. Matched: {matched}.",
+                    $"forbidden-route:{forbiddenRoute}");
             }
         }
 
@@ -769,6 +799,8 @@ public static partial class WebSiteAuditor
             DuplicateIdCount = duplicateIdCount,
             RequiredRouteCount = requiredRouteCount,
             MissingRequiredRouteCount = missingRequiredRouteCount,
+            ForbiddenRouteCount = forbiddenRouteCount,
+            PresentForbiddenRouteCount = presentForbiddenRouteCount,
             RenderedPageCount = renderedPageCount,
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
@@ -807,6 +839,8 @@ public static partial class WebSiteAuditor
                 DuplicateIdCount = result.DuplicateIdCount,
                 RequiredRouteCount = result.RequiredRouteCount,
                 MissingRequiredRouteCount = result.MissingRequiredRouteCount,
+                ForbiddenRouteCount = result.ForbiddenRouteCount,
+                PresentForbiddenRouteCount = result.PresentForbiddenRouteCount,
                 RenderedPageCount = result.RenderedPageCount,
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,

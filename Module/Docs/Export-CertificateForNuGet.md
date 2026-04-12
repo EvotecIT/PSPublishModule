@@ -27,7 +27,7 @@ This cmdlet exports the selected certificate from the local certificate store.
 
 ### EXAMPLE 1
 ```powershell
-PS> Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'
+PS> Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath (Join-Path $env:TEMP 'NuGetSigning.cer')
 ```
 
 Exports the certificate in DER format to the given path.

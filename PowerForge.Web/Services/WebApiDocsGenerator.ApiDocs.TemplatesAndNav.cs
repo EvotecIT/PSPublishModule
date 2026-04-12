@@ -255,7 +255,7 @@ public static partial class WebApiDocsGenerator
         if (TryGetProperty(root, "menus", out var menusProp) && menusProp.ValueKind == JsonValueKind.Object)
         {
             var menuMap = ParseMenusObjectMap(menusProp);
-            ApplyMenusToNav(nav, menuMap);
+            ApplyMenusToNav(nav, menuMap, options.NavSurfaceName);
         }
 
         if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array && nav.Primary.Count == 0)
@@ -441,11 +441,13 @@ public static partial class WebApiDocsGenerator
             return false;
 
         if (!string.IsNullOrWhiteSpace(options.NavSurfaceName) &&
-            TryGetObjectPropertyCaseInsensitive(surfaces, options.NavSurfaceName.Trim(), out selected) &&
-            selected.ValueKind == JsonValueKind.Object)
+            TryGetObjectPropertyCaseInsensitive(surfaces, options.NavSurfaceName.Trim(), out selected))
         {
-            return true;
+            return selected.ValueKind == JsonValueKind.Object;
         }
+
+        if (!string.IsNullOrWhiteSpace(options.NavSurfaceName))
+            return false;
 
         if (!string.IsNullOrWhiteSpace(options.NavContextLayout))
         {
@@ -554,7 +556,7 @@ public static partial class WebApiDocsGenerator
         var effectiveMenus = MergeMenus(baseMenus, profile?.Menus, profile?.InheritMenus ?? true);
         var effectiveActions = MergeActions(baseActions, profile?.Actions, profile?.InheritActions ?? true);
 
-        ApplyMenusToNav(nav, effectiveMenus);
+        ApplyMenusToNav(nav, effectiveMenus, options.NavSurfaceName);
         if (effectiveActions.Count > 0)
             nav.Actions = effectiveActions;
     }
@@ -601,7 +603,7 @@ public static partial class WebApiDocsGenerator
         var effectiveMenus = MergeMenus(baseMenus, profile?.Menus, profile?.InheritMenus ?? true);
         var effectiveActions = MergeActions(baseActions, profile?.Actions, profile?.InheritActions ?? true);
 
-        ApplyMenusToNav(nav, effectiveMenus);
+        ApplyMenusToNav(nav, effectiveMenus, options.NavSurfaceName);
         if (effectiveActions.Count > 0)
             nav.Actions = effectiveActions;
 
@@ -793,9 +795,11 @@ public static partial class WebApiDocsGenerator
         return merged;
     }
 
-    private static void ApplyMenusToNav(NavConfig nav, Dictionary<string, List<NavItem>> menus)
+    private static void ApplyMenusToNav(NavConfig nav, Dictionary<string, List<NavItem>> menus, string? preferredPrimaryMenu = null)
     {
-        nav.Primary = menus.TryGetValue("main", out var main)
+        nav.Primary = !string.IsNullOrWhiteSpace(preferredPrimaryMenu) && menus.TryGetValue(preferredPrimaryMenu.Trim(), out var preferred)
+            ? preferred
+            : menus.TryGetValue("main", out var main)
             ? main
             : menus.Count > 0
                 ? menus.Values.First()

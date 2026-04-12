@@ -138,6 +138,8 @@ internal static partial class WebPipelineRunner
             var mediaProfilesPath = GetString(step, "mediaProfiles") ?? GetString(step, "media-profiles");
             var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
                                  GetString(step, "requiredRoute") ?? GetString(step, "required-route");
+            var forbiddenRoutes = GetString(step, "forbiddenRoutes") ?? GetString(step, "forbidden-routes") ??
+                                  GetString(step, "forbiddenRoute") ?? GetString(step, "forbidden-route");
             var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
             var navRequired = GetBool(step, "navRequired");
             var navOptional = GetBool(step, "navOptional");
@@ -250,6 +252,7 @@ internal static partial class WebPipelineRunner
                 MediaProfiles = mediaProfiles,
                 MinNavCoveragePercent = minNavCoveragePercent,
                 RequiredRoutes = requiredRouteList.ToArray(),
+                ForbiddenRoutes = CliPatternHelper.SplitPatterns(forbiddenRoutes),
                 CheckLinks = GetBool(step, "checkLinks") ?? true,
                 CheckAssets = GetBool(step, "checkAssets") ?? true,
                 CheckNavConsistency = GetBool(step, "checkNav") ?? true,

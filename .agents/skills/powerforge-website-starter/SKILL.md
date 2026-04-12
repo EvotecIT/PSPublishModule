@@ -26,7 +26,7 @@ Follow a deterministic "golden path" so agents can build sites without guessing.
    - Provide `api-header`/`api-footer` partials that match the site header/footer structure/classes.
    - Use multi-CSS: `"/css/app.css,/css/api.css"` (or the equivalent for the site).
    - Emit API coverage report (`coverageReport`) so CI can track documentation completeness.
-   - For PowerShell APIs, wire `psExamplesPath` (or rely on `Examples/` discovery) to enable fallback examples when help XML is sparse.
+   - For PowerShell APIs, wire `psExamplesPath` when you want fallback examples during API generation; do not assume raw `Examples/` should automatically become a public website examples section.
 7. Add quality gates with an escape hatch.
    - Use baselines for legacy noise; fail only on new issues in CI.
 8. Run locally in dev and ci modes and verify output.
@@ -46,6 +46,7 @@ Check these explicitly when reviewing or refactoring an existing site:
 - Navigation consistency:
   - Compare header, footer, docs, and API surfaces; do not assume `build -serve` validated them.
   - Prefer running `verify` plus a rendered smoke pass or CI-mode pipeline, not just a fast preview build.
+  - When a sync/config change removes routes, do not trust a fast incremental `_site`; run a clean build (CI mode or site helper `-CleanOutput`) before checking rendered output.
 - API docs shell parity:
   - Compare `/projects/<slug>/` and `/projects/<slug>/api/` for shared width, spacing, nav alignment, and action rendering.
   - If API header uses `{{NAV_ACTIONS}}`, confirm actions have the right icon/text contract for that theme.
@@ -53,6 +54,12 @@ Check these explicitly when reviewing or refactoring an existing site:
 - Markdown hygiene:
   - Watch for `meta.raw_html: true` on pages that still contain Markdown headings/lists.
   - When pages mix components and Markdown, verify the rendered output instead of trusting front matter alone.
+- Curated examples:
+  - Treat public project examples as an editorial surface, not a raw repo mirror.
+  - Prefer `Website/content/examples` or `content/examples` in project repos.
+  - Only use raw `Examples/` fallback when the site explicitly wants it and the source repo is tidy enough for public ingestion.
+  - Keep `surfaces.examples` off until the examples are intentionally authored and reviewed.
+  - After switching from raw examples to curated examples, use a clean build so stale raw example pages are removed from `_site`.
 - Localized smoke paths:
   - Add CI audit coverage for key language routes and at least one API page.
   - Use required routes for generated files and rendered smoke pages for user-facing navigation paths.

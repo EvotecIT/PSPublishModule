@@ -30,6 +30,13 @@ When you seed a first project, the scaffold also creates surface-specific source
 - PowerShell: `projects-sources/<slug>/powershell/` plus `examples/`
 - .NET: `projects-sources/<slug>/dotnet/`
 
+Recommended examples authoring policy for project hubs:
+- prefer curated example pages inside the project repo under:
+  - `Website/content/examples`
+  - `content/examples`
+- keep raw `Examples/` as a project-owned source of scripts, not something a public site must automatically expose
+- only enable the website `examples` surface for projects that have intentional, website-ready example content
+
 It also adds safe starter templates under `templates/` that do not match discovery patterns yet:
 - PowerShell: `*.ps1.template`, `*-help.xml.template`, `*.psd1.template`, `command-metadata.json.template`
 - .NET: `*.xml.template`, `*.dll.placeholder.txt`

@@ -131,10 +131,15 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains("href=\"https://evotec.xyz/docs/\"", html, StringComparison.OrdinalIgnoreCase);
 
             var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
+            var plSearchPath = Path.Combine(result.OutputPath, "search", "pl", "index.json");
             Assert.True(File.Exists(allSearchPath));
+            Assert.True(File.Exists(plSearchPath));
             var allEntries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
+            var plEntries = JsonDocument.Parse(File.ReadAllText(plSearchPath)).RootElement.EnumerateArray().ToArray();
             Assert.Single(allEntries);
+            Assert.Single(plEntries);
             Assert.Equal("pl", allEntries[0].GetProperty("language").GetString());
+            Assert.Equal("pl", plEntries[0].GetProperty("language").GetString());
         }
         finally
         {
@@ -355,6 +360,53 @@ public class WebSiteLocalizationFeaturesTests
                 string.Equals(entry.GetProperty("language").GetString(), "pl", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(entries, entry =>
                 string.Equals(entry.GetProperty("url").GetString()?.TrimEnd('/'), "/pl/docs", StringComparison.OrdinalIgnoreCase) &&
+                entry.TryGetProperty("meta", out var meta) &&
+                meta.TryGetProperty("i18n.fallback_copy", out var fallbackFlag) &&
+                fallbackFlag.ValueKind == JsonValueKind.True);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_LocalizedFallbackPages_MaterializeForSelectedRootLanguageBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-root-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateDefaultLanguageOnlyDocsContent(root);
+            CreateSimpleTheme(root, "localization-root-fallback-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Root Fallback Build Test", "localization-root-fallback-theme");
+            spec.Localization!.FallbackToDefaultLanguage = true;
+            spec.Localization.MaterializeFallbackPages = true;
+            spec.Localization.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Localization.Languages[1].RenderAtRoot = true;
+
+            var result = BuildSite(root, spec, language: "pl", languageAsRoot: true);
+
+            var plRootHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            var plPrefixedHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+            Assert.True(File.Exists(plRootHtmlPath));
+            Assert.False(File.Exists(plPrefixedHtmlPath));
+
+            var html = File.ReadAllText(plRootHtmlPath);
+            Assert.Contains("Docs EN", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/docs", html, StringComparison.OrdinalIgnoreCase);
+
+            var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
+            Assert.True(File.Exists(allSearchPath));
+            var entries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
+            var entry = Assert.Single(entries);
+            Assert.Equal("pl", entry.GetProperty("language").GetString());
+            Assert.Equal("/docs/", entry.GetProperty("url").GetString());
+            Assert.True(
                 entry.TryGetProperty("meta", out var meta) &&
                 meta.TryGetProperty("i18n.fallback_copy", out var fallbackFlag) &&
                 fallbackFlag.ValueKind == JsonValueKind.True);
@@ -767,6 +819,44 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedPages_EmitCanonicalAndSocialUrls_ForRootServedLanguage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-root-seo-head-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSeoTheme(root, "localization-root-seo-head-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Root SEO Head Test", "localization-root-seo-head-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Localization.Languages[1].RenderAtRoot = true;
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                Image = "/assets/social/default.png"
+            };
+
+            var result = BuildSite(root, spec);
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+            Assert.True(File.Exists(plHtmlPath));
+
+            var html = File.ReadAllText(plHtmlPath);
+            Assert.Contains("<link rel=\"canonical\" href=\"https://evotec.pl/docs/\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<meta property=\"og:url\" content=\"https://evotec.pl/docs/\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<meta name=\"twitter:url\" content=\"https://evotec.pl/docs/\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://evotec.pl/pl/docs/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizedPages_SupportNestedLocalizationBlocks_ForRoutesAndAliases()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-nested-blocks-" + Guid.NewGuid().ToString("N"));
@@ -1136,6 +1226,35 @@ public class WebSiteLocalizationFeaturesTests
             <!doctype html>
             <html>
             <head>{{ head_html }}</head>
+            <body>{{ content }}</body>
+            </html>
+            """);
+        File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+            $$"""
+            {
+              "name": "{{themeName}}",
+              "engine": "scriban",
+              "defaultLayout": "{{layoutName}}"
+            }
+            """);
+        File.WriteAllText(Path.Combine(themeRoot, "assets", "app.css"), "body { font-family: Segoe UI, Arial, sans-serif; }");
+    }
+
+    private static void CreateSeoTheme(string root, string themeName, string layoutName)
+    {
+        var themeRoot = Path.Combine(root, "themes", themeName);
+        Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+        Directory.CreateDirectory(Path.Combine(themeRoot, "assets"));
+        File.WriteAllText(Path.Combine(themeRoot, "layouts", $"{layoutName}.html"),
+            """
+            <!doctype html>
+            <html>
+            <head>
+            {{ canonical_html }}
+            {{ opengraph_html }}
+            {{ structured_data_html }}
+            {{ head_html }}
+            </head>
             <body>{{ content }}</body>
             </html>
             """);

@@ -261,12 +261,14 @@ public static partial class WebSiteBuilder
 
         var output = items.ToList();
         var defaultLanguageBaseUrl = ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage);
-        var existingRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var existingRouteLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var existingTranslations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in items.Where(static value => value is not null && !value.Draft))
         {
-            existingRoutes.Add(NormalizeRouteForMatch(item.OutputPath));
+            existingRouteLanguages.Add(BuildRouteLanguageKey(
+                item.OutputPath,
+                ResolveEffectiveLanguageCode(localization, item.Language)));
             if (!string.IsNullOrWhiteSpace(item.TranslationKey))
                 existingTranslations.Add(BuildTranslationLanguageKey(item.TranslationKey!, ResolveEffectiveLanguageCode(localization, item.Language)));
         }
@@ -300,8 +302,8 @@ public static partial class WebSiteBuilder
                 }
 
                 var fallbackRoute = ApplyLanguagePrefixToRoute(spec, strippedRoute, targetLanguage);
-                var normalizedFallbackRoute = NormalizeRouteForMatch(fallbackRoute);
-                if (existingRoutes.Contains(normalizedFallbackRoute))
+                var fallbackRouteLanguage = BuildRouteLanguageKey(fallbackRoute, targetLanguage);
+                if (existingRouteLanguages.Contains(fallbackRouteLanguage))
                     continue;
 
                 var fallback = CloneFallbackItem(
@@ -311,13 +313,20 @@ public static partial class WebSiteBuilder
                     localization.DefaultLanguage,
                     defaultLanguageBaseUrl);
                 output.Add(fallback);
-                existingRoutes.Add(normalizedFallbackRoute);
+                existingRouteLanguages.Add(fallbackRouteLanguage);
                 if (!string.IsNullOrWhiteSpace(fallback.TranslationKey))
                     existingTranslations.Add(BuildTranslationLanguageKey(fallback.TranslationKey!, targetLanguage));
             }
         }
 
         return output;
+    }
+
+    private static string BuildRouteLanguageKey(string? route, string? language)
+    {
+        var normalizedRoute = NormalizeRouteForMatch(route);
+        var normalizedLanguage = NormalizeLanguageToken(language);
+        return normalizedLanguage + "|" + normalizedRoute;
     }
 
     private static string BuildTranslationLanguageKey(string translationKey, string language)

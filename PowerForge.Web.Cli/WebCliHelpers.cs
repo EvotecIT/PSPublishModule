@@ -27,7 +27,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
-        Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--required-route <path[,path]>] [--forbidden-route <path[,path]>] [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--seo-meta] [--no-seo-meta]");
         Console.WriteLine("                     [--rendered] [--rendered-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
@@ -51,7 +51,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
-        Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
+        Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>] [--forbidden-route <path[,path]>]");
         Console.WriteLine("                     [--nav-optional]");
         Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--fail-issue <pattern[,pattern]>] [--max-total-files <n>]");
         Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
@@ -413,6 +413,7 @@ internal static class WebCliHelpers
         var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
         var mediaProfilesPath = TryGetOptionValue(argv, "--media-profiles");
         var requiredRoutes = ReadOptionList(argv, "--required-route", "--required-routes");
+        var forbiddenRoutes = ReadOptionList(argv, "--forbidden-route", "--forbidden-routes");
         var minNavCoverageText = TryGetOptionValue(argv, "--min-nav-coverage");
         var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
         var navRequired = !HasOption(argv, "--nav-optional");
@@ -500,6 +501,7 @@ internal static class WebCliHelpers
             MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
+            ForbiddenRoutes = forbiddenRoutes.ToArray(),
             CheckLinks = !HasOption(argv, "--no-links"),
             CheckAssets = !HasOption(argv, "--no-assets"),
             CheckNavConsistency = !HasOption(argv, "--no-nav"),
@@ -583,6 +585,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Fix missing CSS/JS/image assets to avoid runtime regressions.");
             if (audit.MissingRequiredRouteCount > 0)
                 recommendations.Add("Ensure required routes like `/404.html` are generated and published.");
+            if (audit.PresentForbiddenRouteCount > 0)
+                recommendations.Add("Remove forbidden generated routes, such as stale language-prefixed paths in root-domain builds.");
             if (audit.NavMismatchCount > 0 || ContainsCategory(audit, "nav"))
                 recommendations.Add("Unify navigation templates/components so all page families (docs/api/404) share a consistent nav contract.");
             if (ContainsCategory(audit, "network-hint"))

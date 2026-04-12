@@ -163,6 +163,17 @@ internal static partial class WebPipelineRunner
         var placeholderMarkers = ResolveProjectApiPlaceholderMarkers(step);
         var defaultCssHref = ResolveProjectApiCssHref(step, baseDir, logger);
         var siteConfigPath = ResolveProjectApiSiteConfigPath(step, baseDir);
+        var apiLanguage = NormalizeOptionalString(
+            GetString(step, "language") ??
+            GetString(step, "lang") ??
+            GetString(step, "languageCode") ??
+            GetString(step, "language-code")) ?? "en";
+        var navSurfaceName = ResolveProjectApiNavSurfaceName(
+            apiLanguage,
+            GetString(step, "navSurface") ??
+            GetString(step, "nav-surface") ??
+            GetString(step, "navSurfaceName") ??
+            GetString(step, "nav-surface-name"));
 
         var serializerOptions = new JsonSerializerOptions
         {
@@ -232,6 +243,8 @@ internal static partial class WebPipelineRunner
                 outRoot,
                 cleanOutput,
                 defaultCssHref,
+                apiLanguage,
+                navSurfaceName,
                 GetProjectApiDocsOverrides(project, baseDir)));
         }
 
@@ -775,6 +788,8 @@ internal static partial class WebPipelineRunner
         string outRoot,
         bool cleanOutput,
         string? cssHref,
+        string language,
+        string navSurfaceName,
         ProjectApiDocsCatalogOverrides? apiDocsOverrides)
     {
         var name = NormalizeOptionalString(project.Name) ?? slug;
@@ -792,11 +807,11 @@ internal static partial class WebPipelineRunner
             ["title"] = $"{name} API Reference",
             ["out"] = outputPath,
             ["baseUrl"] = apiBaseUrl,
-            ["language"] = "en",
+            ["language"] = string.IsNullOrWhiteSpace(language) ? "en" : language,
             ["docsHome"] = hubPath,
             ["navContextPath"] = "/",
             ["navContextProject"] = slug,
-            ["navSurface"] = "main",
+            ["navSurface"] = string.IsNullOrWhiteSpace(navSurfaceName) ? "main" : navSurfaceName,
             ["type"] = selected.Type,
             ["templateTokens"] = templateTokens
         };
@@ -832,12 +847,24 @@ internal static partial class WebPipelineRunner
                 Id = slug,
                 Label = name,
                 Href = apiUrl,
-                Summary = NormalizeOptionalString(project.Description)
+                Summary = ResolveProjectApiSummary(project, name)
             },
             CleanOutput = cleanOutput,
             HasQuickStartTypes = !string.IsNullOrWhiteSpace(apiDocsOverrides?.QuickStartTypes),
             RelatedContentManifestPaths = apiDocsOverrides?.RelatedContentManifestPaths ?? Array.Empty<string>()
         };
+    }
+
+    private static string ResolveProjectApiNavSurfaceName(string? language, string? configuredNavSurface)
+    {
+        var configured = NormalizeOptionalString(configuredNavSurface);
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
+        var normalizedLanguage = NormalizeOptionalString(language) ?? "en";
+        return normalizedLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
+            ? "main"
+            : $"main-{normalizedLanguage}";
     }
 
     private static ProjectApiDocsCatalogOverrides? GetProjectApiDocsOverrides(ProjectCatalogEntry project, string baseDir)
@@ -1209,7 +1236,9 @@ internal static partial class WebPipelineRunner
                 NavContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection"),
                 NavContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout"),
                 NavContextProject = null,
-                NavSurfaceName = GetString(step, "navSurface") ?? GetString(step, "nav-surface") ?? "main",
+                NavSurfaceName = ResolveProjectApiNavSurfaceName(
+                    GetString(step, "language") ?? GetString(step, "lang") ?? GetString(step, "languageCode") ?? GetString(step, "language-code"),
+                    GetString(step, "navSurface") ?? GetString(step, "nav-surface") ?? GetString(step, "navSurfaceName") ?? GetString(step, "nav-surface-name")),
                 SiteName = GetString(step, "siteName") ?? GetString(step, "site-name"),
                 BodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class"),
                 ApiSuiteTitle = suiteTitle,
@@ -2177,6 +2206,8 @@ internal static partial class WebPipelineRunner
         var releasesUrl = NormalizeOptionalString(GetProjectLink(project, "releases")) ??
                           NormalizeOptionalString(project.Metrics?.Release?.LatestUrl);
         var changelogUrl = NormalizeOptionalString(GetProjectLink(project, "changelog"));
+        if (IsDefaultGitHubChangelogLink(changelogUrl, project.GitHubRepo))
+            changelogUrl = null;
         var downloadsUrl = NormalizeOptionalString(GetProjectLink(project, "powerShellGallery")) ??
                            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.GalleryUrl) ??
                            NormalizeOptionalString(project.Metrics?.NuGet?.PackageUrl);
@@ -2185,7 +2216,7 @@ internal static partial class WebPipelineRunner
         var examplesVisible = (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false);
         var safeDocsUrl = docsVisible ? docsUrl : overviewUrl;
         var safeExamplesUrl = examplesVisible ? examplesUrl : overviewUrl;
-        var description = NormalizeOptionalString(project.Description);
+        var description = ResolveProjectApiSummary(project, name);
         var stars = FormatProjectMetric(project.Metrics?.GitHub?.Stars);
         var forks = FormatProjectMetric(project.Metrics?.GitHub?.Forks);
         var openIssues = FormatProjectMetric(project.Metrics?.GitHub?.OpenIssues);
@@ -2250,6 +2281,40 @@ internal static partial class WebPipelineRunner
         if (string.Equals(status, "archived", StringComparison.OrdinalIgnoreCase))
             return "Archived";
         return "Project";
+    }
+
+    private static string? ResolveProjectApiSummary(ProjectCatalogEntry project, string name)
+    {
+        var description = NormalizeOptionalString(project.Description);
+        if (!IsGenericProjectArtifactDescription(description))
+            return description;
+
+        var routeName = string.IsNullOrWhiteSpace(name) ? "This project" : name.Trim();
+        var language = NormalizeOptionalString(project.Metrics?.GitHub?.Language);
+        var hasPowerShell = !string.IsNullOrWhiteSpace(GetProjectLink(project, "powerShellGallery")) ||
+                            !string.IsNullOrWhiteSpace(project.Metrics?.PowerShellGallery?.GalleryUrl) ||
+                            (TryGetProjectSurfaceValue(project.Surfaces, "apiPowerShell") ?? false) ||
+                            string.Equals(language, "PowerShell", StringComparison.OrdinalIgnoreCase);
+        var hasDotNet = !string.IsNullOrWhiteSpace(project.Metrics?.NuGet?.PackageUrl) ||
+                        (TryGetProjectSurfaceValue(project.Surfaces, "apiDotNet") ?? false) ||
+                        string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(language, "F#", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(language, "VB", StringComparison.OrdinalIgnoreCase);
+
+        if (hasPowerShell && hasDotNet)
+            return $"{routeName} is an open-source PowerShell and .NET project with packages, release history, and technical documentation.";
+        if (hasPowerShell)
+            return $"{routeName} is an open-source PowerShell project with packages, release history, and working documentation.";
+        if (hasDotNet)
+            return $"{routeName} is an open-source .NET project with packages, release history, and project documentation.";
+
+        return $"{routeName} is an open-source project with releases, documentation, and implementation-ready resources.";
+    }
+
+    private static bool IsGenericProjectArtifactDescription(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description) ||
+               description.Contains("website artifacts for the Evotec multi-project hub", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? GetProjectLink(ProjectCatalogEntry project, string key)

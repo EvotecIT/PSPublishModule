@@ -424,6 +424,105 @@ public class WebPipelineRunnerProjectCatalogTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectCatalog_PreservesApiDocsFromManifestAndCuration()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-apidocs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": []
+                }
+                """);
+
+            var alphaManifestPath = Path.Combine(root, "projects-sources", "alpha", "WebsiteArtifacts");
+            Directory.CreateDirectory(alphaManifestPath);
+            File.WriteAllText(Path.Combine(alphaManifestPath, "project-manifest.json"),
+                """
+                {
+                  "slug": "alpha",
+                  "name": "Alpha",
+                  "mode": "hub-full",
+                  "description": "Alpha project",
+                  "surfaces": {
+                    "apiPowerShell": true
+                  },
+                  "apiDocs": {
+                    "quickStartTypes": "Invoke-Alpha",
+                    "relatedContentManifest": "./data/projects/alpha-api-guides.json"
+                  }
+                }
+                """);
+
+            var betaManifestPath = Path.Combine(root, "projects-sources", "beta", "WebsiteArtifacts");
+            Directory.CreateDirectory(betaManifestPath);
+            File.WriteAllText(Path.Combine(betaManifestPath, "project-manifest.json"),
+                """
+                {
+                  "slug": "beta",
+                  "name": "Beta",
+                  "mode": "hub-full",
+                  "description": "Beta project",
+                  "surfaces": {
+                    "apiPowerShell": true
+                  }
+                }
+                """);
+
+            var curationPath = Path.Combine(root, "data", "projects", "curation.csv");
+            File.WriteAllText(curationPath,
+                """
+                "slug","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
+                "beta","Invoke-Beta","./data/projects/beta-api-guides.json"
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/projects",
+                      "summaryPath": "./summary.json",
+                      "curation": "./data/projects/curation.csv",
+                      "importManifests": true,
+                      "allowCreateProjects": true,
+                      "applyCuration": true,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": false,
+                      "generateSections": false,
+                      "validate": false
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var catalogText = File.ReadAllText(catalogPath);
+            Assert.Contains("\"apiDocs\":", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"quickStartTypes\": \"Invoke-Alpha\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"relatedContentManifest\": \"./data/projects/alpha-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"quickStartTypes\": \"Invoke-Beta\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"relatedContentManifest\": \"./data/projects/beta-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectCatalog_RemovesStaleGeneratedSectionPages()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-stale-sections-" + Guid.NewGuid().ToString("N"));

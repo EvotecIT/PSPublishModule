@@ -103,6 +103,15 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - If the theme defines tokens, API docs must receive the same token partial/context as normal layouts so width, color, and spacing variables stay aligned.
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
    - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
+8. Project examples rule:
+   - Treat examples as a curated project surface, not an automatic dump of every repo script.
+   - For public project hubs, prefer examples authored in:
+     - `Website/content/examples`
+     - `content/examples`
+   - Only ingest raw `Examples/` folders when the site explicitly wants fallback harvesting and the repo is known to be tidy enough for public display.
+   - Keep `surfaces.examples` disabled until a project has intentional example pages ready for the site.
+   - After changing/removing public example routes, run a clean build or CI-mode pipeline before inspecting `_site`; fast incremental builds may keep stale generated pages.
+   - If examples are enabled, verify the generated routes and the project metadata (`project_surface_examples`, `project_link_examples`, `project_local_examples_available`) after sync.
 
 ## Multi-Project API Suite Starter
 

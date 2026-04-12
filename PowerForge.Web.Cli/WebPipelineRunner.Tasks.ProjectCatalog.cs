@@ -358,6 +358,8 @@ internal static partial class WebPipelineRunner
                 project.Artifacts.Examples = manifest.Artifacts.Examples.Trim();
         }
 
+        MergeManifestExtensionData(project, manifest.ExtensionData, "apiDocs", "api-docs");
+
         if (manifest.Listed.HasValue)
             project.Listed = manifest.Listed.Value;
         if (!string.IsNullOrWhiteSpace(manifest.Status))
@@ -366,6 +368,27 @@ internal static partial class WebPipelineRunner
         project.ManifestPath = manifestPath.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(project.HubPath) && !string.IsNullOrWhiteSpace(project.Slug))
             project.HubPath = $"/projects/{NormalizeSlug(project.Slug)}/";
+    }
+
+    private static void MergeManifestExtensionData(
+        ProjectCatalogEntry project,
+        IReadOnlyDictionary<string, JsonElement>? extensionData,
+        params string[] keys)
+    {
+        if (project is null || extensionData is null || extensionData.Count == 0 || keys is null || keys.Length == 0)
+            return;
+
+        foreach (var key in keys)
+        {
+            foreach (var pair in extensionData)
+            {
+                if (!pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                project.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                project.ExtensionData[pair.Key] = pair.Value.Clone();
+            }
+        }
     }
 
     private static bool TryExtractGitHubRepo(string sourceUrl, out string repo)
@@ -420,12 +443,17 @@ internal static partial class WebPipelineRunner
         foreach (var pair in BuildCsvPrefixedColumnMap(header, "surface."))
             surfaceColumns.TryAdd(pair.Key, pair.Value);
 
+        var apiDocsColumns = BuildCsvPrefixedColumnMap(header, "apiDocs.");
+        foreach (var pair in BuildCsvPrefixedColumnMap(header, "api-docs."))
+            apiDocsColumns.TryAdd(pair.Key, pair.Value);
+
         var hasAnyOverrideColumn = statusIndex >= 0 ||
             listedIndex >= 0 ||
             modeIndex >= 0 ||
             externalUrlIndex >= 0 ||
             linkColumns.Count > 0 ||
-            surfaceColumns.Count > 0;
+            surfaceColumns.Count > 0 ||
+            apiDocsColumns.Count > 0;
         if (slugIndex < 0 || !hasAnyOverrideColumn)
             return 0;
 
@@ -472,6 +500,12 @@ internal static partial class WebPipelineRunner
 
                 project.Links ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
                 project.Links[pair.Key] = rawValue.Trim();
+                if (pair.Key.Equals("source", StringComparison.OrdinalIgnoreCase) &&
+                    string.IsNullOrWhiteSpace(project.GitHubRepo) &&
+                    TryExtractGitHubRepo(rawValue.Trim(), out var repo))
+                {
+                    project.GitHubRepo = repo;
+                }
                 updates++;
             }
 
@@ -485,9 +519,81 @@ internal static partial class WebPipelineRunner
                 project.Surfaces[pair.Key] = surfaceEnabled;
                 updates++;
             }
+
+            var apiDocsUpdates = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in apiDocsColumns)
+            {
+                var rawValue = TryGetCsvCell(parts, pair.Value);
+                if (string.IsNullOrWhiteSpace(rawValue))
+                    continue;
+
+                var key = NormalizeApiDocsCurationKey(pair.Key);
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+
+                apiDocsUpdates[key] = rawValue.Trim();
+            }
+
+            if (apiDocsUpdates.Count > 0)
+            {
+                ApplyProjectApiDocsCuration(project, apiDocsUpdates);
+                updates += apiDocsUpdates.Count;
+            }
         }
 
         return updates;
+    }
+
+    private static void ApplyProjectApiDocsCuration(ProjectCatalogEntry project, IReadOnlyDictionary<string, string> values)
+    {
+        if (project is null || values is null || values.Count == 0)
+            return;
+
+        var apiDocs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in values)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+                continue;
+
+            apiDocs[pair.Key] = pair.Key.Equals("relatedContentManifests", StringComparison.OrdinalIgnoreCase)
+                ? SplitDelimitedList(pair.Value)
+                : pair.Value;
+        }
+
+        if (apiDocs.Count == 0)
+            return;
+
+        project.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        project.ExtensionData["apiDocs"] = JsonSerializer.SerializeToElement(apiDocs);
+    }
+
+    private static string NormalizeApiDocsCurationKey(string key)
+    {
+        var normalized = (key ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        normalized = normalized.Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("_", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .ToLowerInvariant();
+
+        return normalized switch
+        {
+            "quickstarttypes" => "quickStartTypes",
+            "relatedcontentmanifest" => "relatedContentManifest",
+            "relatedcontentmanifests" => "relatedContentManifests",
+            _ => string.Empty
+        };
+    }
+
+    private static string[] SplitDelimitedList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        return value.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
     }
 
     private static int FindCsvColumnIndex(string[] header, params string[] names)
@@ -750,7 +856,7 @@ internal static partial class WebPipelineRunner
             ["apiDotNet"] = isDotNet,
             ["apiPowerShell"] = isPowerShell,
             ["examples"] = false,
-            ["changelog"] = true,
+            ["changelog"] = false,
             ["releases"] = true
         };
     }
@@ -781,6 +887,25 @@ internal static partial class WebPipelineRunner
                string.Equals(route, collectionRoute, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsDefaultGitHubChangelogLink(string? link, string? githubRepo)
+    {
+        if (string.IsNullOrWhiteSpace(link))
+            return false;
+
+        var normalized = link.Trim().TrimEnd('/').ToLowerInvariant();
+        if (!normalized.Contains("/blob/main/changelog.md", StringComparison.Ordinal) &&
+            !normalized.Contains("/blob/master/changelog.md", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(githubRepo))
+            return normalized.StartsWith("https://github.com/", StringComparison.Ordinal);
+
+        var repoRoot = $"https://github.com/{githubRepo.Trim().TrimEnd('/')}".ToLowerInvariant();
+        return normalized.StartsWith(repoRoot, StringComparison.Ordinal);
+    }
+
     private static void NormalizeProjectCatalogContracts(IList<ProjectCatalogEntry> projects, string hubSectionLinkTarget)
     {
         if (projects is null || projects.Count == 0)
@@ -807,6 +932,8 @@ internal static partial class WebPipelineRunner
             var mode = NormalizeProjectMode(project.Mode, "hub-full");
             project.Mode = mode;
             var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
+            if (mode.Equals("dedicated-external", StringComparison.OrdinalIgnoreCase))
+                contentMode = "external";
             project.ContentMode = contentMode;
             project.HubPath = $"/projects/{slug}/";
 
@@ -834,8 +961,23 @@ internal static partial class WebPipelineRunner
                 surfaces["apiDotNet"] = true;
             if (!surfaces.ContainsKey("releases") && (!string.IsNullOrWhiteSpace(githubRepo) || project.Metrics?.Release is not null))
                 surfaces["releases"] = true;
-            if (!surfaces.ContainsKey("changelog") && !string.IsNullOrWhiteSpace(githubRepo))
+
+            var changelogLink = TryGetDictionaryValue(links, "changelog");
+            if (IsDefaultGitHubChangelogLink(changelogLink, githubRepo))
+            {
+                links.Remove("changelog");
+                if (surfaces.TryGetValue("changelog", out var changelogSurface) && changelogSurface)
+                    surfaces["changelog"] = false;
+            }
+            else if (!string.IsNullOrWhiteSpace(changelogLink))
+            {
                 surfaces["changelog"] = true;
+            }
+            if (string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "changelog")) &&
+                surfaces.ContainsKey("changelog"))
+            {
+                surfaces["changelog"] = false;
+            }
 
             if (!string.IsNullOrWhiteSpace(project.ExternalUrl) && string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "website")))
                 links["website"] = project.ExternalUrl.Trim();
@@ -857,9 +999,6 @@ internal static partial class WebPipelineRunner
                 if (!string.IsNullOrWhiteSpace(releasesUrl))
                     links["releases"] = releasesUrl.Trim();
             }
-
-            if (string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "changelog")) && !string.IsNullOrWhiteSpace(githubRepo))
-                links["changelog"] = $"https://github.com/{githubRepo}/blob/main/CHANGELOG.md";
 
             if (string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "nuget")) &&
                 !string.IsNullOrWhiteSpace(project.Metrics?.NuGet?.PackageUrl))
@@ -1172,14 +1311,12 @@ internal static partial class WebPipelineRunner
         }
 
         if (changelogSurface &&
-            string.IsNullOrWhiteSpace(changelogLink) &&
-            string.IsNullOrWhiteSpace(releasesLink) &&
-            string.IsNullOrWhiteSpace(project.GitHubRepo))
+            string.IsNullOrWhiteSpace(changelogLink))
         {
             findings.Add(ProjectCatalogFinding.Warning(
                 "changelog-surface-missing-link",
                 slug,
-                "changelog surface is enabled but links.changelog (or fallback release/source location) is missing."));
+                "changelog surface is enabled but links.changelog is missing. Use release telemetry for generated release notes instead of relying on repository CHANGELOG.md fallback."));
         }
 
         if (hasAnySurface &&
@@ -1753,6 +1890,7 @@ internal static partial class WebPipelineRunner
 
         var nugetById = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
         var nugetByCompactId = new Dictionary<string, WebEcosystemNuGetPackage>(StringComparer.OrdinalIgnoreCase);
+        var nugetByGitHubProject = new Dictionary<string, List<WebEcosystemNuGetPackage>>(StringComparer.OrdinalIgnoreCase);
         if (stats.NuGet?.Items is { Count: > 0 })
         {
             foreach (var package in stats.NuGet.Items)
@@ -1763,6 +1901,18 @@ internal static partial class WebPipelineRunner
                 var compact = CompactToken(package.Id);
                 if (!string.IsNullOrWhiteSpace(compact) && !nugetByCompactId.ContainsKey(compact))
                     nugetByCompactId[compact] = package;
+
+                if (!string.IsNullOrWhiteSpace(package.ProjectUrl) &&
+                    TryExtractGitHubRepo(package.ProjectUrl!, out var packageRepo))
+                {
+                    if (!nugetByGitHubProject.TryGetValue(packageRepo, out var projectPackages))
+                    {
+                        projectPackages = new List<WebEcosystemNuGetPackage>();
+                        nugetByGitHubProject[packageRepo] = projectPackages;
+                    }
+
+                    projectPackages.Add(package);
+                }
             }
         }
 
@@ -1820,6 +1970,27 @@ internal static partial class WebPipelineRunner
                 }
             }
 
+            var nugetPackages = new List<WebEcosystemNuGetPackage>();
+            if (nuget is not null)
+                nugetPackages.Add(nuget);
+            if (!string.IsNullOrWhiteSpace(project.GitHubRepo) &&
+                nugetByGitHubProject.TryGetValue(project.GitHubRepo.Trim(), out var projectNuGetPackages))
+            {
+                foreach (var package in projectNuGetPackages)
+                {
+                    if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
+                        nugetPackages.Add(package);
+                }
+            }
+
+            if (nugetPackages.Count > 0)
+            {
+                nuget ??= nugetPackages
+                    .OrderByDescending(static package => package.TotalDownloads)
+                    .ThenBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+                    .First();
+            }
+
             WebEcosystemPowerShellGalleryModule? module = null;
             foreach (var candidate in candidates)
             {
@@ -1841,42 +2012,53 @@ internal static partial class WebPipelineRunner
             if (!hasAnyMetrics)
                 continue;
 
+            var existingMetrics = project.Metrics;
+            var mergedGitHub = github is null
+                ? existingMetrics?.GitHub
+                : new ProjectCatalogGitHubMetrics
+                {
+                    Repository = github.FullName,
+                    Url = github.Url,
+                    Language = github.Language,
+                    Stars = github.Stars,
+                    Forks = github.Forks,
+                    Watchers = github.Watchers,
+                    OpenIssues = github.OpenIssues,
+                    Archived = github.Archived,
+                    LastPushedAt = github.PushedAt?.ToString("O")
+                };
+            var mergedNuGet = nuget is null
+                ? existingMetrics?.NuGet
+                : new ProjectCatalogNuGetMetrics
+                {
+                    Id = nuget.Id,
+                    Version = nuget.Version,
+                    TotalDownloads = nugetPackages.Count > 1
+                        ? nugetPackages.Sum(static package => Math.Max(0, package.TotalDownloads))
+                        : nuget.TotalDownloads,
+                    PackageUrl = string.IsNullOrWhiteSpace(nuget.PackageUrl)
+                        ? BuildNuGetPackageUrl(nuget.Id)
+                        : nuget.PackageUrl,
+                    PackageCount = Math.Max(1, nugetPackages.Count),
+                    ProjectUrl = nuget.ProjectUrl
+                };
+            var mergedPowerShellGallery = module is null
+                ? existingMetrics?.PowerShellGallery
+                : new ProjectCatalogPowerShellGalleryMetrics
+                {
+                    Id = module.Id,
+                    Version = module.Version,
+                    TotalDownloads = module.DownloadCount,
+                    GalleryUrl = module.GalleryUrl,
+                    ProjectUrl = module.ProjectUrl
+                };
+
             project.Metrics = new ProjectCatalogMetrics
             {
-                GitHub = github is null
-                    ? null
-                    : new ProjectCatalogGitHubMetrics
-                    {
-                        Repository = github.FullName,
-                        Url = github.Url,
-                        Language = github.Language,
-                        Stars = github.Stars,
-                        Forks = github.Forks,
-                        Watchers = github.Watchers,
-                        OpenIssues = github.OpenIssues,
-                        Archived = github.Archived,
-                        LastPushedAt = github.PushedAt?.ToString("O")
-                    },
-                NuGet = nuget is null
-                    ? null
-                    : new ProjectCatalogNuGetMetrics
-                    {
-                        Id = nuget.Id,
-                        Version = nuget.Version,
-                        TotalDownloads = nuget.TotalDownloads,
-                        PackageUrl = nuget.PackageUrl ?? string.Empty,
-                        ProjectUrl = nuget.ProjectUrl
-                    },
-                PowerShellGallery = module is null
-                    ? null
-                    : new ProjectCatalogPowerShellGalleryMetrics
-                    {
-                        Id = module.Id,
-                        Version = module.Version,
-                        TotalDownloads = module.DownloadCount,
-                        GalleryUrl = module.GalleryUrl,
-                        ProjectUrl = module.ProjectUrl
-                    }
+                GitHub = mergedGitHub,
+                NuGet = mergedNuGet,
+                PowerShellGallery = mergedPowerShellGallery,
+                Release = existingMetrics?.Release
             };
 
             var totalDownloads = 0L;
@@ -2066,6 +2248,14 @@ internal static partial class WebPipelineRunner
         if (slashIndex >= 0 && slashIndex + 1 < token.Length)
             return token[(slashIndex + 1)..];
         return token;
+    }
+
+    private static string BuildNuGetPackageUrl(string? packageId)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+            return string.Empty;
+
+        return $"https://www.nuget.org/packages/{Uri.EscapeDataString(packageId.Trim())}";
     }
 
     private static string CompactToken(string? value)
@@ -2488,6 +2678,9 @@ internal static partial class WebPipelineRunner
         [JsonPropertyName("packageUrl")]
         public string? PackageUrl { get; set; }
 
+        [JsonPropertyName("packageCount")]
+        public int PackageCount { get; set; }
+
         [JsonPropertyName("projectUrl")]
         public string? ProjectUrl { get; set; }
     }
@@ -2586,6 +2779,9 @@ internal static partial class WebPipelineRunner
 
         [JsonPropertyName("artifacts")]
         public ProjectCatalogArtifacts? Artifacts { get; set; }
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 
     private sealed class ProjectCatalogFinding

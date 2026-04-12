@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
+    [switch]$IncludeExamples,
     [string]$ArtifactsRoot = (Join-Path $PSScriptRoot '..\WebsiteArtifacts')
 )
 
@@ -15,7 +16,6 @@ $helpCandidates = @(
     (Join-Path $moduleRoot "Artefacts\Unpacked\$moduleName\en-US\$moduleName-help.xml"),
     (Join-Path $moduleRoot "Artefacts\Unpacked\v3.0.0\Modules\$moduleName\en-US\$moduleName-help.xml")
 )
-$examplesSource = Join-Path $moduleRoot 'Examples'
 $placeholderMarkers = @(
     '{{ Fill in the Synopsis }}',
     '{{ Fill in the Description }}',
@@ -60,6 +60,15 @@ function Write-CommandMetadata {
     }
 
     $resolvedManifestPath = [System.IO.Path]::GetFullPath($ModuleManifestPath)
+    $moduleBinaryPath = Join-Path (Split-Path -Parent $resolvedManifestPath) "Lib\$moduleName.dll"
+    if (-not (Test-Path -LiteralPath $moduleBinaryPath -PathType Leaf)) {
+        if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
+            Remove-Item -LiteralPath $OutputPath -Force
+        }
+
+        return
+    }
+
     Remove-Module -Name $moduleName -Force -ErrorAction SilentlyContinue
     try {
         Import-Module $resolvedManifestPath -Force -ErrorAction Stop | Out-Null
@@ -130,8 +139,11 @@ if (Test-Path -LiteralPath $psd1Path -PathType Leaf) {
     Write-CommandMetadata -ModuleManifestPath $psd1Path -OutputPath (Join-Path $apiRoot 'command-metadata.json')
 }
 
-if (Test-Path -LiteralPath $examplesSource -PathType Container) {
-    Copy-Item -LiteralPath $examplesSource -Destination $examplesTarget -Recurse -Force
+if ($IncludeExamples) {
+    $examplesSource = Join-Path $moduleRoot 'Examples'
+    if (Test-Path -LiteralPath $examplesSource -PathType Container) {
+        Copy-Item -LiteralPath $examplesSource -Destination $examplesTarget -Recurse -Force
+    }
 }
 
 $version = $null
@@ -162,7 +174,6 @@ $manifest = [ordered]@{
     }
     artifacts = [ordered]@{
         api = 'WebsiteArtifacts/apidocs'
-        examples = 'Module/Examples'
     }
 }
 

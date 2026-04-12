@@ -432,6 +432,7 @@ internal static partial class WebCliCommandHandlers
         var mediaProfilesPath = TryGetOptionValue(subArgs, "--media-profiles");
         var minNavCoverageText = TryGetOptionValue(subArgs, "--min-nav-coverage");
         var requiredRoutes = ReadOptionList(subArgs, "--required-route", "--required-routes");
+        var forbiddenRoutes = ReadOptionList(subArgs, "--forbidden-route", "--forbidden-routes");
         var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
         var useDefaultIgnoreMedia = !HasOption(subArgs, "--no-default-ignore-media");
         var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
@@ -531,6 +532,7 @@ internal static partial class WebCliCommandHandlers
             MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
+            ForbiddenRoutes = forbiddenRoutes.ToArray(),
             CheckLinks = !HasOption(subArgs, "--no-links"),
             CheckAssets = !HasOption(subArgs, "--no-assets"),
             CheckNavConsistency = !HasOption(subArgs, "--no-nav"),
@@ -637,6 +639,8 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Navigation: checked {result.NavCheckedCount}, ignored {result.NavIgnoredCount}, coverage {result.NavCoveragePercent:0.0}%, mismatches {result.NavMismatchCount}");
         if (result.RequiredRouteCount > 0)
             logger.Info($"Required routes: {result.RequiredRouteCount} (missing {result.MissingRequiredRouteCount})");
+        if (result.ForbiddenRouteCount > 0)
+            logger.Info($"Forbidden routes: {result.ForbiddenRouteCount} (present {result.PresentForbiddenRouteCount})");
         logger.Info($"Issues: {result.ErrorCount} errors, {result.WarningCount} warnings");
         if (result.NewIssueCount > 0 || !string.IsNullOrWhiteSpace(result.BaselinePath))
             logger.Info($"New issues: {result.NewIssueCount} (errors {result.NewErrorCount}, warnings {result.NewWarningCount})");

@@ -35,6 +35,10 @@ public sealed class WebAuditSummary
     public int RequiredRouteCount { get; set; }
     /// <summary>Total required routes missing from generated output.</summary>
     public int MissingRequiredRouteCount { get; set; }
+    /// <summary>Total forbidden routes requested by audit options.</summary>
+    public int ForbiddenRouteCount { get; set; }
+    /// <summary>Total forbidden routes present in generated output.</summary>
+    public int PresentForbiddenRouteCount { get; set; }
     /// <summary>Total rendered pages checked.</summary>
     public int RenderedPageCount { get; set; }
     /// <summary>Total console errors detected during rendered checks.</summary>

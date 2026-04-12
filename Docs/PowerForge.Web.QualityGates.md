@@ -75,6 +75,7 @@ Notes:
 - Verify markdown hygiene now flags multiline HTML media tags (`img`/`iframe`/etc.) because they can render as escaped text in output; keep media tags single-line or use markdown/shortcodes.
 - `markdown-fix` now auto-normalizes multiline media opening tags (`img`, `iframe`, `video`, `audio`, `source`, `picture`) outside code fences.
 - CI pattern: add a dry-run `markdown-fix` step with `failOnChanges:true` and write `reportPath`/`summaryPath` artifacts for fast remediation.
+- Keep CI builds clean (`clean:true`). After removing routes or changing synced surfaces, run a clean local build before inspecting `_site`; incremental dev builds can leave stale HTML that no longer corresponds to source content.
 
 ## Creating/Updating Baselines
 
@@ -91,6 +92,7 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 ## Common Rules Of Thumb
 
 - Prefer `failOnNewWarnings` (verify) and `failOnNewIssues` (audit) in CI.
+- Use clean builds for route-removal changes before trusting rendered smoke checks; stale incremental output can make deleted pages look like current regressions.
 - Prefer strict theme contracts over "it renders ok on one site":
   - `theme.manifest.json` should declare `features` and `featureContracts`.
   - For `apiDocs`, include required fragments and a CSS selector contract.
