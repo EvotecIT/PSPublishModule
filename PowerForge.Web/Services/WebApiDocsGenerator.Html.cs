@@ -464,7 +464,7 @@ $@"<!doctype html>
         if (!string.IsNullOrWhiteSpace(siteName))
             html.Line($"<meta property=\"og:site_name\" content=\"{System.Web.HttpUtility.HtmlEncode(siteName)}\" />");
 
-        html.Line(string.Empty);
+        html.BlankLine();
         html.Line("<!-- Twitter Card -->");
         html.Line($"<meta name=\"twitter:card\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCard)}\" />");
         html.Line($"<meta name=\"twitter:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");

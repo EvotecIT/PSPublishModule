@@ -34,6 +34,11 @@ internal sealed class HtmlFragmentBuilder
         _builder.AppendLine(text ?? string.Empty);
     }
 
+    public void BlankLine()
+    {
+        _builder.AppendLine();
+    }
+
     public void AppendRaw(string? text)
     {
         if (string.IsNullOrEmpty(text))
