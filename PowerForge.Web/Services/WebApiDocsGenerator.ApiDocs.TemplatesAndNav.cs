@@ -37,9 +37,7 @@ public static partial class WebApiDocsGenerator
 
     private static string LoadThemeTokensHtml(WebApiDocsOptions options)
     {
-        var siteConfigPath = string.IsNullOrWhiteSpace(options.SiteConfigPath)
-            ? options.NavJsonPath
-            : options.SiteConfigPath;
+        var siteConfigPath = options.SiteConfigPath;
         if (string.IsNullOrWhiteSpace(siteConfigPath))
             return string.Empty;
 
@@ -99,7 +97,7 @@ public static partial class WebApiDocsGenerator
                     : File.ReadAllText(partialPath);
             });
         }
-        catch
+        catch (Exception)
         {
             return string.Empty;
         }

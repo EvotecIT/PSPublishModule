@@ -139,10 +139,12 @@ if (Test-Path -LiteralPath $psd1Path -PathType Leaf) {
     Write-CommandMetadata -ModuleManifestPath $psd1Path -OutputPath (Join-Path $apiRoot 'command-metadata.json')
 }
 
+$examplesExported = $false
 if ($IncludeExamples) {
     $examplesSource = Join-Path $moduleRoot 'Examples'
     if (Test-Path -LiteralPath $examplesSource -PathType Container) {
         Copy-Item -LiteralPath $examplesSource -Destination $examplesTarget -Recurse -Force
+        $examplesExported = $true
     }
 }
 
@@ -170,11 +172,15 @@ $manifest = [ordered]@{
         docs = $false
         apiPowerShell = $true
         apiDotNet = $false
-        examples = $false
+        examples = $examplesExported
     }
     artifacts = [ordered]@{
         api = 'WebsiteArtifacts/apidocs'
     }
+}
+
+if ($examplesExported) {
+    $manifest.artifacts.examples = 'WebsiteArtifacts/apidocs/powershell/examples'
 }
 
 $manifestPath = Join-Path $resolvedArtifactsRoot 'project-manifest.json'

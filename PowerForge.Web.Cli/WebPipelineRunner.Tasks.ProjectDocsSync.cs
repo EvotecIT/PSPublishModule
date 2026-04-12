@@ -834,7 +834,7 @@ internal static partial class WebPipelineRunner
             return "Example";
 
         var normalized = value.Replace('_', ' ').Replace('-', ' ').Trim();
-        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(normalized);
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalized);
     }
 
     private static string? GetMarkdownHeadingTitle(string? content)
@@ -874,7 +874,7 @@ internal static partial class WebPipelineRunner
         }
 
         var normalizedSlug = string.IsNullOrWhiteSpace(slug) ? "Project" : slug.Replace('-', ' ').Replace('_', ' ').Trim();
-        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(normalizedSlug);
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalizedSlug);
     }
 
     private static bool IsGeneratedExampleMarkdown(string path)
@@ -1033,6 +1033,7 @@ internal static partial class WebPipelineRunner
             if (string.Equals(currentLine.Trim(), expected, StringComparison.Ordinal))
                 return false;
 
+            // Match keys case-insensitively but rewrite the canonical generated casing.
             allLines[i] = expected;
             return true;
         }

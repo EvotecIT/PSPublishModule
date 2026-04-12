@@ -2320,6 +2320,8 @@ internal static partial class WebPipelineRunner
     private static bool IsGenericProjectArtifactDescription(string? description)
     {
         return string.IsNullOrWhiteSpace(description) ||
+               // Older generated manifests used this placeholder; treat it as "missing"
+               // so public pages get a useful project-specific summary.
                description.Contains("website artifacts for the Evotec multi-project hub", StringComparison.OrdinalIgnoreCase);
     }
 

@@ -121,6 +121,7 @@ internal static partial class WebCliCommandHandlers
         if (HasOption(subArgs, "--include-undocumented"))
             includeUndocumented = true;
         var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
+        var siteConfig = TryGetOptionValue(subArgs, "--site-config") ?? TryGetOptionValue(subArgs, "--siteConfig");
         var navSurface = TryGetOptionValue(subArgs, "--nav-surface") ?? TryGetOptionValue(subArgs, "--nav-surface-name");
         var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
         var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
@@ -185,7 +186,7 @@ internal static partial class WebCliCommandHandlers
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = navJson,
-            SiteConfigPath = navJson,
+            SiteConfigPath = siteConfig,
             NavSurfaceName = navSurface,
             GenerateCoverageReport = generateCoverageReport,
             CoverageReportPath = coverageReport,

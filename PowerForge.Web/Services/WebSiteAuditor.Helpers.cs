@@ -12,6 +12,16 @@ public static partial class WebSiteAuditor
     private static readonly Regex HreflangTokenPattern = new(
         "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex LanguagePathSegmentPattern = new(
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> ReservedLanguagePathSegments = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "api",
+        "app",
+        "rss",
+        "www"
+    };
     private static readonly Regex EscapedMediaTagPattern = new(
         "&lt;\\s*(img|iframe|video|source|picture)\\b(?=[^&]*?=)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -292,11 +302,7 @@ public static partial class WebSiteAuditor
         if (string.IsNullOrWhiteSpace(segment))
             return false;
 
-        var trimmed = segment.Trim();
-        if (trimmed.Length < 2 || trimmed.Length > 8)
-            return false;
-
-        return trimmed.All(ch => char.IsLetter(ch) || ch == '-');
+        return LooksLikeLanguagePathSegment(segment);
     }
 
     private static string? ResolveBaseHref(AngleSharp.Dom.IDocument doc)
@@ -1273,10 +1279,7 @@ public static partial class WebSiteAuditor
 
         var slashIndex = normalized.IndexOf('/');
         var firstSegment = slashIndex >= 0 ? normalized.Substring(0, slashIndex) : normalized;
-        if (firstSegment.Length is < 2 or > 5)
-            return string.Empty;
-
-        if (!Regex.IsMatch(firstSegment, "^[a-z]{2}(?:-[a-z0-9]{2,8})?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        if (!LooksLikeLanguagePathSegment(firstSegment))
             return string.Empty;
 
         return "/" + firstSegment.ToLowerInvariant();
@@ -1300,7 +1303,15 @@ public static partial class WebSiteAuditor
 
         var slashIndex = normalized.IndexOf('/');
         var firstSegment = slashIndex >= 0 ? normalized.Substring(0, slashIndex) : normalized;
-        return Regex.IsMatch(firstSegment, "^[a-z]{2}(?:-[a-z0-9]{2,8})?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return LooksLikeLanguagePathSegment(firstSegment);
+    }
+
+    private static bool LooksLikeLanguagePathSegment(string segment)
+    {
+        var trimmed = segment.Trim();
+        return trimmed.Length > 0 &&
+            !ReservedLanguagePathSegments.Contains(trimmed) &&
+            LanguagePathSegmentPattern.IsMatch(trimmed);
     }
 
     private static void ValidateNetworkHints(

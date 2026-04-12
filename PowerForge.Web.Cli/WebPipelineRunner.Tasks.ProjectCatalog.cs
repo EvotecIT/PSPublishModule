@@ -549,7 +549,7 @@ internal static partial class WebPipelineRunner
         if (project is null || values is null || values.Count == 0)
             return;
 
-        var apiDocs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var apiDocs = ReadProjectApiDocsExtension(project);
         foreach (var pair in values)
         {
             if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
@@ -564,7 +564,26 @@ internal static partial class WebPipelineRunner
             return;
 
         project.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-        project.ExtensionData["apiDocs"] = JsonSerializer.SerializeToElement(apiDocs);
+        project.ExtensionData.Remove("api-docs");
+        project.ExtensionData["apiDocs"] = JsonSerializer.SerializeToElement(apiDocs, WebCliJson.Options);
+    }
+
+    private static Dictionary<string, object?> ReadProjectApiDocsExtension(ProjectCatalogEntry project)
+    {
+        var apiDocs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (project.ExtensionData is null || project.ExtensionData.Count == 0)
+            return apiDocs;
+
+        foreach (var key in new[] { "apiDocs", "api-docs" })
+        {
+            if (!project.ExtensionData.TryGetValue(key, out var element) || element.ValueKind != JsonValueKind.Object)
+                continue;
+
+            foreach (var property in element.EnumerateObject())
+                apiDocs[property.Name] = JsonSerializer.Deserialize<object?>(property.Value.GetRawText(), WebCliJson.Options);
+        }
+
+        return apiDocs;
     }
 
     private static string NormalizeApiDocsCurationKey(string key)

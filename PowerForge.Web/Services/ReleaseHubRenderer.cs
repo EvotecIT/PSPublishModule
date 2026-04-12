@@ -28,6 +28,18 @@ internal static class ReleaseHubRenderer
     private static readonly Regex GithubUserMentionRegex = new(
         "(?<![\\w/])@(?<user>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex AnchorOpenTagRegex = new(
+        "^<\\s*a\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex AnchorCloseTagRegex = new(
+        "^<\\s*/\\s*a\\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex CodeLikeOpenTagRegex = new(
+        "^<\\s*(?:code|pre|kbd|samp)\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex CodeLikeCloseTagRegex = new(
+        "^<\\s*/\\s*(?:code|pre|kbd|samp)\\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static string RenderReleaseButton(
         IReadOnlyDictionary<string, object?> data,
@@ -673,20 +685,25 @@ internal static class ReleaseHubRenderer
         var sb = new StringBuilder(html.Length);
         var cursor = 0;
         var inAnchor = false;
+        var codeLikeDepth = 0;
         foreach (Match match in HtmlTagRegex.Matches(html))
         {
             if (match.Index > cursor)
             {
                 var segment = html.Substring(cursor, match.Index - cursor);
-                sb.Append(inAnchor ? segment : replacer(segment));
+                sb.Append(inAnchor || codeLikeDepth > 0 ? segment : replacer(segment));
             }
 
             var tag = match.Value;
             sb.Append(tag);
-            if (Regex.IsMatch(tag, "^<\\s*a\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            if (AnchorOpenTagRegex.IsMatch(tag))
                 inAnchor = true;
-            else if (Regex.IsMatch(tag, "^<\\s*/\\s*a\\s*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            else if (AnchorCloseTagRegex.IsMatch(tag))
                 inAnchor = false;
+            else if (CodeLikeOpenTagRegex.IsMatch(tag) && !tag.EndsWith("/>", StringComparison.Ordinal))
+                codeLikeDepth++;
+            else if (CodeLikeCloseTagRegex.IsMatch(tag) && codeLikeDepth > 0)
+                codeLikeDepth--;
 
             cursor = match.Index + match.Length;
         }
@@ -694,7 +711,7 @@ internal static class ReleaseHubRenderer
         if (cursor < html.Length)
         {
             var segment = html.Substring(cursor);
-            sb.Append(inAnchor ? segment : replacer(segment));
+            sb.Append(inAnchor || codeLikeDepth > 0 ? segment : replacer(segment));
         }
 
         return sb.ToString();

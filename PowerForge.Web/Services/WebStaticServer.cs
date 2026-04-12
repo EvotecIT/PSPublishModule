@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
@@ -9,6 +10,16 @@ public static class WebStaticServer
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+    private static readonly Regex LanguageDirectoryNameRegex = new(
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly HashSet<string> ReservedLanguageDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "api",
+        "app",
+        "rss",
+        "www"
+    };
 
     /// <summary>Starts a blocking static file server.</summary>
     /// <param name="rootPath">Root directory to serve.</param>
@@ -322,10 +333,12 @@ public static class WebStaticServer
 
     private static bool IsLanguageDirectoryName(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length != 2)
+        if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        return char.IsLetter(value[0]) && char.IsLetter(value[1]);
+        var trimmed = value.Trim();
+        return !ReservedLanguageDirectoryNames.Contains(trimmed) &&
+            LanguageDirectoryNameRegex.IsMatch(trimmed);
     }
 
     private static string NormalizeRootPath(string path)
