@@ -41,6 +41,22 @@
         }
       }
     },
+    "GitHub": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Publish": { "type": "boolean" },
+        "Owner": { "type": [ "string", "null" ] },
+        "Repository": { "type": [ "string", "null" ] },
+        "Token": { "type": [ "string", "null" ] },
+        "TokenFilePath": { "type": [ "string", "null" ] },
+        "TokenEnvName": { "type": [ "string", "null" ] },
+        "GenerateReleaseNotes": { "type": "boolean" },
+        "IsPreRelease": { "type": "boolean" },
+        "TagTemplate": { "type": [ "string", "null" ] },
+        "ReleaseNameTemplate": { "type": [ "string", "null" ] }
+      }
+    },
     "Winget": {
       "type": "object",
       "additionalProperties": false,

@@ -65,7 +65,11 @@ public sealed partial class ModulePipelineRunner
             }
 
             if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
-                TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
+                TryRegenerateBootstrapperFromManifest(
+                    buildResult,
+                    plan.ModuleName,
+                    plan.BuildSpec.ExportAssemblies,
+                    plan.BuildSpec.HandleRuntimes);
 
             session.Done(session.ManifestStep);
         }

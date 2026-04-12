@@ -133,6 +133,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
             Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<pre class=\"language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("New-SampleCmdlet -Name &quot;Demo&quot;" + Environment.NewLine + "        </code></pre>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("New-SampleCmdlet -Name &quot;Demo&quot;        </code></pre>", html, StringComparison.Ordinal);
             Assert.Contains("window.Prism=window.Prism||{};window.Prism.manual=true;", html, StringComparison.Ordinal);
             Assert.Contains("prism-core.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);

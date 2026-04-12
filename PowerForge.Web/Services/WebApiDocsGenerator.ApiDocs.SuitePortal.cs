@@ -76,67 +76,85 @@ public static partial class WebApiDocsGenerator
 
     private static string BuildSuitePortalMain(string title, ApiSuiteContext suite, string baseUrl)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("    <div class=\"api-suite-portal ev-page-body\">");
-        sb.AppendLine("      <header class=\"ev-docs-header api-overview-header\">");
-        sb.AppendLine("        <p class=\"ev-eyebrow\">API Suite</p>");
-        sb.AppendLine($"        <h1>{System.Web.HttpUtility.HtmlEncode(title)}</h1>");
-        sb.AppendLine("        <p class=\"lead\">Browse every API in this suite from one landing page, then search across all related symbols.</p>");
-        sb.AppendLine("      </header>");
-        sb.AppendLine("      <div class=\"api-overview-main api-overview-main--full\">");
-        AppendApiSuiteNarrativeSummary(sb, suite);
-        AppendApiSuiteCoverageSummary(sb, suite);
-        AppendApiSuiteRelatedContentSummary(sb, suite);
-        AppendApiSuiteOverview(sb, suite, EnsureTrailingSlash(baseUrl), includeHeading: false);
-        AppendApiSuiteArtifactLinks(sb, suite);
-        sb.AppendLine("      </div>");
-        sb.AppendLine("    </div>");
-        return sb.ToString().TrimEnd();
+        var html = new HtmlFragmentBuilder();
+        html.Line("<div class=\"api-suite-portal ev-page-body\">");
+        using (html.Indent())
+        {
+            html.Line("<header class=\"ev-docs-header api-overview-header\">");
+            using (html.Indent())
+            {
+                html.Line("<p class=\"ev-eyebrow\">API Suite</p>");
+                html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(title)}</h1>");
+                html.Line("<p class=\"lead\">Browse every API in this suite from one landing page, then search across all related symbols.</p>");
+            }
+            html.Line("</header>");
+            html.Line("<div class=\"api-overview-main api-overview-main--full\">");
+            using (html.Indent())
+            {
+                AppendApiSuiteNarrativeSummary(html, suite);
+                AppendApiSuiteCoverageSummary(html, suite);
+                AppendApiSuiteRelatedContentSummary(html, suite);
+                AppendApiSuiteOverview(html, suite, EnsureTrailingSlash(baseUrl), includeHeading: false);
+                AppendApiSuiteArtifactLinks(html, suite);
+            }
+            html.Line("</div>");
+        }
+        html.Line("</div>");
+        return html.ToString().TrimEnd();
     }
 
-    private static void AppendApiSuiteNarrativeSummary(StringBuilder sb, ApiSuiteContext suite)
+    private static void AppendApiSuiteNarrativeSummary(HtmlFragmentBuilder html, ApiSuiteContext suite)
     {
-        if (sb is null || suite is null || string.IsNullOrWhiteSpace(suite.NarrativeUrl))
+        if (html is null || suite is null || string.IsNullOrWhiteSpace(suite.NarrativeUrl))
             return;
 
-        sb.AppendLine($"      <section class=\"api-suite-narrative\" data-suite-narrative-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.NarrativeUrl)}\">");
-        sb.AppendLine("        <h2>Start Here</h2>");
-        sb.AppendLine("        <p class=\"section-desc\">Follow the curated learning path for this API ecosystem before diving into individual reference pages.</p>");
-        sb.AppendLine("        <div class=\"api-suite-narrative-status\" aria-live=\"polite\">Loading suite guidance...</div>");
-        sb.AppendLine("        <div class=\"api-suite-narrative-summary\" hidden></div>");
-        sb.AppendLine("        <div class=\"api-suite-narrative-sections\" hidden></div>");
-        sb.AppendLine("      </section>");
+        html.Line($"<section class=\"api-suite-narrative\" data-suite-narrative-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.NarrativeUrl)}\">");
+        using (html.Indent())
+        {
+            html.Line("<h2>Start Here</h2>");
+            html.Line("<p class=\"section-desc\">Follow the curated learning path for this API ecosystem before diving into individual reference pages.</p>");
+            html.Line("<div class=\"api-suite-narrative-status\" aria-live=\"polite\">Loading suite guidance...</div>");
+            html.Line("<div class=\"api-suite-narrative-summary\" hidden></div>");
+            html.Line("<div class=\"api-suite-narrative-sections\" hidden></div>");
+        }
+        html.Line("</section>");
     }
 
-    private static void AppendApiSuiteCoverageSummary(StringBuilder sb, ApiSuiteContext suite)
+    private static void AppendApiSuiteCoverageSummary(HtmlFragmentBuilder html, ApiSuiteContext suite)
     {
-        if (sb is null || suite is null || string.IsNullOrWhiteSpace(suite.CoverageUrl))
+        if (html is null || suite is null || string.IsNullOrWhiteSpace(suite.CoverageUrl))
             return;
 
-        sb.AppendLine($"      <section class=\"api-suite-coverage-summary\" data-suite-coverage-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.CoverageUrl)}\">");
-        sb.AppendLine("        <h2>Coverage Signals</h2>");
-        sb.AppendLine("        <p class=\"section-desc\">Track whether the important entry points across this suite are well documented and supported by guidance.</p>");
-        sb.AppendLine("        <div class=\"api-suite-coverage-status\" aria-live=\"polite\">Loading suite coverage summary...</div>");
-        sb.AppendLine("        <div class=\"api-suite-coverage-grid\" hidden></div>");
-        sb.AppendLine("      </section>");
+        html.Line($"<section class=\"api-suite-coverage-summary\" data-suite-coverage-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.CoverageUrl)}\">");
+        using (html.Indent())
+        {
+            html.Line("<h2>Coverage Signals</h2>");
+            html.Line("<p class=\"section-desc\">Track whether the important entry points across this suite are well documented and supported by guidance.</p>");
+            html.Line("<div class=\"api-suite-coverage-status\" aria-live=\"polite\">Loading suite coverage summary...</div>");
+            html.Line("<div class=\"api-suite-coverage-grid\" hidden></div>");
+        }
+        html.Line("</section>");
     }
 
-    private static void AppendApiSuiteRelatedContentSummary(StringBuilder sb, ApiSuiteContext suite)
+    private static void AppendApiSuiteRelatedContentSummary(HtmlFragmentBuilder html, ApiSuiteContext suite)
     {
-        if (sb is null || suite is null || string.IsNullOrWhiteSpace(suite.RelatedContentUrl))
+        if (html is null || suite is null || string.IsNullOrWhiteSpace(suite.RelatedContentUrl))
             return;
 
-        sb.AppendLine($"      <section class=\"api-suite-related-content\" data-suite-related-content-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.RelatedContentUrl)}\">");
-        sb.AppendLine("        <h2>Guides & Samples</h2>");
-        sb.AppendLine("        <p class=\"section-desc\">Curated walkthroughs and examples collected across every API in this suite.</p>");
-        sb.AppendLine("        <div class=\"api-suite-related-content-status\" aria-live=\"polite\">Loading curated guides...</div>");
-        sb.AppendLine("        <div class=\"api-suite-related-content-list\" hidden></div>");
-        sb.AppendLine("      </section>");
+        html.Line($"<section class=\"api-suite-related-content\" data-suite-related-content-url=\"{System.Web.HttpUtility.HtmlAttributeEncode(suite.RelatedContentUrl)}\">");
+        using (html.Indent())
+        {
+            html.Line("<h2>Guides & Samples</h2>");
+            html.Line("<p class=\"section-desc\">Curated walkthroughs and examples collected across every API in this suite.</p>");
+            html.Line("<div class=\"api-suite-related-content-status\" aria-live=\"polite\">Loading curated guides...</div>");
+            html.Line("<div class=\"api-suite-related-content-list\" hidden></div>");
+        }
+        html.Line("</section>");
     }
 
-    private static void AppendApiSuiteArtifactLinks(StringBuilder sb, ApiSuiteContext suite)
+    private static void AppendApiSuiteArtifactLinks(HtmlFragmentBuilder html, ApiSuiteContext suite)
     {
-        if (sb is null || suite is null)
+        if (html is null || suite is null)
             return;
 
         var links = new List<(string Label, string Url)>
@@ -152,15 +170,21 @@ public static partial class WebApiDocsGenerator
         if (links.Length == 0)
             return;
 
-        sb.AppendLine("      <section class=\"api-suite-artifacts\">");
-        sb.AppendLine("        <h2>Suite Assets</h2>");
-        sb.AppendLine("        <p class=\"section-desc\">Shared machine-readable outputs for search, xref, and coverage consumers.</p>");
-        sb.AppendLine("        <div class=\"api-suite-artifact-list\">");
-        foreach (var link in links)
+        html.Line("<section class=\"api-suite-artifacts\">");
+        using (html.Indent())
         {
-            sb.AppendLine($"          <a class=\"api-suite-artifact\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(link.Url)}\">{System.Web.HttpUtility.HtmlEncode(link.Label)}</a>");
+            html.Line("<h2>Suite Assets</h2>");
+            html.Line("<p class=\"section-desc\">Shared machine-readable outputs for search, xref, and coverage consumers.</p>");
+            html.Line("<div class=\"api-suite-artifact-list\">");
+            using (html.Indent())
+            {
+                foreach (var link in links)
+                {
+                    html.Line($"<a class=\"api-suite-artifact\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(link.Url)}\">{System.Web.HttpUtility.HtmlEncode(link.Label)}</a>");
+                }
+            }
+            html.Line("</div>");
         }
-        sb.AppendLine("        </div>");
-        sb.AppendLine("      </section>");
+        html.Line("</section>");
     }
 }

@@ -337,12 +337,16 @@ public sealed partial class ModulePipelineRunner
         return null;
     }
 
-    private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
+    private void TryRegenerateBootstrapperFromManifest(
+        ModuleBuildResult buildResult,
+        string moduleName,
+        IReadOnlyList<string>? exportAssemblies,
+        bool handleRuntimes)
     {
         try
         {
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
-            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies);
+            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies, handleRuntimes);
         }
         catch (Exception ex)
         {

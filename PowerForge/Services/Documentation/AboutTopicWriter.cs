@@ -134,10 +134,7 @@ internal sealed class AboutTopicWriter
 
         var indexPath = Path.Combine(aboutOutDir, "README.md");
         var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine("schema: 1.0.0");
-        sb.AppendLine("generated: true");
-        sb.AppendLine("---");
+        MarkdownFrontMatterWriter.Append(sb, ("schema", "1.0.0"), ("generated", "true"));
         sb.AppendLine("# About Topics");
         sb.AppendLine();
         sb.AppendLine("This folder is generated from `about_*.help.txt` and `about_*.txt` source files.");
@@ -242,10 +239,7 @@ internal static class AboutTopicMarkdown
         var shortDesc = ExtractShortDescription(sections);
 
         var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine($"topic: {topic}");
-        sb.AppendLine("schema: 1.0.0");
-        sb.AppendLine("---");
+        MarkdownFrontMatterWriter.Append(sb, ("topic", topic), ("schema", "1.0.0"));
         sb.AppendLine($"# {topic}");
         sb.AppendLine();
 
@@ -299,10 +293,7 @@ internal static class AboutTopicMarkdown
         if (!markdown.StartsWith("---", StringComparison.Ordinal))
         {
             var sb = new StringBuilder();
-            sb.AppendLine("---");
-            sb.AppendLine($"topic: {topic}");
-            sb.AppendLine("schema: 1.0.0");
-            sb.AppendLine("---");
+            MarkdownFrontMatterWriter.Append(sb, ("topic", topic), ("schema", "1.0.0"));
             sb.AppendLine(markdown);
             markdown = sb.ToString().TrimEnd('\r', '\n');
         }

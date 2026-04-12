@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace PowerForgeStudio.Domain.Hub;
 
 public static class GitHubDiscussionMarkdownBuilder
@@ -17,9 +15,9 @@ public static class GitHubDiscussionMarkdownBuilder
             return "_No discussion available._";
         }
 
-        var builder = new StringBuilder();
+        var builder = new MarkdownThreadBuilder();
         var first = entries[0];
-        builder.AppendLine(string.IsNullOrWhiteSpace(first.Markdown)
+        builder.Paragraph(string.IsNullOrWhiteSpace(first.Markdown)
             ? "_No description provided._"
             : first.Markdown.Trim());
 
@@ -28,28 +26,28 @@ public static class GitHubDiscussionMarkdownBuilder
             return builder.ToString().Trim();
         }
 
-        builder.AppendLine();
-        builder.AppendLine("---");
-        builder.AppendLine();
-        builder.AppendLine("## Discussion");
+        builder.HorizontalRule();
+        builder.BlankLine();
+        builder.Heading(2, "Discussion");
 
+        var isFirstDiscussionEntry = true;
         foreach (var entry in entries.Skip(1))
         {
-            builder.AppendLine();
-            builder.Append("### ");
-            builder.Append(entry.AuthorLogin ?? "Unknown actor");
-            builder.Append(entry.Kind == GitHubThreadEntryKind.TimelineEvent ? " activity on " : " commented on ");
-            builder.AppendLine(entry.CreatedAt.ToString("yyyy-MM-dd HH:mm"));
+            if (isFirstDiscussionEntry)
+            {
+                builder.BlankLine();
+                isFirstDiscussionEntry = false;
+            }
+
+            builder.Heading(3, $"{entry.AuthorLogin ?? "Unknown actor"}{(entry.Kind == GitHubThreadEntryKind.TimelineEvent ? " activity on " : " commented on ")}{entry.CreatedAt:yyyy-MM-dd HH:mm}");
 
             if (!string.IsNullOrWhiteSpace(entry.Path))
             {
-                builder.Append("Path: `");
-                builder.Append(entry.Path.Trim());
-                builder.AppendLine("`");
-                builder.AppendLine();
+                builder.InlineLine("Path: `", entry.Path.Trim(), "`");
+                builder.BlankLine();
             }
 
-            builder.AppendLine(string.IsNullOrWhiteSpace(entry.Markdown)
+            builder.Paragraph(string.IsNullOrWhiteSpace(entry.Markdown)
                 ? "_No activity details provided._"
                 : entry.Markdown.Trim());
         }

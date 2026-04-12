@@ -10,7 +10,12 @@ internal static class ModuleBootstrapperGenerator
 {
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
 
-    internal static void Generate(string moduleRoot, string moduleName, ExportSet exports, IReadOnlyList<string>? exportAssemblies)
+    internal static void Generate(
+        string moduleRoot,
+        string moduleName,
+        ExportSet exports,
+        IReadOnlyList<string>? exportAssemblies,
+        bool handleRuntimes)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
@@ -44,7 +49,8 @@ internal static class ModuleBootstrapperGenerator
             primaryLibraryName,
             exports,
             includeBinaryLoader: hasLib,
-            includeScriptLoader: hasScriptFolders);
+            includeScriptLoader: hasScriptFolders,
+            handleRuntimes: handleRuntimes);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -200,7 +206,8 @@ internal static class ModuleBootstrapperGenerator
         string libraryName,
         ExportSet exports,
         bool includeBinaryLoader,
-        bool includeScriptLoader)
+        bool includeScriptLoader,
+        bool handleRuntimes)
     {
         var binaryLoaderBlock = includeBinaryLoader
             ? RenderModuleBootstrapperTemplate(
@@ -209,7 +216,8 @@ internal static class ModuleBootstrapperGenerator
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["LibraryName"] = EscapePsSingleQuoted(libraryName),
-                    ["ModuleName"] = EscapePsSingleQuoted(moduleName)
+                    ["ModuleName"] = EscapePsSingleQuoted(moduleName),
+                    ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty
                 })
             : string.Empty;
 
@@ -232,6 +240,44 @@ internal static class ModuleBootstrapperGenerator
 
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Bootstrapper.Template.ps1");
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
+    }
+
+    private static string BuildRuntimeHandlerBlock()
+    {
+        return string.Join(
+                   "\r\n",
+                   new[]
+                   {
+                       "# Ensure native runtime libraries are discoverable on Windows",
+                       "$IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)",
+                       "# Skip probing when the current host cannot resolve a Windows-facing Lib folder (for example Desktop + Core-only payloads).",
+                       "if ($IsWindowsPlatform -and $LibFolder) {",
+                       "    $Arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture",
+                       "    # PowerShell switch matches the Architecture enum by its string representation here.",
+                       "    $ArchFolder = switch ($Arch) {",
+                       "        'X64'   { 'win-x64' }",
+                       "        'X86'   { 'win-x86' }",
+                       "        'Arm64' { 'win-arm64' }",
+                       "        'Arm'   { 'win-arm' }",
+                       "        Default {",
+                       "            Write-Warning -Message (\"Unknown Windows architecture '{0}'. Falling back to win-x64 native runtime probing.\" -f $Arch)",
+                       "            'win-x64'",
+                       "        }",
+                       "    }",
+                       string.Empty,
+                       "    $NativePath = Join-Path -Path $PSScriptRoot -ChildPath (\"Lib\\{0}\\runtimes\\{1}\\native\" -f $LibFolder, $ArchFolder)",
+                       "    $PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }",
+                       "    if ((Test-Path -LiteralPath $NativePath) -and ($PathEntries -notcontains $NativePath)) {",
+                       "        # Prepend the module-native runtime path so the packaged payload wins over unrelated machine-wide copies.",
+                       "        if ([string]::IsNullOrWhiteSpace($env:PATH)) {",
+                       "            $env:PATH = $NativePath",
+                       "        } else {",
+                       "            $env:PATH = \"$NativePath$([IO.Path]::PathSeparator)$env:PATH\"",
+                       "        }",
+                       "    }",
+                       "}",
+                       string.Empty
+                   });
     }
 
     private static string RenderModuleBootstrapperTemplate(

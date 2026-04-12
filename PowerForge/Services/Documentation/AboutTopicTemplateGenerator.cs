@@ -82,10 +82,7 @@ public static class AboutTopicTemplateGenerator
             : shortDescription!.Trim();
 
         var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine($"topic: {normalizedTopic}");
-        sb.AppendLine("schema: 1.0.0");
-        sb.AppendLine("---");
+        MarkdownFrontMatterWriter.Append(sb, ("topic", normalizedTopic), ("schema", "1.0.0"));
         sb.AppendLine($"# {normalizedTopic}");
         sb.AppendLine();
         sb.AppendLine("## Short Description");

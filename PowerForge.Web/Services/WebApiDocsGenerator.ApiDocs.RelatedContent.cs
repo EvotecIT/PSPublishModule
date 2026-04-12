@@ -482,15 +482,37 @@ public static partial class WebApiDocsGenerator
         string headingTag,
         string indent)
     {
-        if (sb is null || entries is null || entries.Count == 0)
+        if (sb is null)
             return;
 
-        sb.AppendLine($"{indent}<section class=\"type-related-content\" id=\"{sectionId}\">");
-        sb.AppendLine($"{indent}  <{headingTag}>{System.Web.HttpUtility.HtmlEncode(title)}</{headingTag}>");
-        if (!string.IsNullOrWhiteSpace(summary))
-            sb.AppendLine($"{indent}  <p class=\"related-content-summary\">{System.Web.HttpUtility.HtmlEncode(summary)}</p>");
-        AppendRelatedContentList(sb, entries, baseUrl, slugMap, indent + "  ");
-        sb.AppendLine($"{indent}</section>");
+        var html = new HtmlFragmentBuilder(initialIndent: indent?.Length ?? 0);
+        AppendRelatedContentSection(html, entries, baseUrl, slugMap, sectionId, title, summary, headingTag);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendRelatedContentSection(
+        HtmlFragmentBuilder html,
+        IReadOnlyList<ApiResolvedRelatedContentEntry> entries,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        string sectionId,
+        string title,
+        string summary,
+        string headingTag)
+    {
+        if (html is null || entries is null || entries.Count == 0)
+            return;
+
+        html.Line($"<section class=\"type-related-content\" id=\"{sectionId}\">");
+        using (html.Indent())
+        {
+            html.Line($"<{headingTag}>{System.Web.HttpUtility.HtmlEncode(title)}</{headingTag}>");
+            if (!string.IsNullOrWhiteSpace(summary))
+                html.Line($"<p class=\"related-content-summary\">{System.Web.HttpUtility.HtmlEncode(summary)}</p>");
+            AppendRelatedContentList(html, entries, baseUrl, slugMap);
+        }
+        html.Line("</section>");
     }
 
     private static void AppendMemberRelatedContent(
@@ -499,13 +521,31 @@ public static partial class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap)
     {
-        if (sb is null || entries is null || entries.Count == 0)
+        if (sb is null)
             return;
 
-        sb.AppendLine("          <div class=\"member-related-content\">");
-        sb.AppendLine("            <h3>Guides &amp; Samples</h3>");
-        AppendRelatedContentList(sb, entries, baseUrl, slugMap, "            ");
-        sb.AppendLine("          </div>");
+        var html = new HtmlFragmentBuilder(initialIndent: 10);
+        AppendMemberRelatedContent(html, entries, baseUrl, slugMap);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendMemberRelatedContent(
+        HtmlFragmentBuilder html,
+        IReadOnlyList<ApiResolvedRelatedContentEntry> entries,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (html is null || entries is null || entries.Count == 0)
+            return;
+
+        html.Line("<div class=\"member-related-content\">");
+        using (html.Indent())
+        {
+            html.Line("<h3>Guides &amp; Samples</h3>");
+            AppendRelatedContentList(html, entries, baseUrl, slugMap);
+        }
+        html.Line("</div>");
     }
 
     private static void AppendRelatedContentList(
@@ -515,24 +555,51 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         string indent)
     {
-        sb.AppendLine($"{indent}<ul class=\"related-content-list\">");
-        foreach (var entry in entries)
+        if (sb is null)
+            return;
+
+        var html = new HtmlFragmentBuilder(initialIndent: indent?.Length ?? 0);
+        AppendRelatedContentList(html, entries, baseUrl, slugMap);
+        if (!html.IsEmpty)
+            sb.AppendLine(html.ToString().TrimEnd());
+    }
+
+    private static void AppendRelatedContentList(
+        HtmlFragmentBuilder html,
+        IReadOnlyList<ApiResolvedRelatedContentEntry> entries,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (html is null || entries is null || entries.Count == 0)
+            return;
+
+        html.Line("<ul class=\"related-content-list\">");
+        using (html.Indent())
         {
-            var href = entry.Url;
-            var external = IsExternal(href);
-            var externalAttributes = external ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
-            var kindClass = NormalizeRelatedContentKind(entry.Kind);
-            var kindLabel = BuildRelatedContentKindLabel(entry.Kind);
-            sb.AppendLine($"{indent}  <li class=\"related-content-item\">");
-            sb.AppendLine($"{indent}    <div class=\"related-content-head\">");
-            sb.AppendLine($"{indent}      <a class=\"related-content-link\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(href)}\"{externalAttributes}>{System.Web.HttpUtility.HtmlEncode(entry.Title)}</a>");
-            sb.AppendLine($"{indent}      <span class=\"related-content-kind {System.Web.HttpUtility.HtmlEncode(kindClass)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
-            sb.AppendLine($"{indent}    </div>");
-            if (!string.IsNullOrWhiteSpace(entry.Summary))
-                sb.AppendLine($"{indent}    <p class=\"related-content-copy\">{RenderLinkedText(entry.Summary, baseUrl, slugMap)}</p>");
-            sb.AppendLine($"{indent}  </li>");
+            foreach (var entry in entries)
+            {
+                var href = entry.Url;
+                var external = IsExternal(href);
+                var externalAttributes = external ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
+                var kindClass = NormalizeRelatedContentKind(entry.Kind);
+                var kindLabel = BuildRelatedContentKindLabel(entry.Kind);
+                html.Line("<li class=\"related-content-item\">");
+                using (html.Indent())
+                {
+                    html.Line("<div class=\"related-content-head\">");
+                    using (html.Indent())
+                    {
+                        html.Line($"<a class=\"related-content-link\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(href)}\"{externalAttributes}>{System.Web.HttpUtility.HtmlEncode(entry.Title)}</a>");
+                        html.Line($"<span class=\"related-content-kind {System.Web.HttpUtility.HtmlEncode(kindClass)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
+                    }
+                    html.Line("</div>");
+                    if (!string.IsNullOrWhiteSpace(entry.Summary))
+                        html.Line($"<p class=\"related-content-copy\">{RenderLinkedText(entry.Summary, baseUrl, slugMap)}</p>");
+                }
+                html.Line("</li>");
+            }
         }
-        sb.AppendLine($"{indent}</ul>");
+        html.Line("</ul>");
     }
 
     private static string BuildRelatedContentKindLabel(string? kind)

@@ -104,12 +104,7 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var depth = Math.Clamp(maxDepth, 1, 6);
-        var sb = new StringBuilder();
-        foreach (var item in menu.Items)
-        {
-            RenderNavItem(sb, item, depth, 1);
-        }
-        return sb.ToString();
+        return string.Concat(menu.Items.Select(item => BuildNavItemHtml(item, depth, 1)));
     }
 
     public string NavActions()
@@ -118,12 +113,7 @@ internal sealed class ScribanThemeHelpers
         if (actions.Length == 0)
             return string.Empty;
 
-        var sb = new StringBuilder();
-        foreach (var action in actions)
-        {
-            RenderAction(sb, action);
-        }
-        return sb.ToString();
+        return string.Concat(actions.Select(BuildActionHtml));
     }
 
     public string MenuTree(string? menuName = "main", int maxDepth = 3)
@@ -133,14 +123,7 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var depth = Math.Clamp(maxDepth, 1, 10);
-        var sb = new StringBuilder();
-        sb.Append("<ul data-pf-menu=\"").Append(Html(menu.Name)).Append("\">");
-        foreach (var item in menu.Items)
-        {
-            RenderMenuTreeItem(sb, item, depth, 1);
-        }
-        sb.Append("</ul>");
-        return sb.ToString();
+        return $"<ul data-pf-menu=\"{Html(menu.Name)}\">{string.Concat(menu.Items.Select(item => BuildMenuTreeItemHtml(item, depth, 1)))}</ul>";
     }
 
     public string ReleaseButton(
@@ -341,28 +324,14 @@ internal sealed class ScribanThemeHelpers
         var newer = string.IsNullOrWhiteSpace(newerLabel) ? "Newer posts" : newerLabel.Trim();
         var older = string.IsNullOrWhiteSpace(olderLabel) ? "Older posts" : olderLabel.Trim();
         var classes = string.IsNullOrWhiteSpace(cssClass) ? "pf-pagination" : cssClass.Trim();
+        var previousLink = pagination.HasPrevious && !string.IsNullOrWhiteSpace(pagination.PreviousUrl)
+            ? BuildSimpleAnchorHtml(pagination.PreviousUrl, newer)
+            : string.Empty;
+        var nextLink = pagination.HasNext && !string.IsNullOrWhiteSpace(pagination.NextUrl)
+            ? BuildSimpleAnchorHtml(pagination.NextUrl, older)
+            : string.Empty;
 
-        var sb = new StringBuilder();
-        sb.Append("<nav class=\"").Append(Html(classes)).Append("\" aria-label=\"Pagination\">");
-        sb.Append("<div>");
-        if (pagination.HasPrevious && !string.IsNullOrWhiteSpace(pagination.PreviousUrl))
-        {
-            sb.Append("<a href=\"").Append(Html(pagination.PreviousUrl)).Append("\">")
-              .Append(Html(newer))
-              .Append("</a>");
-        }
-        sb.Append("</div>");
-
-        sb.Append("<div>");
-        if (pagination.HasNext && !string.IsNullOrWhiteSpace(pagination.NextUrl))
-        {
-            sb.Append("<a href=\"").Append(Html(pagination.NextUrl)).Append("\">")
-              .Append(Html(older))
-              .Append("</a>");
-        }
-        sb.Append("</div>");
-        sb.Append("</nav>");
-        return sb.ToString();
+        return $"<nav class=\"{Html(classes)}\" aria-label=\"Pagination\"><div>{previousLink}</div><div>{nextLink}</div></nav>";
     }
 
     public string EditorialPostNav(
@@ -423,70 +392,47 @@ internal sealed class ScribanThemeHelpers
         if (string.IsNullOrWhiteSpace(collectionHref) && newer is null && older is null && related.Length == 0)
             return string.Empty;
 
-        var sb = new StringBuilder();
-        sb.Append("<section class=\"").Append(Html(classes)).Append("\">");
+        var backLink = string.IsNullOrWhiteSpace(collectionHref)
+            ? string.Empty
+            : BuildAnchorHtml(collectionHref, backText, "pf-post-nav-back");
+        var newerLink = newer is null ? string.Empty : BuildPostNavDirectionalLink("pf-post-nav-newer", newer.OutputPath, newerText, newer.Title);
+        var olderLink = older is null ? string.Empty : BuildPostNavDirectionalLink("pf-post-nav-older", older.OutputPath, olderText, older.Title);
+        var relatedHtml = related.Length == 0 ? string.Empty : BuildRelatedPostsHtml(relatedTitle, related);
 
-        sb.Append("<div class=\"pf-post-nav-top\">");
-        if (!string.IsNullOrWhiteSpace(collectionHref))
-        {
-            sb.Append("<a class=\"pf-post-nav-back\" href=\"").Append(Html(collectionHref)).Append("\">")
-              .Append(Html(backText))
-              .Append("</a>");
-        }
-        sb.Append("<nav class=\"pf-post-nav-links\" aria-label=\"Post navigation\">");
-        if (newer is not null)
-        {
-            var newerTitle = string.IsNullOrWhiteSpace(newer.Title) ? newer.OutputPath : newer.Title;
-            sb.Append("<a class=\"pf-post-nav-newer\" href=\"").Append(Html(newer.OutputPath)).Append("\">")
-              .Append(Html(newerText))
-              .Append(": ")
-              .Append(Html(newerTitle))
-              .Append("</a>");
-        }
-        if (older is not null)
-        {
-            var olderTitle = string.IsNullOrWhiteSpace(older.Title) ? older.OutputPath : older.Title;
-            sb.Append("<a class=\"pf-post-nav-older\" href=\"").Append(Html(older.OutputPath)).Append("\">")
-              .Append(Html(olderText))
-              .Append(": ")
-              .Append(Html(olderTitle))
-              .Append("</a>");
-        }
-        sb.Append("</nav>");
-        sb.Append("</div>");
-
-        if (related.Length > 0)
-        {
-            sb.Append("<div class=\"pf-post-nav-related\">");
-            sb.Append("<h2>").Append(Html(relatedTitle)).Append("</h2>");
-            sb.Append("<ul>");
-            foreach (var candidate in related)
-            {
-                var relatedTextValue = string.IsNullOrWhiteSpace(candidate.Title) ? candidate.OutputPath : candidate.Title;
-                sb.Append("<li><a href=\"")
-                  .Append(Html(candidate.OutputPath))
-                  .Append("\" aria-label=\"")
-                  .Append(Html(BuildRelatedPostAriaLabel(relatedTextValue)))
-                  .Append("\">")
-                  .Append(Html(relatedTextValue))
-                  .Append("</a></li>");
-            }
-            sb.Append("</ul>");
-            sb.Append("</div>");
-        }
-
-        sb.Append("</section>");
-        return sb.ToString();
+        return $"<section class=\"{Html(classes)}\"><div class=\"pf-post-nav-top\">{backLink}<nav class=\"pf-post-nav-links\" aria-label=\"Post navigation\">{newerLink}{olderLink}</nav></div>{relatedHtml}</section>";
     }
 
-    private static void RenderNavItem(StringBuilder sb, NavigationItem item, int maxDepth, int depth)
+    private static string BuildSimpleAnchorHtml(string href, string text)
+        => $"<a href=\"{Html(href)}\">{Html(text)}</a>";
+
+    private static string BuildAnchorHtml(string href, string text, string cssClass)
+        => $"<a class=\"{Html(cssClass)}\" href=\"{Html(href)}\">{Html(text)}</a>";
+
+    private static string BuildPostNavDirectionalLink(string cssClass, string href, string label, string? title)
+    {
+        var resolvedTitle = string.IsNullOrWhiteSpace(title) ? href : title;
+        return $"<a class=\"{Html(cssClass)}\" href=\"{Html(href)}\">{Html(label)}: {Html(resolvedTitle)}</a>";
+    }
+
+    private string BuildRelatedPostsHtml(string relatedTitle, IReadOnlyList<ContentItem> related)
+    {
+        var relatedItemsHtml = string.Concat(related.Select(candidate =>
+        {
+            var relatedTextValue = string.IsNullOrWhiteSpace(candidate.Title) ? candidate.OutputPath : candidate.Title;
+            return $"<li><a href=\"{Html(candidate.OutputPath)}\" aria-label=\"{Html(BuildRelatedPostAriaLabel(relatedTextValue))}\">{Html(relatedTextValue)}</a></li>";
+        }));
+
+        return $"<div class=\"pf-post-nav-related\"><h2>{Html(relatedTitle)}</h2><ul>{relatedItemsHtml}</ul></div>";
+    }
+
+    private static string BuildNavItemHtml(NavigationItem item, int maxDepth, int depth)
     {
         if (item is null)
-            return;
+            return string.Empty;
 
         var text = string.IsNullOrWhiteSpace(item.Text) ? item.Title : item.Text;
         if (string.IsNullOrWhiteSpace(text))
-            return;
+            return string.Empty;
 
         var hasUrl = !string.IsNullOrWhiteSpace(item.Url);
         var hasChildren = item.Items is { Length: > 0 } && depth < maxDepth;
@@ -494,90 +440,58 @@ internal sealed class ScribanThemeHelpers
         if (hasChildren)
         {
             // Minimal dropdown structure that themes can style/replace.
-            sb.Append("<details class=\"pf-nav-group\"");
-            if (item.IsActive || item.IsAncestor) sb.Append(" open");
-            sb.Append(">");
-            sb.Append("<summary class=\"pf-nav-group__summary\">");
-            if (!string.IsNullOrWhiteSpace(item.IconHtml))
-                sb.Append(item.IconHtml);
-            sb.Append(Html(text));
-            sb.Append("</summary>");
-            sb.Append("<div class=\"pf-nav-group__items\">");
-            foreach (var child in item.Items ?? Array.Empty<NavigationItem>())
-                RenderNavItem(sb, child, maxDepth, depth + 1);
-            sb.Append("</div>");
-            sb.Append("</details>");
-            return;
+            var open = item.IsActive || item.IsAncestor ? " open" : string.Empty;
+            var icon = string.IsNullOrWhiteSpace(item.IconHtml) ? string.Empty : item.IconHtml;
+            var childrenHtml = string.Concat((item.Items ?? Array.Empty<NavigationItem>()).Select(child => BuildNavItemHtml(child, maxDepth, depth + 1)));
+            return $"<details class=\"pf-nav-group\"{open}><summary class=\"pf-nav-group__summary\">{icon}{Html(text)}</summary><div class=\"pf-nav-group__items\">{childrenHtml}</div></details>";
         }
 
         if (!hasUrl)
-            return;
-
-        sb.Append("<a href=\"").Append(Html(item.Url!)).Append("\"");
+            return string.Empty;
 
         var cls = BuildClass(item, null);
+        var attributes = new List<string> { $"href=\"{Html(item.Url!)}\"" };
         if (!string.IsNullOrWhiteSpace(cls))
-            sb.Append(" class=\"").Append(Html(cls)).Append("\"");
-
+            attributes.Add($"class=\"{Html(cls)}\"");
         if (!string.IsNullOrWhiteSpace(item.Target))
-            sb.Append(" target=\"").Append(Html(item.Target!)).Append("\"");
+            attributes.Add($"target=\"{Html(item.Target!)}\"");
         if (!string.IsNullOrWhiteSpace(item.Rel))
-            sb.Append(" rel=\"").Append(Html(item.Rel!)).Append("\"");
+            attributes.Add($"rel=\"{Html(item.Rel!)}\"");
         if (!string.IsNullOrWhiteSpace(item.AriaLabel))
-            sb.Append(" aria-label=\"").Append(Html(item.AriaLabel!)).Append("\"");
+            attributes.Add($"aria-label=\"{Html(item.AriaLabel!)}\"");
 
-        sb.Append(">");
-        if (!string.IsNullOrWhiteSpace(item.IconHtml))
-            sb.Append(item.IconHtml);
-        sb.Append(Html(text));
-        sb.Append("</a>");
+        var itemIcon = string.IsNullOrWhiteSpace(item.IconHtml) ? string.Empty : item.IconHtml;
+        return $"<a {string.Join(" ", attributes)}>{itemIcon}{Html(text)}</a>";
     }
 
-    private static void RenderMenuTreeItem(StringBuilder sb, NavigationItem item, int maxDepth, int depth)
+    private static string BuildMenuTreeItemHtml(NavigationItem item, int maxDepth, int depth)
     {
         if (item is null)
-            return;
+            return string.Empty;
 
         var text = string.IsNullOrWhiteSpace(item.Text) ? item.Title : item.Text;
         if (string.IsNullOrWhiteSpace(text))
-            return;
+            return string.Empty;
 
         var hasUrl = !string.IsNullOrWhiteSpace(item.Url);
         var children = item.Items ?? Array.Empty<NavigationItem>();
         var hasChildren = children.Length > 0 && depth < maxDepth;
 
-        sb.Append("<li");
         var cls = BuildClass(item, "pf-menu__item");
-        if (!string.IsNullOrWhiteSpace(cls))
-            sb.Append(" class=\"").Append(Html(cls)).Append("\"");
-        sb.Append(">");
-
-        if (hasUrl)
-        {
-            sb.Append("<a href=\"").Append(Html(item.Url!)).Append("\">");
-            sb.Append(Html(text));
-            sb.Append("</a>");
-        }
-        else
-        {
-            sb.Append("<span>").Append(Html(text)).Append("</span>");
-        }
-
-        if (hasChildren)
-        {
-            sb.Append("<ul>");
-            foreach (var child in children)
-                RenderMenuTreeItem(sb, child, maxDepth, depth + 1);
-            sb.Append("</ul>");
-        }
-
-        sb.Append("</li>");
+        var classAttr = string.IsNullOrWhiteSpace(cls) ? string.Empty : $" class=\"{Html(cls)}\"";
+        var body = hasUrl
+            ? $"<a href=\"{Html(item.Url!)}\">{Html(text)}</a>"
+            : $"<span>{Html(text)}</span>";
+        var childrenHtml = hasChildren
+            ? $"<ul>{string.Concat(children.Select(child => BuildMenuTreeItemHtml(child, maxDepth, depth + 1)))}</ul>"
+            : string.Empty;
+        return $"<li{classAttr}>{body}{childrenHtml}</li>";
     }
 
-    private static void RenderAction(StringBuilder sb, NavigationItem action)
+    private static string BuildActionHtml(NavigationItem action)
     {
         if (action is null)
-            return;
+            return string.Empty;
 
         var isButton = string.Equals(action.Kind, "button", StringComparison.OrdinalIgnoreCase);
         var hasUrl = !string.IsNullOrWhiteSpace(action.Url);
@@ -590,50 +504,41 @@ internal sealed class ScribanThemeHelpers
         if (text is null && !hasIcon && !string.IsNullOrWhiteSpace(title))
             text = title;
 
+        var content = hasIcon && !string.IsNullOrWhiteSpace(text)
+            ? $"{iconHtml} {Html(text)}"
+            : hasIcon
+                ? iconHtml!
+                : !string.IsNullOrWhiteSpace(text)
+                    ? Html(text)
+                    : string.Empty;
+
         if (isButton)
         {
-            sb.Append("<button type=\"button\"");
+            var buttonAttributes = new List<string> { "type=\"button\"" };
             if (!string.IsNullOrWhiteSpace(action.CssClass))
-                sb.Append(" class=\"").Append(Html(action.CssClass!)).Append("\"");
+                buttonAttributes.Add($"class=\"{Html(action.CssClass!)}\"");
             if (!string.IsNullOrWhiteSpace(title))
-                sb.Append(" title=\"").Append(Html(title)).Append("\"");
+                buttonAttributes.Add($"title=\"{Html(title)}\"");
             if (!string.IsNullOrWhiteSpace(ariaLabel))
-                sb.Append(" aria-label=\"").Append(Html(ariaLabel!)).Append("\"");
-            sb.Append(">");
-            if (hasIcon)
-                sb.Append(iconHtml);
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                if (hasIcon) sb.Append(" ");
-                sb.Append(Html(text));
-            }
-            sb.Append("</button>");
-            return;
+                buttonAttributes.Add($"aria-label=\"{Html(ariaLabel!)}\"");
+            return $"<button {string.Join(" ", buttonAttributes)}>{content}</button>";
         }
 
         if (!hasUrl)
-            return;
+            return string.Empty;
 
-        sb.Append("<a href=\"").Append(Html(action.Url!)).Append("\"");
+        var attributes = new List<string> { $"href=\"{Html(action.Url!)}\"" };
         if (!string.IsNullOrWhiteSpace(action.CssClass))
-            sb.Append(" class=\"").Append(Html(action.CssClass!)).Append("\"");
+            attributes.Add($"class=\"{Html(action.CssClass!)}\"");
         if (!string.IsNullOrWhiteSpace(action.Target))
-            sb.Append(" target=\"").Append(Html(action.Target!)).Append("\"");
+            attributes.Add($"target=\"{Html(action.Target!)}\"");
         if (!string.IsNullOrWhiteSpace(action.Rel))
-            sb.Append(" rel=\"").Append(Html(action.Rel!)).Append("\"");
+            attributes.Add($"rel=\"{Html(action.Rel!)}\"");
         if (!string.IsNullOrWhiteSpace(title))
-            sb.Append(" title=\"").Append(Html(title)).Append("\"");
+            attributes.Add($"title=\"{Html(title)}\"");
         if (!string.IsNullOrWhiteSpace(ariaLabel))
-            sb.Append(" aria-label=\"").Append(Html(ariaLabel!)).Append("\"");
-        sb.Append(">");
-        if (hasIcon)
-            sb.Append(iconHtml);
-        if (!string.IsNullOrWhiteSpace(text))
-        {
-            if (hasIcon) sb.Append(" ");
-            sb.Append(Html(text));
-        }
-        sb.Append("</a>");
+            attributes.Add($"aria-label=\"{Html(ariaLabel!)}\"");
+        return $"<a {string.Join(" ", attributes)}>{content}</a>";
     }
 
     private static string ResolveSummary(ContentItem item, int maxLength)
