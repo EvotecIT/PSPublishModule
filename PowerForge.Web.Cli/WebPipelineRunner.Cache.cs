@@ -311,6 +311,10 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "overlay":
                 return ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
+            case "route-fallbacks":
+            case "routefallbacks":
+            case "templated-routes":
+                return GetExpectedRouteFallbackOutputs(baseDir, step);
             case "html-transform":
             {
                 var outputs = new List<string>();
@@ -952,5 +956,79 @@ internal static partial class WebPipelineRunner
             default:
                 return Array.Empty<string>();
         }
+    }
+
+    private static string[] GetExpectedRouteFallbackOutputs(string baseDir, JsonElement step)
+    {
+        var outputs = new List<string>();
+        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+        if (!string.IsNullOrWhiteSpace(siteRoot))
+            outputs.AddRange(ResolveOutputCandidates(baseDir, siteRoot));
+        outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path")));
+
+        if (string.IsNullOrWhiteSpace(siteRoot))
+            return outputs
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        var normalizedSiteRoot = NormalizeRootPath(siteRoot);
+        var rootOutput = GetString(step, "rootOutput") ??
+                         GetString(step, "root-output") ??
+                         GetString(step, "indexOutput") ??
+                         GetString(step, "index-output");
+        if (!string.IsNullOrWhiteSpace(rootOutput))
+        {
+            var rootRelativePath = NormalizeRouteFallbackRelativePath(rootOutput);
+            outputs.Add(GetRouteFallbackOutputFullPath(siteRoot, normalizedSiteRoot, rootRelativePath));
+        }
+
+        var destinationTemplate = GetString(step, "destinationTemplate") ??
+                                  GetString(step, "destination-template") ??
+                                  GetString(step, "pathTemplate") ??
+                                  GetString(step, "path-template");
+        var itemsPath = ResolvePath(baseDir,
+            GetString(step, "items") ??
+            GetString(step, "itemsPath") ??
+            GetString(step, "items-path") ??
+            GetString(step, "manifest") ??
+            GetString(step, "data"));
+        var itemsProperty = GetString(step, "itemsProperty") ??
+                            GetString(step, "items-property") ??
+                            GetString(step, "itemsKey") ??
+                            GetString(step, "items-key");
+
+        if (!string.IsNullOrWhiteSpace(destinationTemplate) &&
+            !string.IsNullOrWhiteSpace(itemsPath) &&
+            File.Exists(itemsPath))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(itemsPath));
+                var items = ResolveRouteFallbackItems(document.RootElement, itemsProperty);
+                foreach (var item in items)
+                {
+                    var values = BuildRouteFallbackValueMap(item);
+                    var relativePath = NormalizeRouteFallbackRelativePath(
+                        ExpandRouteFallbackTemplate(destinationTemplate, values, "destinationTemplate"));
+                    outputs.Add(GetRouteFallbackOutputFullPath(siteRoot, normalizedSiteRoot, relativePath));
+                }
+            }
+            catch
+            {
+                // Fall back to the coarse outputs so the task itself can report the real validation error.
+            }
+        }
+
+        return outputs
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string GetRouteFallbackOutputFullPath(string siteRoot, string normalizedSiteRoot, string relativePath)
+    {
+        var fullPath = Path.GetFullPath(Path.Combine(siteRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!fullPath.StartsWith(normalizedSiteRoot, FileSystemPathComparison))
+            throw new InvalidOperationException($"route-fallbacks output path must stay under siteRoot: {relativePath}");
+        return fullPath;
     }
 }

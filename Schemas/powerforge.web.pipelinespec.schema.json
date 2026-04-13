@@ -60,6 +60,7 @@
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
         { "$ref": "#/$defs/OverlayStep" },
+        { "$ref": "#/$defs/RouteFallbacksStep" },
         { "$ref": "#/$defs/HostingStep" },
         { "$ref": "#/$defs/CloudflareStep" },
         { "$ref": "#/$defs/GitHubArtifactsPruneStep" },
@@ -3391,6 +3392,134 @@
         "exclude": { "type": "string" }
       },
       "required": ["task", "source", "destination"]
+    },
+    "RouteFallbacksStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "enum": ["route-fallbacks", "routefallbacks", "templated-routes"] },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string", "description": "Alias for siteRoot." },
+        "template": { "type": "string" },
+        "templatePath": { "type": "string", "description": "Alias for template." },
+        "template-path": { "type": "string", "description": "Alias for template." },
+        "items": { "type": "string" },
+        "itemsPath": { "type": "string", "description": "Alias for items." },
+        "items-path": { "type": "string", "description": "Alias for items." },
+        "manifest": { "type": "string", "description": "Alias for items." },
+        "data": { "type": "string", "description": "Alias for items." },
+        "itemsProperty": { "type": "string" },
+        "items-property": { "type": "string", "description": "Alias for itemsProperty." },
+        "itemsKey": { "type": "string", "description": "Alias for itemsProperty." },
+        "items-key": { "type": "string", "description": "Alias for itemsProperty." },
+        "destinationTemplate": { "type": "string" },
+        "destination-template": { "type": "string", "description": "Alias for destinationTemplate." },
+        "pathTemplate": { "type": "string", "description": "Alias for destinationTemplate." },
+        "path-template": { "type": "string", "description": "Alias for destinationTemplate." },
+        "rootOutput": { "type": "string" },
+        "root-output": { "type": "string", "description": "Alias for rootOutput." },
+        "indexOutput": { "type": "string", "description": "Alias for rootOutput." },
+        "index-output": { "type": "string", "description": "Alias for rootOutput." },
+        "htmlEncode": { "type": "boolean" },
+        "html-encode": { "type": "boolean", "description": "Alias for htmlEncode." },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "replacements": {
+          "type": "object",
+          "description": "Template token map for per-item route files. Values may include {property} placeholders from each item object.",
+          "additionalProperties": { "type": "string" }
+        },
+        "routeReplacements": {
+          "type": "object",
+          "description": "Alias for replacements.",
+          "additionalProperties": { "type": "string" }
+        },
+        "route-replacements": {
+          "type": "object",
+          "description": "Alias for replacements.",
+          "additionalProperties": { "type": "string" }
+        },
+        "itemValues": {
+          "type": "object",
+          "description": "Alias for replacements.",
+          "additionalProperties": { "type": "string" }
+        },
+        "item-values": {
+          "type": "object",
+          "description": "Alias for replacements.",
+          "additionalProperties": { "type": "string" }
+        },
+        "rootValues": {
+          "type": "object",
+          "description": "Optional template token map for the rootOutput file.",
+          "additionalProperties": { "type": "string" }
+        },
+        "root-values": {
+          "type": "object",
+          "description": "Alias for rootValues.",
+          "additionalProperties": { "type": "string" }
+        },
+        "rootReplacements": {
+          "type": "object",
+          "description": "Alias for rootValues.",
+          "additionalProperties": { "type": "string" }
+        },
+        "root-replacements": {
+          "type": "object",
+          "description": "Alias for rootValues.",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["template"] },
+            { "required": ["templatePath"] },
+            { "required": ["template-path"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["items"] },
+            { "required": ["itemsPath"] },
+            { "required": ["items-path"] },
+            { "required": ["manifest"] },
+            { "required": ["data"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["destinationTemplate"] },
+            { "required": ["destination-template"] },
+            { "required": ["pathTemplate"] },
+            { "required": ["path-template"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["replacements"] },
+            { "required": ["routeReplacements"] },
+            { "required": ["route-replacements"] },
+            { "required": ["itemValues"] },
+            { "required": ["item-values"] }
+          ]
+        }
+      ]
     },
     "HostingStep": {
       "type": "object",
