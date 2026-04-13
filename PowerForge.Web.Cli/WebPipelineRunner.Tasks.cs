@@ -84,6 +84,11 @@ internal static partial class WebPipelineRunner
             case "overlay":
                 ExecuteOverlay(step, baseDir, stepResult);
                 break;
+            case "route-fallbacks":
+            case "routefallbacks":
+            case "templated-routes":
+                ExecuteRouteFallbacks(step, baseDir, stepResult);
+                break;
             case "hosting":
                 ExecuteHosting(step, baseDir, stepResult);
                 break;

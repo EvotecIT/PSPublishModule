@@ -311,6 +311,17 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "overlay":
                 return ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
+            case "route-fallbacks":
+            case "routefallbacks":
+            case "templated-routes":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path")));
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "html-transform":
             {
                 var outputs = new List<string>();

@@ -1290,6 +1290,49 @@ Notes:
 - Example: `"include": "**/*.html,**/*.css"`
 - `clean: true` deletes the destination folder before copying (avoids stale files).
 
+#### route-fallbacks
+Materializes route-specific HTML fallback files from a stable template and JSON manifest. This is useful for SPA/Blazor route shells that need unique canonical/title/description metadata per output path without custom post-build scripts.
+```json
+{
+  "task": "route-fallbacks",
+  "siteRoot": "./_site",
+  "template": "../App/wwwroot/index.html",
+  "items": "./data/tool-route-meta.json",
+  "destinationTemplate": "tools/{slug}/index.html",
+  "rootOutput": "tools/index.html",
+  "rootValues": {
+    "__DD_PAGE_TITLE__": "Domain Detective Browser Tools",
+    "__DD_META_DESCRIPTION__": "Browse DomainDetective browser tools.",
+    "__DD_CANONICAL_URL__": "https://domaindetective.dev/tools/",
+    "__DD_OG_TITLE__": "Domain Detective Browser Tools",
+    "__DD_OG_DESCRIPTION__": "Browse DomainDetective browser tools.",
+    "__DD_LOADING_TITLE__": "Preparing browser tools",
+    "__DD_LOADING_TEXT__": "Loading the shared navigation, theme, and DNS analysis toolkit."
+  },
+  "replacements": {
+    "__DD_PAGE_TITLE__": "{name} | Domain Detective Tools",
+    "__DD_META_DESCRIPTION__": "{description}",
+    "__DD_CANONICAL_URL__": "https://domaindetective.dev/tools/{slug}/",
+    "__DD_OG_TITLE__": "{name} | Domain Detective Tools",
+    "__DD_OG_DESCRIPTION__": "{description}",
+    "__DD_LOADING_TITLE__": "Preparing {name}",
+    "__DD_LOADING_TEXT__": "Loading the {name} workspace."
+  },
+  "reportPath": "./_reports/route-fallbacks.json"
+}
+```
+
+Notes:
+- Task aliases: `routefallbacks`, `templated-routes`.
+- Required inputs: `siteRoot`, `template`, `items`, `destinationTemplate`, and at least one per-route replacement token map.
+- `items` may be either a JSON array or an object containing an array under `items`, `routes`, or `entries`.
+- Use `itemsProperty` (`items-property`, `itemsKey`, `items-key`) when the array lives under a different property name.
+- Replacement values can reference item properties with `{property}` placeholders.
+- `rootOutput` is optional; when set, the engine writes one root fallback file using `rootValues` and the same template.
+- `htmlEncode` defaults to `true` so route values are HTML-encoded before token replacement.
+- Output paths are resolved under `siteRoot`; attempts to escape that root fail the step.
+- The template must already contain every replacement token used by either `replacements` or `rootValues`.
+
 #### hosting
 Keeps only selected host redirect artifacts in the built site output (useful when one deployment target should not ship other host configs).
 ```json
