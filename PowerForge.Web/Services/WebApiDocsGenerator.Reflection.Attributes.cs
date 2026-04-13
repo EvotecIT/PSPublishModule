@@ -345,6 +345,11 @@ public static partial class WebApiDocsGenerator
         return ApiDocsAssemblyLoadContext.GetNuGetPackageRootCandidates(assemblyPath);
     }
 
+    internal static bool GetApiDocsShouldProbeHostAssemblyPaths(string assemblyName)
+    {
+        return ApiDocsAssemblyLoadContext.ShouldProbeHostAssemblyPaths(assemblyName);
+    }
+
     private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
     {
         private readonly AssemblyDependencyResolver _resolver;
@@ -361,13 +366,14 @@ public static partial class WebApiDocsGenerator
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
+            var assemblySimpleName = assemblyName.Name;
             var dependencyPath = _resolver.ResolveAssemblyToPath(assemblyName);
             var dependencyAssembly = TryLoadFromPath(dependencyPath);
             if (dependencyAssembly is not null)
                 return dependencyAssembly;
 
-            if (!string.IsNullOrWhiteSpace(assemblyName.Name) &&
-                _dependencyPaths.TryGetValue(assemblyName.Name, out var mappedPath) &&
+            if (!string.IsNullOrWhiteSpace(assemblySimpleName) &&
+                _dependencyPaths.TryGetValue(assemblySimpleName, out var mappedPath) &&
                 File.Exists(mappedPath))
             {
                 var mappedAssembly = TryLoadFromPath(mappedPath);
@@ -375,19 +381,20 @@ public static partial class WebApiDocsGenerator
                     return mappedAssembly;
             }
 
-            if (!string.IsNullOrWhiteSpace(assemblyName.Name) &&
-                _hostProbePaths.TryGetValue(assemblyName.Name, out var hostPath) &&
+            var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(existing => AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
+            if (alreadyLoaded is not null)
+                return alreadyLoaded;
+
+            if (!string.IsNullOrWhiteSpace(assemblySimpleName) &&
+                ShouldProbeHostAssemblyPaths(assemblySimpleName) &&
+                _hostProbePaths.TryGetValue(assemblySimpleName, out var hostPath) &&
                 File.Exists(hostPath))
             {
                 var hostAssembly = TryLoadFromPath(hostPath);
                 if (hostAssembly is not null)
                     return hostAssembly;
             }
-
-            var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(existing => AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
-            if (alreadyLoaded is not null)
-                return alreadyLoaded;
 
             return null;
         }
@@ -506,6 +513,30 @@ public static partial class WebApiDocsGenerator
             }
 
             return dependencyPaths;
+        }
+
+        internal static bool ShouldProbeHostAssemblyPaths(string? assemblyName)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyName))
+                return false;
+
+            if (assemblyName.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (assemblyName.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (assemblyName.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("mscorlib", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("netstandard", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.Equals("System.Private.CoreLib", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
+                assemblyName.StartsWith("Microsoft.Win32.", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         internal static IReadOnlyList<string> GetHostAssemblyProbeDirectories(string assemblyPath)

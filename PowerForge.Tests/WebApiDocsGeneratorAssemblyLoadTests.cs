@@ -37,6 +37,20 @@ public sealed class WebApiDocsGeneratorAssemblyLoadTests
         }
     }
 
+    [Theory]
+    [InlineData("System.Net.Requests", false)]
+    [InlineData("System.Runtime", false)]
+    [InlineData("netstandard", false)]
+    [InlineData("System.Management.Automation", true)]
+    [InlineData("Microsoft.PowerShell.Commands.Utility", true)]
+    [InlineData("Scriban", true)]
+    public void GetApiDocsShouldProbeHostAssemblyPaths_AppliesFrameworkProbePolicy(string assemblyName, bool expected)
+    {
+        var actual = WebApiDocsGenerator.GetApiDocsShouldProbeHostAssemblyPaths(assemblyName);
+
+        Assert.Equal(expected, actual);
+    }
+
     [Fact]
     public void GetNuGetPackageRootCandidates_PrefersConfiguredAndEnvironmentHomes()
     {
