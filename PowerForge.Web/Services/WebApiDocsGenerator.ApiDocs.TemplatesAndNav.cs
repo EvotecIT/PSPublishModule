@@ -25,16 +25,82 @@ public static partial class WebApiDocsGenerator
     internal static string GetApiDocsResolvedHeadHtml(WebApiDocsOptions options)
     {
         var explicitHead = LoadOptionalHtml(options.HeadHtmlPath);
+        var themeTokensHead = LoadThemeTokensHtml(options);
         var nav = LoadNavConfig(options);
         var navHead = nav?.HeadLinksHtml ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(explicitHead))
-            return navHead;
+        return string.Join(
+            Environment.NewLine,
+            new[] { themeTokensHead, explicitHead, navHead }
+                .Where(fragment => !string.IsNullOrWhiteSpace(fragment)));
+    }
 
-        if (string.IsNullOrWhiteSpace(navHead))
-            return explicitHead;
+    private static string LoadThemeTokensHtml(WebApiDocsOptions options)
+    {
+        var siteConfigPath = options.SiteConfigPath;
+        if (string.IsNullOrWhiteSpace(siteConfigPath))
+            return string.Empty;
 
-        return string.Join(Environment.NewLine, new[] { explicitHead, navHead }.Where(fragment => !string.IsNullOrWhiteSpace(fragment)));
+        try
+        {
+            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(siteConfigPath, WebJson.Options);
+            if (string.IsNullOrWhiteSpace(spec.DefaultTheme))
+                return string.Empty;
+
+            var plan = WebSitePlanner.Plan(spec, specPath, WebJson.Options);
+            var themesRoot = string.IsNullOrWhiteSpace(plan.ThemesRoot)
+                ? Path.Combine(plan.RootPath, "themes")
+                : plan.ThemesRoot;
+            var themeRoot = Path.Combine(themesRoot, spec.DefaultTheme);
+            if (!Directory.Exists(themeRoot))
+                return string.Empty;
+
+            var loader = new ThemeLoader();
+            var manifest = loader.Load(themeRoot, themesRoot);
+            if (manifest?.Tokens is null || manifest.Tokens.Count == 0)
+                return string.Empty;
+
+            var tokensPartialPath = loader.ResolvePartialPath(themeRoot, manifest, "theme-tokens");
+            if (string.IsNullOrWhiteSpace(tokensPartialPath) || !File.Exists(tokensPartialPath))
+                return string.Empty;
+
+            var template = File.ReadAllText(tokensPartialPath);
+            if (string.IsNullOrWhiteSpace(template))
+                return string.Empty;
+
+            var context = new ThemeRenderContext
+            {
+                Site = spec,
+                Page = new ContentItem
+                {
+                    Title = options.Title ?? string.Empty,
+                    HtmlContent = string.Empty
+                },
+                Data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["theme"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["name"] = string.IsNullOrWhiteSpace(manifest.Name) ? spec.DefaultTheme ?? string.Empty : manifest.Name,
+                        ["tokens"] = manifest.Tokens
+                    }
+                },
+                BodyClass = options.BodyClass ?? string.Empty,
+                CurrentPath = options.BaseUrl ?? "/"
+            };
+
+            var engine = new ScribanTemplateEngine();
+            return engine.Render(template, context, partialName =>
+            {
+                var partialPath = loader.ResolvePartialPath(themeRoot, manifest, partialName);
+                return string.IsNullOrWhiteSpace(partialPath) || !File.Exists(partialPath)
+                    ? string.Empty
+                    : File.ReadAllText(partialPath);
+            });
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
     }
 
     private static string LoadEmbeddedRaw(string fileName)
@@ -100,6 +166,8 @@ public static partial class WebApiDocsGenerator
 
         if (root.TryGetProperty("Name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
             nav.SiteName = nameProp.GetString() ?? nav.SiteName;
+        if (root.TryGetProperty("name", out var lowerNameProp) && lowerNameProp.ValueKind == JsonValueKind.String)
+            nav.SiteName = lowerNameProp.GetString() ?? nav.SiteName;
         if (root.TryGetProperty("siteName", out var siteProp) && siteProp.ValueKind == JsonValueKind.String)
             nav.SiteName = siteProp.GetString() ?? nav.SiteName;
         if (TryGetProperty(root, "BaseUrl", out var baseUrlProp) && baseUrlProp.ValueKind == JsonValueKind.String)
@@ -109,6 +177,8 @@ public static partial class WebApiDocsGenerator
 
         if (TryGetProperty(root, "Social", out var socialProp) && socialProp.ValueKind == JsonValueKind.Object)
         {
+            if (TryGetProperty(socialProp, "SiteName", out var socialSiteNameProp) && socialSiteNameProp.ValueKind == JsonValueKind.String)
+                nav.SiteName = socialSiteNameProp.GetString() ?? nav.SiteName;
             if (TryGetProperty(socialProp, "Image", out var imageProp) && imageProp.ValueKind == JsonValueKind.String)
                 nav.SocialImage = imageProp.GetString() ?? nav.SocialImage;
             if (TryGetProperty(socialProp, "ImageWidth", out var imageWidthProp) && TryReadInt32(imageWidthProp, out var imageWidth))
@@ -124,6 +194,8 @@ public static partial class WebApiDocsGenerator
         }
         if (TryGetProperty(root, "social", out var lowerSocialProp) && lowerSocialProp.ValueKind == JsonValueKind.Object)
         {
+            if (TryGetProperty(lowerSocialProp, "siteName", out var lowerSocialSiteNameProp) && lowerSocialSiteNameProp.ValueKind == JsonValueKind.String)
+                nav.SiteName = lowerSocialSiteNameProp.GetString() ?? nav.SiteName;
             if (TryGetProperty(lowerSocialProp, "image", out var lowerImageProp) && lowerImageProp.ValueKind == JsonValueKind.String)
                 nav.SocialImage = lowerImageProp.GetString() ?? nav.SocialImage;
             if (TryGetProperty(lowerSocialProp, "imageWidth", out var lowerImageWidthProp) && TryReadInt32(lowerImageWidthProp, out var lowerImageWidth))
@@ -181,7 +253,7 @@ public static partial class WebApiDocsGenerator
         if (TryGetProperty(root, "menus", out var menusProp) && menusProp.ValueKind == JsonValueKind.Object)
         {
             var menuMap = ParseMenusObjectMap(menusProp);
-            ApplyMenusToNav(nav, menuMap);
+            ApplyMenusToNav(nav, menuMap, options.NavSurfaceName);
         }
 
         if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array && nav.Primary.Count == 0)
@@ -367,11 +439,13 @@ public static partial class WebApiDocsGenerator
             return false;
 
         if (!string.IsNullOrWhiteSpace(options.NavSurfaceName) &&
-            TryGetObjectPropertyCaseInsensitive(surfaces, options.NavSurfaceName.Trim(), out selected) &&
-            selected.ValueKind == JsonValueKind.Object)
+            TryGetObjectPropertyCaseInsensitive(surfaces, options.NavSurfaceName.Trim(), out selected))
         {
-            return true;
+            return selected.ValueKind == JsonValueKind.Object;
         }
+
+        if (!string.IsNullOrWhiteSpace(options.NavSurfaceName))
+            return false;
 
         if (!string.IsNullOrWhiteSpace(options.NavContextLayout))
         {
@@ -480,7 +554,7 @@ public static partial class WebApiDocsGenerator
         var effectiveMenus = MergeMenus(baseMenus, profile?.Menus, profile?.InheritMenus ?? true);
         var effectiveActions = MergeActions(baseActions, profile?.Actions, profile?.InheritActions ?? true);
 
-        ApplyMenusToNav(nav, effectiveMenus);
+        ApplyMenusToNav(nav, effectiveMenus, options.NavSurfaceName);
         if (effectiveActions.Count > 0)
             nav.Actions = effectiveActions;
     }
@@ -527,7 +601,7 @@ public static partial class WebApiDocsGenerator
         var effectiveMenus = MergeMenus(baseMenus, profile?.Menus, profile?.InheritMenus ?? true);
         var effectiveActions = MergeActions(baseActions, profile?.Actions, profile?.InheritActions ?? true);
 
-        ApplyMenusToNav(nav, effectiveMenus);
+        ApplyMenusToNav(nav, effectiveMenus, options.NavSurfaceName);
         if (effectiveActions.Count > 0)
             nav.Actions = effectiveActions;
 
@@ -719,9 +793,11 @@ public static partial class WebApiDocsGenerator
         return merged;
     }
 
-    private static void ApplyMenusToNav(NavConfig nav, Dictionary<string, List<NavItem>> menus)
+    private static void ApplyMenusToNav(NavConfig nav, Dictionary<string, List<NavItem>> menus, string? preferredPrimaryMenu = null)
     {
-        nav.Primary = menus.TryGetValue("main", out var main)
+        nav.Primary = !string.IsNullOrWhiteSpace(preferredPrimaryMenu) && menus.TryGetValue(preferredPrimaryMenu.Trim(), out var preferred)
+            ? preferred
+            : menus.TryGetValue("main", out var main)
             ? main
             : menus.Count > 0
                 ? menus.Values.First()
@@ -951,6 +1027,13 @@ public static partial class WebApiDocsGenerator
             var external = ReadBool(item, "External", "external");
             if (!string.IsNullOrWhiteSpace(href))
                 external |= IsExternal(href);
+
+            if (!string.IsNullOrWhiteSpace(iconHtml) &&
+                !string.IsNullOrWhiteSpace(text) &&
+                string.Equals(text, title, StringComparison.Ordinal))
+            {
+                text = null;
+            }
 
             list.Add(new NavAction(href, text, title, ariaLabel, iconHtml, cssClass, kind, external, target, rel));
         }

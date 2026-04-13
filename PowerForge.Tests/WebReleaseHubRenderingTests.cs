@@ -139,9 +139,32 @@ public class WebReleaseHubRenderingTests
         Assert.Contains("ix-chat-win-thumb.png", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pf-release-badge--platform", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pf-release-badge--arch", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("pf-release-badge--kind", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pf-release-badge--kind", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pf-release-asset-badge--kind", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("zip ·", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pf-release-asset-thumb", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pf-release-asset-badge--platform", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_ReleaseChangelog_PolishesGitHubReleaseLinks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< release-changelog product="pswritehtml.module" limit="1" includePreview="false" >}}
+            """,
+            setup: WriteReleaseHubDataWithFriendlyLinks,
+            useScribanTheme: false,
+            scribanLayoutBody: null);
+
+        Assert.Contains("pf-release-link--user", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"https://github.com/PrzemyslawKlys\">@PrzemyslawKlys</a>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-link--pull", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(">#524</a>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-release-link--compare", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(">Compare v1.40.0 to v1.41.0</a>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(">https://github.com/EvotecIT/PSWriteHTML/pull/524</a>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("href=\"https://github.com/example\"><a", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -526,6 +549,44 @@ public class WebReleaseHubRenderingTests
                       "arch": "x64",
                       "kind": "zip",
                       "size": 5242880
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+    }
+
+    private static void WriteReleaseHubDataWithFriendlyLinks(string root)
+    {
+        var dataDir = Path.Combine(root, "data");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "release-hub.json"),
+            """
+            {
+              "title": "PSWriteHTML Releases",
+              "products": [
+                { "id": "pswritehtml.module", "name": "PSWriteHTML Module", "order": 10 }
+              ],
+              "releases": [
+                {
+                  "tag": "v1.41.0",
+                  "title": "PSWriteHTML 1.41.0",
+                  "url": "https://github.com/EvotecIT/PSWriteHTML/releases/tag/v1.41.0",
+                  "publishedAt": "2026-03-08T10:00:00Z",
+                  "isPrerelease": false,
+                  "isLatestStable": true,
+                  "body_html": "<p>Fixed by @PrzemyslawKlys in <a href=\"https://github.com/EvotecIT/PSWriteHTML/pull/524\">https://github.com/EvotecIT/PSWriteHTML/pull/524</a>.</p><p>Full changelog: <a href=\"https://github.com/EvotecIT/PSWriteHTML/compare/v1.40.0...v1.41.0\">https://github.com/EvotecIT/PSWriteHTML/compare/v1.40.0...v1.41.0</a></p><p>Already linked <a href=\"https://github.com/example\">@example</a></p>",
+                  "assets": [
+                    {
+                      "name": "PSWriteHTML-v1.41.0.zip",
+                      "downloadUrl": "https://example.test/downloads/PSWriteHTML-v1.41.0.zip",
+                      "product": "pswritehtml.module",
+                      "channel": "stable",
+                      "platform": "any",
+                      "arch": "any",
+                      "kind": "zip",
+                      "size": 2048000
                     }
                   ]
                 }

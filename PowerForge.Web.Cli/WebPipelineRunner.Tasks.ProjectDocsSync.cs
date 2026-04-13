@@ -78,7 +78,7 @@ internal static partial class WebPipelineRunner
             step,
             arrayKeys: new[] { "sourceExamplesPaths", "source-examples-paths" },
             scalarKeys: new[] { "sourceExamplesPath", "source-examples-path", "sourceExamplesFolder", "source-examples-folder" },
-            defaults: new[] { "Website/content/examples", "Examples", "content/examples" });
+            defaults: new[] { "Website/content/examples", "content/examples" });
 
         var apiRoot = ResolvePath(baseDir,
             GetString(step, "apiRoot") ??
@@ -269,6 +269,7 @@ internal static partial class WebPipelineRunner
         var skippedExamples = 0;
         var copiedExampleFiles = 0;
         var missingExampleSources = new List<string>();
+        var examplesArtifactSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         Directory.CreateDirectory(contentRoot);
         if (syncApi)
@@ -316,6 +317,8 @@ internal static partial class WebPipelineRunner
                 File.Copy(sourceFile, targetFile, overwrite: true);
                 copiedFiles++;
             }
+
+            StampProjectDocsMetadata(targetDocsRoot, slug, GetProjectDisplayName(project.GitHubRepoUrl, slug));
 
             if (generateToc)
             {
@@ -435,6 +438,11 @@ internal static partial class WebPipelineRunner
                     copiedExampleFiles++;
                 }
 
+                var matchedExamplesCandidate = TryGetMatchedSourceCandidate(sourcesRoot, slug, sourceExamplesRoot, examplesSourceCandidates);
+                if (!string.IsNullOrWhiteSpace(matchedExamplesCandidate))
+                    examplesArtifactSources[slug] = matchedExamplesCandidate;
+
+                MaterializeProjectExampleDocs(targetExamplesRoot, project);
                 syncedExamples++;
             }
         }
@@ -444,7 +452,8 @@ internal static partial class WebPipelineRunner
             projectsContentRoot,
             contentRoot,
             apiRoot,
-            examplesRoot);
+            examplesRoot,
+            examplesArtifactSources);
 
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
@@ -494,7 +503,8 @@ internal static partial class WebPipelineRunner
         string projectsContentRoot,
         string docsRoot,
         string apiRoot,
-        string examplesRoot)
+        string examplesRoot,
+        IReadOnlyDictionary<string, string> examplesArtifactSources)
     {
         if (projects is null || projects.Count == 0)
             return;
@@ -507,23 +517,25 @@ internal static partial class WebPipelineRunner
                 continue;
 
             var slug = project.Slug.Trim().ToLowerInvariant();
-            var docsAvailable = HasProjectSurfaceContent(docsRoot, slug);
-            var apiAvailable = HasProjectSurfaceContent(apiRoot, slug);
-            var examplesAvailable = HasProjectSurfaceContent(examplesRoot, slug);
+            var docsAvailable = HasProjectMarkdownSurfaceContent(docsRoot, slug);
+            var apiAvailable = HasProjectArtifactSurfaceContent(apiRoot, slug);
+            var examplesAvailable = HasProjectMarkdownSurfaceContent(examplesRoot, slug);
 
-            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".md"), docsAvailable, apiAvailable, examplesAvailable);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".docs.md"), docsAvailable, apiAvailable, examplesAvailable);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".api.md"), docsAvailable, apiAvailable, examplesAvailable);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".examples.md"), docsAvailable, apiAvailable, examplesAvailable);
+            examplesArtifactSources.TryGetValue(slug, out var examplesArtifactSource);
+
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".docs.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".api.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(projectsContentRoot, slug + ".examples.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
 
             var nestedSectionsRoot = Path.Combine(projectsContentRoot, slug);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "docs.md"), docsAvailable, apiAvailable, examplesAvailable);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "api.md"), docsAvailable, apiAvailable, examplesAvailable);
-            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "examples.md"), docsAvailable, apiAvailable, examplesAvailable);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "docs.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "api.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
+            UpdateProjectLocalSurfaceFlags(Path.Combine(nestedSectionsRoot, "examples.md"), docsAvailable, apiAvailable, examplesAvailable, examplesArtifactSource);
         }
     }
 
-    private static bool HasProjectSurfaceContent(string root, string slug)
+    private static bool HasProjectMarkdownSurfaceContent(string root, string slug)
     {
         if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(slug))
             return false;
@@ -537,11 +549,364 @@ internal static partial class WebPipelineRunner
         return Directory.EnumerateFiles(projectRoot, "*.md", SearchOption.AllDirectories).Any();
     }
 
+    private static bool HasProjectArtifactSurfaceContent(string root, string slug)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(slug))
+            return false;
+        if (!Directory.Exists(root))
+            return false;
+
+        var projectRoot = Path.Combine(root, slug);
+        if (!Directory.Exists(projectRoot))
+            return false;
+
+        return Directory.EnumerateFiles(projectRoot, "*", SearchOption.AllDirectories)
+            .Any(static path => !string.IsNullOrWhiteSpace(Path.GetFileName(path)));
+    }
+
+    private static void StampProjectDocsMetadata(string targetDocsRoot, string slug, string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(targetDocsRoot) || !Directory.Exists(targetDocsRoot) || string.IsNullOrWhiteSpace(slug))
+            return;
+
+        var normalizedSlug = slug.Trim().ToLowerInvariant();
+        var hubPath = $"/projects/{normalizedSlug}/";
+        var docsPath = hubPath + "docs/";
+
+        foreach (var markdownPath in Directory.EnumerateFiles(targetDocsRoot, "*", SearchOption.AllDirectories).Where(static path => IsMarkdownExtension(Path.GetExtension(path))))
+        {
+            var content = File.ReadAllText(markdownPath);
+            var changed = false;
+            var hasFrontMatter = TryGetFrontMatterLines(content, out var allLines);
+            if (!hasFrontMatter)
+            {
+                var normalizedContent = content.TrimStart('\uFEFF');
+                allLines = new List<string>
+                {
+                    "---",
+                    $"title: {YamlQuote(GetMarkdownHeadingTitle(normalizedContent) ?? HumanizeExampleTitle(Path.GetFileNameWithoutExtension(markdownPath)))}",
+                    "layout: docs",
+                    "---",
+                    string.Empty
+                };
+                allLines.AddRange(normalizedContent.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'));
+                changed = true;
+            }
+
+            var closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            if (closingIndex <= 0)
+                continue;
+
+            if (!TryGetFrontMatterValue(allLines, closingIndex, "layout", out var layoutValue) || string.IsNullOrWhiteSpace(layoutValue))
+            {
+                changed |= UpsertFrontMatterString(allLines, closingIndex, "layout", "docs");
+                closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            }
+
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.generated_by", "powerforge.project-docs-sync");
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_base_slug", normalizedSlug);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_name", projectName);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_section", "docs");
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_hub_path", hubPath);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_link_docs", docsPath);
+
+            if (!changed)
+                continue;
+
+            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            File.WriteAllText(markdownPath, string.Join(newline, allLines), Encoding.UTF8);
+        }
+    }
+
+    private static void MaterializeProjectExampleDocs(string targetExamplesRoot, ProjectDocsCatalogItem project)
+    {
+        if (string.IsNullOrWhiteSpace(targetExamplesRoot) || !Directory.Exists(targetExamplesRoot))
+            return;
+
+        var slug = string.IsNullOrWhiteSpace(project.Slug) ? "project" : project.Slug.Trim().ToLowerInvariant();
+        var projectName = GetProjectDisplayName(project.GitHubRepoUrl, slug);
+        var sourceRepo = string.IsNullOrWhiteSpace(project.GitHubRepoUrl)
+            ? null
+            : project.GitHubRepoUrl.Trim();
+
+        var scriptFiles = Directory
+            .EnumerateFiles(targetExamplesRoot, "*.ps1", SearchOption.AllDirectories)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var scriptPath in scriptFiles)
+        {
+            var companionMarkdown = Path.ChangeExtension(scriptPath, ".md");
+            if (File.Exists(companionMarkdown) && !IsGeneratedExampleMarkdown(companionMarkdown))
+                continue;
+
+            var title = HumanizeExampleTitle(Path.GetFileNameWithoutExtension(scriptPath));
+            var relativeFolder = Path.GetDirectoryName(Path.GetRelativePath(targetExamplesRoot, scriptPath)) ?? string.Empty;
+            var lines = new List<string>
+            {
+                "---",
+                $"title: {YamlQuote(title)}",
+                "layout: docs",
+                $"meta.generated_by: {YamlQuote("powerforge.project-docs-sync")}",
+                "---",
+                string.Empty,
+                $"Source-owned example maintained with {projectName}.",
+                string.Empty
+            };
+
+            if (!string.IsNullOrWhiteSpace(sourceRepo))
+            {
+                lines.Add($"- Source repository: [{sourceRepo}]({sourceRepo})");
+                if (!string.IsNullOrWhiteSpace(relativeFolder))
+                    lines.Add($"- Example group: `{relativeFolder.Replace('\\', '/')}`");
+                lines.Add(string.Empty);
+            }
+
+            lines.Add("```powershell");
+            lines.AddRange(File.ReadAllLines(scriptPath));
+            lines.Add("```");
+
+            File.WriteAllText(companionMarkdown, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+        }
+
+        var markdownFiles = Directory
+            .EnumerateFiles(targetExamplesRoot, "*", SearchOption.AllDirectories)
+            .Where(static path => IsMarkdownExtension(Path.GetExtension(path)))
+            .Where(static path => !string.Equals(Path.GetFileName(path), "_index.md", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var markdownPath in markdownFiles)
+        {
+            var existingContent = File.ReadAllText(markdownPath);
+            if (HasYamlFrontMatter(existingContent))
+                continue;
+
+            var title = HumanizeExampleTitle(Path.GetFileNameWithoutExtension(markdownPath));
+            var relativeFolder = Path.GetDirectoryName(Path.GetRelativePath(targetExamplesRoot, markdownPath)) ?? string.Empty;
+            var lines = new List<string>
+            {
+                "---",
+                $"title: {YamlQuote(title)}",
+                "layout: docs",
+                $"meta.generated_by: {YamlQuote("powerforge.project-docs-sync")}",
+                "---",
+                string.Empty
+            };
+
+            if (!string.IsNullOrWhiteSpace(sourceRepo))
+            {
+                lines.Add($"- Source repository: [{sourceRepo}]({sourceRepo})");
+                if (!string.IsNullOrWhiteSpace(relativeFolder))
+                    lines.Add($"- Example group: `{relativeFolder.Replace('\\', '/')}`");
+                lines.Add(string.Empty);
+            }
+
+            lines.Add(existingContent.TrimStart('\uFEFF'));
+            File.WriteAllText(markdownPath, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+        }
+
+        var directories = Directory
+            .EnumerateDirectories(targetExamplesRoot, "*", SearchOption.AllDirectories)
+            .OrderBy(static path => path.Length)
+            .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .Prepend(targetExamplesRoot)
+            .ToList();
+
+        foreach (var directory in directories)
+        {
+            var indexPath = Path.Combine(directory, "_index.md");
+            if (File.Exists(indexPath) && !IsGeneratedExampleMarkdown(indexPath))
+                continue;
+
+            var relativeDirectory = Path.GetRelativePath(targetExamplesRoot, directory);
+            var directoryName = directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase)
+                ? projectName
+                : HumanizeExampleTitle(Path.GetFileName(directory));
+
+            var childDirectories = Directory
+                .EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly)
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var childMarkdown = Directory
+                .EnumerateFiles(directory, "*.md", SearchOption.TopDirectoryOnly)
+                .Where(static path => !string.Equals(Path.GetFileName(path), "_index.md", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var lines = new List<string>
+            {
+                "---",
+                $"title: {YamlQuote(directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase) ? $"{projectName} Examples" : directoryName)}",
+                $"description: {YamlQuote(directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase) ? $"Project-scoped examples for {projectName}." : $"Example group for {directoryName}.")}",
+                "layout: docs",
+                $"meta.generated_by: {YamlQuote("powerforge.project-docs-sync")}",
+                "---",
+                string.Empty,
+                directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase)
+                    ? $"Browse runnable examples and usage patterns maintained with {projectName}."
+                    : $"Examples in the `{relativeDirectory.Replace('\\', '/')}` group.",
+                string.Empty
+            };
+
+            if (!string.IsNullOrWhiteSpace(sourceRepo))
+            {
+                lines.Add($"- Source repository: [{sourceRepo}]({sourceRepo})");
+                lines.Add(string.Empty);
+            }
+
+            if (childDirectories.Count > 0)
+            {
+                lines.Add("## Groups");
+                lines.Add(string.Empty);
+                foreach (var childDirectory in childDirectories)
+                {
+                    var childName = HumanizeExampleTitle(Path.GetFileName(childDirectory));
+                    lines.Add($"- [{childName}](./{Path.GetFileName(childDirectory)}/)");
+                }
+                lines.Add(string.Empty);
+            }
+
+            if (childMarkdown.Count > 0)
+            {
+                lines.Add("## Examples");
+                lines.Add(string.Empty);
+                foreach (var childFile in childMarkdown)
+                {
+                    var childName = HumanizeExampleTitle(Path.GetFileNameWithoutExtension(childFile));
+                    lines.Add($"- [{childName}](./{Path.GetFileNameWithoutExtension(childFile)}/)");
+                }
+                lines.Add(string.Empty);
+            }
+
+            File.WriteAllText(indexPath, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+        }
+
+        StampProjectExampleMetadata(targetExamplesRoot, slug, projectName);
+    }
+
+    private static void StampProjectExampleMetadata(string targetExamplesRoot, string slug, string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(targetExamplesRoot) || !Directory.Exists(targetExamplesRoot) || string.IsNullOrWhiteSpace(slug))
+            return;
+
+        var normalizedSlug = slug.Trim().ToLowerInvariant();
+        var hubPath = $"/projects/{normalizedSlug}/";
+        var examplesPath = hubPath + "examples/";
+
+        foreach (var markdownPath in Directory.EnumerateFiles(targetExamplesRoot, "*", SearchOption.AllDirectories).Where(static path => IsMarkdownExtension(Path.GetExtension(path))))
+        {
+            var content = File.ReadAllText(markdownPath);
+            if (!TryGetFrontMatterLines(content, out var allLines))
+                continue;
+
+            var closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            if (closingIndex <= 0)
+                continue;
+
+            var changed = false;
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_base_slug", normalizedSlug);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_name", projectName);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_section", "examples");
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_hub_path", hubPath);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_link_examples", examplesPath);
+
+            if (!changed)
+                continue;
+
+            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            File.WriteAllText(markdownPath, string.Join(newline, allLines), Encoding.UTF8);
+        }
+    }
+
+    private static string HumanizeExampleTitle(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Example";
+
+        var normalized = value.Replace('_', ' ').Replace('-', ' ').Trim();
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalized);
+    }
+
+    private static string? GetMarkdownHeadingTitle(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+
+        foreach (var line in content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("# ", StringComparison.Ordinal))
+                continue;
+
+            var title = trimmed.TrimStart('#').Trim();
+            if (!string.IsNullOrWhiteSpace(title))
+                return title;
+        }
+
+        return null;
+    }
+
+    private static string GetProjectDisplayName(string? sourceRepoUrl, string slug)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceRepoUrl) &&
+            Uri.TryCreate(sourceRepoUrl.Trim(), UriKind.Absolute, out var uri))
+        {
+            var repoSegment = uri.Segments.LastOrDefault();
+            if (!string.IsNullOrWhiteSpace(repoSegment))
+            {
+                var repoName = repoSegment.Trim('/').Trim();
+                if (repoName.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                    repoName = repoName[..^4];
+
+                if (!string.IsNullOrWhiteSpace(repoName))
+                    return repoName;
+            }
+        }
+
+        var normalizedSlug = string.IsNullOrWhiteSpace(slug) ? "Project" : slug.Replace('-', ' ').Replace('_', ' ').Trim();
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalizedSlug);
+    }
+
+    private static bool IsGeneratedExampleMarkdown(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        var content = File.ReadAllText(path);
+        return content.Contains("meta.generated_by: \"powerforge.project-docs-sync\"", StringComparison.Ordinal);
+    }
+
+    private static bool HasYamlFrontMatter(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        var normalized = content.TrimStart('\uFEFF');
+        return normalized.StartsWith("---", StringComparison.Ordinal);
+    }
+
+    private static bool IsMarkdownExtension(string? extension)
+    {
+        return string.Equals(extension, ".md", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(extension, ".markdown", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void UpdateProjectLocalSurfaceFlags(
         string markdownPath,
         bool docsAvailable,
         bool apiAvailable,
-        bool examplesAvailable)
+        bool examplesAvailable,
+        string? examplesArtifactSource = null)
     {
         if (string.IsNullOrWhiteSpace(markdownPath) || !File.Exists(markdownPath))
             return;
@@ -560,12 +925,74 @@ internal static partial class WebPipelineRunner
         changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_local_api_available", apiAvailable);
         closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
         changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_local_examples_available", examplesAvailable);
+        closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+
+        var hasExamplesLink =
+            TryGetFrontMatterValue(allLines, closingIndex, "meta.project_link_examples", out var projectExamplesLink) &&
+            !string.IsNullOrWhiteSpace(projectExamplesLink);
+        var isExamplesSection =
+            TryGetFrontMatterValue(allLines, closingIndex, "meta.project_section", out var projectSection) &&
+            string.Equals(projectSection, "examples", StringComparison.OrdinalIgnoreCase);
+
+        if (examplesAvailable && (hasExamplesLink || isExamplesSection))
+        {
+            changed |= UpsertFrontMatterBoolean(allLines, closingIndex, "meta.project_surface_examples", true);
+            closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+
+            if (!hasExamplesLink &&
+                TryGetFrontMatterValue(allLines, closingIndex, "meta.project_hub_path", out var projectHubPath) &&
+                !string.IsNullOrWhiteSpace(projectHubPath))
+            {
+                var normalizedHubPath = projectHubPath.Trim();
+                if (!normalizedHubPath.EndsWith("/", StringComparison.Ordinal))
+                    normalizedHubPath += "/";
+
+                changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_link_examples", normalizedHubPath + "examples/");
+                closingIndex = FindFrontMatterClosingMarkerIndex(allLines);
+            }
+
+            if (!string.IsNullOrWhiteSpace(examplesArtifactSource))
+                changed |= UpsertFrontMatterString(allLines, closingIndex, "meta.project_artifact_examples", examplesArtifactSource);
+        }
 
         if (!changed)
             return;
 
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         File.WriteAllText(markdownPath, string.Join(newline, allLines), Encoding.UTF8);
+    }
+
+    private static string? TryGetMatchedSourceCandidate(
+        string sourcesRoot,
+        string slug,
+        string resolvedSourcePath,
+        IReadOnlyList<string> sourceCandidates)
+    {
+        if (string.IsNullOrWhiteSpace(sourcesRoot) ||
+            string.IsNullOrWhiteSpace(slug) ||
+            string.IsNullOrWhiteSpace(resolvedSourcePath) ||
+            sourceCandidates is null ||
+            sourceCandidates.Count == 0)
+        {
+            return null;
+        }
+
+        var resolvedFullPath = Path.GetFullPath(resolvedSourcePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        foreach (var candidate in sourceCandidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var candidatePath = Path.GetFullPath(Path.Combine(sourcesRoot, slug, candidate))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (string.Equals(candidatePath, resolvedFullPath, StringComparison.OrdinalIgnoreCase))
+                return candidate.Replace('\\', '/');
+        }
+
+        return null;
     }
 
     private static bool UpsertFrontMatterBoolean(List<string> allLines, int closingMarkerIndex, string key, bool value)
@@ -589,6 +1016,53 @@ internal static partial class WebPipelineRunner
 
         allLines.Insert(closingMarkerIndex, expected);
         return true;
+    }
+
+    private static bool UpsertFrontMatterString(List<string> allLines, int closingMarkerIndex, string key, string value)
+    {
+        if (allLines is null || allLines.Count == 0 || closingMarkerIndex <= 0 || string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var expected = $"{key}: \"{value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+        for (var i = 1; i < closingMarkerIndex; i++)
+        {
+            var currentLine = allLines[i];
+            if (!currentLine.TrimStart().StartsWith(key + ":", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.Equals(currentLine.Trim(), expected, StringComparison.Ordinal))
+                return false;
+
+            // Match keys case-insensitively but rewrite the canonical generated casing.
+            allLines[i] = expected;
+            return true;
+        }
+
+        allLines.Insert(closingMarkerIndex, expected);
+        return true;
+    }
+
+    private static bool TryGetFrontMatterValue(IReadOnlyList<string> allLines, int closingMarkerIndex, string key, out string? value)
+    {
+        value = null;
+        if (allLines is null || allLines.Count == 0 || closingMarkerIndex <= 0)
+            return false;
+
+        for (var i = 1; i < closingMarkerIndex; i++)
+        {
+            var currentLine = allLines[i];
+            if (!currentLine.TrimStart().StartsWith(key + ":", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var separatorIndex = currentLine.IndexOf(':');
+            if (separatorIndex < 0 || separatorIndex + 1 >= currentLine.Length)
+                return false;
+
+            value = currentLine[(separatorIndex + 1)..].Trim().Trim('"');
+            return true;
+        }
+
+        return false;
     }
 
     private static int FindFrontMatterClosingMarkerIndex(IReadOnlyList<string> lines)
@@ -719,6 +1193,7 @@ internal static partial class WebPipelineRunner
             string? apiDotNetLink = null;
             string? apiPowerShellLink = null;
             string? examplesLink = null;
+            string? sourceLink = null;
             string? artifactDocs = null;
             string? artifactApi = null;
             string? artifactExamples = null;
@@ -739,6 +1214,7 @@ internal static partial class WebPipelineRunner
                 apiDotNetLink = GetString(linksElement, "apiDotNet");
                 apiPowerShellLink = GetString(linksElement, "apiPowerShell");
                 examplesLink = GetString(linksElement, "examples");
+                sourceLink = GetString(linksElement, "source");
             }
 
             if (projectElement.TryGetProperty("artifacts", out var artifactsElement) &&
@@ -785,6 +1261,7 @@ internal static partial class WebPipelineRunner
                 ApiDotNetLink = apiDotNetLink,
                 ApiPowerShellLink = apiPowerShellLink,
                 ExamplesLink = examplesLink,
+                GitHubRepoUrl = sourceLink,
                 ArtifactDocs = artifactDocs,
                 ArtifactApi = artifactApi,
                 ArtifactExamples = artifactExamples
@@ -1239,6 +1716,7 @@ internal static partial class WebPipelineRunner
         public string? ApiDotNetLink { get; init; }
         public string? ApiPowerShellLink { get; init; }
         public string? ExamplesLink { get; init; }
+        public string? GitHubRepoUrl { get; init; }
         public string? ArtifactDocs { get; init; }
         public string? ArtifactApi { get; init; }
         public string? ArtifactExamples { get; init; }

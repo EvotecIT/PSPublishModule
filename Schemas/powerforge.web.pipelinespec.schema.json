@@ -231,6 +231,10 @@
         "required-routes": { "type": "string" },
         "requiredRoute": { "type": "string" },
         "required-route": { "type": "string" },
+        "forbiddenRoutes": { "type": "string" },
+        "forbidden-routes": { "type": "string" },
+        "forbiddenRoute": { "type": "string" },
+        "forbidden-route": { "type": "string" },
         "checkLinks": { "type": "boolean" },
         "checkAssets": { "type": "boolean" },
         "checkNav": { "type": "boolean" },
@@ -1748,6 +1752,10 @@
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "config": { "type": "string" },
+        "language": { "type": "string", "description": "Optional language code for generated API pages and localized navigation selection." },
+        "lang": { "type": "string", "description": "Alias for language." },
+        "languageCode": { "type": "string", "description": "Alias for language." },
+        "language-code": { "type": "string", "description": "Alias for language." },
         "catalog": { "type": "string" },
         "catalogPath": { "type": "string" },
         "catalog-path": { "type": "string" },
@@ -3109,6 +3117,22 @@
         "required-route": {
           "type": "string",
           "description": "Deprecated alias for requiredRoutes."
+        },
+        "forbiddenRoutes": {
+          "type": "string",
+          "description": "Comma-separated list of routes that must not resolve in generated output."
+        },
+        "forbidden-routes": {
+          "type": "string",
+          "description": "Deprecated alias for forbiddenRoutes."
+        },
+        "forbiddenRoute": {
+          "type": "string",
+          "description": "Deprecated alias for forbiddenRoutes."
+        },
+        "forbidden-route": {
+          "type": "string",
+          "description": "Deprecated alias for forbiddenRoutes."
         },
         "checkLinks": { "type": "boolean" },
         "checkAssets": { "type": "boolean" },

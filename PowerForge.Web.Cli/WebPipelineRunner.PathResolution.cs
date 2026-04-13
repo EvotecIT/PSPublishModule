@@ -201,6 +201,69 @@ internal static partial class WebPipelineRunner
         }
     }
 
+    private static void TryResolveApiSuiteFragmentsFromTheme(string siteConfigPath, ref string? head, ref string? header, ref string? footer)
+    {
+        if (string.IsNullOrWhiteSpace(siteConfigPath))
+            return;
+
+        try
+        {
+            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(siteConfigPath, WebCliJson.Options);
+            if (string.IsNullOrWhiteSpace(spec.DefaultTheme))
+                return;
+
+            var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+            var themesRoot = string.IsNullOrWhiteSpace(plan.ThemesRoot)
+                ? Path.Combine(plan.RootPath, "themes")
+                : plan.ThemesRoot;
+            var themeRoot = Path.Combine(themesRoot, spec.DefaultTheme);
+            if (!Directory.Exists(themeRoot))
+                return;
+
+            var loader = new ThemeLoader();
+            var manifest = loader.Load(themeRoot, themesRoot);
+            if (manifest is null)
+                return;
+
+            if (string.IsNullOrWhiteSpace(head))
+            {
+                var candidate = loader.ResolvePartialPath(themeRoot, manifest, "api-head");
+                if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                    head = candidate;
+            }
+
+            if (string.IsNullOrWhiteSpace(header))
+            {
+                foreach (var partialName in new[] { "api-suite-header", "api-header" })
+                {
+                    var candidate = loader.ResolvePartialPath(themeRoot, manifest, partialName);
+                    if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
+                        continue;
+
+                    header = candidate;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(footer))
+            {
+                foreach (var partialName in new[] { "api-suite-footer", "api-footer" })
+                {
+                    var candidate = loader.ResolvePartialPath(themeRoot, manifest, partialName);
+                    if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
+                        continue;
+
+                    footer = candidate;
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // best-effort
+        }
+    }
+
     private static string[]? GetArrayOfStrings(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object) return null;

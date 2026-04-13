@@ -78,6 +78,81 @@ public class WebPipelineRunnerSourcesSyncTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_SourcesSync_CleanStepDefault_ReplacesExistingDestination()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sources-sync-clean-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "clean source");
+            RunGit(source, "init");
+            RunGit(source, "config", "user.email", "pf-tests@example.local");
+            RunGit(source, "config", "user.name", "PowerForge Tests");
+            RunGit(source, "add", ".");
+            RunGit(source, "commit", "-m", "init", "--quiet");
+
+            var staleDestination = Path.Combine(root, "projects", "demo-project");
+            Directory.CreateDirectory(staleDestination);
+            File.WriteAllText(Path.Combine(staleDestination, "stale.txt"), "stale");
+
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Pipeline Sources Sync Clean Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "{{EscapeJson(source)}}", "Slug": "demo-project" }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    { "task": "sources-sync", "config": "./site.json", "clean": true }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            Assert.Equal("clean source", File.ReadAllText(Path.Combine(staleDestination, "README.md")));
+            Assert.False(File.Exists(Path.Combine(staleDestination, "stale.txt")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static bool IsGitAvailable()
     {
         try
@@ -146,4 +221,3 @@ public class WebPipelineRunnerSourcesSyncTests
         return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
-

@@ -162,7 +162,13 @@ public static partial class WebSiteVerifier
         return false;
     }
 
-    private static void ValidateMarkdownHygiene(string rootPath, string filePath, string? collectionName, string body, List<string> warnings)
+    private static void ValidateMarkdownHygiene(
+        string rootPath,
+        string filePath,
+        string? collectionName,
+        Dictionary<string, object?>? meta,
+        string body,
+        List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(body))
             return;
@@ -181,6 +187,17 @@ public static partial class WebSiteVerifier
         }
 
         var withoutCodeBlocks = MarkdownFenceRegex.Replace(body, string.Empty);
+
+        if (meta is not null &&
+            TryGetMetaString(meta, "raw_html", out var rawHtmlValue) &&
+            bool.TryParse(rawHtmlValue, out var rawHtml) &&
+            rawHtml &&
+            MarkdownBlockSyntaxRegex.IsMatch(withoutCodeBlocks))
+        {
+            warnings.Add(
+                $"Markdown hygiene: '{relative}' sets meta.raw_html=true but still contains Markdown block syntax (headings or lists). " +
+                "This content will render as literal text. Remove meta.raw_html or convert the body to HTML.");
+        }
 
         var multilineMediaMatches = MarkdownMultilineMediaHtmlRegex.Matches(withoutCodeBlocks);
         if (multilineMediaMatches.Count > 0)

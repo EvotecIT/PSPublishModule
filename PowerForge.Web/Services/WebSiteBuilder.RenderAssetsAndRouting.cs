@@ -355,7 +355,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(description))
             description = ResolveMetaDescription(spec, item);
         var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
-        var url = ResolveAbsoluteUrl(languageBaseUrl, canonicalOrOutput);
+        var url = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
         var imageOverride = ResolveSocialImageOverride(item);
         var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
@@ -443,7 +443,7 @@ public static partial class WebSiteBuilder
                     ["@type"] = "ListItem",
                     ["position"] = index + 1,
                     ["name"] = crumb.Title ?? string.Empty,
-                    ["item"] = ResolveAbsoluteUrl(baseUrl, crumb.Url)
+                    ["item"] = ResolveAbsolutePublicUrl(spec, localization, item.Language, crumb.Url)
                 })
                 .ToArray();
 
@@ -455,7 +455,7 @@ public static partial class WebSiteBuilder
             }));
         }
 
-        var pageUrl = ResolveAbsoluteUrl(languageBaseUrl, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
         if (spec.StructuredData.Website && item.Kind == PageKind.Home)
         {
             var webSiteModel = new Dictionary<string, object?>
@@ -692,6 +692,28 @@ public static partial class WebSiteBuilder
         var trimmedBase = baseUrl.TrimEnd('/');
         var trimmedPath = path.StartsWith("/") ? path : "/" + path;
         return trimmedBase + trimmedPath;
+    }
+
+    private static string ResolveAbsolutePublicUrl(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? languageCode,
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        if (IsAbsoluteHttpUrl(path))
+        {
+            return TryRebaseAbsoluteUrlForSelectedLanguageRootBuild(spec, localization, path, effectiveLanguage, out var rebased)
+                ? rebased
+                : path;
+        }
+
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
+        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, path, effectiveLanguage);
+        return ResolveAbsoluteUrl(baseUrl, publicRoute);
     }
 
     private static string? ResolveThemeRoot(SiteSpec spec, string rootPath)

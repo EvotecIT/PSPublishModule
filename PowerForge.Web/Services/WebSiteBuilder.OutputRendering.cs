@@ -73,9 +73,8 @@ public static partial class WebSiteBuilder
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
         var localizationConfig = ResolveLocalizationConfig(spec);
-        var languageBaseUrl = ResolveLanguageBaseUrl(spec, localizationConfig, item.Language);
         var canonicalRoute = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
-        var canonicalUrl = ResolveAbsoluteUrl(languageBaseUrl, canonicalRoute);
+        var canonicalUrl = ResolveAbsolutePublicUrl(spec, localizationConfig, item.Language, canonicalRoute);
         var canonical = string.IsNullOrWhiteSpace(canonicalUrl)
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";

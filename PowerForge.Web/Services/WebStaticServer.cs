@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
@@ -9,6 +10,16 @@ public static class WebStaticServer
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+    private static readonly Regex LanguageDirectoryNameRegex = new(
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly HashSet<string> ReservedLanguageDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "api",
+        "app",
+        "rss",
+        "www"
+    };
 
     /// <summary>Starts a blocking static file server.</summary>
     /// <param name="rootPath">Root directory to serve.</param>
@@ -186,6 +197,8 @@ public static class WebStaticServer
         var rawPath = request.Url?.AbsolutePath ?? "/";
         var path = Uri.UnescapeDataString(rawPath);
         var filePath = ResolveFilePath(basePath, path);
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            filePath = ResolveLocalizedAliasFilePath(basePath, path);
 
         if (filePath is null || !File.Exists(filePath))
         {
@@ -257,6 +270,75 @@ public static class WebStaticServer
         }
 
         return candidate;
+    }
+
+    private static string? ResolveLocalizedAliasFilePath(string basePath, string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath) ||
+            string.Equals(urlPath, "/", StringComparison.Ordinal) ||
+            Path.HasExtension(urlPath))
+        {
+            return null;
+        }
+
+        if (HasLeadingLanguagePrefix(urlPath))
+            return null;
+
+        string[] languageDirectories;
+        try
+        {
+            languageDirectories = Directory.GetDirectories(basePath)
+                .Select(Path.GetFileName)
+                .Where(static name => !string.IsNullOrWhiteSpace(name) && IsLanguageDirectoryName(name!))
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (languageDirectories.Length == 0)
+            return null;
+
+        string? match = null;
+        foreach (var languageDirectory in languageDirectories)
+        {
+            var candidatePath = ResolveFilePath(basePath, "/" + languageDirectory + urlPath);
+            if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(match))
+                return null;
+
+            match = candidatePath;
+        }
+
+        return match;
+    }
+
+    private static bool HasLeadingLanguagePrefix(string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath))
+            return false;
+
+        var trimmed = urlPath.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return false;
+
+        var firstSegmentEnd = trimmed.IndexOf('/');
+        var firstSegment = firstSegmentEnd >= 0 ? trimmed[..firstSegmentEnd] : trimmed;
+        return IsLanguageDirectoryName(firstSegment);
+    }
+
+    private static bool IsLanguageDirectoryName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        return !ReservedLanguageDirectoryNames.Contains(trimmed) &&
+            LanguageDirectoryNameRegex.IsMatch(trimmed);
     }
 
     private static string NormalizeRootPath(string path)

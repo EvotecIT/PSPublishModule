@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -562,6 +563,31 @@ public static class WebReleaseHubGenerator
                 using var response = GitHubClient.Send(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (ShouldRetryGitHubWithoutAuthorization(request, response))
+                    {
+                        using var retryRequest = CloneRequestWithoutAuthorization(request);
+                        using var retryResponse = GitHubClient.Send(retryRequest);
+                        if (retryResponse.IsSuccessStatusCode)
+                        {
+                            warnings.Add($"GitHub release fetch retried without Authorization after token auth failed for {owner}/{repo}.");
+                            using var retryStream = retryResponse.Content.ReadAsStream();
+                            using var retryDoc = JsonDocument.Parse(retryStream);
+                            if (retryDoc.RootElement.ValueKind != JsonValueKind.Array)
+                                break;
+
+                            var retryPageItems = ParseReleaseArray(retryDoc.RootElement, owner, repo, sourceIsGitHubApi: true);
+                            if (retryPageItems.Count == 0)
+                                break;
+
+                            results.AddRange(retryPageItems);
+
+                            if (retryPageItems.Count < pageSize)
+                                break;
+
+                            continue;
+                        }
+                    }
+
                     warnings.Add($"GitHub release fetch failed ({(int)response.StatusCode}) for {owner}/{repo}.");
                     break;
                 }
@@ -589,6 +615,31 @@ public static class WebReleaseHubGenerator
         }
 
         return results;
+    }
+
+    private static bool ShouldRetryGitHubWithoutAuthorization(HttpRequestMessage request, HttpResponseMessage response)
+    {
+        if (request.Headers.Authorization is null)
+            return false;
+
+        if (response.StatusCode is not HttpStatusCode.Unauthorized and not HttpStatusCode.Forbidden)
+            return false;
+
+        return request.RequestUri?.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static HttpRequestMessage CloneRequestWithoutAuthorization(HttpRequestMessage request)
+    {
+        var clone = new HttpRequestMessage(request.Method, request.RequestUri);
+        foreach (var header in request.Headers)
+        {
+            if (header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        return clone;
     }
 
     private static HttpClient CreateGitHubClient()

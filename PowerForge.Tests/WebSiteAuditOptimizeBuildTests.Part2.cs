@@ -635,6 +635,52 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_FailsWhenForbiddenRouteExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-forbidden-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "pl", "kontakt"));
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "pl", "kontakt", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Kontakt</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                ForbiddenRoutes = new[] { "/pl/kontakt/" },
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(1, result.ForbiddenRouteCount);
+            Assert.Equal(1, result.PresentForbiddenRouteCount);
+            Assert.Contains(result.Errors, error => error.Contains("forbidden route '/pl/kontakt/' exists", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_ReturnsPerStageCounters()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-" + Guid.NewGuid().ToString("N"));

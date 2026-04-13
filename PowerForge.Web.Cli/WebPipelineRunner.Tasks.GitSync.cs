@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace PowerForge.Web.Cli;
 
@@ -286,7 +287,7 @@ internal static partial class WebPipelineRunner
     private static GitSyncExecutionResult ExecuteGitSyncRequest(GitSyncRequest request)
     {
         if (request.Clean && Directory.Exists(request.DestinationFull))
-            Directory.Delete(request.DestinationFull, recursive: true);
+            DeleteDirectoryForGitSyncClean(request.DestinationFull);
 
         var gitFolder = Path.Combine(request.DestinationFull, ".git");
         var cloned = false;
@@ -355,6 +356,54 @@ internal static partial class WebPipelineRunner
             DisplayReference = ResolveHeadReference(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs),
             Commit = ResolveHeadCommit(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs)
         };
+    }
+
+    private static void DeleteDirectoryForGitSyncClean(string path)
+    {
+        const int attempts = 5;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                if (!Directory.Exists(path))
+                    return;
+
+                ClearReadOnlyAttributes(path);
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (IOException) when (attempt < attempts)
+            {
+                Thread.Sleep(150 * attempt);
+            }
+            catch (UnauthorizedAccessException) when (attempt < attempts)
+            {
+                Thread.Sleep(150 * attempt);
+            }
+        }
+
+        if (Directory.Exists(path))
+        {
+            ClearReadOnlyAttributes(path);
+            Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private static void ClearReadOnlyAttributes(string path)
+    {
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+            }
+            catch
+            {
+                // Best-effort cleanup. The retrying delete reports persistent failures.
+            }
+        }
     }
 
     private static string NormalizeGitRepo(string repo, string baseDir, string? repoBaseUrl, string authType)
@@ -910,6 +959,7 @@ internal static partial class WebPipelineRunner
             RepoInput = source.RepoInput,
             RepoBaseUrl = source.RepoBaseUrl,
             Repo = source.Repo,
+            DestinationInput = source.DestinationInput,
             DestinationFull = source.DestinationFull,
             Reference = reference,
             Clean = source.Clean,

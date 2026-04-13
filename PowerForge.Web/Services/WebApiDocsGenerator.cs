@@ -101,6 +101,8 @@ public sealed class WebApiDocsOptions
     public string? FooterHtmlPath { get; set; }
     /// <summary>Optional nav config path (site.json or site-nav.json) for header/footer tokens.</summary>
     public string? NavJsonPath { get; set; }
+    /// <summary>Optional site config path (site.json) used for theme and token resolution on generated API pages.</summary>
+    public string? SiteConfigPath { get; set; }
     /// <summary>
     /// Optional navigation context path used when <see cref="NavJsonPath"/> points to a site-nav.json that contains profile definitions.
     /// When set, PowerForge can select the most appropriate Navigation.Profile for API docs header/footer tokens.

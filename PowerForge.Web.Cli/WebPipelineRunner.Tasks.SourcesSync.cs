@@ -22,6 +22,7 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("sources-sync: site.json has no Sources entries.");
 
         var repos = new List<Dictionary<string, object?>>();
+        var cleanDefault = GetBool(step, "clean") ?? GetBool(step, "clean-target");
         var destinationComparer = FileSystemPathComparison == StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
@@ -60,7 +61,7 @@ internal static partial class WebPipelineRunner
                 ["tokenEnv"] = source.TokenEnv,
                 ["token"] = source.Token,
                 ["username"] = source.Username,
-                ["clean"] = source.Clean,
+                ["clean"] = source.Clean ?? cleanDefault,
                 ["fetchTags"] = source.FetchTags,
                 ["depth"] = source.Depth,
                 ["timeoutSeconds"] = source.TimeoutSeconds,

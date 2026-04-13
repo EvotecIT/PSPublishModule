@@ -93,6 +93,17 @@ Rule:
 - Set `css` to a list: `"/css/app.css,/css/api.css"`.
 - Ensure `api-header`/`api-footer` match the site’s header/footer structure/classes.
 - Set `coverageReport` (for example `./_reports/apidocs-coverage.json`) so CI can track doc completeness drift.
-- For PowerShell API steps, set `psExamplesPath` (for example `../MyModule/Examples`) to improve examples when help XML is incomplete.
+- For PowerShell API steps, set `psExamplesPath` when you want fallback code examples during API generation.
+- Do not treat raw `Examples/` folders as the default public website examples source unless the site explicitly opts into that behavior.
 - Add at least one coverage threshold + gate in CI-focused pipelines (for example `minTypeSummaryPercent`, `minPowerShellCodeExamplesPercent`, `failOnCoverage: true`).
 - Add source-link gates in CI (`minTypeSourceUrlPercent`, `maxMemberSourceRepoMismatchHints`, etc.) so broken source URL patterns fail fast.
+
+## Project examples (curated-by-default)
+
+Recommended contract for public project hubs:
+
+- author examples in the project repo under:
+  - `Website/content/examples`
+  - `content/examples`
+- enable `surfaces.examples` only after those curated pages exist
+- treat raw `Examples/` as source material for maintainers, not something the public site must expose automatically

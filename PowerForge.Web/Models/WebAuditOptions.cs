@@ -83,6 +83,8 @@ public sealed class WebAuditOptions
     public int MinNavCoveragePercent { get; set; }
     /// <summary>Routes that must resolve to generated HTML output (for example "/", "/404.html", "/api/").</summary>
     public string[] RequiredRoutes { get; set; } = Array.Empty<string>();
+    /// <summary>Routes that must not resolve to generated HTML output (for example language-prefixed aliases in a root-domain build).</summary>
+    public string[] ForbiddenRoutes { get; set; } = Array.Empty<string>();
     /// <summary>When true, run rendered (Playwright) checks.</summary>
     public bool CheckRendered { get; set; }
     /// <summary>Maximum number of pages to render (0 = all).</summary>

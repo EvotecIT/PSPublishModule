@@ -16,6 +16,30 @@ internal static class ReleaseHubRenderer
     private static readonly Regex FragmentLinkRegex = new(
         "(?<prefix><a\\b[^>]*\\bhref\\s*=\\s*)(?<quote>[\"'])#(?<target>[^\"'#]+)(\\k<quote>)(?<suffix>[^>]*>)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex HtmlTagRegex = new(
+        "<[^>]+>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex AnchorWithHrefRegex = new(
+        "<a(?<attrs>\\b[^>]*?\\bhref\\s*=\\s*(?<quote>[\"'])(?<href>https?://[^\"']+)\\k<quote>[^>]*)>(?<text>.*?)</a>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex ClassAttributeRegex = new(
+        "\\bclass\\s*=\\s*(?<quote>[\"'])(?<value>[^\"']*)(\\k<quote>)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex GithubUserMentionRegex = new(
+        "(?<![\\w/])@(?<user>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex AnchorOpenTagRegex = new(
+        "^<\\s*a\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex AnchorCloseTagRegex = new(
+        "^<\\s*/\\s*a\\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex CodeLikeOpenTagRegex = new(
+        "^<\\s*(?:code|pre|kbd|samp)\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex CodeLikeCloseTagRegex = new(
+        "^<\\s*/\\s*(?:code|pre|kbd|samp)\\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static string RenderReleaseButton(
         IReadOnlyDictionary<string, object?> data,
@@ -394,7 +418,7 @@ internal static class ReleaseHubRenderer
                 if (!string.IsNullOrWhiteSpace(bodyMarkdown))
                     bodyHtml = MarkdownRenderer.RenderToHtml(bodyMarkdown, markdown);
             }
-            release.BodyHtml = NamespaceReleaseBodyHtml(bodyHtml ?? string.Empty, release.Tag);
+            release.BodyHtml = PolishReleaseBodyHtml(NamespaceReleaseBodyHtml(bodyHtml ?? string.Empty, release.Tag));
 
             if (TryReadList(releaseMap, "assets", out var assetValues))
             {
@@ -575,6 +599,141 @@ internal static class ReleaseHubRenderer
         });
     }
 
+    private static string PolishReleaseBodyHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var polished = AnchorWithHrefRegex.Replace(html, RewriteRawUrlAnchor);
+        return ReplaceTextOutsideAnchors(polished, LinkifyGithubMentions);
+    }
+
+    private static string RewriteRawUrlAnchor(Match match)
+    {
+        var href = System.Web.HttpUtility.HtmlDecode(match.Groups["href"].Value);
+        if (string.IsNullOrWhiteSpace(href))
+            return match.Value;
+
+        var text = System.Web.HttpUtility.HtmlDecode(StripTags(match.Groups["text"].Value)).Trim();
+        if (!string.Equals(text.TrimEnd('/'), href.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            return match.Value;
+
+        var label = ResolveFriendlyUrlLabel(href, out var modifier);
+        if (string.IsNullOrWhiteSpace(label))
+            return match.Value;
+
+        var classes = string.IsNullOrWhiteSpace(modifier)
+            ? "pf-release-link"
+            : $"pf-release-link pf-release-link--{modifier}";
+        var attrs = EnsureAnchorClass(match.Groups["attrs"].Value, classes);
+        return $"<a{attrs}>{Html(label)}</a>";
+    }
+
+    private static string? ResolveFriendlyUrlLabel(string href, out string modifier)
+    {
+        modifier = "external";
+        if (!Uri.TryCreate(href, UriKind.Absolute, out var uri))
+            return null;
+
+        if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 4 &&
+                (parts[2].Equals("pull", StringComparison.OrdinalIgnoreCase) ||
+                 parts[2].Equals("issues", StringComparison.OrdinalIgnoreCase)))
+            {
+                modifier = parts[2].Equals("pull", StringComparison.OrdinalIgnoreCase) ? "pull" : "issue";
+                return "#" + parts[3];
+            }
+
+            if (parts.Length >= 4 && parts[2].Equals("compare", StringComparison.OrdinalIgnoreCase))
+            {
+                modifier = "compare";
+                return "Compare " + parts[3].Replace("...", " to ", StringComparison.Ordinal);
+            }
+
+            if (parts.Length >= 4 && parts[2].Equals("releases", StringComparison.OrdinalIgnoreCase) && parts[3].Equals("tag", StringComparison.OrdinalIgnoreCase))
+            {
+                modifier = "release";
+                return parts.Length >= 5 ? parts[4] : "Release";
+            }
+        }
+
+        return uri.Host;
+    }
+
+    private static string LinkifyGithubMentions(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        return GithubUserMentionRegex.Replace(text, match =>
+        {
+            var user = match.Groups["user"].Value;
+            if (string.IsNullOrWhiteSpace(user))
+                return match.Value;
+
+            return $"<a class=\"pf-release-link pf-release-link--user\" href=\"https://github.com/{Html(user)}\">@{Html(user)}</a>";
+        });
+    }
+
+    private static string ReplaceTextOutsideAnchors(string html, Func<string, string> replacer)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var sb = new StringBuilder(html.Length);
+        var cursor = 0;
+        var inAnchor = false;
+        var codeLikeDepth = 0;
+        foreach (Match match in HtmlTagRegex.Matches(html))
+        {
+            if (match.Index > cursor)
+            {
+                var segment = html.Substring(cursor, match.Index - cursor);
+                sb.Append(inAnchor || codeLikeDepth > 0 ? segment : replacer(segment));
+            }
+
+            var tag = match.Value;
+            sb.Append(tag);
+            if (AnchorOpenTagRegex.IsMatch(tag))
+                inAnchor = true;
+            else if (AnchorCloseTagRegex.IsMatch(tag))
+                inAnchor = false;
+            else if (CodeLikeOpenTagRegex.IsMatch(tag) && !tag.EndsWith("/>", StringComparison.Ordinal))
+                codeLikeDepth++;
+            else if (CodeLikeCloseTagRegex.IsMatch(tag) && codeLikeDepth > 0)
+                codeLikeDepth--;
+
+            cursor = match.Index + match.Length;
+        }
+
+        if (cursor < html.Length)
+        {
+            var segment = html.Substring(cursor);
+            sb.Append(inAnchor || codeLikeDepth > 0 ? segment : replacer(segment));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string EnsureAnchorClass(string attrs, string cssClass)
+    {
+        if (string.IsNullOrWhiteSpace(cssClass))
+            return attrs;
+
+        var match = ClassAttributeRegex.Match(attrs);
+        if (!match.Success)
+            return attrs + " class=\"" + Html(cssClass) + "\"";
+
+        var existing = match.Groups["value"].Value;
+        var merged = JoinClasses(existing, cssClass);
+        return ClassAttributeRegex.Replace(attrs, $"class={match.Groups["quote"].Value}{merged}{match.Groups["quote"].Value}", 1);
+    }
+
+    private static string StripTags(string html)
+        => string.IsNullOrWhiteSpace(html) ? string.Empty : HtmlTagRegex.Replace(html, string.Empty);
+
     private static string NamespaceFragment(string prefix, string fragment)
     {
         var normalizedPrefix = Slugify(prefix);
@@ -700,8 +859,6 @@ internal static class ReleaseHubRenderer
             parts.Add(ToDisplayToken(asset.Platform));
         if (!string.IsNullOrWhiteSpace(asset.Arch) && !string.Equals(asset.Arch, "any", StringComparison.OrdinalIgnoreCase))
             parts.Add(asset.Arch);
-        if (!string.IsNullOrWhiteSpace(asset.Kind) && !string.Equals(asset.Kind, "file", StringComparison.OrdinalIgnoreCase))
-            parts.Add(asset.Kind);
         if (asset.Size is > 0)
             parts.Add(FormatBytes(asset.Size.Value));
 
@@ -770,16 +927,6 @@ internal static class ReleaseHubRenderer
             {
                 Kind = "arch",
                 Label = ToDisplayToken(asset.Arch)
-            });
-        }
-
-        if (!string.IsNullOrWhiteSpace(asset.Kind) &&
-            !string.Equals(asset.Kind, "file", StringComparison.OrdinalIgnoreCase))
-        {
-            badges.Add(new ReleaseAssetBadgeView
-            {
-                Kind = "kind",
-                Label = asset.Kind.Trim().ToLowerInvariant()
             });
         }
 

@@ -39,4 +39,11 @@ public sealed class LocalizationLanguageRuntime
 
     /// <summary>Resolved URL for this page in target language.</summary>
     public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Local preview URL for this page in target language.
+    /// This stays rooted to the generated output tree so localhost previews can switch languages
+    /// even when production uses split domains with language-specific root routing.
+    /// </summary>
+    public string LocalUrl { get; set; } = string.Empty;
 }

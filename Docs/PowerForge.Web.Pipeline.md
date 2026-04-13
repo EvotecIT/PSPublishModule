@@ -1233,7 +1233,7 @@ Notes:
   - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
 
 #### project-docs-sync
-Synchronizes project documentation (and optionally API artifacts) from source repositories listed in your project catalog.
+Synchronizes project documentation, curated public examples, and optionally API artifacts from source repositories listed in your project catalog.
 
 ```json
 {
@@ -1245,6 +1245,11 @@ Synchronizes project documentation (and optionally API artifacts) from source re
   "syncApi": true,
   "apiRoot": "./data/apidocs",
   "sourceApiPaths": ["Website/data/apidocs", "data/apidocs"],
+  "syncExamples": true,
+  "examplesRoot": "./content/project-examples",
+  "examplesSectionFolder": "examples",
+  "cleanExamplesTarget": true,
+  "sourceExamplesPaths": ["Website/content/examples", "content/examples"],
   "generateToc": true,
   "summaryPath": "./Build/sync-project-docs-last-run.json"
 }
@@ -1254,13 +1259,17 @@ Notes:
 - Uses `catalog.projects[].surfaces` to decide what to sync:
   - docs: `surfaces.docs`
   - api: `surfaces.apiDotNet` or `surfaces.apiPowerShell` (when `syncApi: true`)
+  - examples: `surfaces.examples` (when `syncExamples: true`)
 - Supports path candidates:
   - docs: `sourceDocsPaths` (array) or `sourceDocsPath` (string)
   - api: `sourceApiPaths` (array) or `sourceApiPath` (string)
+  - examples: `sourceExamplesPaths` (array) or `sourceExamplesPath` (string)
 - Path candidates are checked in order for each project (`<sourcesRoot>/<slug>/<candidate>`).
+- Public project examples default to curated folders (`Website/content/examples`, then `content/examples`). Raw repo `Examples/` folders are not a default public examples source; include `"Examples"` in `sourceExamplesPaths` only when that repo is tidy and explicitly approved for public ingestion.
 - `cleanTarget` clears docs target folder before copy.
 - `cleanApiTarget` clears API target folder before copy (defaults to `cleanTarget`).
-- `failOnMissingSource` and `failOnMissingApiSource` allow strict CI enforcement.
+- `cleanExamplesTarget` clears each project examples target before copy (defaults to `cleanTarget`). Use it for generated curated-example surfaces so removed examples do not remain in `content/project-examples`.
+- `failOnMissingSource`, `failOnMissingApiSource`, and `failOnMissingExamplesSource` allow strict CI enforcement.
 - Writes machine-readable summary JSON with synced/skipped counts and missing source paths.
 
 #### overlay

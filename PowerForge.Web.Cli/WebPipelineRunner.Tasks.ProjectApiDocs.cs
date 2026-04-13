@@ -48,11 +48,7 @@ internal static partial class WebPipelineRunner
             "./projects-sources");
         sourcesRoot = string.IsNullOrWhiteSpace(sourcesRoot) ? string.Empty : Path.GetFullPath(sourcesRoot);
 
-        var apiRoot = ResolvePath(baseDir,
-            GetString(step, "apiRoot") ??
-            GetString(step, "api-root") ??
-            "./data/project-api");
-        apiRoot = string.IsNullOrWhiteSpace(apiRoot) ? string.Empty : Path.GetFullPath(apiRoot);
+        var apiRoot = ResolveProjectApiArtifactRoot(step, baseDir, logger);
 
         var siteRoot = ResolvePath(baseDir,
             GetString(step, "siteRoot") ??
@@ -167,6 +163,17 @@ internal static partial class WebPipelineRunner
         var placeholderMarkers = ResolveProjectApiPlaceholderMarkers(step);
         var defaultCssHref = ResolveProjectApiCssHref(step, baseDir, logger);
         var siteConfigPath = ResolveProjectApiSiteConfigPath(step, baseDir);
+        var apiLanguage = NormalizeOptionalString(
+            GetString(step, "language") ??
+            GetString(step, "lang") ??
+            GetString(step, "languageCode") ??
+            GetString(step, "language-code")) ?? "en";
+        var navSurfaceName = ResolveProjectApiNavSurfaceName(
+            apiLanguage,
+            GetString(step, "navSurface") ??
+            GetString(step, "nav-surface") ??
+            GetString(step, "navSurfaceName") ??
+            GetString(step, "nav-surface-name"));
 
         var serializerOptions = new JsonSerializerOptions
         {
@@ -236,6 +243,8 @@ internal static partial class WebPipelineRunner
                 outRoot,
                 cleanOutput,
                 defaultCssHref,
+                apiLanguage,
+                navSurfaceName,
                 GetProjectApiDocsOverrides(project, baseDir)));
         }
 
@@ -332,11 +341,11 @@ internal static partial class WebPipelineRunner
                     suiteEntries,
                     defaultCssHref,
                     siteConfigPath,
-                    generateSuiteSearch ? suiteSearchPath : null,
-                    generateSuiteXrefMap ? suiteXrefMapPath : null,
-                    generateSuiteCoverageReport ? suiteCoveragePath : null,
-                    generateSuiteRelatedContent ? suiteRelatedContentPath : null,
-                    suiteNarrativeManifestPaths.Length > 0 ? suiteNarrativePath : null,
+                    suiteArtifacts?.SearchOutputPath,
+                    suiteArtifacts?.XrefMapOutputPath,
+                    suiteArtifacts?.CoverageOutputPath,
+                    suiteArtifacts?.RelatedContentOutputPath,
+                    suiteArtifacts?.NarrativeOutputPath,
                     logger);
             }
             WriteProjectApiSuiteManifest(
@@ -779,6 +788,8 @@ internal static partial class WebPipelineRunner
         string outRoot,
         bool cleanOutput,
         string? cssHref,
+        string language,
+        string navSurfaceName,
         ProjectApiDocsCatalogOverrides? apiDocsOverrides)
     {
         var name = NormalizeOptionalString(project.Name) ?? slug;
@@ -796,11 +807,11 @@ internal static partial class WebPipelineRunner
             ["title"] = $"{name} API Reference",
             ["out"] = outputPath,
             ["baseUrl"] = apiBaseUrl,
-            ["language"] = "en",
+            ["language"] = string.IsNullOrWhiteSpace(language) ? "en" : language,
             ["docsHome"] = hubPath,
             ["navContextPath"] = "/",
             ["navContextProject"] = slug,
-            ["navSurface"] = "main",
+            ["navSurface"] = string.IsNullOrWhiteSpace(navSurfaceName) ? "main" : navSurfaceName,
             ["type"] = selected.Type,
             ["templateTokens"] = templateTokens
         };
@@ -836,12 +847,24 @@ internal static partial class WebPipelineRunner
                 Id = slug,
                 Label = name,
                 Href = apiUrl,
-                Summary = NormalizeOptionalString(project.Description)
+                Summary = ResolveProjectApiSummary(project, name)
             },
             CleanOutput = cleanOutput,
             HasQuickStartTypes = !string.IsNullOrWhiteSpace(apiDocsOverrides?.QuickStartTypes),
             RelatedContentManifestPaths = apiDocsOverrides?.RelatedContentManifestPaths ?? Array.Empty<string>()
         };
+    }
+
+    private static string ResolveProjectApiNavSurfaceName(string? language, string? configuredNavSurface)
+    {
+        var configured = NormalizeOptionalString(configuredNavSurface);
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
+        var normalizedLanguage = NormalizeOptionalString(language) ?? "en";
+        return normalizedLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
+            ? "main"
+            : $"main-{normalizedLanguage}";
     }
 
     private static ProjectApiDocsCatalogOverrides? GetProjectApiDocsOverrides(ProjectCatalogEntry project, string baseDir)
@@ -1189,6 +1212,12 @@ internal static partial class WebPipelineRunner
 
         try
         {
+            var headHtmlPath = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html"));
+            var headerHtmlPath = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
+            var footerHtmlPath = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
+            if (!string.IsNullOrWhiteSpace(siteConfigPath))
+                TryResolveApiSuiteFragmentsFromTheme(siteConfigPath, ref headHtmlPath, ref headerHtmlPath, ref footerHtmlPath);
+
             var options = new WebApiDocsOptions
             {
                 OutputPath = landingRoot,
@@ -1196,17 +1225,20 @@ internal static partial class WebPipelineRunner
                 BaseUrl = suiteLandingUrl,
                 CssHref = cssHref,
                 CriticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css")),
-                HeadHtmlPath = ResolvePath(baseDir, GetString(step, "headHtml") ?? GetString(step, "head-html")),
-                HeaderHtmlPath = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html")),
-                FooterHtmlPath = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html")),
+                HeadHtmlPath = headHtmlPath,
+                HeaderHtmlPath = headerHtmlPath,
+                FooterHtmlPath = footerHtmlPath,
                 TemplateRootPath = ResolvePath(baseDir, GetString(step, "templateRoot") ?? GetString(step, "template-root")),
                 DocsScriptPath = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script")),
                 NavJsonPath = siteConfigPath,
+                SiteConfigPath = siteConfigPath,
                 NavContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ?? "/",
                 NavContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection"),
                 NavContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout"),
                 NavContextProject = null,
-                NavSurfaceName = GetString(step, "navSurface") ?? GetString(step, "nav-surface") ?? "main",
+                NavSurfaceName = ResolveProjectApiNavSurfaceName(
+                    GetString(step, "language") ?? GetString(step, "lang") ?? GetString(step, "languageCode") ?? GetString(step, "language-code"),
+                    GetString(step, "navSurface") ?? GetString(step, "nav-surface") ?? GetString(step, "navSurfaceName") ?? GetString(step, "nav-surface-name")),
                 SiteName = GetString(step, "siteName") ?? GetString(step, "site-name"),
                 BodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class"),
                 ApiSuiteTitle = suiteTitle,
@@ -1254,27 +1286,32 @@ internal static partial class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(suiteSearchPath))
         {
-            artifacts.SearchPath = WriteProjectApiSuiteSearch(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteSearchPath, logger);
+            artifacts.SearchOutputPath = WriteProjectApiSuiteSearch(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteSearchPath, logger);
+            artifacts.SearchPath = artifacts.SearchOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteXrefMapPath))
         {
-            artifacts.XrefMapPath = WriteProjectApiSuiteXref(preparedInputs, suiteXrefMapPath, logger);
+            artifacts.XrefMapOutputPath = WriteProjectApiSuiteXref(preparedInputs, suiteXrefMapPath, logger);
+            artifacts.XrefMapPath = artifacts.XrefMapOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteCoveragePath))
         {
-            artifacts.CoveragePath = WriteProjectApiSuiteCoverage(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteCoveragePath, logger);
+            artifacts.CoverageOutputPath = WriteProjectApiSuiteCoverage(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteCoveragePath, logger);
+            artifacts.CoveragePath = artifacts.CoverageOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteRelatedContentPath))
         {
-            artifacts.RelatedContentPath = WriteProjectApiSuiteRelatedContent(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteRelatedContentPath, logger);
+            artifacts.RelatedContentOutputPath = WriteProjectApiSuiteRelatedContent(preparedInputs, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteRelatedContentPath, logger);
+            artifacts.RelatedContentPath = artifacts.RelatedContentOutputPath;
         }
 
         if (!string.IsNullOrWhiteSpace(suiteNarrativePath))
         {
-            artifacts.NarrativePath = WriteProjectApiSuiteNarrative(suiteNarrativeManifestPaths, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteNarrativePath, logger);
+            artifacts.NarrativeOutputPath = WriteProjectApiSuiteNarrative(suiteNarrativeManifestPaths, suiteTitle, suiteHomeUrl, suiteHomeLabel, suiteEntries, suiteNarrativePath, logger);
+            artifacts.NarrativePath = artifacts.NarrativeOutputPath;
         }
 
         artifacts.SearchPath = BuildSuiteArtifactRelativePath(suiteManifestPath, artifacts.SearchPath);
@@ -2169,20 +2206,26 @@ internal static partial class WebPipelineRunner
         var releasesUrl = NormalizeOptionalString(GetProjectLink(project, "releases")) ??
                           NormalizeOptionalString(project.Metrics?.Release?.LatestUrl);
         var changelogUrl = NormalizeOptionalString(GetProjectLink(project, "changelog"));
-        var downloadsUrl = NormalizeOptionalString(GetProjectLink(project, "powerShellGallery")) ??
+        if (IsDefaultGitHubChangelogLink(changelogUrl, project.GitHubRepo))
+            changelogUrl = null;
+        var downloadsSurfaceVisible = TryGetProjectSurfaceValue(project.Surfaces, "downloads") ?? true;
+        var downloadsUrl = NormalizeOptionalString(GetProjectLink(project, "downloads")) ??
+                           NormalizeOptionalString(GetProjectLink(project, "powerShellGallery")) ??
                            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.GalleryUrl) ??
                            NormalizeOptionalString(project.Metrics?.NuGet?.PackageUrl);
+        if (!downloadsSurfaceVisible)
+            downloadsUrl = null;
 
         var docsVisible = (TryGetProjectSurfaceValue(project.Surfaces, "docs") ?? false);
         var examplesVisible = (TryGetProjectSurfaceValue(project.Surfaces, "examples") ?? false);
         var safeDocsUrl = docsVisible ? docsUrl : overviewUrl;
         var safeExamplesUrl = examplesVisible ? examplesUrl : overviewUrl;
-        var description = NormalizeOptionalString(project.Description);
+        var description = ResolveProjectApiSummary(project, name);
         var stars = FormatProjectMetric(project.Metrics?.GitHub?.Stars);
         var forks = FormatProjectMetric(project.Metrics?.GitHub?.Forks);
         var openIssues = FormatProjectMetric(project.Metrics?.GitHub?.OpenIssues);
         var (downloadsLabel, downloadsValue) = ResolveProjectDownloadsPresentation(project);
-        var downloads = FormatProjectMetric(downloadsValue);
+        var downloads = downloadsSurfaceVisible ? FormatProjectMetric(downloadsValue) : null;
         var release = NormalizeOptionalString(project.Metrics?.Release?.LatestTag) ?? NormalizeOptionalString(project.Version);
         var language = NormalizeOptionalString(project.Metrics?.GitHub?.Language);
         var lastPush = FormatProjectApiDate(project.Metrics?.GitHub?.LastPushedAt);
@@ -2205,7 +2248,8 @@ internal static partial class WebPipelineRunner
             ["PROJECT_CHANGELOG_URL"] = EncodeHrefToken(changelogUrl),
             ["PROJECT_CHANGELOG_HIDDEN"] = BuildHiddenAttribute(changelogUrl),
             ["PROJECT_DOWNLOADS_URL"] = EncodeHrefToken(downloadsUrl),
-            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
+            ["PROJECT_DOWNLOADS_ACTION_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
+            ["PROJECT_DOWNLOADS_TAB_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
             ["PROJECT_STARS"] = EncodeToken(stars),
             ["PROJECT_STARS_HIDDEN"] = BuildHiddenAttribute(stars),
             ["PROJECT_FORKS"] = EncodeToken(forks),
@@ -2214,7 +2258,8 @@ internal static partial class WebPipelineRunner
             ["PROJECT_OPEN_ISSUES_HIDDEN"] = BuildHiddenAttribute(openIssues),
             ["PROJECT_DOWNLOADS_LABEL"] = EncodeToken(downloadsLabel ?? "Downloads"),
             ["PROJECT_DOWNLOADS"] = EncodeToken(downloads),
-            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloads),
+            ["PROJECT_DOWNLOADS_METRIC_HIDDEN"] = BuildHiddenAttribute(downloads),
+            ["PROJECT_DOWNLOADS_HIDDEN"] = BuildHiddenAttribute(downloadsUrl),
             ["PROJECT_RELEASE"] = EncodeToken(release),
             ["PROJECT_RELEASE_HIDDEN"] = BuildHiddenAttribute(release),
             ["PROJECT_LANGUAGE"] = EncodeToken(language),
@@ -2242,6 +2287,42 @@ internal static partial class WebPipelineRunner
         if (string.Equals(status, "archived", StringComparison.OrdinalIgnoreCase))
             return "Archived";
         return "Project";
+    }
+
+    private static string? ResolveProjectApiSummary(ProjectCatalogEntry project, string name)
+    {
+        var description = NormalizeOptionalString(project.Description);
+        if (!IsGenericProjectArtifactDescription(description))
+            return description;
+
+        var routeName = string.IsNullOrWhiteSpace(name) ? "This project" : name.Trim();
+        var language = NormalizeOptionalString(project.Metrics?.GitHub?.Language);
+        var hasPowerShell = !string.IsNullOrWhiteSpace(GetProjectLink(project, "powerShellGallery")) ||
+                            !string.IsNullOrWhiteSpace(project.Metrics?.PowerShellGallery?.GalleryUrl) ||
+                            (TryGetProjectSurfaceValue(project.Surfaces, "apiPowerShell") ?? false) ||
+                            string.Equals(language, "PowerShell", StringComparison.OrdinalIgnoreCase);
+        var hasDotNet = !string.IsNullOrWhiteSpace(project.Metrics?.NuGet?.PackageUrl) ||
+                        (TryGetProjectSurfaceValue(project.Surfaces, "apiDotNet") ?? false) ||
+                        string.Equals(language, "C#", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(language, "F#", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(language, "VB", StringComparison.OrdinalIgnoreCase);
+
+        if (hasPowerShell && hasDotNet)
+            return $"{routeName} is an open-source PowerShell and .NET project with packages, release history, and technical documentation.";
+        if (hasPowerShell)
+            return $"{routeName} is an open-source PowerShell project with packages, release history, and working documentation.";
+        if (hasDotNet)
+            return $"{routeName} is an open-source .NET project with packages, release history, and project documentation.";
+
+        return $"{routeName} is an open-source project with releases, documentation, and implementation-ready resources.";
+    }
+
+    private static bool IsGenericProjectArtifactDescription(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description) ||
+               // Older generated manifests used this placeholder; treat it as "missing"
+               // so public pages get a useful project-specific summary.
+               description.Contains("website artifacts for the Evotec multi-project hub", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? GetProjectLink(ProjectCatalogEntry project, string key)
@@ -2412,6 +2493,28 @@ internal static partial class WebPipelineRunner
         return File.Exists(defaultSiteConfig) ? defaultSiteConfig : null;
     }
 
+    private static string ResolveProjectApiArtifactRoot(JsonElement step, string baseDir, WebConsoleLogger? logger)
+    {
+        var explicitApiRoot = ResolvePath(baseDir,
+            GetString(step, "apiRoot") ??
+            GetString(step, "api-root"));
+        if (!string.IsNullOrWhiteSpace(explicitApiRoot))
+            return Path.GetFullPath(explicitApiRoot);
+
+        var defaultRoot = Path.GetFullPath(Path.Combine(baseDir, "data", "project-api"));
+        if (Directory.Exists(defaultRoot))
+            return defaultRoot;
+
+        var artifactRoot = Path.GetFullPath(Path.Combine(baseDir, "data", "project-api-artifacts"));
+        if (Directory.Exists(artifactRoot))
+        {
+            logger?.Warn($"project-apidocs: apiRoot not configured; using detected artifact root '{artifactRoot}' instead of missing default '{defaultRoot}'.");
+            return artifactRoot;
+        }
+
+        return defaultRoot;
+    }
+
     private static string ResolveProjectApiSuiteLandingUrl(
         string? explicitLandingUrl,
         string? suiteHomeUrl,
@@ -2580,6 +2683,11 @@ internal static partial class WebPipelineRunner
 
     private sealed class ProjectApiSuiteArtifacts
     {
+        public string? SearchOutputPath { get; set; }
+        public string? XrefMapOutputPath { get; set; }
+        public string? CoverageOutputPath { get; set; }
+        public string? RelatedContentOutputPath { get; set; }
+        public string? NarrativeOutputPath { get; set; }
         public string? SearchPath { get; set; }
         public string? XrefMapPath { get; set; }
         public string? CoveragePath { get; set; }
