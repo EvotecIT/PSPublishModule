@@ -9,25 +9,27 @@ using PowerForge.Web;
 public class ScribanPfNavigationHelpersTests
 {
     [Theory]
-    [InlineData("fr", "BuildEditorialCardAriaLabel", "Produit", "Ouvrir l'article: Produit")]
-    [InlineData("de", "BuildEditorialCardAriaLabel", "Produkt", "Artikel öffnen: Produkt")]
-    [InlineData("es", "BuildEditorialCardAriaLabel", "Producto", "Abrir artículo: Producto")]
-    [InlineData("fr", "BuildRelatedPostAriaLabel", "Produit", "Article associé: Produit")]
-    [InlineData("de", "BuildRelatedPostAriaLabel", "Produkt", "Zugehöriger Beitrag: Produkt")]
-    [InlineData("es", "BuildRelatedPostAriaLabel", "Producto", "Artículo relacionado: Producto")]
-    public void Build_LocalizedArticleAriaLabels_UseNativeCharacters(
-        string language,
-        string methodName,
-        string title,
-        string expected)
+    [InlineData("en", "Product", "Open article: Product")]
+    [InlineData("fr", "Produit", "Ouvrir l'article: Produit")]
+    [InlineData("de", "Produkt", "Artikel öffnen: Produkt")]
+    [InlineData("es", "Producto", "Abrir artículo: Producto")]
+    public void Build_EditorialCardAriaLabels_UseLocalizedText(string language, string title, string expected)
     {
         var helpers = CreateHelpers(language);
-        var actual = methodName switch
-        {
-            nameof(ScribanThemeHelpers.BuildEditorialCardAriaLabel) => helpers.BuildEditorialCardAriaLabel(title),
-            nameof(ScribanThemeHelpers.BuildRelatedPostAriaLabel) => helpers.BuildRelatedPostAriaLabel(title),
-            _ => throw new ArgumentOutOfRangeException(nameof(methodName), methodName, "Unknown ARIA label helper.")
-        };
+        var actual = helpers.BuildEditorialCardAriaLabel(title);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "Product", "Related post: Product")]
+    [InlineData("fr", "Produit", "Article associé: Produit")]
+    [InlineData("de", "Produkt", "Zugehöriger Beitrag: Produkt")]
+    [InlineData("es", "Producto", "Artículo relacionado: Producto")]
+    public void Build_RelatedPostAriaLabels_UseLocalizedText(string language, string title, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildRelatedPostAriaLabel(title);
 
         Assert.Equal(expected, actual);
     }
@@ -40,6 +42,17 @@ public class ScribanPfNavigationHelpersTests
     {
         var helpers = CreateHelpers(language);
         var actual = helpers.BuildTaxonomyChipAriaLabel("categories", "Product Updates");
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "Tag: release")]
+    [InlineData("es", "Etiqueta: release")]
+    public void Build_LocalizedTagChipAriaLabels_UseLocalizedText(string language, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("tags", "release");
 
         Assert.Equal(expected, actual);
     }
