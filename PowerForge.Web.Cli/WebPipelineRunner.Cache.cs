@@ -62,6 +62,21 @@ internal static partial class WebPipelineRunner
         return true;
     }
 
+    private static bool IsCacheableStep(string task, JsonElement step)
+    {
+        if (!IsCacheableTask(task))
+            return false;
+
+        if (task.Equals("agent-ready", StringComparison.OrdinalIgnoreCase) ||
+            task.Equals("agentready", StringComparison.OrdinalIgnoreCase))
+        {
+            var operation = (GetString(step, "operation") ?? "prepare").Trim();
+            return operation.Equals("prepare", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
+    }
+
     private static WebPipelineCacheState LoadPipelineCache(string cachePath, WebConsoleLogger? logger)
     {
         try
@@ -252,7 +267,7 @@ internal static partial class WebPipelineRunner
                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string[] GetExpectedStepOutputs(string task, JsonElement step, string baseDir)
+    private static string[] GetExpectedStepOutputs(string task, JsonElement step, string baseDir, string lastBuildOutPath)
     {
         switch (task)
         {
@@ -535,6 +550,9 @@ internal static partial class WebPipelineRunner
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
+            case "agent-ready":
+            case "agentready":
+                return GetExpectedAgentReadyPrepareOutputs(step, baseDir, lastBuildOutPath);
             case "optimize":
             {
                 var outputs = new List<string>();
@@ -956,6 +974,179 @@ internal static partial class WebPipelineRunner
             default:
                 return Array.Empty<string>();
         }
+    }
+
+    private static string[] GetExpectedAgentReadyPrepareOutputs(JsonElement step, string baseDir, string lastBuildOutPath)
+    {
+        var operation = (GetString(step, "operation") ?? "prepare").Trim();
+        if (!operation.Equals("prepare", StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<string>();
+
+        var siteRoot = ResolvePath(baseDir,
+            GetString(step, "siteRoot") ??
+            GetString(step, "site-root") ??
+            GetString(step, "out") ??
+            GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
+            siteRoot = lastBuildOutPath;
+        if (string.IsNullOrWhiteSpace(siteRoot))
+            return Array.Empty<string>();
+
+        var spec = ResolveAgentReadinessSpecForCache(step, baseDir);
+        if (!spec.Enabled)
+            return Array.Empty<string>();
+
+        var outputs = new List<string>();
+        if (spec.Robots)
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, "robots.txt"));
+
+        if (spec.ApiCatalog?.Enabled == true && AgentReadyApiCatalogWillWrite(siteRoot, spec.ApiCatalog))
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.ApiCatalog.OutputPath) ? ".well-known/api-catalog" : spec.ApiCatalog.OutputPath!));
+
+        if (spec.AgentSkills?.Enabled == true)
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentSkills.IndexPath) ? ".well-known/agent-skills/index.json" : spec.AgentSkills.IndexPath!));
+
+        if (spec.AgentsJson?.Enabled == true)
+        {
+            var agentsPaths = new[]
+            {
+                string.IsNullOrWhiteSpace(spec.AgentsJson.OutputPath) ? "agents.json" : spec.AgentsJson.OutputPath!,
+                string.IsNullOrWhiteSpace(spec.AgentsJson.WellKnownOutputPath) ? ".well-known/agents.json" : spec.AgentsJson.WellKnownOutputPath!
+            };
+
+            foreach (var path in agentsPaths.Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))
+                outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, path));
+        }
+
+        if (spec.A2AAgentCard?.Enabled == true)
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.A2AAgentCard.OutputPath) ? ".well-known/agent-card.json" : spec.A2AAgentCard.OutputPath!));
+
+        if (spec.McpServerCard?.Enabled == true && !string.IsNullOrWhiteSpace(spec.McpServerCard.Endpoint))
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.McpServerCard.OutputPath) ? ".well-known/mcp/server-card.json" : spec.McpServerCard.OutputPath!));
+
+        if (ShouldExpectAgentReadyHeaders(siteRoot, spec))
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!));
+
+        return outputs
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static AgentReadinessSpec ResolveAgentReadinessSpecForCache(JsonElement step, string baseDir)
+    {
+        var configPath = ResolvePath(baseDir, GetString(step, "config"));
+        if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
+        {
+            var loaded = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+            return NormalizeAgentReadinessSpecForCache(loaded.Spec.AgentReadiness);
+        }
+
+        return NormalizeAgentReadinessSpecForCache(null);
+    }
+
+    private static AgentReadinessSpec NormalizeAgentReadinessSpecForCache(AgentReadinessSpec? spec)
+    {
+        if (spec is null)
+        {
+            return new AgentReadinessSpec
+            {
+                Enabled = true,
+                SecurityHeaders = new AgentSecurityHeadersSpec(),
+                ContentSignals = new AgentContentSignalsSpec(),
+                ApiCatalog = new AgentApiCatalogSpec(),
+                AgentSkills = new AgentSkillsDiscoverySpec(),
+                AgentsJson = new AgentDiscoveryDocumentSpec()
+            };
+        }
+
+        var resolved = new AgentReadinessSpec
+        {
+            Enabled = spec.Enabled,
+            HeadersPath = spec.HeadersPath,
+            LinkHeaders = spec.LinkHeaders,
+            SecurityHeaders = spec.SecurityHeaders,
+            Robots = spec.Robots,
+            ContentSignals = spec.ContentSignals,
+            BotRules = spec.BotRules,
+            ApiCatalog = spec.ApiCatalog,
+            AgentSkills = spec.AgentSkills,
+            AgentsJson = spec.AgentsJson,
+            A2AAgentCard = spec.A2AAgentCard,
+            McpServerCard = spec.McpServerCard,
+            OpenApi = spec.OpenApi,
+            WebMcp = spec.WebMcp,
+            MarkdownNegotiation = spec.MarkdownNegotiation
+        };
+
+        if (resolved.Enabled)
+        {
+            resolved.SecurityHeaders ??= new AgentSecurityHeadersSpec();
+            resolved.ContentSignals ??= new AgentContentSignalsSpec();
+            resolved.ApiCatalog ??= new AgentApiCatalogSpec();
+            resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
+            resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
+        }
+
+        return resolved;
+    }
+
+    private static bool AgentReadyApiCatalogWillWrite(string siteRoot, AgentApiCatalogSpec spec)
+    {
+        if (spec.Entries?.Any(static entry => !string.IsNullOrWhiteSpace(entry.Anchor)) == true)
+            return true;
+
+        return File.Exists(Path.Combine(siteRoot, "api", "index.json"));
+    }
+
+    private static bool ShouldExpectAgentReadyHeaders(string siteRoot, AgentReadinessSpec spec)
+        => spec.SecurityHeaders?.Enabled == true ||
+           (spec.LinkHeaders && File.Exists(Path.Combine(siteRoot, "llms.txt"))) ||
+           (spec.LinkHeaders && AgentReadyOpenApiRouteExists(siteRoot, spec.OpenApi)) ||
+           spec.ApiCatalog?.Enabled == true ||
+           spec.AgentSkills?.Enabled == true ||
+           spec.AgentsJson?.Enabled == true ||
+           spec.A2AAgentCard?.Enabled == true ||
+           spec.McpServerCard?.Enabled == true;
+
+    private static bool AgentReadyOpenApiRouteExists(string siteRoot, AgentOpenApiSpec? spec)
+    {
+        if (spec?.Enabled != true)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(spec.Path) &&
+            !Uri.TryCreate(spec.Path, UriKind.Absolute, out _))
+        {
+            return File.Exists(ResolveAgentReadySiteOutputPath(siteRoot, spec.Path!));
+        }
+
+        foreach (var candidate in new[] { "/openapi.json", "/api/openapi.json", "/swagger.json", "/api/swagger.json", "/.well-known/openapi.json" })
+        {
+            if (File.Exists(ResolveAgentReadySiteOutputPath(siteRoot, candidate)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ResolveAgentReadySiteOutputPath(string siteRoot, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Path is required.", nameof(path));
+
+        var root = Path.GetFullPath(siteRoot.Trim().Trim('"'));
+        var normalized = path.Trim().Trim('"').Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+        var resolved = Path.GetFullPath(Path.Combine(root, normalized));
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        if (!resolved.Equals(root, FileSystemPathComparison) &&
+            !resolved.StartsWith(rootWithSeparator, FileSystemPathComparison))
+        {
+            throw new ArgumentException($"Path '{path}' resolves outside the site root.", nameof(path));
+        }
+
+        return resolved;
     }
 
     private static string[] GetExpectedRouteFallbackOutputs(string baseDir, JsonElement step)

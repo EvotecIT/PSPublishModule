@@ -54,6 +54,7 @@
         { "$ref": "#/$defs/LlmsStep" },
         { "$ref": "#/$defs/CompatMatrixStep" },
         { "$ref": "#/$defs/SitemapStep" },
+        { "$ref": "#/$defs/AgentReadyStep" },
         { "$ref": "#/$defs/OptimizeStep" },
         { "$ref": "#/$defs/AuditStep" },
         { "$ref": "#/$defs/SeoDoctorStep" },
@@ -2960,6 +2961,37 @@
           ]
         }
       ]
+    },
+    "AgentReadyStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "enum": ["agent-ready", "agentready"] },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "operation": { "type": "string", "enum": ["prepare", "verify", "scan"] },
+        "config": { "type": "string" },
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "base-url": { "type": "string" },
+        "url": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "timeout-ms": { "type": "integer", "minimum": 1 },
+        "failOnFailures": { "type": "boolean" },
+        "fail-on-failures": { "type": "boolean" },
+        "headersPath": { "type": "string" },
+        "headers-path": { "type": "string" }
+      },
+      "required": ["task"]
     },
     "OptimizeStep": {
       "type": "object",
