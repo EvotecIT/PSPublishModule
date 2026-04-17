@@ -654,7 +654,7 @@ internal sealed class ScribanThemeHelpers
           .Append("</a>");
     }
 
-    private string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
+    internal string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
     {
         var label = value?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(label))
@@ -666,9 +666,9 @@ internal sealed class ScribanThemeHelpers
             ? languageCode switch
             {
                 "pl" => "Kategoria",
-                "fr" => "Categorie",
+                "fr" => "Catégorie",
                 "de" => "Kategorie",
-                "es" => "Categoria",
+                "es" => "Categoría",
                 _ => "Category"
             }
             : normalizedTaxonomy.Equals("tags", StringComparison.OrdinalIgnoreCase)
@@ -1317,28 +1317,28 @@ internal sealed class ScribanThemeHelpers
         return cls.Count == 0 ? string.Empty : string.Join(" ", cls);
     }
 
-    private string BuildEditorialCardAriaLabel(string title)
+    internal string BuildEditorialCardAriaLabel(string title)
     {
         var label = string.IsNullOrWhiteSpace(title) ? "Entry" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
             "pl" => "Otwórz artykuł: " + label,
-            "fr" => "Ouvrir l article: " + label,
-            "de" => "Artikel offnen: " + label,
-            "es" => "Abrir articulo: " + label,
+            "fr" => "Ouvrir l'article: " + label,
+            "de" => "Artikel öffnen: " + label,
+            "es" => "Abrir artículo: " + label,
             _ => "Open article: " + label
         };
     }
 
-    private string BuildRelatedPostAriaLabel(string title)
+    internal string BuildRelatedPostAriaLabel(string title)
     {
         var label = string.IsNullOrWhiteSpace(title) ? "Post" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
             "pl" => "Powiązany artykuł: " + label,
-            "fr" => "Article associe: " + label,
-            "de" => "Zugehoriger Beitrag: " + label,
-            "es" => "Articulo relacionado: " + label,
+            "fr" => "Article associé: " + label,
+            "de" => "Zugehöriger Beitrag: " + label,
+            "es" => "Artículo relacionado: " + label,
             _ => "Related post: " + label
         };
     }

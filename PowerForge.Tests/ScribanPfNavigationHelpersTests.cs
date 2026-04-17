@@ -8,6 +8,68 @@ using PowerForge.Web;
 
 public class ScribanPfNavigationHelpersTests
 {
+    [Theory]
+    [InlineData("en", "", "Open article: Entry")]
+    [InlineData("en", "Product", "Open article: Product")]
+    [InlineData("pl", "Produkt", "Otwórz artykuł: Produkt")]
+    [InlineData("fr", "Produit", "Ouvrir l'article: Produit")]
+    [InlineData("de", "Produkt", "Artikel öffnen: Produkt")]
+    [InlineData("es", "Producto", "Abrir artículo: Producto")]
+    public void Build_EditorialCardAriaLabels_UseLocalizedText(string language, string title, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildEditorialCardAriaLabel(title);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "   ", "Related post: Post")]
+    [InlineData("en", "Product", "Related post: Product")]
+    [InlineData("pl", "Produkt", "Powiązany artykuł: Produkt")]
+    [InlineData("fr", "Produit", "Article associé: Produit")]
+    [InlineData("de", "Produkt", "Zugehöriger Beitrag: Produkt")]
+    [InlineData("es", "Producto", "Artículo relacionado: Producto")]
+    public void Build_RelatedPostAriaLabels_UseLocalizedText(string language, string title, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildRelatedPostAriaLabel(title);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("pl", "Kategoria: Product Updates")]
+    [InlineData("fr", "Catégorie: Product Updates")]
+    [InlineData("de", "Kategorie: Product Updates")]
+    [InlineData("es", "Categoría: Product Updates")]
+    public void Build_LocalizedCategoryChipAriaLabels_UseNativeCharacters(string language, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("categories", "Product Updates");
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("en", "Tag: release")]
+    [InlineData("es", "Etiqueta: release")]
+    public void Build_LocalizedTagChipAriaLabels_UseLocalizedText(string language, string expected)
+    {
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("tags", "release");
+
+        Assert.Equal(expected, actual);
+    }
+
+    private static ScribanThemeHelpers CreateHelpers(string language)
+    {
+        return new ScribanThemeHelpers(new ThemeRenderContext
+        {
+            Page = new ContentItem { Language = language }
+        });
+    }
+
     [Fact]
     public void Build_RendersPfNavHelpers_InScribanTheme()
     {
