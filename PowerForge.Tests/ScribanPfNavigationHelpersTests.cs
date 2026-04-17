@@ -36,6 +36,7 @@ public class ScribanPfNavigationHelpersTests
 
     [Theory]
     [InlineData("fr", "Catégorie: Product Updates")]
+    [InlineData("de", "Kategorie: Product Updates")]
     [InlineData("es", "Categoría: Product Updates")]
     public void Build_LocalizedCategoryChipAriaLabels_UseNativeCharacters(string language, string expected)
     {
