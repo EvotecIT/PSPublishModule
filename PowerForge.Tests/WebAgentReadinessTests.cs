@@ -317,6 +317,63 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void AgentReadyScanStepsAreNotCacheable()
+    {
+        var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "scan", "url": "https://example.test" }""").RootElement.Clone();
+        var method = typeof(WebPipelineRunner).GetMethod("IsCacheableStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var cacheable = Assert.IsType<bool>(method.Invoke(null, new object[] { "agent-ready", step }));
+
+        Assert.False(cacheable);
+    }
+
+    [Fact]
+    public void AgentReadyExpectedOutputsHonorConfiguredOptionalArtifacts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-agent-ready-optional-outputs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            Directory.CreateDirectory(siteRoot);
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Agent Ready Optional Outputs",
+                  "agentReadiness": {
+                    "enabled": true,
+                    "apiCatalog": { "enabled": false },
+                    "agentSkills": { "enabled": true, "indexPath": ".well-known/skills.json" },
+                    "agentsJson": { "enabled": false },
+                    "a2aAgentCard": { "enabled": false },
+                    "mcpServerCard": { "enabled": false }
+                  }
+                }
+                """);
+            var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "prepare", "config": "./site.json" }""").RootElement.Clone();
+            var method = typeof(WebPipelineRunner).GetMethod("GetExpectedStepOutputs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+            Assert.NotNull(method);
+
+            var outputs = Assert.IsType<string[]>(method.Invoke(null, new object[] { "agent-ready", step, root, siteRoot }));
+
+            Assert.Contains(Path.Combine(siteRoot, "robots.txt"), outputs);
+            Assert.Contains(Path.Combine(siteRoot, ".well-known", "skills.json"), outputs);
+            Assert.Contains(Path.Combine(siteRoot, "_headers"), outputs);
+            Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "api-catalog"), outputs);
+            Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "mcp", "server-card.json"), outputs);
+            Assert.DoesNotContain(Path.Combine(siteRoot, "agents.json"), outputs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Verify_HonorsDisabledOptionalAgentReadinessChecks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-" + Guid.NewGuid().ToString("N"));

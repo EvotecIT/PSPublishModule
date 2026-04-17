@@ -181,7 +181,7 @@ internal static partial class WebPipelineRunner
             var dependencyMiss = definition.DependencyIndexes.Any(index =>
                 !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
             var cacheStateLocal = cacheState;
-            var cacheable = cacheEnabled && cacheStateLocal is not null && IsCacheableTask(task);
+            var cacheable = cacheEnabled && cacheStateLocal is not null && IsCacheableStep(task, step);
             if (cacheable)
             {
                 var fingerprintSalt = fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
