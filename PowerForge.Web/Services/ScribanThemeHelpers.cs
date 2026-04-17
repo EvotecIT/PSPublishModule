@@ -1323,9 +1323,9 @@ internal sealed class ScribanThemeHelpers
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
             "pl" => "Otwórz artykuł: " + label,
-            "fr" => "Ouvrir l article: " + label,
-            "de" => "Artikel offnen: " + label,
-            "es" => "Abrir articulo: " + label,
+            "fr" => "Ouvrir l'article: " + label,
+            "de" => "Artikel öffnen: " + label,
+            "es" => "Abrir artículo: " + label,
             _ => "Open article: " + label
         };
     }
