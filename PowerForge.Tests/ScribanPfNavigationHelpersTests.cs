@@ -9,7 +9,9 @@ using PowerForge.Web;
 public class ScribanPfNavigationHelpersTests
 {
     [Theory]
+    [InlineData("en", "", "Open article: Entry")]
     [InlineData("en", "Product", "Open article: Product")]
+    [InlineData("pl", "Produkt", "Otwórz artykuł: Produkt")]
     [InlineData("fr", "Produit", "Ouvrir l'article: Produit")]
     [InlineData("de", "Produkt", "Artikel öffnen: Produkt")]
     [InlineData("es", "Producto", "Abrir artículo: Producto")]
@@ -22,7 +24,9 @@ public class ScribanPfNavigationHelpersTests
     }
 
     [Theory]
+    [InlineData("en", "   ", "Related post: Post")]
     [InlineData("en", "Product", "Related post: Product")]
+    [InlineData("pl", "Produkt", "Powiązany artykuł: Produkt")]
     [InlineData("fr", "Produit", "Article associé: Produit")]
     [InlineData("de", "Produkt", "Zugehöriger Beitrag: Produkt")]
     [InlineData("es", "Producto", "Artículo relacionado: Producto")]
@@ -35,6 +39,7 @@ public class ScribanPfNavigationHelpersTests
     }
 
     [Theory]
+    [InlineData("pl", "Kategoria: Product Updates")]
     [InlineData("fr", "Catégorie: Product Updates")]
     [InlineData("de", "Kategorie: Product Updates")]
     [InlineData("es", "Categoría: Product Updates")]
