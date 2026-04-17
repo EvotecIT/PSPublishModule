@@ -37,4 +37,8 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.6" />
+  </ItemGroup>
+
 </Project>

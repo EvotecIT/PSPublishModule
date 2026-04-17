@@ -132,16 +132,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.11.1",
-        "contentHash": "okzVwr299MM6vq2L+YR51ywoXITr3Ewiu6FXsBEj3egKQ0XJI1fn5E2WiBAnxAhlPnvnUE2pdeNvj6IBdmOjKA==",
+        "resolved": "14.12.0",
+        "contentHash": "YGEgNTZ6DaMhXgJYLClRrmEe6CMsEL5E8hy4c2iH/aEmj41ojFAtA/PIXYH1AOYINNEUX/83nLp/y5obt9P/vw==",
         "dependencies": {
-          "Magick.NET.Core": "14.11.1"
+          "Magick.NET.Core": "14.12.0"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.11.1",
-        "contentHash": "e9ejYUe6+GgbB6KBOpMp0jVDS72u0siDBz0RKSjBAEIZcigKDXDsOcoPLmLJJJqhorx3C4soRak2hCL/gaKdcg=="
+        "resolved": "14.12.0",
+        "contentHash": "QPyuk1Lxp1xgSTP8xomnoZjeOtUeTSoeSuEckhGaUAi6GdZ5d2PmZqzr0O4m/zPbC4So/yg5rr2QO4vYD6fB5g=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -689,8 +689,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "ULmp3xoOwNYjOYp4JZ2NK/6NdTgiN1GQXzVVN1njQ7LOZ0d0B9vyMnhyqbIi9Qw4JXj1JgCsitkTShboHRx7Eg=="
+        "resolved": "10.0.6",
+        "contentHash": "88tquaGJ1htm4DHWS6x9jwER7sFET2SVRN7HqO1FYZwE0diDcUmz0ajhVa8ZD2HGhDJBueSPjP/gqyP3gXtT2A=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -699,10 +699,10 @@
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "HQSFbakswZ1OXFz2Bt3AJlC6ENDqWeVpgqhf213xqQUMDifzydOHIKVb1RV4prayobvR3ETIScMaQdDF2hwGZA==",
+        "resolved": "10.0.6",
+        "contentHash": "71yFkEElPZKZ9jbZQTe1CWeHYXEtnCXwZnHnfeA8pP47tCXBUoWk+6zSIZ7RXO90nZjXgPNil6BFGWb1OBqA5w==",
         "dependencies": {
-          "System.Security.Cryptography.Pkcs": "8.0.0"
+          "System.Security.Cryptography.Pkcs": "10.0.6"
         }
       },
       "System.Security.Permissions": {
@@ -841,14 +841,15 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[1.0.0, )"
+          "PowerForge": "[1.0.0, )",
+          "System.Security.Cryptography.Xml": "[10.0.6, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
-          "Magick.NET-Q8-AnyCPU": "[14.11.1, )",
+          "Magick.NET-Q8-AnyCPU": "[14.12.0, )",
           "OfficeIMO.Markdown": "[0.6.7, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[7.0.0, )",
