@@ -666,9 +666,9 @@ internal sealed class ScribanThemeHelpers
             ? languageCode switch
             {
                 "pl" => "Kategoria",
-                "fr" => "Categorie",
+                "fr" => "Catégorie",
                 "de" => "Kategorie",
-                "es" => "Categoria",
+                "es" => "Categoría",
                 _ => "Category"
             }
             : normalizedTaxonomy.Equals("tags", StringComparison.OrdinalIgnoreCase)
@@ -1336,9 +1336,9 @@ internal sealed class ScribanThemeHelpers
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
         {
             "pl" => "Powiązany artykuł: " + label,
-            "fr" => "Article associe: " + label,
-            "de" => "Zugehoriger Beitrag: " + label,
-            "es" => "Articulo relacionado: " + label,
+            "fr" => "Article associé: " + label,
+            "de" => "Zugehöriger Beitrag: " + label,
+            "es" => "Artículo relacionado: " + label,
             _ => "Related post: " + label
         };
     }

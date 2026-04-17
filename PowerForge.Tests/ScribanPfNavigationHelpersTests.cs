@@ -2,12 +2,55 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using ImageMagick;
 using Xunit;
 using PowerForge.Web;
 
 public class ScribanPfNavigationHelpersTests
 {
+    [Theory]
+    [InlineData("fr", "BuildEditorialCardAriaLabel", "Produit", "Ouvrir l'article: Produit")]
+    [InlineData("de", "BuildEditorialCardAriaLabel", "Produkt", "Artikel öffnen: Produkt")]
+    [InlineData("es", "BuildEditorialCardAriaLabel", "Producto", "Abrir artículo: Producto")]
+    [InlineData("fr", "BuildRelatedPostAriaLabel", "Produit", "Article associé: Produit")]
+    [InlineData("de", "BuildRelatedPostAriaLabel", "Produkt", "Zugehöriger Beitrag: Produkt")]
+    [InlineData("es", "BuildRelatedPostAriaLabel", "Producto", "Artículo relacionado: Producto")]
+    public void Build_LocalizedArticleAriaLabels_UseNativeCharacters(
+        string language,
+        string methodName,
+        string title,
+        string expected)
+    {
+        var helpers = new ScribanThemeHelpers(new ThemeRenderContext
+        {
+            Page = new ContentItem { Language = language }
+        });
+
+        var method = typeof(ScribanThemeHelpers).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var actual = Assert.IsType<string>(method.Invoke(helpers, new object[] { title }));
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("fr", "Catégorie: Product Updates")]
+    [InlineData("es", "Categoría: Product Updates")]
+    public void Build_LocalizedCategoryChipAriaLabels_UseNativeCharacters(string language, string expected)
+    {
+        var helpers = new ScribanThemeHelpers(new ThemeRenderContext
+        {
+            Page = new ContentItem { Language = language }
+        });
+
+        var method = typeof(ScribanThemeHelpers).GetMethod("BuildTaxonomyChipAriaLabel", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var actual = Assert.IsType<string>(method.Invoke(helpers, new object[] { "categories", "Product Updates" }));
+        Assert.Equal(expected, actual);
+    }
+
     [Fact]
     public void Build_RendersPfNavHelpers_InScribanTheme()
     {

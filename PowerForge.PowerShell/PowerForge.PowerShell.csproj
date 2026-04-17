@@ -38,6 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Explicit NU1903 override for the vulnerable transitive System.Security.Cryptography.Xml 8.0.0 path. -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.6" />
   </ItemGroup>
 
