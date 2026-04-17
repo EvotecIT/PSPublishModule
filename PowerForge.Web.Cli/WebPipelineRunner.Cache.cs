@@ -252,7 +252,7 @@ internal static partial class WebPipelineRunner
                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string[] GetExpectedStepOutputs(string task, JsonElement step, string baseDir)
+    private static string[] GetExpectedStepOutputs(string task, JsonElement step, string baseDir, string lastBuildOutPath)
     {
         switch (task)
         {
@@ -543,6 +543,8 @@ internal static partial class WebPipelineRunner
                     GetString(step, "site-root") ??
                     GetString(step, "out") ??
                     GetString(step, "output"));
+                if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
+                    siteRoot = lastBuildOutPath;
                 if (string.IsNullOrWhiteSpace(siteRoot))
                     return Array.Empty<string>();
 

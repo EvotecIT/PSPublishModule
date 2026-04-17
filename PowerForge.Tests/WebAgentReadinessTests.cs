@@ -292,6 +292,31 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void AgentReadyExpectedOutputsUseLastBuildOutputWhenSiteRootIsImplicit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-agent-ready-cache-outputs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            var step = JsonDocument.Parse("""{ "task": "agent-ready", "config": "./site.json" }""").RootElement.Clone();
+            var method = typeof(WebPipelineRunner).GetMethod("GetExpectedStepOutputs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+            Assert.NotNull(method);
+
+            var outputs = Assert.IsType<string[]>(method.Invoke(null, new object[] { "agent-ready", step, root, siteRoot }));
+
+            Assert.Contains(Path.Combine(siteRoot, "robots.txt"), outputs);
+            Assert.Contains(Path.Combine(siteRoot, "_headers"), outputs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Verify_HonorsDisabledOptionalAgentReadinessChecks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-" + Guid.NewGuid().ToString("N"));

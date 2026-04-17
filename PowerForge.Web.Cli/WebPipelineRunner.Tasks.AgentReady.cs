@@ -7,7 +7,7 @@ internal static partial class WebPipelineRunner
 {
     private static void ExecuteAgentReady(JsonElement step, string baseDir, string lastBuildOutPath, WebPipelineStepResult stepResult)
     {
-        var operation = GetString(step, "operation") ?? GetString(step, "mode") ?? "prepare";
+        var operation = GetString(step, "operation") ?? "prepare";
         var configPath = ResolvePath(baseDir, GetString(step, "config"));
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root") ?? GetString(step, "out") ?? GetString(step, "output"));
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? GetString(step, "url");

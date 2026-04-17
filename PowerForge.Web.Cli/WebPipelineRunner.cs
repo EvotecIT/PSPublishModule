@@ -166,7 +166,7 @@ internal static partial class WebPipelineRunner
             var stopwatch = Stopwatch.StartNew();
             var cacheKey = $"{stepIndex}:{task}";
             var stepFingerprint = string.Empty;
-            var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir);
+            var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir, lastBuildOutPath);
             if (definition.DependencyIndexes.Length > 0)
             {
                 foreach (var dependencyIndex in definition.DependencyIndexes)
@@ -195,6 +195,12 @@ internal static partial class WebPipelineRunner
                     stepResult.Cached = true;
                     stepResult.Message = AppendDuration(cacheEntry.Message ?? "cache hit", stopwatch);
                     stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
+                    if (task.Equals("build", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var cachedBuildOut = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        if (!string.IsNullOrWhiteSpace(cachedBuildOut))
+                            lastBuildOutPath = cachedBuildOut;
+                    }
                     result.Steps.Add(stepResult);
                     stepResultsByIndex[stepIndex] = stepResult;
                     if (profileEnabled)
