@@ -2966,7 +2966,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "task": { "const": "agent-ready" },
+        "task": { "enum": ["agent-ready", "agentready"] },
         "id": { "type": "string" },
         "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "mode": { "type": "string" },

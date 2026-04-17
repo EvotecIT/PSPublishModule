@@ -70,6 +70,8 @@ public class WebAgentReadinessTests
 
             var headers = File.ReadAllText(Path.Combine(root, "_headers"));
             Assert.Contains("</.well-known/custom-api-catalog>; rel=\"api-catalog\"", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/.well-known/custom-api-catalog" + Environment.NewLine + "  Content-Type: application/linkset+json", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/.well-known/api-catalog" + Environment.NewLine + "  Content-Type:", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("rel=\"api-catalog\"", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("application/linkset+json", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Strict-Transport-Security", headers, StringComparison.OrdinalIgnoreCase);
@@ -81,6 +83,132 @@ public class WebAgentReadinessTests
             using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "custom-api-catalog")));
             Assert.True(apiCatalog.RootElement.TryGetProperty("linkset", out var linkset));
             Assert.True(linkset.GetArrayLength() > 0);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_WritesSecurityHeadersWhenLinkHeadersAreDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-security-headers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    LinkHeaders = false,
+                    MarkdownNegotiation = false,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            var headers = File.ReadAllText(Path.Combine(root, "_headers"));
+            Assert.Contains("Strict-Transport-Security", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Content-Security-Policy", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Link:", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/.well-known/api-catalog", headers, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_DisabledAgentReadinessShortCircuits()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-all-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec { Enabled = false }
+            });
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Checks);
+            Assert.Contains(result.Warnings, warning => warning.Contains("disabled", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveSpec_DoesNotMutateCallerSpec()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-no-mutate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var spec = new AgentReadinessSpec
+            {
+                Enabled = true,
+                MarkdownNegotiation = false
+            };
+
+            _ = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = spec
+            });
+
+            Assert.Null(spec.SecurityHeaders);
+            Assert.Null(spec.ContentSignals);
+            Assert.Null(spec.ApiCatalog);
+            Assert.Null(spec.AgentSkills);
+            Assert.Null(spec.AgentsJson);
         }
         finally
         {

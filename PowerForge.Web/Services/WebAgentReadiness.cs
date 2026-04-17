@@ -105,7 +105,7 @@ public static class WebAgentReadiness
         if (!string.IsNullOrWhiteSpace(openApiPath))
             linkTargets.Add(new HeaderLinkTarget(openApiPath!, "service-desc", "application/openapi+json"));
 
-        if (spec.LinkHeaders)
+        if (ShouldWriteHeaders(spec, linkTargets))
             written.Add(UpdateHeaders(siteRoot, spec, linkTargets));
 
         var verify = Verify(new WebAgentReadinessVerifyOptions
@@ -141,6 +141,18 @@ public static class WebAgentReadiness
         var spec = ResolveSpec(options.AgentReadiness);
         var checks = new List<WebAgentReadinessCheck>();
         var warnings = new List<string>();
+
+        if (!spec.Enabled)
+        {
+            return new WebAgentReadinessResult
+            {
+                Operation = "verify",
+                SiteRoot = siteRoot,
+                BaseUrl = NormalizeBaseUrl(options.BaseUrl),
+                Success = true,
+                Warnings = new[] { "AgentReadiness is disabled." }
+            };
+        }
 
         var robotsPath = Path.Combine(siteRoot, "robots.txt");
         var robotsText = File.Exists(robotsPath) ? File.ReadAllText(robotsPath) : null;
@@ -356,16 +368,35 @@ public static class WebAgentReadiness
     {
         if (spec is not null)
         {
-            if (spec.Enabled)
+            var resolved = new AgentReadinessSpec
             {
-                spec.SecurityHeaders ??= new AgentSecurityHeadersSpec();
-                spec.ContentSignals ??= new AgentContentSignalsSpec();
-                spec.ApiCatalog ??= new AgentApiCatalogSpec();
-                spec.AgentSkills ??= new AgentSkillsDiscoverySpec();
-                spec.AgentsJson ??= new AgentDiscoveryDocumentSpec();
+                Enabled = spec.Enabled,
+                HeadersPath = spec.HeadersPath,
+                LinkHeaders = spec.LinkHeaders,
+                SecurityHeaders = spec.SecurityHeaders,
+                Robots = spec.Robots,
+                ContentSignals = spec.ContentSignals,
+                BotRules = spec.BotRules,
+                ApiCatalog = spec.ApiCatalog,
+                AgentSkills = spec.AgentSkills,
+                AgentsJson = spec.AgentsJson,
+                A2AAgentCard = spec.A2AAgentCard,
+                McpServerCard = spec.McpServerCard,
+                OpenApi = spec.OpenApi,
+                WebMcp = spec.WebMcp,
+                MarkdownNegotiation = spec.MarkdownNegotiation
+            };
+
+            if (resolved.Enabled)
+            {
+                resolved.SecurityHeaders ??= new AgentSecurityHeadersSpec();
+                resolved.ContentSignals ??= new AgentContentSignalsSpec();
+                resolved.ApiCatalog ??= new AgentApiCatalogSpec();
+                resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
+                resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
             }
 
-            return spec;
+            return resolved;
         }
 
         return new AgentReadinessSpec
@@ -666,6 +697,15 @@ public static class WebAgentReadiness
         return outputPath;
     }
 
+    private static bool ShouldWriteHeaders(AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
+        => spec.SecurityHeaders?.Enabled == true ||
+           (spec.LinkHeaders && linkTargets.Count > 0) ||
+           spec.ApiCatalog?.Enabled == true ||
+           spec.AgentSkills?.Enabled == true ||
+           spec.AgentsJson?.Enabled == true ||
+           spec.A2AAgentCard?.Enabled == true ||
+           spec.McpServerCard?.Enabled == true;
+
     private static string UpdateHeaders(string siteRoot, AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
     {
         var headersPath = spec.HeadersPath;
@@ -675,37 +715,24 @@ public static class WebAgentReadiness
         var sb = new StringBuilder();
         sb.AppendLine(AgentBlockStart);
         var security = spec.SecurityHeaders ?? new AgentSecurityHeadersSpec();
-        if (linkTargets.Count > 0)
+        var writeLinkHeaders = spec.LinkHeaders && linkTargets.Count > 0;
+        if (security.Enabled || writeLinkHeaders)
         {
             sb.AppendLine("/");
             AppendSecurityHeaders(sb, security);
-            foreach (var target in linkTargets.DistinctBy(static t => t.Href, StringComparer.OrdinalIgnoreCase))
+            if (writeLinkHeaders)
             {
-                sb.Append("  Link: <").Append(target.Href).Append(">; rel=\"").Append(target.Rel).Append("\"");
-                if (!string.IsNullOrWhiteSpace(target.Type))
-                    sb.Append("; type=\"").Append(target.Type).Append("\"");
-                sb.AppendLine();
+                foreach (var target in linkTargets.DistinctBy(static t => t.Href, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append("  Link: <").Append(target.Href).Append(">; rel=\"").Append(target.Rel).Append("\"");
+                    if (!string.IsNullOrWhiteSpace(target.Type))
+                        sb.Append("; type=\"").Append(target.Type).Append("\"");
+                    sb.AppendLine();
+                }
             }
         }
 
-        sb.AppendLine("/.well-known/api-catalog");
-        sb.AppendLine("  Content-Type: application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"");
-        AppendCorsHeaders(sb, security);
-        sb.AppendLine("/.well-known/agent-skills/index.json");
-        sb.AppendLine("  Content-Type: application/json");
-        AppendCorsHeaders(sb, security);
-        sb.AppendLine("/agents.json");
-        sb.AppendLine("  Content-Type: application/json");
-        AppendCorsHeaders(sb, security);
-        sb.AppendLine("/.well-known/agents.json");
-        sb.AppendLine("  Content-Type: application/json");
-        AppendCorsHeaders(sb, security);
-        sb.AppendLine("/.well-known/agent-card.json");
-        sb.AppendLine("  Content-Type: application/json");
-        AppendCorsHeaders(sb, security);
-        sb.AppendLine("/.well-known/mcp/server-card.json");
-        sb.AppendLine("  Content-Type: application/json");
-        AppendCorsHeaders(sb, security);
+        AppendDiscoveryResourceHeaders(sb, siteRoot, spec, security);
         sb.AppendLine(AgentBlockEnd);
 
         var next = string.IsNullOrWhiteSpace(cleaned)
@@ -714,6 +741,56 @@ public static class WebAgentReadiness
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, next);
         return path;
+    }
+
+    private static void AppendDiscoveryResourceHeaders(StringBuilder sb, string siteRoot, AgentReadinessSpec spec, AgentSecurityHeadersSpec security)
+    {
+        if (spec.ApiCatalog?.Enabled == true)
+        {
+            AppendResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.ApiCatalog.OutputPath, ".well-known/api-catalog"),
+                "application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"", security);
+        }
+
+        if (spec.AgentSkills?.Enabled == true)
+        {
+            AppendResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.AgentSkills.IndexPath, ".well-known/agent-skills/index.json"),
+                "application/json", security);
+        }
+
+        if (spec.AgentsJson?.Enabled == true)
+        {
+            var routes = new[]
+                {
+                    ResolveSiteRoute(siteRoot, spec.AgentsJson.OutputPath, "agents.json"),
+                    ResolveSiteRoute(siteRoot, spec.AgentsJson.WellKnownOutputPath, ".well-known/agents.json")
+                }
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var route in routes)
+                AppendResourceHeaders(sb, route, "application/json", security);
+        }
+
+        if (spec.A2AAgentCard?.Enabled == true)
+        {
+            AppendResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json"),
+                "application/json", security);
+        }
+
+        if (spec.McpServerCard?.Enabled == true)
+        {
+            AppendResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json"),
+                "application/json", security);
+        }
+    }
+
+    private static void AppendResourceHeaders(StringBuilder sb, string route, string contentType, AgentSecurityHeadersSpec security)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return;
+
+        sb.AppendLine(NormalizeRoute(route));
+        sb.Append("  Content-Type: ").Append(contentType).AppendLine();
+        AppendCorsHeaders(sb, security);
     }
 
     private static void AppendSecurityHeaders(StringBuilder sb, AgentSecurityHeadersSpec security)
