@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
 using ImageMagick;
 using Xunit;
 using PowerForge.Web;
@@ -22,15 +21,14 @@ public class ScribanPfNavigationHelpersTests
         string title,
         string expected)
     {
-        var helpers = new ScribanThemeHelpers(new ThemeRenderContext
+        var helpers = CreateHelpers(language);
+        var actual = methodName switch
         {
-            Page = new ContentItem { Language = language }
-        });
+            nameof(ScribanThemeHelpers.BuildEditorialCardAriaLabel) => helpers.BuildEditorialCardAriaLabel(title),
+            nameof(ScribanThemeHelpers.BuildRelatedPostAriaLabel) => helpers.BuildRelatedPostAriaLabel(title),
+            _ => throw new ArgumentOutOfRangeException(nameof(methodName), methodName, "Unknown ARIA label helper.")
+        };
 
-        var method = typeof(ScribanThemeHelpers).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-
-        var actual = Assert.IsType<string>(method.Invoke(helpers, new object[] { title }));
         Assert.Equal(expected, actual);
     }
 
@@ -40,16 +38,18 @@ public class ScribanPfNavigationHelpersTests
     [InlineData("es", "Categoría: Product Updates")]
     public void Build_LocalizedCategoryChipAriaLabels_UseNativeCharacters(string language, string expected)
     {
-        var helpers = new ScribanThemeHelpers(new ThemeRenderContext
+        var helpers = CreateHelpers(language);
+        var actual = helpers.BuildTaxonomyChipAriaLabel("categories", "Product Updates");
+
+        Assert.Equal(expected, actual);
+    }
+
+    private static ScribanThemeHelpers CreateHelpers(string language)
+    {
+        return new ScribanThemeHelpers(new ThemeRenderContext
         {
             Page = new ContentItem { Language = language }
         });
-
-        var method = typeof(ScribanThemeHelpers).GetMethod("BuildTaxonomyChipAriaLabel", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-
-        var actual = Assert.IsType<string>(method.Invoke(helpers, new object[] { "categories", "Product Updates" }));
-        Assert.Equal(expected, actual);
     }
 
     [Fact]

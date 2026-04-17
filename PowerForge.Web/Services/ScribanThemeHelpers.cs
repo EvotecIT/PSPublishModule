@@ -654,7 +654,7 @@ internal sealed class ScribanThemeHelpers
           .Append("</a>");
     }
 
-    private string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
+    internal string BuildTaxonomyChipAriaLabel(string taxonomyName, string value)
     {
         var label = value?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(label))
@@ -1317,7 +1317,7 @@ internal sealed class ScribanThemeHelpers
         return cls.Count == 0 ? string.Empty : string.Join(" ", cls);
     }
 
-    private string BuildEditorialCardAriaLabel(string title)
+    internal string BuildEditorialCardAriaLabel(string title)
     {
         var label = string.IsNullOrWhiteSpace(title) ? "Entry" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
@@ -1330,7 +1330,7 @@ internal sealed class ScribanThemeHelpers
         };
     }
 
-    private string BuildRelatedPostAriaLabel(string title)
+    internal string BuildRelatedPostAriaLabel(string title)
     {
         var label = string.IsNullOrWhiteSpace(title) ? "Post" : title.Trim();
         return ResolveEffectiveLanguageCode(_context.Page?.Language) switch
