@@ -85,6 +85,8 @@
     "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
     "Xref": { "$ref": "#/$defs/XrefSpec" },
     "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
+    "AgentReadiness": { "$ref": "#/$defs/AgentReadinessSpec" },
+    "agentReadiness": { "$ref": "#/$defs/AgentReadinessSpec" },
     "Features": {
       "type": "array",
       "items": {
@@ -748,6 +750,246 @@
         "FailOnNavLint": { "type": "boolean" },
         "FailOnThemeContract": { "type": "boolean" },
         "SuppressWarnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentReadinessSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "HeadersPath": { "type": "string" },
+        "headersPath": { "type": "string" },
+        "LinkHeaders": { "type": "boolean" },
+        "linkHeaders": { "type": "boolean" },
+        "SecurityHeaders": { "$ref": "#/$defs/AgentSecurityHeadersSpec" },
+        "securityHeaders": { "$ref": "#/$defs/AgentSecurityHeadersSpec" },
+        "Robots": { "type": "boolean" },
+        "robots": { "type": "boolean" },
+        "ContentSignals": { "$ref": "#/$defs/AgentContentSignalsSpec" },
+        "contentSignals": { "$ref": "#/$defs/AgentContentSignalsSpec" },
+        "BotRules": { "type": "array", "items": { "$ref": "#/$defs/AgentBotRuleSpec" } },
+        "botRules": { "type": "array", "items": { "$ref": "#/$defs/AgentBotRuleSpec" } },
+        "ApiCatalog": { "$ref": "#/$defs/AgentApiCatalogSpec" },
+        "apiCatalog": { "$ref": "#/$defs/AgentApiCatalogSpec" },
+        "AgentSkills": { "$ref": "#/$defs/AgentSkillsDiscoverySpec" },
+        "agentSkills": { "$ref": "#/$defs/AgentSkillsDiscoverySpec" },
+        "AgentsJson": { "$ref": "#/$defs/AgentDiscoveryDocumentSpec" },
+        "agentsJson": { "$ref": "#/$defs/AgentDiscoveryDocumentSpec" },
+        "A2AAgentCard": { "$ref": "#/$defs/AgentA2ACardSpec" },
+        "a2aAgentCard": { "$ref": "#/$defs/AgentA2ACardSpec" },
+        "McpServerCard": { "$ref": "#/$defs/AgentMcpServerCardSpec" },
+        "mcpServerCard": { "$ref": "#/$defs/AgentMcpServerCardSpec" },
+        "OpenApi": { "$ref": "#/$defs/AgentOpenApiSpec" },
+        "openApi": { "$ref": "#/$defs/AgentOpenApiSpec" },
+        "WebMcp": { "type": "boolean" },
+        "webMcp": { "type": "boolean" },
+        "MarkdownNegotiation": { "type": "boolean" },
+        "markdownNegotiation": { "type": "boolean" }
+      }
+    },
+    "AgentSecurityHeadersSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "Hsts": { "type": "boolean" },
+        "hsts": { "type": "boolean" },
+        "HstsValue": { "type": "string" },
+        "hstsValue": { "type": "string" },
+        "ContentSecurityPolicy": { "type": "boolean" },
+        "contentSecurityPolicy": { "type": "boolean" },
+        "ContentSecurityPolicyValue": { "type": "string" },
+        "contentSecurityPolicyValue": { "type": "string" },
+        "XContentTypeOptions": { "type": "boolean" },
+        "xContentTypeOptions": { "type": "boolean" },
+        "XFrameOptions": { "type": "boolean" },
+        "xFrameOptions": { "type": "boolean" },
+        "ReferrerPolicy": { "type": "boolean" },
+        "referrerPolicy": { "type": "boolean" },
+        "ReferrerPolicyValue": { "type": "string" },
+        "referrerPolicyValue": { "type": "string" },
+        "CorsForWellKnown": { "type": "boolean" },
+        "corsForWellKnown": { "type": "boolean" },
+        "CorsAllowOrigin": { "type": "string" },
+        "corsAllowOrigin": { "type": "string" }
+      }
+    },
+    "AgentContentSignalsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "Search": { "type": "boolean" },
+        "search": { "type": "boolean" },
+        "AiInput": { "type": "boolean" },
+        "aiInput": { "type": "boolean" },
+        "AiTrain": { "type": "boolean" },
+        "aiTrain": { "type": "boolean" }
+      }
+    },
+    "AgentBotRuleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "UserAgent": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "Allow": { "type": "string" },
+        "allow": { "type": "string" },
+        "Disallow": { "type": "string" },
+        "disallow": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["UserAgent"] },
+        { "required": ["userAgent"] }
+      ]
+    },
+    "AgentApiCatalogSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "Entries": { "type": "array", "items": { "$ref": "#/$defs/AgentApiCatalogEntrySpec" } },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/AgentApiCatalogEntrySpec" } }
+      }
+    },
+    "AgentApiCatalogEntrySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Anchor": { "type": "string" },
+        "anchor": { "type": "string" },
+        "ServiceDesc": { "type": "string" },
+        "serviceDesc": { "type": "string" },
+        "ServiceDoc": { "type": "string" },
+        "serviceDoc": { "type": "string" },
+        "Status": { "type": "string" },
+        "status": { "type": "string" },
+        "Title": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "AgentSkillsDiscoverySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "IndexPath": { "type": "string" },
+        "indexPath": { "type": "string" },
+        "Skills": { "type": "array", "items": { "$ref": "#/$defs/AgentSkillSpec" } },
+        "skills": { "type": "array", "items": { "$ref": "#/$defs/AgentSkillSpec" } }
+      }
+    },
+    "AgentDiscoveryDocumentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "WellKnownOutputPath": { "type": "string" },
+        "wellKnownOutputPath": { "type": "string" },
+        "Description": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "AgentA2ACardSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Description": { "type": "string" },
+        "description": { "type": "string" },
+        "Url": { "type": "string" },
+        "url": { "type": "string" },
+        "Version": { "type": "string" },
+        "version": { "type": "string" },
+        "DocumentationUrl": { "type": "string" },
+        "documentationUrl": { "type": "string" },
+        "DefaultInputModes": { "type": "array", "items": { "type": "string" } },
+        "defaultInputModes": { "type": "array", "items": { "type": "string" } },
+        "DefaultOutputModes": { "type": "array", "items": { "type": "string" } },
+        "defaultOutputModes": { "type": "array", "items": { "type": "string" } },
+        "Skills": { "type": "array", "items": { "$ref": "#/$defs/AgentA2ASkillSpec" } },
+        "skills": { "type": "array", "items": { "$ref": "#/$defs/AgentA2ASkillSpec" } }
+      }
+    },
+    "AgentA2ASkillSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string" },
+        "id": { "type": "string" },
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Description": { "type": "string" },
+        "description": { "type": "string" },
+        "Tags": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentSkillSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Type": { "type": "string" },
+        "type": { "type": "string" },
+        "Description": { "type": "string" },
+        "description": { "type": "string" },
+        "Url": { "type": "string" },
+        "url": { "type": "string" },
+        "SourcePath": { "type": "string" },
+        "sourcePath": { "type": "string" },
+        "Content": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+    "AgentOpenApiSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "Path": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "AgentMcpServerCardSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Version": { "type": "string" },
+        "version": { "type": "string" },
+        "Endpoint": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "Transport": { "type": "string" },
+        "transport": { "type": "string" },
+        "Tools": { "type": "boolean" },
+        "tools": { "type": "boolean" },
+        "Resources": { "type": "boolean" },
+        "resources": { "type": "boolean" },
+        "Prompts": { "type": "boolean" },
+        "prompts": { "type": "boolean" }
       }
     },
     "NavigationSpec": {

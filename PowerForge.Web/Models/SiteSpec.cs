@@ -102,6 +102,8 @@ public sealed class SiteSpec
     public XrefSpec? Xref { get; set; }
     /// <summary>Verification policy defaults for verify/doctor commands.</summary>
     public VerifyPolicySpec? Verify { get; set; }
+    /// <summary>Agent-readiness discovery and policy output settings.</summary>
+    public AgentReadinessSpec? AgentReadiness { get; set; }
     /// <summary>Build cache configuration.</summary>
     public BuildCacheSpec? Cache { get; set; }
 }
