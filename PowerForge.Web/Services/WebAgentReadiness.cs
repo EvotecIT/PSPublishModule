@@ -13,8 +13,6 @@ public static class WebAgentReadiness
 {
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
-    private const string HeadersBlockStart = "# BEGIN PowerForge Agent Readiness";
-    private const string HeadersBlockEnd = "# END PowerForge Agent Readiness";
     private const string AgentSkillsSchema = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
     private static readonly Regex GeneratedBlockRegex = new(
         @"(?ms)^\s*# BEGIN PowerForge Agent Readiness\s*$.*?^\s*# END PowerForge Agent Readiness\s*$\r?\n?",
@@ -58,7 +56,7 @@ public static class WebAgentReadiness
             if (!string.IsNullOrWhiteSpace(apiCatalogPath))
             {
                 written.Add(apiCatalogPath!);
-                linkTargets.Add(new HeaderLinkTarget("/.well-known/api-catalog", "api-catalog", "application/linkset+json"));
+                linkTargets.Add(new HeaderLinkTarget(ToSiteRoute(siteRoot, apiCatalogPath!), "api-catalog", "application/linkset+json"));
             }
         }
 
@@ -68,7 +66,7 @@ public static class WebAgentReadiness
             if (!string.IsNullOrWhiteSpace(agentSkillsPath))
             {
                 written.Add(agentSkillsPath!);
-                linkTargets.Add(new HeaderLinkTarget("/.well-known/agent-skills/index.json", "describedby", "application/json"));
+                linkTargets.Add(new HeaderLinkTarget(ToSiteRoute(siteRoot, agentSkillsPath!), "describedby", "application/json"));
             }
         }
 
@@ -77,7 +75,7 @@ public static class WebAgentReadiness
             var agentsPaths = WriteAgentsJson(siteRoot, baseUrl, siteName, spec, warnings);
             written.AddRange(agentsPaths);
             if (agentsPaths.Length > 0)
-                linkTargets.Add(new HeaderLinkTarget("/agents.json", "describedby", "application/json"));
+                linkTargets.Add(new HeaderLinkTarget(ToSiteRoute(siteRoot, agentsPaths[0]), "describedby", "application/json"));
         }
 
         if (spec.A2AAgentCard?.Enabled == true)
@@ -86,7 +84,7 @@ public static class WebAgentReadiness
             if (!string.IsNullOrWhiteSpace(agentCardPath))
             {
                 written.Add(agentCardPath!);
-                linkTargets.Add(new HeaderLinkTarget("/.well-known/agent-card.json", "service-desc", "application/json"));
+                linkTargets.Add(new HeaderLinkTarget(ToSiteRoute(siteRoot, agentCardPath!), "service-desc", "application/json"));
             }
         }
 
@@ -96,7 +94,7 @@ public static class WebAgentReadiness
             if (!string.IsNullOrWhiteSpace(serverCardPath))
             {
                 written.Add(serverCardPath!);
-                linkTargets.Add(new HeaderLinkTarget("/.well-known/mcp/server-card.json", "service-desc", "application/json"));
+                linkTargets.Add(new HeaderLinkTarget(ToSiteRoute(siteRoot, serverCardPath!), "service-desc", "application/json"));
             }
         }
 
@@ -146,17 +144,20 @@ public static class WebAgentReadiness
 
         var robotsPath = Path.Combine(siteRoot, "robots.txt");
         var robotsText = File.Exists(robotsPath) ? File.ReadAllText(robotsPath) : null;
-        AddCheck(checks, "robots-txt", "discoverability", "robots.txt", File.Exists(robotsPath) ? "pass" : "fail",
-            File.Exists(robotsPath) ? "robots.txt exists." : "robots.txt is missing.", robotsPath);
+        var robotsExists = File.Exists(robotsPath);
+        AddCheck(checks, "robots-txt", "discoverability", "robots.txt", robotsExists ? "pass" : (spec.Robots ? "fail" : "info"),
+            robotsExists ? "robots.txt exists." : (spec.Robots ? "robots.txt is missing." : "robots.txt generation is disabled."), robotsPath);
         if (!string.IsNullOrWhiteSpace(robotsText))
         {
+            var botRulesExpected = spec.Robots;
             AddCheck(checks, "ai-bot-rules", "bot-access-control", "AI bot rules in robots.txt",
-                HasRobotsUserAgent(robotsText!) ? "pass" : "fail",
-                HasRobotsUserAgent(robotsText!) ? "robots.txt declares crawler rules." : "robots.txt has no User-agent rules.",
+                HasRobotsUserAgent(robotsText!) ? "pass" : (botRulesExpected ? "fail" : "info"),
+                HasRobotsUserAgent(robotsText!) ? "robots.txt declares crawler rules." : (botRulesExpected ? "robots.txt has no User-agent rules." : "robots.txt generation is disabled."),
                 robotsPath);
+            var contentSignalsExpected = spec.Robots && spec.ContentSignals?.Enabled == true;
             AddCheck(checks, "content-signals", "bot-access-control", "Content Signals in robots.txt",
-                HasContentSignals(robotsText!) ? "pass" : "fail",
-                HasContentSignals(robotsText!) ? "robots.txt declares Content-Signal preferences." : "No Content-Signal directive found.",
+                HasContentSignals(robotsText!) ? "pass" : (contentSignalsExpected ? "fail" : "info"),
+                HasContentSignals(robotsText!) ? "robots.txt declares Content-Signal preferences." : (contentSignalsExpected ? "No Content-Signal directive found." : "Content Signals are disabled."),
                 robotsPath);
         }
 
@@ -164,24 +165,28 @@ public static class WebAgentReadiness
         AddCheck(checks, "sitemap", "discoverability", "sitemap.xml", ValidateSitemap(sitemapPath, out var sitemapMessage) ? "pass" : "fail",
             sitemapMessage, sitemapPath);
 
-        var headersPath = Path.Combine(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!.TrimStart('/', '\\'));
+        var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
+        var linkHeadersPresent = File.Exists(headersPath) && headersText.Contains("Link:", StringComparison.OrdinalIgnoreCase);
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
-            File.Exists(headersPath) && headersText.Contains("Link:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            File.Exists(headersPath) && headersText.Contains("Link:", StringComparison.OrdinalIgnoreCase)
+            linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
+            linkHeadersPresent
                 ? "Static host headers include Link discovery hints."
-                : "No static host Link headers found. Add _headers output or configure host-level response headers.",
+                : (spec.LinkHeaders ? "No static host Link headers found. Add _headers output or configure host-level response headers." : "Link header generation is disabled."),
             headersPath);
 
-        AddSecurityHeaderChecks(checks, headersText, headersPath);
+        AddSecurityHeaderChecks(checks, headersText, headersPath, spec.SecurityHeaders);
 
         var rootHtml = ReadFirstHtml(siteRoot);
         AddHtmlSemanticsChecks(checks, rootHtml.Text, rootHtml.Path);
 
-        var apiCatalogPath = Path.Combine(siteRoot, ".well-known", "api-catalog");
+        var apiCatalogPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.ApiCatalog?.OutputPath) ? ".well-known/api-catalog" : spec.ApiCatalog!.OutputPath!);
+        var apiCatalogValid = ValidateApiCatalog(apiCatalogPath, out var apiCatalogMessage);
+        var apiCatalogExpected = spec.ApiCatalog?.Enabled == true;
         AddCheck(checks, "api-catalog", "api-auth-mcp-skill-discovery", "API Catalog (RFC 9727)",
-            ValidateApiCatalog(apiCatalogPath, out var apiCatalogMessage) ? "pass" : "fail",
-            apiCatalogMessage, apiCatalogPath);
+            apiCatalogValid ? "pass" : (apiCatalogExpected ? "fail" : "info"),
+            apiCatalogValid ? apiCatalogMessage : (apiCatalogExpected ? apiCatalogMessage : "API catalog generation is disabled."),
+            apiCatalogPath);
 
         var openApi = ResolveOpenApiRoute(siteRoot, spec.OpenApi);
         AddCheck(checks, "openapi", "agent-protocols", "OpenAPI",
@@ -191,22 +196,28 @@ public static class WebAgentReadiness
                 : "No OpenAPI document configured or detected. Skip this for pure documentation sites.",
             siteRoot);
 
-        var skillsIndexPath = Path.Combine(siteRoot, ".well-known", "agent-skills", "index.json");
+        var skillsIndexPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentSkills?.IndexPath) ? ".well-known/agent-skills/index.json" : spec.AgentSkills!.IndexPath!);
+        var skillsValid = ValidateAgentSkillsIndex(skillsIndexPath, siteRoot, out var skillsMessage);
+        var skillsExpected = spec.AgentSkills?.Enabled == true;
         AddCheck(checks, "agent-skills", "api-auth-mcp-skill-discovery", "Agent Skills index",
-            ValidateAgentSkillsIndex(skillsIndexPath, siteRoot, out var skillsMessage) ? "pass" : "fail",
-            skillsMessage, skillsIndexPath);
+            skillsValid ? "pass" : (skillsExpected ? "fail" : "info"),
+            skillsValid ? skillsMessage : (skillsExpected ? skillsMessage : "Agent Skills index generation is disabled."),
+            skillsIndexPath);
 
-        var agentsJsonPath = Path.Combine(siteRoot, "agents.json");
+        var agentsJsonPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.AgentsJson?.OutputPath) ? "agents.json" : spec.AgentsJson!.OutputPath!);
+        var agentsJsonValid = ValidateAgentsJson(agentsJsonPath, out var agentsMessage);
+        var agentsJsonExpected = spec.AgentsJson?.Enabled == true;
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            ValidateAgentsJson(agentsJsonPath, out var agentsMessage) ? "pass" : "fail",
-            agentsMessage, agentsJsonPath);
+            agentsJsonValid ? "pass" : (agentsJsonExpected ? "fail" : "info"),
+            agentsJsonValid ? agentsMessage : (agentsJsonExpected ? agentsMessage : "agents.json generation is disabled."),
+            agentsJsonPath);
 
-        var a2aPath = Path.Combine(siteRoot, ".well-known", "agent-card.json");
+        var a2aPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.A2AAgentCard?.OutputPath) ? ".well-known/agent-card.json" : spec.A2AAgentCard!.OutputPath!);
         var a2aExpected = spec.A2AAgentCard?.Enabled == true;
         var a2aStatus = ValidateA2AAgentCard(a2aPath, out var a2aMessage) ? "pass" : (a2aExpected ? "fail" : "info");
         AddCheck(checks, "a2a-agent-card", "agent-protocols", "A2A Agent Card", a2aStatus, a2aMessage, a2aPath);
 
-        var mcpCardPath = Path.Combine(siteRoot, ".well-known", "mcp", "server-card.json");
+        var mcpCardPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.McpServerCard?.OutputPath) ? ".well-known/mcp/server-card.json" : spec.McpServerCard!.OutputPath!);
         var mcpExpected = spec.McpServerCard?.Enabled == true;
         var mcpStatus = ValidateMcpServerCard(mcpCardPath, out var mcpMessage) ? "pass" : (mcpExpected ? "fail" : "info");
         AddCheck(checks, "mcp-server-card", "api-auth-mcp-skill-discovery", "MCP Server Card", mcpStatus, mcpMessage, mcpCardPath);
@@ -531,10 +542,10 @@ public static class WebAgentReadiness
             ["robots"] = ToAbsoluteUrl(baseUrl, "/robots.txt"),
             ["sitemap"] = ToAbsoluteUrl(baseUrl, "/sitemap.xml"),
             ["llms"] = File.Exists(Path.Combine(siteRoot, "llms.txt")) ? ToAbsoluteUrl(baseUrl, "/llms.txt") : null,
-            ["apiCatalog"] = spec.ApiCatalog?.Enabled == true ? ToAbsoluteUrl(baseUrl, "/.well-known/api-catalog") : null,
-            ["agentSkills"] = spec.AgentSkills?.Enabled == true ? ToAbsoluteUrl(baseUrl, "/.well-known/agent-skills/index.json") : null,
-            ["mcpServerCard"] = spec.McpServerCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, "/.well-known/mcp/server-card.json") : null,
-            ["a2aAgentCard"] = spec.A2AAgentCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, "/.well-known/agent-card.json") : null
+            ["apiCatalog"] = spec.ApiCatalog?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.ApiCatalog.OutputPath, ".well-known/api-catalog")) : null,
+            ["agentSkills"] = spec.AgentSkills?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.AgentSkills.IndexPath, ".well-known/agent-skills/index.json")) : null,
+            ["mcpServerCard"] = spec.McpServerCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json")) : null,
+            ["a2aAgentCard"] = spec.A2AAgentCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json")) : null
         };
 
         var root = new JsonObject
@@ -662,7 +673,7 @@ public static class WebAgentReadiness
         var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
         var cleaned = RemoveGeneratedBlock(existing).TrimEnd();
         var sb = new StringBuilder();
-        sb.AppendLine(HeadersBlockStart);
+        sb.AppendLine(AgentBlockStart);
         var security = spec.SecurityHeaders ?? new AgentSecurityHeadersSpec();
         if (linkTargets.Count > 0)
         {
@@ -695,7 +706,7 @@ public static class WebAgentReadiness
         sb.AppendLine("/.well-known/mcp/server-card.json");
         sb.AppendLine("  Content-Type: application/json");
         AppendCorsHeaders(sb, security);
-        sb.AppendLine(HeadersBlockEnd);
+        sb.AppendLine(AgentBlockEnd);
 
         var next = string.IsNullOrWhiteSpace(cleaned)
             ? sb.ToString()
@@ -951,45 +962,37 @@ public static class WebAgentReadiness
         => text.Contains("<urlset", StringComparison.OrdinalIgnoreCase) ||
            text.Contains("<sitemapindex", StringComparison.OrdinalIgnoreCase);
 
-    private static void AddSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, string headersText, string target)
+    private static void AddSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, string headersText, string target, AgentSecurityHeadersSpec? spec)
     {
-        AddCheck(checks, "security-hsts", "security-trust", "HSTS",
-            headersText.Contains("Strict-Transport-Security:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("Strict-Transport-Security:", StringComparison.OrdinalIgnoreCase)
-                ? "Static host headers include HSTS."
-                : "Static host headers do not include Strict-Transport-Security.",
-            target);
-        AddCheck(checks, "security-csp", "security-trust", "CSP",
-            headersText.Contains("Content-Security-Policy:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("Content-Security-Policy:", StringComparison.OrdinalIgnoreCase)
-                ? "Static host headers include Content-Security-Policy."
-                : "Static host headers do not include Content-Security-Policy.",
-            target);
-        AddCheck(checks, "security-xcto", "security-trust", "X-Content-Type-Options",
-            headersText.Contains("X-Content-Type-Options:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("X-Content-Type-Options:", StringComparison.OrdinalIgnoreCase)
-                ? "Static host headers include X-Content-Type-Options."
-                : "Static host headers do not include X-Content-Type-Options.",
-            target);
+        var expected = spec?.Enabled == true;
+        AddConfiguredHeaderCheck(checks, "security-hsts", "HSTS", headersText, target, expected && spec!.Hsts, "Strict-Transport-Security:",
+            "Static host headers include HSTS.", "Static host headers do not include Strict-Transport-Security.");
+        AddConfiguredHeaderCheck(checks, "security-csp", "CSP", headersText, target, expected && spec!.ContentSecurityPolicy, "Content-Security-Policy:",
+            "Static host headers include Content-Security-Policy.", "Static host headers do not include Content-Security-Policy.");
+        AddConfiguredHeaderCheck(checks, "security-xcto", "X-Content-Type-Options", headersText, target, expected && spec!.XContentTypeOptions, "X-Content-Type-Options:",
+            "Static host headers include X-Content-Type-Options.", "Static host headers do not include X-Content-Type-Options.");
+
+        var hasFrameProtection = headersText.Contains("X-Frame-Options:", StringComparison.OrdinalIgnoreCase) ||
+                                 headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase);
         AddCheck(checks, "security-xfo", "security-trust", "X-Frame-Options",
-            headersText.Contains("X-Frame-Options:", StringComparison.OrdinalIgnoreCase) ||
-            headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("X-Frame-Options:", StringComparison.OrdinalIgnoreCase) ||
-            headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase)
+            hasFrameProtection ? "pass" : (expected && spec!.XFrameOptions ? "fail" : "info"),
+            hasFrameProtection
                 ? "Static host headers include clickjacking protection."
-                : "Static host headers do not include X-Frame-Options or CSP frame-ancestors.",
+                : (expected && spec!.XFrameOptions ? "Static host headers do not include X-Frame-Options or CSP frame-ancestors." : "Clickjacking protection header generation is disabled."),
             target);
-        AddCheck(checks, "security-referrer-policy", "security-trust", "Referrer-Policy",
-            headersText.Contains("Referrer-Policy:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("Referrer-Policy:", StringComparison.OrdinalIgnoreCase)
-                ? "Static host headers include Referrer-Policy."
-                : "Static host headers do not include Referrer-Policy.",
-            target);
-        AddCheck(checks, "security-cors", "security-trust", "CORS",
-            headersText.Contains("Access-Control-Allow-Origin:", StringComparison.OrdinalIgnoreCase) ? "pass" : "fail",
-            headersText.Contains("Access-Control-Allow-Origin:", StringComparison.OrdinalIgnoreCase)
-                ? "Agent discovery resources include CORS headers."
-                : "No Access-Control-Allow-Origin header configured for agent discovery resources.",
+
+        AddConfiguredHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", headersText, target, expected && spec!.ReferrerPolicy, "Referrer-Policy:",
+            "Static host headers include Referrer-Policy.", "Static host headers do not include Referrer-Policy.");
+        AddConfiguredHeaderCheck(checks, "security-cors", "CORS", headersText, target, expected && spec!.CorsForWellKnown, "Access-Control-Allow-Origin:",
+            "Agent discovery resources include CORS headers.", "No Access-Control-Allow-Origin header configured for agent discovery resources.");
+    }
+
+    private static void AddConfiguredHeaderCheck(List<WebAgentReadinessCheck> checks, string id, string name, string headersText, string target, bool expected, string headerName, string passMessage, string failMessage)
+    {
+        var present = headersText.Contains(headerName, StringComparison.OrdinalIgnoreCase);
+        AddCheck(checks, id, "security-trust", name,
+            present ? "pass" : (expected ? "fail" : "info"),
+            present ? passMessage : (expected ? failMessage : $"{name} header generation is disabled."),
             target);
     }
 
@@ -1334,8 +1337,44 @@ public static class WebAgentReadiness
 
     private static string ResolveSitePath(string siteRoot, string path)
     {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Path is required.", nameof(path));
+
+        var root = Path.GetFullPath(siteRoot.Trim().Trim('"'));
         var normalized = path.Trim().Trim('"').Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
-        return Path.GetFullPath(Path.Combine(siteRoot, normalized));
+        var resolved = Path.GetFullPath(Path.Combine(root, normalized));
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        if (!resolved.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+            !resolved.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"Path '{path}' resolves outside the site root.", nameof(path));
+        }
+
+        return resolved;
+    }
+
+    private static string ResolveSiteRoute(string siteRoot, string? path, string defaultPath)
+        => ToSiteRoute(siteRoot, ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(path) ? defaultPath : path!));
+
+    private static string ToSiteRoute(string siteRoot, string path)
+    {
+        var root = Path.GetFullPath(siteRoot.Trim().Trim('"'));
+        var resolved = Path.GetFullPath(path);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        if (!resolved.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+            !resolved.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"Path '{path}' resolves outside the site root.", nameof(path));
+        }
+
+        var relative = Path.GetRelativePath(root, resolved).Replace(Path.DirectorySeparatorChar, '/');
+        return NormalizeRoute(relative);
     }
 
     private static string Slugify(string value)

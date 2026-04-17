@@ -50,7 +50,7 @@ public class WebAgentReadinessTests
                 {
                     Enabled = true,
                     ContentSignals = new AgentContentSignalsSpec { Search = true, AiInput = false, AiTrain = false },
-                    ApiCatalog = new AgentApiCatalogSpec { Enabled = true },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = ".well-known/custom-api-catalog" },
                     AgentSkills = new AgentSkillsDiscoverySpec { Enabled = true },
                     A2AAgentCard = new AgentA2ACardSpec { Enabled = true }
                 }
@@ -58,7 +58,7 @@ public class WebAgentReadinessTests
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
             Assert.True(File.Exists(Path.Combine(root, "robots.txt")));
-            Assert.True(File.Exists(Path.Combine(root, ".well-known", "api-catalog")));
+            Assert.True(File.Exists(Path.Combine(root, ".well-known", "custom-api-catalog")));
             Assert.True(File.Exists(Path.Combine(root, ".well-known", "agent-skills", "index.json")));
             Assert.True(File.Exists(Path.Combine(root, "agents.json")));
             Assert.True(File.Exists(Path.Combine(root, ".well-known", "agent-card.json")));
@@ -69,12 +69,16 @@ public class WebAgentReadinessTests
             Assert.Contains("Sitemap: https://example.test/sitemap.xml", robots, StringComparison.OrdinalIgnoreCase);
 
             var headers = File.ReadAllText(Path.Combine(root, "_headers"));
+            Assert.Contains("</.well-known/custom-api-catalog>; rel=\"api-catalog\"", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("rel=\"api-catalog\"", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("application/linkset+json", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Strict-Transport-Security", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Access-Control-Allow-Origin", headers, StringComparison.OrdinalIgnoreCase);
 
-            using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "api-catalog")));
+            using var agentsJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "agents.json")));
+            Assert.Contains("/.well-known/custom-api-catalog", agentsJson.RootElement.GetProperty("resources").GetProperty("apiCatalog").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "custom-api-catalog")));
             Assert.True(apiCatalog.RootElement.TryGetProperty("linkset", out var linkset));
             Assert.True(linkset.GetArrayLength() > 0);
         }
@@ -152,6 +156,89 @@ public class WebAgentReadinessTests
             Assert.True(result.Steps[2].Success, result.Steps[2].Message);
             Assert.True(File.Exists(Path.Combine(root, "site", ".well-known", "agent-skills", "index.json")));
             Assert.True(File.Exists(Path.Combine(root, "site", "_headers")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_HonorsDisabledOptionalAgentReadinessChecks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownNegotiation = false
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.DoesNotContain(result.Checks, check => string.Equals(check.Status, "fail", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_RejectsAgentOutputPathOutsideSiteRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "api"));
+            File.WriteAllText(Path.Combine(root, "api", "index.json"), "{}");
+
+            var ex = Assert.Throws<ArgumentException>(() => WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = true, OutputPath = "../outside-api-catalog" },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            }));
+
+            Assert.Contains("outside the site root", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
