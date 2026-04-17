@@ -60,6 +60,10 @@ internal static partial class WebPipelineRunner
             case "sitemap":
                 ExecuteSitemap(step, baseDir, lastBuildOutPath, stepResult);
                 break;
+            case "agent-ready":
+            case "agentready":
+                ExecuteAgentReady(step, baseDir, lastBuildOutPath, stepResult);
+                break;
             case "xref-merge":
                 ExecuteXrefMerge(step, label, baseDir, fast, effectiveMode, logger, stepResult);
                 break;

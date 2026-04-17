@@ -535,6 +535,27 @@ internal static partial class WebPipelineRunner
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
+            case "agent-ready":
+            case "agentready":
+            {
+                var siteRoot = ResolvePath(baseDir,
+                    GetString(step, "siteRoot") ??
+                    GetString(step, "site-root") ??
+                    GetString(step, "out") ??
+                    GetString(step, "output"));
+                if (string.IsNullOrWhiteSpace(siteRoot))
+                    return Array.Empty<string>();
+
+                var headersPath = GetString(step, "headersPath") ?? GetString(step, "headers-path") ?? "_headers";
+                return new[]
+                {
+                    Path.Combine(siteRoot, "robots.txt"),
+                    Path.Combine(siteRoot, ".well-known", "api-catalog"),
+                    Path.Combine(siteRoot, ".well-known", "agent-skills", "index.json"),
+                    Path.Combine(siteRoot, ".well-known", "mcp", "server-card.json"),
+                    Path.Combine(siteRoot, headersPath)
+                };
+            }
             case "optimize":
             {
                 var outputs = new List<string>();
