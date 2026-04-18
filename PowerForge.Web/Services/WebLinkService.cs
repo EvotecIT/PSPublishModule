@@ -420,6 +420,17 @@ public static partial class WebLinkService
             if (string.Equals(source, target.Path, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.Ordinal))
             {
+                if (IsDirectSelfRedirect(redirect))
+                {
+                    AddRedirectIssue(
+                        issues,
+                        LinkValidationSeverity.Error,
+                        "PFLINK.REDIRECT.LOOP",
+                        $"Redirect loop detected starting at {BuildDisplaySource(redirect)}.",
+                        redirect,
+                        normalizedTarget: target.Path);
+                }
+
                 continue;
             }
 
@@ -514,6 +525,38 @@ public static partial class WebLinkService
 
     private static RedirectGraphTarget BuildRedirectGraphTarget(string targetUrl)
         => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)));
+
+    private static bool IsDirectSelfRedirect(LinkRedirectRule redirect)
+    {
+        var sourcePath = NormalizePathPreservingTrailingSlash(redirect.SourcePath);
+        var targetPath = NormalizePathPreservingTrailingSlash(redirect.TargetUrl);
+        return !string.IsNullOrWhiteSpace(sourcePath) &&
+               sourcePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePathPreservingTrailingSlash(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            trimmed = uri.AbsolutePath;
+        }
+
+        var queryIndex = trimmed.IndexOf('?');
+        if (queryIndex >= 0)
+            trimmed = trimmed[..queryIndex];
+        var hashIndex = trimmed.IndexOf('#');
+        if (hashIndex >= 0)
+            trimmed = trimmed[..hashIndex];
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed.TrimStart('/');
+        return trimmed;
+    }
 
     private static string NormalizeRedirectGraphQuery(string? query)
         => string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim().TrimStart('?');
@@ -890,8 +933,11 @@ public static partial class WebLinkService
         if (string.IsNullOrWhiteSpace(targetUrl) || string.IsNullOrWhiteSpace(utm))
             return targetUrl;
 
-        var separator = targetUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        return targetUrl + separator + utm.Trim().TrimStart('?').TrimStart('&');
+        var fragmentIndex = targetUrl.IndexOf('#');
+        var beforeFragment = fragmentIndex >= 0 ? targetUrl[..fragmentIndex] : targetUrl;
+        var fragment = fragmentIndex >= 0 ? targetUrl[fragmentIndex..] : string.Empty;
+        var separator = beforeFragment.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        return beforeFragment + separator + utm.Trim().TrimStart('?').TrimStart('&') + fragment;
     }
 
     private static string BuildImportedId(LinkLegacySource source, string target, int row)

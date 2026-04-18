@@ -405,6 +405,28 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirectGraph_DetectsDirectSelfRedirects()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "self",
+                    SourcePath = "/a",
+                    TargetUrl = "/a",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+    }
+
+    [Fact]
     public void ValidateRedirectGraph_DetectsLoopsThroughSameHostAbsoluteTargets()
     {
         var dataSet = new WebLinkDataSet
@@ -581,6 +603,46 @@ public sealed class WebLinkServiceTests
             Assert.Contains("RewriteRule ^gone", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^legacy/.* - [G,L]", apache, StringComparison.Ordinal);
             Assert.Equal(2, CountOccurrences(apache, "[G,L]"));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_InsertsShortlinkUtmBeforeFragment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-utm-fragment-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Shortlinks = new[]
+                {
+                    new LinkShortlinkRule
+                    {
+                        Slug = "promo",
+                        TargetUrl = "https://example.test/landing#cta",
+                        Utm = "utm_source=short",
+                        Status = 302,
+                        Owner = "evotec",
+                        AllowExternal = true
+                    }
+                }
+            };
+
+            WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            });
+
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains("https://example.test/landing?utm_source=short#cta", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://example.test/landing#cta?utm_source=short", apache, StringComparison.Ordinal);
         }
         finally
         {
