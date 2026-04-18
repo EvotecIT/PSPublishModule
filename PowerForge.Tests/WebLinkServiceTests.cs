@@ -111,6 +111,91 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirects_TreatsWildcardAndEmptyHostsAsSameScope()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "global-empty",
+                    SourcePath = "/old",
+                    TargetUrl = "/new",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "global-wildcard",
+                    SourceHost = "*",
+                    SourcePath = "/old",
+                    TargetUrl = "/other",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
+    }
+
+    [Fact]
+    public void ValidateRedirects_TreatsExactSourceQueryAsQueryRuleForDuplicates()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "exact-query",
+                    SourcePath = "/",
+                    SourceQuery = "p=123",
+                    MatchType = LinkRedirectMatchType.Exact,
+                    TargetUrl = "/post-a",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "query",
+                    SourcePath = "/",
+                    SourceQuery = "p=123",
+                    MatchType = LinkRedirectMatchType.Query,
+                    TargetUrl = "/post-b",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
+    }
+
+    [Fact]
+    public void ValidateRedirects_RejectsProtocolRelativeTargets()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "protocol-relative",
+                    SourcePath = "/old",
+                    TargetUrl = "//attacker.example/path",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.TARGET_INVALID");
+    }
+
+    [Fact]
     public void ValidateRedirectGraph_DoesNotTreatQueryOrSlashCanonicalRulesAsLoops()
     {
         var dataSet = new WebLinkDataSet
@@ -480,6 +565,40 @@ public sealed class WebLinkServiceTests
             var suggestion = Assert.Single(result.Suggestions);
             Assert.Equal("/docs/instal", suggestion.Path);
             Assert.Contains(suggestion.Suggestions, item => item.TargetPath == "/docs/install/");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate404Report_DoesNotSuggestRootForUnrelatedMissingPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-404-root-score-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            File.WriteAllText(Path.Combine(root, "_site", "index.html"), "<html>home</html>");
+            var logPath = Path.Combine(root, "404.csv");
+            File.WriteAllText(logPath,
+                """
+                path,count,status
+                /wp-login.php,4,404
+                """);
+
+            var result = WebLinkService.Generate404Report(new WebLink404ReportOptions
+            {
+                SiteRoot = Path.Combine(root, "_site"),
+                SourcePath = logPath,
+                MinimumScore = 0.8
+            });
+
+            var suggestion = Assert.Single(result.Suggestions);
+            Assert.Empty(suggestion.Suggestions);
+            Assert.Equal(0, result.SuggestedObservationCount);
         }
         finally
         {

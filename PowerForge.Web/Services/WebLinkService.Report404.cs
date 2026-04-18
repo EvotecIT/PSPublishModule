@@ -323,6 +323,8 @@ public static partial class WebLinkService
         var candidate = NormalizeForScore(route);
         if (missing.Equals(candidate, StringComparison.OrdinalIgnoreCase))
             return 1d;
+        if (missing.Length == 0 || candidate.Length == 0)
+            return 0d;
         if (missing.Contains(candidate, StringComparison.OrdinalIgnoreCase) ||
             candidate.Contains(missing, StringComparison.OrdinalIgnoreCase))
             return 0.82d;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -512,7 +513,13 @@ public static partial class WebLinkService
     private static void ValidateTarget(string targetUrl, bool allowExternal, List<LinkValidationIssue> issues, string source, string? id, string codePrefix)
     {
         var trimmed = targetUrl.Trim();
-        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+        if (trimmed.StartsWith("//", StringComparison.Ordinal))
+        {
+            AddIssue(issues, LinkValidationSeverity.Error, codePrefix + ".TARGET_INVALID", "Protocol-relative target URLs are not supported.", source, id);
+            return;
+        }
+
+        if (IsLocalPath(trimmed))
             return;
 
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
@@ -576,16 +583,27 @@ public static partial class WebLinkService
 
     private static string BuildRedirectKey(LinkRedirectRule redirect)
         => string.Join("|",
-            redirect.SourceHost ?? string.Empty,
-            redirect.MatchType.ToString(),
+            NormalizeRedirectGraphHost(redirect.SourceHost),
+            ((int)NormalizeRedirectKeyMatchType(redirect)).ToString(CultureInfo.InvariantCulture),
             NormalizeSourcePath(redirect.SourcePath),
-            redirect.SourceQuery ?? string.Empty);
+            NormalizeRedirectGraphQuery(redirect.SourceQuery));
+
+    private static LinkRedirectMatchType NormalizeRedirectKeyMatchType(LinkRedirectRule redirect)
+        => redirect.MatchType == LinkRedirectMatchType.Exact && !string.IsNullOrWhiteSpace(redirect.SourceQuery)
+            ? LinkRedirectMatchType.Query
+            : redirect.MatchType;
 
     private static string BuildRedirectGraphKey(string? host, string path, string? query)
-        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), query?.Trim().ToLowerInvariant() ?? string.Empty);
+        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), NormalizeRedirectGraphQuery(query));
 
     private static string NormalizeRedirectGraphHost(string? host)
-        => string.IsNullOrWhiteSpace(host) ? string.Empty : host.Trim().ToLowerInvariant();
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return string.Empty;
+
+        var trimmed = host.Trim();
+        return trimmed.Equals("*", StringComparison.Ordinal) ? string.Empty : trimmed.ToLowerInvariant();
+    }
 
     private static bool IsAllowedStatus(int status)
         => status is 301 or 302 or 307 or 308 or 410;
@@ -756,7 +774,14 @@ public static partial class WebLinkService
     }
 
     private static bool IsLocalPath(string? value)
-        => !string.IsNullOrWhiteSpace(value) && value.Trim().StartsWith("/", StringComparison.Ordinal);
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        return trimmed.StartsWith("/", StringComparison.Ordinal) &&
+               !trimmed.StartsWith("//", StringComparison.Ordinal);
+    }
 
     private static bool IsHttpUrl(string? value)
         => !string.IsNullOrWhiteSpace(value) &&
