@@ -27,35 +27,47 @@ internal static class WebLinkCommandSupport
         if (!string.IsNullOrWhiteSpace(summaryDirectory))
             Directory.CreateDirectory(summaryDirectory);
 
-        var summary = new
+        var summary = new WebLinkCommandSummary
         {
-            generatedOn = DateTimeOffset.UtcNow.ToString("O"),
-            action,
-            redirects = validation.RedirectCount,
-            shortlinks = validation.ShortlinkCount,
-            errors = validation.ErrorCount,
-            warnings = validation.WarningCount,
-            duplicateWarnings = validation.Issues.Count(static issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE_SAME_TARGET"),
-            duplicateErrors = validation.Issues.Count(static issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE"),
-            success = taskSuccess,
-            validationSuccess = validation.Success,
-            usedSourceCount = dataSet.UsedSources.Length,
-            usedSources = dataSet.UsedSources,
-            missingSourceCount = dataSet.MissingSources.Length,
-            missingSources = dataSet.MissingSources,
-            baselinePath = baseline?.Path,
-            baselineLoaded = baseline?.Loaded,
-            baselineWarningCount = baseline?.KeyCount,
-            baselineGenerated = baseline?.Generated,
-            baselineUpdated = baseline?.Updated,
-            baselineWrittenPath = baseline?.WrittenPath,
-            newWarningCount = baseline?.NewWarnings.Length,
-            newWarnings = baseline?.NewWarnings,
-            issues = validation.Issues,
-            export
+            GeneratedOn = DateTimeOffset.UtcNow.ToString("O"),
+            Action = action,
+            Redirects = validation.RedirectCount,
+            Shortlinks = validation.ShortlinkCount,
+            Errors = validation.ErrorCount,
+            Warnings = validation.WarningCount,
+            DuplicateWarnings = validation.Issues.Count(static issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE_SAME_TARGET"),
+            DuplicateErrors = validation.Issues.Count(static issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE"),
+            Success = taskSuccess,
+            ValidationSuccess = validation.Success,
+            UsedSourceCount = dataSet.UsedSources.Length,
+            UsedSources = dataSet.UsedSources,
+            MissingSourceCount = dataSet.MissingSources.Length,
+            MissingSources = dataSet.MissingSources,
+            BaselinePath = baseline?.Path,
+            BaselineLoaded = baseline?.Loaded,
+            BaselineWarningCount = baseline?.KeyCount,
+            BaselineGenerated = baseline?.Generated,
+            BaselineUpdated = baseline?.Updated,
+            BaselineWrittenPath = baseline?.WrittenPath,
+            NewWarningCount = baseline?.NewWarnings.Length,
+            NewWarnings = baseline?.NewWarnings,
+            Issues = validation.Issues,
+            Export = export
         };
 
-        File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, LinksSummaryJsonOptions));
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, LinksSummaryJsonContext.WebLinkCommandSummary));
+    }
+
+    internal static void WriteLinksApplyReviewSummary(string? summaryPath, WebLinkReviewApplyResult result)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+            return;
+
+        var summaryDirectory = Path.GetDirectoryName(summaryPath);
+        if (!string.IsNullOrWhiteSpace(summaryDirectory))
+            Directory.CreateDirectory(summaryDirectory);
+
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, WebCliJson.Context.WebLinkReviewApplyResult));
     }
 
     internal static void WriteIssueReport(string? reportPath, LinkValidationResult validation)
@@ -353,6 +365,39 @@ internal static class WebLinkCommandSupport
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
+
+    private static readonly PowerForgeWebCliJsonContext LinksSummaryJsonContext = new(new JsonSerializerOptions(WebCliJson.Options)
+    {
+        WriteIndented = true
+    });
+}
+
+internal sealed class WebLinkCommandSummary
+{
+    public string GeneratedOn { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public int Redirects { get; set; }
+    public int Shortlinks { get; set; }
+    public int Errors { get; set; }
+    public int Warnings { get; set; }
+    public int DuplicateWarnings { get; set; }
+    public int DuplicateErrors { get; set; }
+    public bool Success { get; set; }
+    public bool ValidationSuccess { get; set; }
+    public int UsedSourceCount { get; set; }
+    public string[] UsedSources { get; set; } = Array.Empty<string>();
+    public int MissingSourceCount { get; set; }
+    public string[] MissingSources { get; set; } = Array.Empty<string>();
+    public string? BaselinePath { get; set; }
+    public bool? BaselineLoaded { get; set; }
+    public int? BaselineWarningCount { get; set; }
+    public bool? BaselineGenerated { get; set; }
+    public bool? BaselineUpdated { get; set; }
+    public string? BaselineWrittenPath { get; set; }
+    public int? NewWarningCount { get; set; }
+    public LinkValidationIssue[]? NewWarnings { get; set; }
+    public LinkValidationIssue[] Issues { get; set; } = Array.Empty<LinkValidationIssue>();
+    public WebLinkApacheExportResult? Export { get; set; }
 }
 
 internal sealed class WebLinkBaselineState

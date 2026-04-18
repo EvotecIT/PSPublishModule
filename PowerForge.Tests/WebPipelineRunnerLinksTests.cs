@@ -614,6 +614,81 @@ public sealed class WebPipelineRunnerLinksTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_LinksApplyReview_AppliesCandidateFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-apply-review-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var reportsPath = Path.Combine(root, "Build", "link-reports");
+            Directory.CreateDirectory(reportsPath);
+            Directory.CreateDirectory(Path.Combine(root, "data", "links"));
+            File.WriteAllText(Path.Combine(reportsPath, "404-promoted-candidates.json"),
+                """
+                {
+                  "redirects": [
+                    {
+                      "id": "reviewed",
+                      "sourcePath": "/docs/instal",
+                      "targetUrl": "/docs/install/",
+                      "enabled": false,
+                      "source": "404-promoted"
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(reportsPath, "ignored-404-candidates.json"),
+                """
+                {
+                  "ignored404": [
+                    {
+                      "path": "/wp-login.php",
+                      "reason": "scanner noise"
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "data", "links", "ignored-404.json"), "{ \"ignored404\": [] }");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-apply-review",
+                      "all": true,
+                      "enableRedirects": true,
+                      "redirects": "./data/links/redirects.json",
+                      "ignored404": "./data/links/ignored-404.json",
+                      "summaryPath": "./Build/link-reports/apply-summary.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Contains("links-apply-review ok", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            var redirectsJson = File.ReadAllText(Path.Combine(root, "data", "links", "redirects.json"));
+            Assert.Contains("\"sourcePath\": \"/docs/instal\"", redirectsJson, StringComparison.Ordinal);
+            Assert.Contains("\"enabled\": true", redirectsJson, StringComparison.Ordinal);
+            var ignoredJson = File.ReadAllText(Path.Combine(root, "data", "links", "ignored-404.json"));
+            Assert.Contains("\"path\": \"/wp-login.php\"", ignoredJson, StringComparison.Ordinal);
+
+            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(reportsPath, "apply-summary.json")));
+            Assert.Equal(1, summary.RootElement.GetProperty("redirects").GetProperty("candidateCount").GetInt32());
+            Assert.Equal(1, summary.RootElement.GetProperty("ignored404").GetProperty("candidateCount").GetInt32());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

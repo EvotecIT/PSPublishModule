@@ -184,6 +184,11 @@ internal static partial class WebPipelineRunner
             case "links-ignore":
                 ExecuteLinksIgnore404(step, baseDir, stepResult);
                 break;
+            case "links-apply-review":
+            case "link-apply-review":
+            case "links-apply":
+                ExecuteLinksApplyReview(step, baseDir, stepResult);
+                break;
             case "wordpress-normalize":
             case "wordpress-normalize-content":
             case "normalize-wordpress-content":

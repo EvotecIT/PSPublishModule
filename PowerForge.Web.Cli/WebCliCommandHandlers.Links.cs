@@ -547,7 +547,7 @@ internal static partial class WebCliCommandHandlers
         var summaryPath = ResolveOptionalPath(baseDir,
             TryGetOptionValue(args, "--summary-path") ??
             TryGetOptionValue(args, "--summaryPath"));
-        WriteLinksApplyReviewSummary(summaryPath, result);
+        WebLinkCommandSupport.WriteLinksApplyReviewSummary(summaryPath, result);
 
         if (outputJson)
         {

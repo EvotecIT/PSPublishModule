@@ -319,6 +319,82 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"links-ignore-404 ok: candidates={result.CandidateCount}; written={result.WrittenCount}; skippedDuplicates={result.SkippedDuplicateCount}";
     }
 
+    private static void ExecuteLinksApplyReview(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var loaded = LoadLinksSpec(step, baseDir);
+        var links = loaded.Spec;
+        var linkBaseDir = loaded.BaseDir ?? baseDir;
+        var applyAll = GetBool(step, "all") ?? false;
+        var applyRedirects = applyAll ||
+                             GetBool(step, "applyRedirects") == true ||
+                             GetBool(step, "apply-redirects") == true ||
+                             GetBool(step, "redirectCandidatesOnly") == true ||
+                             GetBool(step, "redirect-candidates-only") == true;
+        var applyIgnored404 = applyAll ||
+                              GetBool(step, "applyIgnored404") == true ||
+                              GetBool(step, "apply-ignored-404") == true ||
+                              GetBool(step, "ignored404CandidatesOnly") == true ||
+                              GetBool(step, "ignored-404-candidates-only") == true;
+        if (!applyRedirects && !applyIgnored404)
+            throw new InvalidOperationException("links-apply-review requires applyRedirects, applyIgnored404, or all:true.");
+
+        var redirectCandidatesPath = ResolvePath(baseDir,
+            GetString(step, "redirectCandidates") ??
+            GetString(step, "redirect-candidates") ??
+            GetString(step, "redirectCandidatesPath") ??
+            GetString(step, "redirect-candidates-path")) ??
+            Path.GetFullPath(Path.Combine(baseDir, "Build", "link-reports", "404-promoted-candidates.json"));
+        var redirectsPath = ResolvePathForLinks(baseDir, linkBaseDir,
+            GetString(step, "redirects") ??
+            GetString(step, "redirectsPath") ??
+            GetString(step, "redirects-path"),
+            links?.Redirects);
+        if (applyRedirects && string.IsNullOrWhiteSpace(redirectsPath))
+            throw new InvalidOperationException("links-apply-review requires redirects or links.redirects config.");
+
+        var ignored404CandidatesPath = ResolvePath(baseDir,
+            GetString(step, "ignored404Candidates") ??
+            GetString(step, "ignored-404-candidates") ??
+            GetString(step, "ignored404CandidatesPath") ??
+            GetString(step, "ignored-404-candidates-path")) ??
+            Path.GetFullPath(Path.Combine(baseDir, "Build", "link-reports", "ignored-404-candidates.json"));
+        var ignored404Path = ResolvePathForLinks(baseDir, linkBaseDir,
+            GetString(step, "ignored404") ??
+            GetString(step, "ignored-404") ??
+            GetString(step, "ignored404Path") ??
+            GetString(step, "ignored-404-path"),
+            links?.Ignored404);
+        if (applyIgnored404 && string.IsNullOrWhiteSpace(ignored404Path))
+            throw new InvalidOperationException("links-apply-review requires ignored404 or links.ignored404 config.");
+
+        var result = WebLinkService.ApplyReviewCandidates(new WebLinkReviewApplyOptions
+        {
+            ApplyRedirects = applyRedirects,
+            ApplyIgnored404 = applyIgnored404,
+            RedirectCandidatesPath = redirectCandidatesPath,
+            RedirectsPath = redirectsPath,
+            Ignored404CandidatesPath = ignored404CandidatesPath,
+            Ignored404Path = ignored404Path,
+            ReplaceExisting = GetBool(step, "replaceExisting") ?? GetBool(step, "replace-existing") ?? false,
+            EnableRedirects = GetBool(step, "enableRedirects") ?? GetBool(step, "enable-redirects") ?? false,
+            DryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? GetBool(step, "whatIf") ?? GetBool(step, "what-if") ?? false
+        });
+
+        var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        WebLinkCommandSupport.WriteLinksApplyReviewSummary(summaryPath, result);
+
+        var parts = new List<string>();
+        if (result.Redirects is not null)
+            parts.Add($"redirects={result.Redirects.CandidateCount}; redirectWritten={result.Redirects.WrittenCount}; redirectSkipped={result.Redirects.SkippedDuplicateCount}");
+        if (result.Ignored404 is not null)
+            parts.Add($"ignored404={result.Ignored404.CandidateCount}; ignoredWritten={result.Ignored404.WrittenCount}; ignoredSkipped={result.Ignored404.SkippedDuplicateCount}");
+
+        stepResult.Success = true;
+        stepResult.Message = parts.Count == 0
+            ? "links-apply-review ok"
+            : $"links-apply-review ok: {string.Join("; ", parts)}";
+    }
+
     private static WebLinkLoadOptions BuildLinkLoadOptions(
         JsonElement step,
         string baseDir,

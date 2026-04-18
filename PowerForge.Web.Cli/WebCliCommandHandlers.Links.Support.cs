@@ -10,18 +10,6 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private static void WriteLinksApplyReviewSummary(string? summaryPath, WebLinkReviewApplyResult result)
-    {
-        if (string.IsNullOrWhiteSpace(summaryPath))
-            return;
-
-        var summaryDirectory = Path.GetDirectoryName(summaryPath);
-        if (!string.IsNullOrWhiteSpace(summaryDirectory))
-            Directory.CreateDirectory(summaryDirectory);
-
-        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, WebCliJson.Context.WebLinkReviewApplyResult));
-    }
-
     private static void WriteLinksReview404Summary(string? summaryPath, WebLink404ReviewResult result)
     {
         if (string.IsNullOrWhiteSpace(summaryPath))
