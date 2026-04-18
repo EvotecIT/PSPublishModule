@@ -188,7 +188,7 @@ public sealed class WebCliLinksTests
 
             var exitCode = WebCliCommandHandlers.HandleSubCommand(
                 "links",
-                new[] { "import-wordpress", "--config", configPath, "--source", importPath, "--owner", "evotec", "--tag", "imported" },
+                new[] { "import-wordpress", "--config", configPath, "--source", importPath, "--host", "short=evo.yt", "--owner", "evotec", "--tag", "imported" },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
                 outputSchemaVersion: CliEnvelopeSchemaVersion);
@@ -199,6 +199,7 @@ public sealed class WebCliLinksTests
             var json = File.ReadAllText(shortlinksPath);
             Assert.Contains("\"slug\": \"teams\"", json, StringComparison.Ordinal);
             Assert.Contains("\"host\": \"evo.yt\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"host\": \"short=evo.yt\"", json, StringComparison.Ordinal);
             Assert.Contains("\"targetUrl\": \"https://teams.example.test\"", json, StringComparison.Ordinal);
             Assert.Contains("\"importedHits\": 42", json, StringComparison.Ordinal);
             Assert.Contains("\"source\": \"imported-pretty-links\"", json, StringComparison.Ordinal);

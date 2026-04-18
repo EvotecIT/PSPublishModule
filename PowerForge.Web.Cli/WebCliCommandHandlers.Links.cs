@@ -600,7 +600,7 @@ internal static partial class WebCliCommandHandlers
             return Fail("Missing required --out or links.shortlinks config path.", outputJson, logger, command);
 
         var hosts = BuildLinkHostMap(args, loaded.Spec);
-        var host = TryGetOptionValue(args, "--host");
+        var host = TryGetDirectImportHost(args);
         hosts.TryGetValue("short", out var configuredShortHost);
         if (string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(configuredShortHost))
             host = configuredShortHost;
@@ -641,6 +641,16 @@ internal static partial class WebCliCommandHandlers
         foreach (var warning in result.Warnings)
             logger.Warn(warning);
         return 0;
+    }
+
+    private static string? TryGetDirectImportHost(string[] args)
+    {
+        var host = TryGetOptionValue(args, "--host");
+        if (string.IsNullOrWhiteSpace(host))
+            return null;
+
+        var trimmed = host.Trim();
+        return trimmed.Contains('=') ? null : trimmed;
     }
 
 }

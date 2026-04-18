@@ -36,12 +36,13 @@ public static partial class WebLinkService
 
         var candidatePath = Path.GetFullPath(options.RedirectCandidatesPath);
         var targetPath = Path.GetFullPath(options.RedirectsPath);
+        if (!File.Exists(candidatePath))
+            throw new FileNotFoundException("Redirect candidate file was not found.", candidatePath);
+
         var existing = File.Exists(targetPath)
             ? ReadExistingRedirects(targetPath)
             : new List<LinkRedirectRule>();
-        var candidates = File.Exists(candidatePath)
-            ? ReadExistingRedirects(candidatePath)
-            : new List<LinkRedirectRule>();
+        var candidates = ReadExistingRedirects(candidatePath);
 
         if (options.EnableRedirects)
         {
@@ -74,12 +75,13 @@ public static partial class WebLinkService
 
         var candidatePath = Path.GetFullPath(options.Ignored404CandidatesPath);
         var targetPath = Path.GetFullPath(options.Ignored404Path);
+        if (!File.Exists(candidatePath))
+            throw new FileNotFoundException("Ignored-404 candidate file was not found.", candidatePath);
+
         var existing = File.Exists(targetPath)
             ? LoadIgnored404Rules(targetPath).ToList()
             : new List<Ignored404Rule>();
-        var candidates = File.Exists(candidatePath)
-            ? LoadIgnored404Rules(candidatePath).ToList()
-            : new List<Ignored404Rule>();
+        var candidates = LoadIgnored404Rules(candidatePath).ToList();
 
         var merged = MergeIgnored404Rules(existing, candidates, options.ReplaceExisting, out var skipped, out var replaced);
         if (!options.DryRun)

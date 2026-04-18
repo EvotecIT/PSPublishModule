@@ -1362,6 +1362,34 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ApplyReviewCandidates_FailsWhenRequestedCandidateFileIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-apply-review-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var redirectsPath = Path.Combine(root, "data", "links", "redirects.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(redirectsPath)!);
+            File.WriteAllText(redirectsPath, "{ \"redirects\": [] }");
+            var missingCandidatesPath = Path.Combine(root, "Build", "link-reports", "missing-candidates.json");
+
+            var exception = Assert.Throws<FileNotFoundException>(() => WebLinkService.ApplyReviewCandidates(new WebLinkReviewApplyOptions
+            {
+                ApplyRedirects = true,
+                RedirectCandidatesPath = missingCandidatesPath,
+                RedirectsPath = redirectsPath
+            }));
+
+            Assert.Equal(missingCandidatesPath, exception.FileName);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Validate_LanguageRootHostTreatsPrefixedAndRootTargetsAsSame()
     {
         var dataSet = new WebLinkDataSet
