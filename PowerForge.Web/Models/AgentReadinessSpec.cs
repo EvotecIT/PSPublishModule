@@ -31,8 +31,23 @@ public sealed class AgentReadinessSpec
     public AgentOpenApiSpec? OpenApi { get; set; }
     /// <summary>When true, verify that rendered HTML exposes WebMCP browser tools.</summary>
     public bool WebMcp { get; set; }
+    /// <summary>Optional static markdown artifacts generated from rendered HTML.</summary>
+    public AgentMarkdownArtifactsSpec? MarkdownArtifacts { get; set; }
     /// <summary>When true, treat markdown negotiation as expected during remote scans.</summary>
     public bool MarkdownNegotiation { get; set; } = true;
+}
+
+/// <summary>Static markdown artifacts generated from rendered HTML for agent readers and edge negotiation.</summary>
+public sealed class AgentMarkdownArtifactsSpec
+{
+    /// <summary>Enable markdown artifact generation during agent-ready prepare.</summary>
+    public bool Enabled { get; set; }
+    /// <summary>Markdown file extension. Defaults to .md.</summary>
+    public string? Extension { get; set; } = ".md";
+    /// <summary>Maximum number of HTML pages to convert. Zero means no explicit limit.</summary>
+    public int MaxPages { get; set; }
+    /// <summary>When true, prepend the page title as a top-level heading when one can be resolved.</summary>
+    public bool IncludeTitle { get; set; } = true;
 }
 
 /// <summary>Security headers that agent and AI-readiness scanners commonly expect.</summary>

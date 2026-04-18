@@ -784,8 +784,24 @@
         "openApi": { "$ref": "#/$defs/AgentOpenApiSpec" },
         "WebMcp": { "type": "boolean" },
         "webMcp": { "type": "boolean" },
+        "MarkdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
+        "markdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
         "MarkdownNegotiation": { "type": "boolean" },
         "markdownNegotiation": { "type": "boolean" }
+      }
+    },
+    "AgentMarkdownArtifactsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "Extension": { "type": "string" },
+        "extension": { "type": "string" },
+        "MaxPages": { "type": "integer", "minimum": 0 },
+        "maxPages": { "type": "integer", "minimum": 0 },
+        "IncludeTitle": { "type": "boolean" },
+        "includeTitle": { "type": "boolean" }
       }
     },
     "AgentSecurityHeadersSpec": {

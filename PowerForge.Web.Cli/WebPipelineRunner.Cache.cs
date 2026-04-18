@@ -1024,6 +1024,26 @@ internal static partial class WebPipelineRunner
         if (spec.McpServerCard?.Enabled == true && !string.IsNullOrWhiteSpace(spec.McpServerCard.Endpoint))
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.McpServerCard.OutputPath) ? ".well-known/mcp/server-card.json" : spec.McpServerCard.OutputPath!));
 
+        if (spec.MarkdownArtifacts?.Enabled == true)
+        {
+            var extension = string.IsNullOrWhiteSpace(spec.MarkdownArtifacts.Extension) ? ".md" : spec.MarkdownArtifacts.Extension!.Trim();
+            if (!extension.StartsWith(".", StringComparison.Ordinal))
+                extension = "." + extension;
+
+            outputs.AddRange(Directory.Exists(siteRoot)
+                ? Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
+                    .Where(path => !Path.GetFileName(path).EndsWith(".head.html", StringComparison.OrdinalIgnoreCase))
+                    .Where(path => !Path.GetFileName(path).EndsWith(".scripts.html", StringComparison.OrdinalIgnoreCase))
+                    .Where(path =>
+                    {
+                        var relative = Path.GetRelativePath(siteRoot, path).Replace('\\', '/');
+                        return !relative.StartsWith("api-fragments/", StringComparison.OrdinalIgnoreCase) &&
+                               !relative.Contains("/api-fragments/", StringComparison.OrdinalIgnoreCase);
+                    })
+                    .Select(path => Path.ChangeExtension(path, extension))
+                : new[] { ResolveAgentReadySiteOutputPath(siteRoot, "index" + extension) });
+        }
+
         if (ShouldExpectAgentReadyHeaders(siteRoot, spec))
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!));
 
@@ -1075,6 +1095,7 @@ internal static partial class WebPipelineRunner
             McpServerCard = spec.McpServerCard,
             OpenApi = spec.OpenApi,
             WebMcp = spec.WebMcp,
+            MarkdownArtifacts = spec.MarkdownArtifacts,
             MarkdownNegotiation = spec.MarkdownNegotiation
         };
 
@@ -1106,7 +1127,8 @@ internal static partial class WebPipelineRunner
            spec.AgentSkills?.Enabled == true ||
            spec.AgentsJson?.Enabled == true ||
            spec.A2AAgentCard?.Enabled == true ||
-           spec.McpServerCard?.Enabled == true;
+           spec.McpServerCard?.Enabled == true ||
+           spec.MarkdownArtifacts?.Enabled == true;
 
     private static bool AgentReadyOpenApiRouteExists(string siteRoot, AgentOpenApiSpec? spec)
     {
