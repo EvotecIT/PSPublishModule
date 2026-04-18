@@ -413,8 +413,10 @@ public static partial class WebLinkService
 
             var source = NormalizeSourcePath(redirect.SourcePath);
             var target = NormalizeSourcePath(redirect.TargetUrl);
+            if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+                continue;
             if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(target))
-                map[source] = target;
+                map[BuildRedirectGraphKey(redirect.SourceHost, source, redirect.SourceQuery)] = target;
         }
 
         foreach (var redirect in redirects)
@@ -422,12 +424,14 @@ public static partial class WebLinkService
             if (redirect.MatchType != LinkRedirectMatchType.Exact && redirect.MatchType != LinkRedirectMatchType.Query)
                 continue;
 
+            var host = NormalizeRedirectGraphHost(redirect.SourceHost);
             var current = NormalizeSourcePath(redirect.SourcePath);
+            var currentQuery = redirect.SourceQuery;
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var depth = 0;
-            while (map.TryGetValue(current, out var next))
+            while (TryGetRedirectGraphTarget(map, host, current, currentQuery, out var next))
             {
-                if (!visited.Add(current))
+                if (!visited.Add(BuildRedirectGraphKey(host, current, currentQuery)))
                 {
                     AddRedirectIssue(
                         issues,
@@ -440,6 +444,7 @@ public static partial class WebLinkService
                 }
 
                 current = next;
+                currentQuery = string.Empty;
                 depth++;
                 if (depth > 5)
                 {
@@ -454,6 +459,22 @@ public static partial class WebLinkService
                 }
             }
         }
+    }
+
+    private static bool TryGetRedirectGraphTarget(
+        IReadOnlyDictionary<string, string> map,
+        string host,
+        string path,
+        string? query,
+        out string target)
+    {
+        if (!string.IsNullOrWhiteSpace(host) &&
+            map.TryGetValue(BuildRedirectGraphKey(host, path, query), out target!))
+        {
+            return true;
+        }
+
+        return map.TryGetValue(BuildRedirectGraphKey(null, path, query), out target!);
     }
 
     private static void ValidateTarget(string targetUrl, bool allowExternal, List<LinkValidationIssue> issues, string source, string? id, string codePrefix)
@@ -527,6 +548,12 @@ public static partial class WebLinkService
             redirect.MatchType.ToString(),
             NormalizeSourcePath(redirect.SourcePath),
             redirect.SourceQuery ?? string.Empty);
+
+    private static string BuildRedirectGraphKey(string? host, string path, string? query)
+        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), query?.Trim().ToLowerInvariant() ?? string.Empty);
+
+    private static string NormalizeRedirectGraphHost(string? host)
+        => string.IsNullOrWhiteSpace(host) ? string.Empty : host.Trim().ToLowerInvariant();
 
     private static bool IsAllowedStatus(int status)
         => status is 301 or 302 or 307 or 308 or 410;

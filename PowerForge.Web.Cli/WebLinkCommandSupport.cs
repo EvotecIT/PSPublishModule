@@ -333,10 +333,15 @@ internal static class WebLinkCommandSupport
     private static string EscapeCsv(string? value)
     {
         var text = value ?? string.Empty;
+        if (text.Length > 0 && IsCsvFormulaPrefix(text[0]))
+            text = "'" + text;
         if (text.Contains('"', StringComparison.Ordinal))
             text = text.Replace("\"", "\"\"", StringComparison.Ordinal);
         return text.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" + text + "\"" : text;
     }
+
+    private static bool IsCsvFormulaPrefix(char value)
+        => value is '=' or '+' or '-' or '@';
 
     private static readonly JsonSerializerOptions LinksSummaryJsonOptions = new()
     {

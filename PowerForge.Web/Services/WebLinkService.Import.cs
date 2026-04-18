@@ -209,10 +209,12 @@ public static partial class WebLinkService
         var configuredPrefix = string.IsNullOrWhiteSpace(configuredPathPrefix)
             ? null
             : "/" + configuredPathPrefix.Trim().Trim('/');
-        if (!string.IsNullOrWhiteSpace(configuredPrefix) &&
-            path.StartsWith(configuredPrefix.Trim('/'), StringComparison.OrdinalIgnoreCase))
+        var configuredPrefixSegment = configuredPrefix?.Trim('/');
+        if (!string.IsNullOrWhiteSpace(configuredPrefixSegment) &&
+            (string.Equals(path, configuredPrefixSegment, StringComparison.OrdinalIgnoreCase) ||
+             path.StartsWith(configuredPrefixSegment + "/", StringComparison.OrdinalIgnoreCase)))
         {
-            path = path[configuredPrefix.Trim('/').Length..].Trim('/');
+            path = path[configuredPrefixSegment.Length..].Trim('/');
         }
 
         var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);

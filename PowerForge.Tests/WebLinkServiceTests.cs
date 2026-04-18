@@ -41,6 +41,70 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirectGraph_KeepsHostScopedChainsSeparate()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "en-old",
+                    SourceHost = "evotec.xyz",
+                    SourcePath = "/old",
+                    TargetUrl = "/new",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "pl-new",
+                    SourceHost = "evotec.pl",
+                    SourcePath = "/new",
+                    TargetUrl = "/old",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.CHAIN");
+    }
+
+    [Fact]
+    public void ValidateRedirectGraph_DoesNotTreatQueryOrSlashCanonicalRulesAsLoops()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "post-id",
+                    SourcePath = "/",
+                    SourceQuery = "p=123",
+                    MatchType = LinkRedirectMatchType.Query,
+                    TargetUrl = "/blog/current/",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "root-slash",
+                    SourcePath = "/blog/current",
+                    TargetUrl = "/blog/current/",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.CHAIN");
+    }
+
+    [Fact]
     public void ExportApache_EmitsHostScopedRedirectsAndShortlinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-" + Guid.NewGuid().ToString("N"));
@@ -125,6 +189,7 @@ public sealed class WebLinkServiceTests
                 id,name,slug,url,clicks
                 7,Discord,discord,https://discord.gg/example,42
                 8,Docs,/go/docs,https://docs.example.test,12
+                9,Google,google,https://google.example.test,3
                 """);
             File.WriteAllText(outPath,
                 """
@@ -151,8 +216,8 @@ public sealed class WebLinkServiceTests
             });
 
             Assert.Equal(1, result.ExistingCount);
-            Assert.Equal(2, result.ImportedCount);
-            Assert.Equal(3, result.WrittenCount);
+            Assert.Equal(3, result.ImportedCount);
+            Assert.Equal(4, result.WrittenCount);
 
             var loaded = WebLinkService.Load(new WebLinkLoadOptions
             {
@@ -164,6 +229,8 @@ public sealed class WebLinkServiceTests
             Assert.Equal(42, discord.ImportedHits);
             Assert.Equal("imported-pretty-links", discord.Source);
             Assert.Contains("imported", discord.Tags);
+            Assert.Contains(loaded.Shortlinks, item => item.Slug == "google" && item.PathPrefix == "/go");
+            Assert.DoesNotContain(loaded.Shortlinks, item => item.Slug == "ogle");
         }
         finally
         {

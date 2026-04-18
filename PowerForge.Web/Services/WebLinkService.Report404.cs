@@ -9,7 +9,8 @@ namespace PowerForge.Web;
 
 public static partial class WebLinkService
 {
-    private static readonly Regex ApacheRequestRegex = new("\"[A-Z]+\\s+([^\\s\\\"]+)\\s+HTTP/[^\\\"]+\"\\s+(\\d{3})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly TimeSpan LinkRegexTimeout = TimeSpan.FromSeconds(2);
+    private static readonly Regex ApacheRequestRegex = new("\"[A-Z]+\\s+([^\\s\\\"]+)\\s+HTTP/[^\\\"]+\"\\s+(\\d{3})", RegexOptions.Compiled | RegexOptions.CultureInvariant, LinkRegexTimeout);
 
     /// <summary>Creates a reviewable 404 suggestion report from logs or observation CSVs.</summary>
     public static WebLink404ReportResult Generate404Report(WebLink404ReportOptions options)

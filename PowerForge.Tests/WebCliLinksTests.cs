@@ -84,6 +84,33 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
+    public void HandleSubCommand_LinksValidate_AcceptsCamelCaseDirectSourceFlags()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-direct-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            _ = WriteSiteFixture(root, duplicateRedirects: false);
+            var redirectsPath = Path.Combine(root, "data", "links", "redirects.json");
+            var shortlinksPath = Path.Combine(root, "data", "links", "shortlinks.json");
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "links",
+                new[] { "validate", "--redirectsPath", redirectsPath, "--shortlinksPath", shortlinksPath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
+
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void HandleSubCommand_LinksImportWordPress_ImportsPrettyLinksCsv()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-import-" + Guid.NewGuid().ToString("N"));

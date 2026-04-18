@@ -1856,6 +1856,8 @@
         "summary-path": { "type": "string" },
         "reportPath": { "type": "string" },
         "report-path": { "type": "string" },
+        "duplicateReportPath": { "type": "string" },
+        "duplicate-report-path": { "type": "string" },
         "strict": { "type": "boolean" },
         "skipValidation": { "type": "boolean" },
         "skip-validation": { "type": "boolean" },

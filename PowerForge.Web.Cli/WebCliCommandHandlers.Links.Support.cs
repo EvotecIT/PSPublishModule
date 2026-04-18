@@ -188,8 +188,10 @@ internal static partial class WebCliCommandHandlers
     private static bool HasDirectLinkSources(string[] args)
         => !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--redirects")) ||
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--redirects-path")) ||
+           !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--redirectsPath")) ||
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinks")) ||
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinks-path")) ||
+           !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinksPath")) ||
            ReadOptionList(args, "--source", "--sources", "--redirect-csv", "--redirect-csv-path", "--redirect-csv-paths", "--csv-source", "--csv-sources").Count > 0;
 
     private static string? ResolvePathForLinks(string baseDir, string? directValue, string? configValue)
