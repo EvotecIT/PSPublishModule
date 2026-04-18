@@ -46,6 +46,18 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebDotNetBuildResult))]
 [JsonSerializable(typeof(WebDotNetPublishResult))]
 [JsonSerializable(typeof(WebStaticOverlayResult))]
+[JsonSerializable(typeof(LinkServiceSpec))]
+[JsonSerializable(typeof(LinkRedirectRule[]))]
+[JsonSerializable(typeof(LinkShortlinkRule[]))]
+[JsonSerializable(typeof(LinkValidationIssue[]))]
+[JsonSerializable(typeof(LinkValidationResult))]
+[JsonSerializable(typeof(WebLinkApacheExportResult))]
+[JsonSerializable(typeof(WebLinkShortlinkImportResult))]
+[JsonSerializable(typeof(WebLink404ReportResult))]
+[JsonSerializable(typeof(WebLink404PromoteResult))]
+[JsonSerializable(typeof(WebLink404IgnoreResult))]
+[JsonSerializable(typeof(WebLink404ReviewResult))]
+[JsonSerializable(typeof(WebLinkReviewApplyResult))]
 internal partial class PowerForgeWebCliJsonContext : JsonSerializerContext
 {
 }

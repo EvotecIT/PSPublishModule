@@ -38,6 +38,8 @@ collection: {{collection}}
             "ecosystem-stats" => HandleEcosystemStats(subArgs, outputJson, logger, outputSchemaVersion),
             "optimize" => HandleOptimize(subArgs, outputJson, logger, outputSchemaVersion),
             "pipeline" => HandlePipeline(subArgs, outputJson, logger, outputSchemaVersion),
+            "links" => HandleLinks(subArgs, outputJson, logger, outputSchemaVersion),
+            "link" => HandleLinks(subArgs, outputJson, logger, outputSchemaVersion),
             "website-runner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
             "website_runner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
             "websiterunner" => HandleWebsiteRunner(subArgs, outputJson, logger, outputSchemaVersion),
