@@ -79,6 +79,35 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateShortlinks_TreatsWildcardAndEmptyHostsAsSameScope()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Shortlinks = new[]
+            {
+                new LinkShortlinkRule
+                {
+                    Slug = "docs",
+                    TargetUrl = "/docs/",
+                    Owner = "evotec"
+                },
+                new LinkShortlinkRule
+                {
+                    Host = "*",
+                    Slug = "docs",
+                    TargetUrl = "/docs-v2/",
+                    Owner = "evotec"
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.SHORTLINK.DUPLICATE");
+    }
+
+    [Fact]
     public void ValidateRedirectGraph_KeepsHostScopedChainsSeparate()
     {
         var dataSet = new WebLinkDataSet
@@ -287,6 +316,29 @@ public sealed class WebLinkServiceTests
         var result = WebLinkService.Validate(dataSet);
 
         Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.TARGET_INVALID");
+    }
+
+    [Fact]
+    public void ValidateRedirects_TreatsSameHostAbsoluteTargetAsInternal()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "same-host",
+                    SourceHost = "example.com",
+                    SourcePath = "/old",
+                    TargetUrl = "https://example.com/new",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.TARGET_EXTERNAL");
     }
 
     [Fact]

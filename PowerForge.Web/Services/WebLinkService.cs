@@ -321,7 +321,7 @@ public static partial class WebLinkService
                 AddIssue(issues, LinkValidationSeverity.Error, "PFLINK.REDIRECT.TARGET_MISSING", "Redirect target URL is required unless status is 410.", "redirect", label);
 
             if (!string.IsNullOrWhiteSpace(redirect.TargetUrl))
-                ValidateTarget(redirect.TargetUrl, redirect.AllowExternal, issues, "redirect", label, "PFLINK.REDIRECT");
+                ValidateTarget(redirect.TargetUrl, redirect.AllowExternal, issues, "redirect", label, "PFLINK.REDIRECT", redirect.SourceHost);
 
             if (redirect.MatchType == LinkRedirectMatchType.Regex && IsBroadRegex(redirect.SourcePath))
                 AddIssue(issues, LinkValidationSeverity.Warning, "PFLINK.REDIRECT.REGEX_BROAD", "Regex redirect looks very broad and should be reviewed.", "redirect", label);
@@ -389,9 +389,9 @@ public static partial class WebLinkService
             if (string.IsNullOrWhiteSpace(shortlink.TargetUrl))
                 AddIssue(issues, LinkValidationSeverity.Error, "PFLINK.SHORTLINK.TARGET_MISSING", "Shortlink target URL is required.", "shortlink", label);
             else
-                ValidateTarget(AppendUtm(shortlink.TargetUrl, shortlink.Utm), shortlink.AllowExternal, issues, "shortlink", label, "PFLINK.SHORTLINK");
+                ValidateTarget(AppendUtm(shortlink.TargetUrl, shortlink.Utm), shortlink.AllowExternal, issues, "shortlink", label, "PFLINK.SHORTLINK", shortlink.Host);
 
-            var key = $"{shortlink.Host ?? string.Empty}|{NormalizeShortlinkPath(shortlink, hosts)}";
+            var key = $"{NormalizeRedirectGraphHost(shortlink.Host)}|{NormalizeShortlinkPath(shortlink, hosts)}";
             if (seen.TryGetValue(key, out var existing))
             {
                 AddIssue(issues, LinkValidationSeverity.Error, "PFLINK.SHORTLINK.DUPLICATE", $"Duplicate shortlink conflicts with '{existing.Slug}'.", "shortlink", label);
@@ -534,7 +534,7 @@ public static partial class WebLinkService
             : null;
     }
 
-    private static void ValidateTarget(string targetUrl, bool allowExternal, List<LinkValidationIssue> issues, string source, string? id, string codePrefix)
+    private static void ValidateTarget(string targetUrl, bool allowExternal, List<LinkValidationIssue> issues, string source, string? id, string codePrefix, string? sourceHost = null)
     {
         var trimmed = targetUrl.Trim();
         if (trimmed.StartsWith("//", StringComparison.Ordinal))
@@ -559,9 +559,14 @@ public static partial class WebLinkService
             return;
         }
 
-        if (!allowExternal)
+        if (!allowExternal && !IsSameHostTarget(uri, sourceHost))
             AddIssue(issues, LinkValidationSeverity.Error, codePrefix + ".TARGET_EXTERNAL", "External target requires allowExternal: true.", source, id);
     }
+
+    private static bool IsSameHostTarget(Uri target, string? sourceHost)
+        => !string.IsNullOrWhiteSpace(sourceHost) &&
+           !sourceHost.Trim().Equals("*", StringComparison.Ordinal) &&
+           target.Host.Equals(sourceHost.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static void AddIssue(List<LinkValidationIssue> issues, LinkValidationSeverity severity, string code, string message, string source, string? id)
         => issues.Add(new LinkValidationIssue
