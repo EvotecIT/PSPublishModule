@@ -160,7 +160,7 @@ public class WebAgentReadinessTests
                 """
                 <!doctype html>
                 <html lang="en">
-                <head><title>Example Home</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <head><title>Example Home</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2020-01-01"}</script></head>
                 <body><main><h1>Welcome</h1><p>Hello <strong>agents</strong>.</p><p><a href="/docs/">Read docs</a></p></main></body>
                 </html>
                 """);
@@ -204,6 +204,65 @@ public class WebAgentReadinessTests
             Assert.Contains("/docs/index.md" + Environment.NewLine + "  Content-Type: text/markdown; charset=utf-8", headers, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(result.Checks, check => check.Id == "markdown-artifacts" && check.Status == "pass");
             Assert.Contains(result.Checks, check => check.Id == "markdown-root-artifact" && check.Status == "pass");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_HonorsMarkdownArtifactExtensionAndSkipsApiFragments()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-markdown-extension-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "api-fragments"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example Home</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2020-01-01"}</script></head>
+                <body><main><h1>Welcome</h1><p>Hello agents.</p></main></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "api-fragments", "index.html"),
+                """
+                <!doctype html>
+                <html><body><main><h1>Fragment</h1></main></body></html>
+                """);
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true, Extension = ".markdown" },
+                    MarkdownNegotiation = false,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.True(File.Exists(Path.Combine(root, "index.markdown")));
+            Assert.False(File.Exists(Path.Combine(root, "api-fragments", "index.markdown")));
+
+            var headers = File.ReadAllText(Path.Combine(root, "_headers"));
+            Assert.Contains("</index.markdown>; rel=\"alternate\"; type=\"text/markdown\"", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/index.markdown" + Environment.NewLine + "  Content-Type: text/markdown; charset=utf-8", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/api-fragments/index.markdown", headers, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -408,7 +467,9 @@ public class WebAgentReadinessTests
         {
             var siteRoot = Path.Combine(root, "site");
             Directory.CreateDirectory(siteRoot);
+            Directory.CreateDirectory(Path.Combine(siteRoot, "api-fragments"));
             File.WriteAllText(Path.Combine(siteRoot, "index.html"), "<!doctype html><html><body><main><h1>Home</h1></main></body></html>");
+            File.WriteAllText(Path.Combine(siteRoot, "api-fragments", "index.html"), "<!doctype html><html><body><main><h1>Fragment</h1></main></body></html>");
             File.WriteAllText(Path.Combine(root, "site.json"),
                 """
                 {
@@ -434,6 +495,7 @@ public class WebAgentReadinessTests
             Assert.Contains(Path.Combine(siteRoot, "robots.txt"), outputs);
             Assert.Contains(Path.Combine(siteRoot, ".well-known", "skills.json"), outputs);
             Assert.Contains(Path.Combine(siteRoot, "index.md"), outputs);
+            Assert.DoesNotContain(Path.Combine(siteRoot, "api-fragments", "index.md"), outputs);
             Assert.Contains(Path.Combine(siteRoot, "_headers"), outputs);
             Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "api-catalog"), outputs);
             Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "mcp", "server-card.json"), outputs);

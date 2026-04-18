@@ -16,9 +16,16 @@ public static class WebAgentReadiness
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
     private const string AgentSkillsSchema = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
     private static readonly Regex GeneratedBlockRegex = new(
         @"(?ms)^\s*# BEGIN PowerForge Agent Readiness\s*$.*?^\s*# END PowerForge Agent Readiness\s*$\r?\n?",
         RegexOptions.Compiled);
+    private static readonly Regex MarkdownWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex MarkdownTrailingWhitespaceRegex = new(@"[ \t]+\n", RegexOptions.Compiled);
+    private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
+    private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
 
     /// <summary>Writes configured agent-readiness files under the site root.</summary>
     public static WebAgentReadinessResult Prepare(WebAgentReadinessPrepareOptions options)
@@ -733,12 +740,12 @@ public static class WebAgentReadiness
         var written = new List<string>();
         foreach (var htmlPath in candidates)
         {
-            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath), spec);
+            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath, Encoding.UTF8), spec);
             if (string.IsNullOrWhiteSpace(markdown))
                 continue;
 
             var outputPath = Path.ChangeExtension(htmlPath, extension);
-            File.WriteAllText(outputPath, markdown);
+            File.WriteAllText(outputPath, markdown, Encoding.UTF8);
             written.Add(outputPath);
         }
 
@@ -910,10 +917,10 @@ public static class WebAgentReadiness
             "footer" or "form" or "header" or "main" or "nav" or "section" or "table";
 
     private static string NormalizeInlineWhitespace(string text)
-        => string.IsNullOrWhiteSpace(text) ? string.Empty : Regex.Replace(text, @"\s+", " ");
+        => string.IsNullOrWhiteSpace(text) ? string.Empty : MarkdownWhitespaceRegex.Replace(text, " ");
 
     private static string CollapseMarkdownInline(string text)
-        => Regex.Replace(NormalizeMarkdownDocument(text).Replace(Environment.NewLine, " ", StringComparison.Ordinal), @"\s+", " ").Trim();
+        => MarkdownWhitespaceRegex.Replace(NormalizeMarkdownDocument(text).Replace(Environment.NewLine, " ", StringComparison.Ordinal), " ").Trim();
 
     private static string NormalizeMarkdownDocument(string text)
     {
@@ -921,9 +928,9 @@ public static class WebAgentReadiness
             return string.Empty;
 
         var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        normalized = Regex.Replace(normalized, @"[ \t]+\n", "\n");
-        normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
-        normalized = Regex.Replace(normalized, @"[ \t]{2,}", " ");
+        normalized = MarkdownTrailingWhitespaceRegex.Replace(normalized, "\n");
+        normalized = MarkdownBlankLinesRegex.Replace(normalized, "\n\n");
+        normalized = MarkdownRepeatedSpacesRegex.Replace(normalized, " ");
         return normalized.Replace("\n", Environment.NewLine, StringComparison.Ordinal).Trim();
     }
 
@@ -1018,9 +1025,10 @@ public static class WebAgentReadiness
 
         if (spec.MarkdownArtifacts?.Enabled == true)
         {
+            var extension = NormalizeMarkdownExtension(spec.MarkdownArtifacts.Extension);
             foreach (var route in markdownArtifactPaths
                          .Select(path => ToSiteRoute(siteRoot, path))
-                         .Where(static route => route.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                         .Where(route => route.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 AppendResourceHeaders(sb, route, "text/markdown; charset=utf-8", security);
@@ -1459,6 +1467,7 @@ public static class WebAgentReadiness
                 .Take(2)
                 .ToArray()
             : Array.Empty<string>();
+        var rootMarkdownExists = File.Exists(rootMarkdown);
 
         AddCheck(checks, "markdown-artifacts", "content", "Markdown artifacts",
             markdownFiles.Length > 0 ? "pass" : (expected ? "fail" : "info"),
@@ -1468,8 +1477,8 @@ public static class WebAgentReadiness
             siteRoot);
 
         AddCheck(checks, "markdown-root-artifact", "content", "Root markdown artifact",
-            File.Exists(rootMarkdown) ? "pass" : (expected ? "fail" : "info"),
-            File.Exists(rootMarkdown)
+            rootMarkdownExists ? "pass" : (expected ? "fail" : "info"),
+            rootMarkdownExists
                 ? "Root page has a markdown artifact for host-level Accept negotiation."
                 : (expected ? "Root markdown artifact is missing." : "Root markdown artifact generation is disabled."),
             rootMarkdown);
@@ -1696,8 +1705,8 @@ public static class WebAgentReadiness
             ? root
             : root + Path.DirectorySeparatorChar;
 
-        if (!resolved.Equals(root, StringComparison.OrdinalIgnoreCase) &&
-            !resolved.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        if (!resolved.Equals(root, FileSystemPathComparison) &&
+            !resolved.StartsWith(rootWithSeparator, FileSystemPathComparison))
         {
             throw new ArgumentException($"Path '{path}' resolves outside the site root.", nameof(path));
         }
@@ -1716,8 +1725,8 @@ public static class WebAgentReadiness
             ? root
             : root + Path.DirectorySeparatorChar;
 
-        if (!resolved.Equals(root, StringComparison.OrdinalIgnoreCase) &&
-            !resolved.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        if (!resolved.Equals(root, FileSystemPathComparison) &&
+            !resolved.StartsWith(rootWithSeparator, FileSystemPathComparison))
         {
             throw new ArgumentException($"Path '{path}' resolves outside the site root.", nameof(path));
         }

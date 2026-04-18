@@ -1034,6 +1034,12 @@ internal static partial class WebPipelineRunner
                 ? Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
                     .Where(path => !Path.GetFileName(path).EndsWith(".head.html", StringComparison.OrdinalIgnoreCase))
                     .Where(path => !Path.GetFileName(path).EndsWith(".scripts.html", StringComparison.OrdinalIgnoreCase))
+                    .Where(path =>
+                    {
+                        var relative = Path.GetRelativePath(siteRoot, path).Replace('\\', '/');
+                        return !relative.StartsWith("api-fragments/", StringComparison.OrdinalIgnoreCase) &&
+                               !relative.Contains("/api-fragments/", StringComparison.OrdinalIgnoreCase);
+                    })
                     .Select(path => Path.ChangeExtension(path, extension))
                 : new[] { ResolveAgentReadySiteOutputPath(siteRoot, "index" + extension) });
         }
