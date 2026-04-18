@@ -306,7 +306,7 @@ public static partial class WebLinkService
         var result = new List<char>();
         foreach (var ch in value.Trim().ToLowerInvariant())
         {
-            if (char.IsLetterOrDigit(ch))
+            if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'))
             {
                 result.Add(ch);
             }

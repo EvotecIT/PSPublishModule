@@ -687,7 +687,10 @@ public static partial class WebLinkService
 
         var normalized = NormalizeDestination(targetUrl);
         if (!IsHttpUrl(normalized))
-            return NormalizeLanguageRootPath(NormalizeSourcePath(normalized), sourceHost, languageRootHosts);
+        {
+            var path = NormalizeLanguageRootPath(NormalizeSourcePath(normalized), sourceHost, languageRootHosts);
+            return AppendNormalizedQuery(path, ExtractLocalQuery(normalized));
+        }
 
         if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
             return normalized;
@@ -695,10 +698,17 @@ public static partial class WebLinkService
         if (!string.IsNullOrWhiteSpace(sourceHost) &&
             uri.Host.Equals(sourceHost.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            return NormalizeLanguageRootPath(NormalizeSourcePath(uri.AbsolutePath), sourceHost, languageRootHosts);
+            var path = NormalizeLanguageRootPath(NormalizeSourcePath(uri.AbsolutePath), sourceHost, languageRootHosts);
+            return AppendNormalizedQuery(path, uri.Query);
         }
 
         return normalized.TrimEnd('/');
+    }
+
+    private static string AppendNormalizedQuery(string path, string? query)
+    {
+        var normalizedQuery = NormalizeRedirectGraphQuery(query);
+        return string.IsNullOrWhiteSpace(normalizedQuery) ? path : path + "?" + normalizedQuery;
     }
 
     private static string NormalizeLanguageRootPath(

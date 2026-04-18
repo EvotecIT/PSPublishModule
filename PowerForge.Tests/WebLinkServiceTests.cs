@@ -174,6 +174,36 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirects_PreservesTargetQueryWhenComparingDuplicates()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "promo-a",
+                    SourcePath = "/promo",
+                    TargetUrl = "/landing?src=a",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "promo-b",
+                    SourcePath = "/promo",
+                    TargetUrl = "/landing?src=b",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE_SAME_TARGET");
+    }
+
+    [Fact]
     public void ValidateRedirects_RejectsProtocolRelativeTargets()
     {
         var dataSet = new WebLinkDataSet
@@ -530,6 +560,50 @@ public sealed class WebLinkServiceTests
             Assert.Equal(1, result.ImportedCount);
             Assert.Equal(1, result.WrittenCount);
             Assert.Equal(1, result.SkippedDuplicateCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ImportPrettyLinks_SlugifiesToValidatorSafeAscii()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-import-ascii-slug-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var csvPath = Path.Combine(root, "pretty-links.csv");
+            var outPath = Path.Combine(root, "shortlinks.json");
+            File.WriteAllText(csvPath,
+                """
+                id,name,slug,url,clicks
+                9,Cafe,café-2026,https://cafe.example.test,5
+                """);
+
+            WebLinkService.ImportPrettyLinks(new WebLinkShortlinkImportOptions
+            {
+                SourcePath = csvPath,
+                OutputPath = outPath,
+                Host = "evo.yt",
+                ShortHost = "evo.yt",
+                Owner = "evotec"
+            });
+
+            var loaded = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = outPath,
+                Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["short"] = "evo.yt"
+                }
+            });
+
+            var shortlink = Assert.Single(loaded.Shortlinks);
+            Assert.Equal("caf-2026", shortlink.Slug);
+            Assert.True(WebLinkService.Validate(loaded).Success);
         }
         finally
         {
