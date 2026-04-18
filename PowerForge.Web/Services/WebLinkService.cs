@@ -441,46 +441,74 @@ public static partial class WebLinkService
                 };
         }
 
+        var graphHosts = redirects
+            .Select(redirect => NormalizeRedirectGraphHost(redirect.SourceHost))
+            .Where(host => !string.IsNullOrWhiteSpace(host))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         foreach (var redirect in redirects)
         {
             if (redirect.MatchType != LinkRedirectMatchType.Exact && redirect.MatchType != LinkRedirectMatchType.Query)
                 continue;
 
             var host = NormalizeRedirectGraphHost(redirect.SourceHost);
-            var current = NormalizeSourcePath(redirect.SourcePath);
-            var currentQuery = redirect.SourceQuery;
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var depth = 0;
-            while (TryGetRedirectGraphTarget(map, host, current, currentQuery, out var next))
+            foreach (var traversalHost in BuildRedirectGraphTraversalHosts(host, graphHosts))
             {
-                if (!visited.Add(BuildRedirectGraphKey(host, current, currentQuery)))
+                var current = NormalizeSourcePath(redirect.SourcePath);
+                var currentQuery = redirect.SourceQuery;
+                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var depth = 0;
+                var reported = false;
+                while (TryGetRedirectGraphTarget(map, traversalHost, current, currentQuery, out var next))
                 {
-                    AddRedirectIssue(
-                        issues,
-                        LinkValidationSeverity.Error,
-                        "PFLINK.REDIRECT.LOOP",
-                        $"Redirect loop detected starting at {BuildDisplaySource(redirect)}.",
-                        redirect,
-                        normalizedTarget: NormalizeSourcePath(redirect.TargetUrl));
-                    break;
+                    if (!visited.Add(BuildRedirectGraphKey(traversalHost, current, currentQuery)))
+                    {
+                        AddRedirectIssue(
+                            issues,
+                            LinkValidationSeverity.Error,
+                            "PFLINK.REDIRECT.LOOP",
+                            $"Redirect loop detected starting at {BuildDisplaySource(redirect)}.",
+                            redirect,
+                            normalizedTarget: NormalizeSourcePath(redirect.TargetUrl));
+                        reported = true;
+                        break;
+                    }
+
+                    current = next.Path;
+                    currentQuery = next.Query;
+                    depth++;
+                    if (depth > 5)
+                    {
+                        AddRedirectIssue(
+                            issues,
+                            LinkValidationSeverity.Error,
+                            "PFLINK.REDIRECT.CHAIN",
+                            $"Redirect chain is longer than 5 hops starting at {BuildDisplaySource(redirect)}.",
+                            redirect,
+                            normalizedTarget: NormalizeSourcePath(redirect.TargetUrl));
+                        reported = true;
+                        break;
+                    }
                 }
 
-                current = next.Path;
-                currentQuery = next.Query;
-                depth++;
-                if (depth > 5)
-                {
-                    AddRedirectIssue(
-                        issues,
-                        LinkValidationSeverity.Error,
-                        "PFLINK.REDIRECT.CHAIN",
-                        $"Redirect chain is longer than 5 hops starting at {BuildDisplaySource(redirect)}.",
-                        redirect,
-                        normalizedTarget: NormalizeSourcePath(redirect.TargetUrl));
+                if (reported)
                     break;
-                }
             }
         }
+    }
+
+    private static IEnumerable<string> BuildRedirectGraphTraversalHosts(string host, IReadOnlyList<string> graphHosts)
+    {
+        if (!string.IsNullOrWhiteSpace(host))
+        {
+            yield return host;
+            yield break;
+        }
+
+        yield return string.Empty;
+        foreach (var graphHost in graphHosts)
+            yield return graphHost;
     }
 
     private static bool TryGetRedirectGraphTarget(

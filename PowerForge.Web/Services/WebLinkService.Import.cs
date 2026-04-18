@@ -276,7 +276,7 @@ public static partial class WebLinkService
 
     private static string BuildShortlinkImportKey(LinkShortlinkRule shortlink, string? shortHost)
         => string.Join("|",
-            shortlink.Host ?? string.Empty,
+            NormalizeRedirectGraphHost(shortlink.Host),
             NormalizeShortlinkImportPrefix(shortlink.PathPrefix, shortlink.Host, shortHost),
             shortlink.Slug ?? string.Empty);
 
