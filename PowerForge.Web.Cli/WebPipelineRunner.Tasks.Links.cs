@@ -127,7 +127,8 @@ internal static partial class WebPipelineRunner
 
         var hosts = BuildLinksHostMap(step, links);
         var host = GetString(step, "host");
-        if (string.IsNullOrWhiteSpace(host) && hosts.TryGetValue("short", out var shortHost))
+        hosts.TryGetValue("short", out var shortHost);
+        if (string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(shortHost))
             host = shortHost;
 
         var result = WebLinkService.ImportPrettyLinks(new WebLinkShortlinkImportOptions
@@ -136,9 +137,10 @@ internal static partial class WebPipelineRunner
             SourceOriginPath = sourcePathValue,
             OutputPath = outputPath,
             Host = host,
+            ShortHost = shortHost,
             PathPrefix = GetString(step, "pathPrefix") ?? GetString(step, "path-prefix"),
             Owner = GetString(step, "owner"),
-            Tags = GetArrayOfStrings(step, "tags") ?? GetArrayOfStrings(step, "tag") ?? Array.Empty<string>(),
+            Tags = GetStringOrArrayOfStrings(step, "tags", "tag"),
             Status = GetInt(step, "status") ?? 302,
             AllowExternal = !(GetBool(step, "allowExternal") == false || GetBool(step, "allow-external") == false),
             MergeWithExisting = !(GetBool(step, "merge") == false || GetBool(step, "mergeWithExisting") == false || GetBool(step, "merge-with-existing") == false),

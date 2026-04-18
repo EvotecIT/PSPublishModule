@@ -34,7 +34,7 @@ public static partial class WebLinkService
             : new List<LinkShortlinkRule>();
 
         var existingCount = existing.Count;
-        var merged = MergeShortlinks(existing, imported, options.ReplaceExisting, out var skippedCount);
+        var merged = MergeShortlinks(existing, imported, options.ReplaceExisting, options.ShortHost, out var skippedCount);
         WriteShortlinkJson(outputPath, merged);
 
         return new WebLinkShortlinkImportResult
@@ -143,6 +143,7 @@ public static partial class WebLinkService
         List<LinkShortlinkRule> existing,
         List<LinkShortlinkRule> imported,
         bool replaceExisting,
+        string? shortHost,
         out int skippedCount)
     {
         skippedCount = 0;
@@ -151,13 +152,13 @@ public static partial class WebLinkService
 
         foreach (var shortlink in existing.Where(static item => item is not null))
         {
-            index[BuildShortlinkImportKey(shortlink)] = merged.Count;
+            index[BuildShortlinkImportKey(shortlink, shortHost)] = merged.Count;
             merged.Add(shortlink);
         }
 
         foreach (var shortlink in imported.Where(static item => item is not null))
         {
-            var key = BuildShortlinkImportKey(shortlink);
+            var key = BuildShortlinkImportKey(shortlink, shortHost);
             if (index.TryGetValue(key, out var existingIndex))
             {
                 if (replaceExisting)
@@ -273,19 +274,28 @@ public static partial class WebLinkService
             ? parsed
             : defaultStatus;
 
-    private static string BuildShortlinkImportKey(LinkShortlinkRule shortlink)
+    private static string BuildShortlinkImportKey(LinkShortlinkRule shortlink, string? shortHost)
         => string.Join("|",
             shortlink.Host ?? string.Empty,
-            NormalizeShortlinkImportPrefix(shortlink.PathPrefix),
+            NormalizeShortlinkImportPrefix(shortlink.PathPrefix, shortlink.Host, shortHost),
             shortlink.Slug ?? string.Empty);
 
-    private static string NormalizeShortlinkImportPrefix(string? pathPrefix)
+    private static string NormalizeShortlinkImportPrefix(string? pathPrefix, string? host, string? shortHost)
     {
         if (string.IsNullOrWhiteSpace(pathPrefix))
-            return string.Empty;
+        {
+            return !string.IsNullOrWhiteSpace(host) &&
+                   !string.IsNullOrWhiteSpace(shortHost) &&
+                   host.Trim().Equals(shortHost.Trim(), StringComparison.OrdinalIgnoreCase)
+                ? "/"
+                : "/go";
+        }
 
-        var trimmed = pathPrefix.Trim().Trim('/');
-        return string.IsNullOrWhiteSpace(trimmed) ? string.Empty : "/" + trimmed;
+        var trimmed = pathPrefix.Trim();
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed.TrimStart('/');
+        trimmed = trimmed.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(trimmed) ? "/" : trimmed;
     }
 
     private static string SlugifyShortlink(string value)
@@ -337,6 +347,8 @@ public sealed class WebLinkShortlinkImportOptions
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Optional host for imported shortlinks.</summary>
     public string? Host { get; set; }
+    /// <summary>Configured shortlink host used to resolve implicit root prefixes.</summary>
+    public string? ShortHost { get; set; }
     /// <summary>Optional path prefix for imported shortlinks.</summary>
     public string? PathPrefix { get; set; }
     /// <summary>Default owner assigned to imported shortlinks.</summary>

@@ -407,7 +407,7 @@ public static partial class WebLinkService
 
     private static void ValidateRedirectGraph(LinkRedirectRule[] redirects, List<LinkValidationIssue> issues)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, RedirectGraphTarget>(StringComparer.OrdinalIgnoreCase);
         foreach (var redirect in redirects)
         {
             if (redirect.MatchType != LinkRedirectMatchType.Exact && redirect.MatchType != LinkRedirectMatchType.Query)
@@ -416,10 +416,14 @@ public static partial class WebLinkService
                 continue;
 
             var source = NormalizeSourcePath(redirect.SourcePath);
-            var target = NormalizeSourcePath(redirect.TargetUrl);
-            if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+            var target = BuildRedirectGraphTarget(redirect.TargetUrl);
+            if (string.Equals(source, target.Path, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
-            if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(target))
+            }
+
+            if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(target.Path))
                 map[BuildRedirectGraphKey(redirect.SourceHost, source, redirect.SourceQuery)] = target;
         }
 
@@ -447,8 +451,8 @@ public static partial class WebLinkService
                     break;
                 }
 
-                current = next;
-                currentQuery = string.Empty;
+                current = next.Path;
+                currentQuery = next.Query;
                 depth++;
                 if (depth > 5)
                 {
@@ -466,11 +470,11 @@ public static partial class WebLinkService
     }
 
     private static bool TryGetRedirectGraphTarget(
-        IReadOnlyDictionary<string, string> map,
+        IReadOnlyDictionary<string, RedirectGraphTarget> map,
         string host,
         string path,
         string? query,
-        out string target)
+        out RedirectGraphTarget target)
     {
         if (!string.IsNullOrWhiteSpace(host) &&
             map.TryGetValue(BuildRedirectGraphKey(host, path, query), out target!))
@@ -479,6 +483,30 @@ public static partial class WebLinkService
         }
 
         return map.TryGetValue(BuildRedirectGraphKey(null, path, query), out target!);
+    }
+
+    private readonly record struct RedirectGraphTarget(string Path, string Query);
+
+    private static RedirectGraphTarget BuildRedirectGraphTarget(string targetUrl)
+        => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)));
+
+    private static string NormalizeRedirectGraphQuery(string? query)
+        => string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim().TrimStart('?').ToLowerInvariant();
+
+    private static string? ExtractLocalQuery(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        var hashIndex = trimmed.IndexOf('#');
+        if (hashIndex >= 0)
+            trimmed = trimmed[..hashIndex];
+
+        var queryIndex = trimmed.IndexOf('?');
+        return queryIndex >= 0 && queryIndex < trimmed.Length - 1
+            ? trimmed[(queryIndex + 1)..]
+            : null;
     }
 
     private static void ValidateTarget(string targetUrl, bool allowExternal, List<LinkValidationIssue> issues, string source, string? id, string codePrefix)

@@ -601,7 +601,8 @@ internal static partial class WebCliCommandHandlers
 
         var hosts = BuildLinkHostMap(args, loaded.Spec);
         var host = TryGetOptionValue(args, "--host");
-        if (string.IsNullOrWhiteSpace(host) && hosts.TryGetValue("short", out var configuredShortHost))
+        hosts.TryGetValue("short", out var configuredShortHost);
+        if (string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(configuredShortHost))
             host = configuredShortHost;
 
         var status = ParseIntOption(TryGetOptionValue(args, "--status"), 302);
@@ -611,6 +612,7 @@ internal static partial class WebCliCommandHandlers
             SourceOriginPath = sourcePath,
             OutputPath = outPath,
             Host = host,
+            ShortHost = configuredShortHost,
             PathPrefix = TryGetOptionValue(args, "--path-prefix") ?? TryGetOptionValue(args, "--pathPrefix"),
             Owner = TryGetOptionValue(args, "--owner"),
             Tags = ReadOptionList(args, "--tag", "--tags").ToArray(),

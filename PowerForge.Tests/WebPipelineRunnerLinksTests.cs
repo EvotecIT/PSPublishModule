@@ -384,7 +384,7 @@ public sealed class WebPipelineRunnerLinksTests
                       "config": "./site.json",
                       "source": "./data/links/imports/pretty-links.csv",
                       "owner": "evotec",
-                      "tags": [ "imported" ],
+                      "tags": "imported",
                       "summaryPath": "./Build/import-links-summary.json"
                     }
                   ]
@@ -401,6 +401,7 @@ public sealed class WebPipelineRunnerLinksTests
             var json = File.ReadAllText(shortlinksPath);
             Assert.Contains("\"slug\": \"teams\"", json, StringComparison.Ordinal);
             Assert.Contains("\"host\": \"evo.yt\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"imported\"", json, StringComparison.Ordinal);
             Assert.Contains("\"importedHits\": 42", json, StringComparison.Ordinal);
 
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "import-links-summary.json")));

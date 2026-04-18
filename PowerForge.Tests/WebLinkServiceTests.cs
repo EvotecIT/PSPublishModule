@@ -143,6 +143,37 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirectGraph_DetectsLoopsThroughTargetQuery()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "a",
+                    SourcePath = "/a",
+                    TargetUrl = "/b?x=1",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "b-query",
+                    SourcePath = "/b",
+                    SourceQuery = "x=1",
+                    MatchType = LinkRedirectMatchType.Query,
+                    TargetUrl = "/a",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+    }
+
+    [Fact]
     public void ExportApache_EmitsHostScopedRedirectsAndShortlinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-" + Guid.NewGuid().ToString("N"));
@@ -364,6 +395,56 @@ public sealed class WebLinkServiceTests
             });
             var docs = Assert.Single(loaded.Shortlinks, item => item.Slug == "docs");
             Assert.Equal("https://docs.example.test", docs.TargetUrl);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ImportPrettyLinks_TreatsImplicitPrefixAsGoForNonShortHosts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-import-implicit-prefix-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var csvPath = Path.Combine(root, "pretty-links.csv");
+            var outPath = Path.Combine(root, "shortlinks.json");
+            File.WriteAllText(csvPath,
+                """
+                id,name,slug,url,clicks
+                8,Docs,/go/docs,https://docs-new.example.test,12
+                """);
+            File.WriteAllText(outPath,
+                """
+                {
+                  "shortlinks": [
+                    {
+                      "host": "evotec.xyz",
+                      "slug": "docs",
+                      "targetUrl": "https://docs.example.test",
+                      "owner": "evotec",
+                      "allowExternal": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebLinkService.ImportPrettyLinks(new WebLinkShortlinkImportOptions
+            {
+                SourcePath = csvPath,
+                OutputPath = outPath,
+                Host = "evotec.xyz",
+                ShortHost = "evo.yt",
+                Owner = "evotec"
+            });
+
+            Assert.Equal(1, result.ExistingCount);
+            Assert.Equal(1, result.ImportedCount);
+            Assert.Equal(1, result.WrittenCount);
+            Assert.Equal(1, result.SkippedDuplicateCount);
         }
         finally
         {
