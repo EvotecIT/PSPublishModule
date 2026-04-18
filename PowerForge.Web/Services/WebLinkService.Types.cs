@@ -29,6 +29,8 @@ public sealed class WebLinkDataSet
     public string[] UsedSources { get; set; } = Array.Empty<string>();
     /// <summary>Configured source files that were missing.</summary>
     public string[] MissingSources { get; set; } = Array.Empty<string>();
+    /// <summary>Named host aliases, for example en, pl, or short.</summary>
+    public IReadOnlyDictionary<string, string> Hosts { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     /// <summary>Host-to-language-prefix map for domains where a language is deployed at the web root.</summary>
     public IReadOnlyDictionary<string, string> LanguageRootHosts { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }

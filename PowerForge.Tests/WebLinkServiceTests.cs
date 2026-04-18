@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -38,6 +39,43 @@ public sealed class WebLinkServiceTests
         Assert.False(result.Success);
         Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
         Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.TARGET_EXTERNAL");
+    }
+
+    [Fact]
+    public void Validate_DetectsShortHostDuplicateRoutes()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["short"] = "evo.yt"
+            },
+            Shortlinks = new[]
+            {
+                new LinkShortlinkRule
+                {
+                    Slug = "docs",
+                    Host = "evo.yt",
+                    TargetUrl = "https://docs.example.test",
+                    Owner = "evotec",
+                    AllowExternal = true
+                },
+                new LinkShortlinkRule
+                {
+                    Slug = "docs",
+                    Host = "evo.yt",
+                    PathPrefix = "/",
+                    TargetUrl = "https://docs-alt.example.test",
+                    Owner = "evotec",
+                    AllowExternal = true
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.SHORTLINK.DUPLICATE");
     }
 
     [Fact]
@@ -167,6 +205,43 @@ public sealed class WebLinkServiceTests
             Assert.Contains("RewriteCond %{QUERY_STRING} (^|&)p=123(&|$)", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{HTTP_HOST} ^(.+\\.)?evo\\.yt$ [NC]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_EscapesExactSourceRegexCharacters()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-escape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Redirects = new[]
+                {
+                    new LinkRedirectRule
+                    {
+                        Id = "dotted",
+                        SourcePath = "/foo.bar/",
+                        TargetUrl = "/new/",
+                        Status = 301
+                    }
+                }
+            };
+
+            WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            });
+
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains(@"RewriteRule ^foo\.bar/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
         }
         finally
         {

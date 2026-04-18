@@ -97,6 +97,40 @@ public sealed class WebPipelineRunnerLinksTests
     }
 
     [Fact]
+    public void RunPipeline_LinksValidate_FailsWhenConfigPathIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-missing-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-validate",
+                      "config": "./missing-site.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("links config file not found", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_LinksValidate_FailsOnUnsafeExternalTarget()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-fail-" + Guid.NewGuid().ToString("N"));

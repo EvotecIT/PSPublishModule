@@ -52,6 +52,7 @@ public static partial class WebLinkService
             Shortlinks = shortlinks.ToArray(),
             UsedSources = usedSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             MissingSources = missingSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            Hosts = NormalizeHostMap(options.Hosts),
             LanguageRootHosts = NormalizeLanguageRootHosts(options.LanguageRootHosts)
         };
     }
@@ -70,7 +71,7 @@ public static partial class WebLinkService
             .ToArray();
 
         ValidateRedirects(enabledRedirects, issues, dataSet.LanguageRootHosts);
-        ValidateShortlinks(enabledShortlinks, issues);
+        ValidateShortlinks(enabledShortlinks, issues, dataSet.Hosts);
         ValidateRedirectGraph(enabledRedirects, issues);
 
         var errorCount = issues.Count(static issue => issue.Severity == LinkValidationSeverity.Error);
@@ -366,7 +367,10 @@ public static partial class WebLinkService
         }
     }
 
-    private static void ValidateShortlinks(LinkShortlinkRule[] shortlinks, List<LinkValidationIssue> issues)
+    private static void ValidateShortlinks(
+        LinkShortlinkRule[] shortlinks,
+        List<LinkValidationIssue> issues,
+        IReadOnlyDictionary<string, string>? hosts)
     {
         var seen = new Dictionary<string, LinkShortlinkRule>(StringComparer.OrdinalIgnoreCase);
         foreach (var shortlink in shortlinks)
@@ -386,7 +390,7 @@ public static partial class WebLinkService
             else
                 ValidateTarget(AppendUtm(shortlink.TargetUrl, shortlink.Utm), shortlink.AllowExternal, issues, "shortlink", label, "PFLINK.SHORTLINK");
 
-            var key = $"{shortlink.Host ?? string.Empty}|{NormalizeShortlinkPath(shortlink, null)}";
+            var key = $"{shortlink.Host ?? string.Empty}|{NormalizeShortlinkPath(shortlink, hosts)}";
             if (seen.TryGetValue(key, out var existing))
             {
                 AddIssue(issues, LinkValidationSeverity.Error, "PFLINK.SHORTLINK.DUPLICATE", $"Duplicate shortlink conflicts with '{existing.Slug}'.", "shortlink", label);
@@ -679,6 +683,23 @@ public static partial class WebLinkService
 
         var rebased = "/" + path[prefix.Length..].TrimStart('/');
         return string.IsNullOrWhiteSpace(rebased) ? "/" : rebased;
+    }
+
+    private static IReadOnlyDictionary<string, string> NormalizeHostMap(IReadOnlyDictionary<string, string>? hosts)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (hosts is null)
+            return normalized;
+
+        foreach (var pair in hosts)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+                continue;
+
+            normalized[pair.Key.Trim()] = pair.Value.Trim();
+        }
+
+        return normalized;
     }
 
     private static IReadOnlyDictionary<string, string> NormalizeLanguageRootHosts(IReadOnlyDictionary<string, string>? hosts)

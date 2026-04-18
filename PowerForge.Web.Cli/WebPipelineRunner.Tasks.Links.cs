@@ -21,7 +21,8 @@ internal static partial class WebPipelineRunner
         var baselineUpdate = GetBool(step, "baselineUpdate") ?? GetBool(step, "baseline-update") ?? false;
         var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline-path") ?? GetString(step, "baseline");
 
-        var linkOptions = BuildLinkLoadOptions(step, baseDir);
+        var loaded = LoadLinksSpec(step, baseDir);
+        var linkOptions = BuildLinkLoadOptions(step, baseDir, loaded);
         var dataSet = WebLinkService.Load(linkOptions);
         if (strict && dataSet.UsedSources.Length == 0)
             throw new InvalidOperationException("links-validate strict mode failed: no link source files were found.");
@@ -55,7 +56,8 @@ internal static partial class WebPipelineRunner
         var includeHeader = GetBool(step, "includeHeader") ?? GetBool(step, "include-header") ?? true;
         var include404 = GetBool(step, "includeErrorDocument404") ?? GetBool(step, "include-error-document-404") ?? false;
 
-        var linkOptions = BuildLinkLoadOptions(step, baseDir);
+        var loaded = LoadLinksSpec(step, baseDir);
+        var linkOptions = BuildLinkLoadOptions(step, baseDir, loaded);
         var dataSet = WebLinkService.Load(linkOptions);
         if (strict && dataSet.UsedSources.Length == 0)
             throw new InvalidOperationException("links-export-apache strict mode failed: no link source files were found.");
@@ -78,7 +80,7 @@ internal static partial class WebPipelineRunner
             GetString(step, "output-path") ??
             GetString(step, "apacheOut") ??
             GetString(step, "apache-out")) ??
-            ResolvePath(baseDir, LoadLinksSpec(step, baseDir).Spec?.ApacheOut) ??
+            ResolvePath(loaded.BaseDir ?? baseDir, loaded.Spec?.ApacheOut) ??
             Path.GetFullPath(Path.Combine(baseDir, "deploy", "apache", "link-service-redirects.conf"));
 
         var export = WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
@@ -317,9 +319,12 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"links-ignore-404 ok: candidates={result.CandidateCount}; written={result.WrittenCount}; skippedDuplicates={result.SkippedDuplicateCount}";
     }
 
-    private static WebLinkLoadOptions BuildLinkLoadOptions(JsonElement step, string baseDir)
+    private static WebLinkLoadOptions BuildLinkLoadOptions(
+        JsonElement step,
+        string baseDir,
+        (LinkServiceSpec? Spec, string? BaseDir)? loadedSpec = null)
     {
-        var loaded = LoadLinksSpec(step, baseDir);
+        var loaded = loadedSpec ?? LoadLinksSpec(step, baseDir);
         var links = loaded.Spec;
         var linkBaseDir = loaded.BaseDir ?? baseDir;
 
@@ -373,9 +378,13 @@ internal static partial class WebPipelineRunner
 
     private static (LinkServiceSpec? Spec, string? BaseDir) LoadLinksSpec(JsonElement step, string baseDir)
     {
-        var configPath = ResolvePath(baseDir, GetString(step, "config"));
-        if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+        var configValue = GetString(step, "config");
+        var configPath = ResolvePath(baseDir, configValue);
+        if (string.IsNullOrWhiteSpace(configPath))
             return (null, null);
+
+        if (!File.Exists(configPath))
+            throw new InvalidOperationException($"links config file not found: {configPath}");
 
         var (siteSpec, siteSpecPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
         return (siteSpec.Links, Path.GetDirectoryName(siteSpecPath) ?? baseDir);
