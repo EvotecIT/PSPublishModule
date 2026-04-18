@@ -276,8 +276,17 @@ public static partial class WebLinkService
     private static string BuildShortlinkImportKey(LinkShortlinkRule shortlink)
         => string.Join("|",
             shortlink.Host ?? string.Empty,
-            shortlink.PathPrefix ?? string.Empty,
+            NormalizeShortlinkImportPrefix(shortlink.PathPrefix),
             shortlink.Slug ?? string.Empty);
+
+    private static string NormalizeShortlinkImportPrefix(string? pathPrefix)
+    {
+        if (string.IsNullOrWhiteSpace(pathPrefix))
+            return string.Empty;
+
+        var trimmed = pathPrefix.Trim().Trim('/');
+        return string.IsNullOrWhiteSpace(trimmed) ? string.Empty : "/" + trimmed;
+    }
 
     private static string SlugifyShortlink(string value)
     {

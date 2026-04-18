@@ -239,6 +239,64 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ImportPrettyLinks_NormalizesPrefixWhenMergingExistingShortlinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-import-prefix-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var csvPath = Path.Combine(root, "pretty-links.csv");
+            var outPath = Path.Combine(root, "shortlinks.json");
+            File.WriteAllText(csvPath,
+                """
+                id,name,slug,url,clicks
+                8,Docs,/go/docs,https://docs-new.example.test,12
+                """);
+            File.WriteAllText(outPath,
+                """
+                {
+                  "shortlinks": [
+                    {
+                      "host": "evo.yt",
+                      "pathPrefix": "/go/",
+                      "slug": "docs",
+                      "targetUrl": "https://docs.example.test",
+                      "owner": "evotec",
+                      "allowExternal": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebLinkService.ImportPrettyLinks(new WebLinkShortlinkImportOptions
+            {
+                SourcePath = csvPath,
+                OutputPath = outPath,
+                Host = "evo.yt",
+                PathPrefix = "go",
+                Owner = "evotec"
+            });
+
+            Assert.Equal(1, result.ExistingCount);
+            Assert.Equal(1, result.ImportedCount);
+            Assert.Equal(1, result.WrittenCount);
+            Assert.Equal(1, result.SkippedDuplicateCount);
+
+            var loaded = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = outPath
+            });
+            var docs = Assert.Single(loaded.Shortlinks, item => item.Slug == "docs");
+            Assert.Equal("https://docs.example.test", docs.TargetUrl);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate404Report_SuggestsGeneratedRoutesFromApacheLog()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-404-" + Guid.NewGuid().ToString("N"));

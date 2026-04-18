@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json.Serialization;
 using System.Text.Json;
 using PowerForge.Web;
 
@@ -291,7 +290,7 @@ internal static partial class WebPipelineRunner
             GetString(step, "csvReport") ??
             GetString(step, "csv-report"));
 
-        var paths = GetArrayOfStrings(step, "paths") ?? GetArrayOfStrings(step, "path") ?? Array.Empty<string>();
+        var paths = GetStringOrArrayOfStrings(step, "paths", "path");
         var includeAll = GetBool(step, "all") ?? false;
         var onlyWithoutSuggestions = GetBool(step, "withoutSuggestions") ?? GetBool(step, "without-suggestions") ?? false;
         if (paths.Length == 0 && !includeAll && !onlyWithoutSuggestions)
@@ -457,7 +456,7 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(summaryDirectory))
             Directory.CreateDirectory(summaryDirectory);
 
-        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksImportJsonOptions));
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLinkShortlinkImportResult));
     }
 
     private static void WriteLinks404Report(string reportPath, WebLink404ReportResult result)
@@ -466,7 +465,7 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
-        File.WriteAllText(reportPath, JsonSerializer.Serialize(result, LinksImportJsonOptions));
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLink404ReportResult));
     }
 
     private static void WriteLinksPromoteSummary(string? summaryPath, WebLink404PromoteResult result)
@@ -478,7 +477,7 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(summaryDirectory))
             Directory.CreateDirectory(summaryDirectory);
 
-        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksImportJsonOptions));
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLink404PromoteResult));
     }
 
     private static void WriteLinksIgnoreSummary(string? summaryPath, WebLink404IgnoreResult result)
@@ -490,15 +489,27 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(summaryDirectory))
             Directory.CreateDirectory(summaryDirectory);
 
-        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksImportJsonOptions));
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLink404IgnoreResult));
     }
 
-    private static readonly JsonSerializerOptions LinksImportJsonOptions = new()
+    private static string[] GetStringOrArrayOfStrings(JsonElement step, params string[] names)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
+        foreach (var name in names)
+        {
+            var array = GetArrayOfStrings(step, name);
+            if (array is { Length: > 0 })
+                return array;
+
+            var value = GetString(step, name);
+            if (!string.IsNullOrWhiteSpace(value))
+                return new[] { value };
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static readonly PowerForgeWebCliJsonContext LinksSummaryJsonContext = new(new JsonSerializerOptions(WebCliJson.Options)
+    {
+        WriteIndented = true
+    });
 }

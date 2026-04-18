@@ -298,11 +298,13 @@ internal static class WebLinkCommandSupport
         => string.Join("|",
             issue.Code ?? string.Empty,
             issue.Source ?? string.Empty,
+            issue.Id ?? string.Empty,
             issue.SourceHost ?? string.Empty,
             issue.SourcePath ?? string.Empty,
             issue.SourceQuery ?? string.Empty,
             issue.Status.ToString(CultureInfo.InvariantCulture),
             issue.NormalizedTargetUrl ?? issue.TargetUrl ?? string.Empty,
+            issue.RelatedId ?? string.Empty,
             issue.RelatedStatus.ToString(CultureInfo.InvariantCulture),
             issue.RelatedNormalizedTargetUrl ?? issue.RelatedTargetUrl ?? string.Empty);
 

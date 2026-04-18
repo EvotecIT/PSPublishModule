@@ -552,7 +552,7 @@ public sealed class WebPipelineRunnerLinksTests
                       "task": "links-ignore-404",
                       "source": "./404-suggestions.json",
                       "out": "./data/links/ignored-404.json",
-                      "paths": ["/wp-login.php"],
+                      "path": "/wp-login.php",
                       "reason": "scanner noise",
                       "reviewCsv": "./Build/ignored-404.csv",
                       "summaryPath": "./Build/ignore-404-summary.json"

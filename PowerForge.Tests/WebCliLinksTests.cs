@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using PowerForge.Web;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -84,6 +85,49 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
+    public void EvaluateBaseline_TreatsWarningIdsAsDistinctKeys()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-baseline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var baselinePath = Path.Combine(root, ".powerforge", "link-baseline.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
+            var existingIssue = BuildMissingOwnerIssue("existing");
+            var newIssue = BuildMissingOwnerIssue("new");
+            File.WriteAllText(baselinePath,
+                $$"""
+                {
+                  "version": 1,
+                  "warningKeys": [
+                    {{JsonString(WebLinkCommandSupport.BuildIssueKey(existingIssue))}}
+                  ]
+                }
+                """);
+
+            var state = WebLinkCommandSupport.EvaluateBaseline(
+                root,
+                baselinePath,
+                new LinkValidationResult
+                {
+                    Issues = new[] { existingIssue, newIssue },
+                    WarningCount = 2
+                },
+                baselineGenerate: false,
+                baselineUpdate: false,
+                failOnNewWarnings: true);
+
+            var warning = Assert.Single(state.NewWarnings);
+            Assert.Equal("new", warning.Id);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void HandleSubCommand_LinksValidate_AcceptsCamelCaseDirectSourceFlags()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-direct-" + Guid.NewGuid().ToString("N"));
@@ -109,6 +153,22 @@ public sealed class WebCliLinksTests
             TryDeleteDirectory(root);
         }
     }
+
+    private static LinkValidationIssue BuildMissingOwnerIssue(string id)
+        => new()
+        {
+            Severity = LinkValidationSeverity.Warning,
+            Code = "PFLINK.SHORTLINK.OWNER",
+            Source = "shortlink",
+            Id = id,
+            SourceHost = "evo.yt",
+            SourcePath = "/go",
+            Status = 302,
+            TargetUrl = "https://example.test"
+        };
+
+    private static string JsonString(string value)
+        => System.Text.Json.JsonSerializer.Serialize(value);
 
     [Fact]
     public void HandleSubCommand_LinksImportWordPress_ImportsPrettyLinksCsv()
