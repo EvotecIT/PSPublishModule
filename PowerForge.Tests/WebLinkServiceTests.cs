@@ -204,6 +204,70 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirects_PreservesSourceQueryCaseInKeys()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "upper",
+                    SourcePath = "/promo",
+                    SourceQuery = "Token=A",
+                    MatchType = LinkRedirectMatchType.Query,
+                    TargetUrl = "/landing-a",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "lower",
+                    SourcePath = "/promo",
+                    SourceQuery = "Token=a",
+                    MatchType = LinkRedirectMatchType.Query,
+                    TargetUrl = "/landing-b",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
+    }
+
+    [Fact]
+    public void ValidateRedirects_KeepsRegexSourcePatternsIntactInKeys()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "regex-query-char",
+                    SourcePath = "^foo?bar$",
+                    MatchType = LinkRedirectMatchType.Regex,
+                    TargetUrl = "/first",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "regex-fragment-char",
+                    SourcePath = "^foo#bar$",
+                    MatchType = LinkRedirectMatchType.Regex,
+                    TargetUrl = "/second",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.DUPLICATE");
+    }
+
+    [Fact]
     public void ValidateRedirects_RejectsProtocolRelativeTargets()
     {
         var dataSet = new WebLinkDataSet
@@ -1149,6 +1213,43 @@ public sealed class WebLinkServiceTests
 
             Assert.Equal(2, dataSet.Redirects.Length);
             Assert.Equal("evotec.pl", dataSet.Redirects.Single(rule => rule.SourceQuery == "page_id=40").SourceHost);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Load_ReadsWrappedRedirectsCaseInsensitively()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-load-wrapper-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var redirectsPath = Path.Combine(root, "redirects.json");
+            File.WriteAllText(redirectsPath,
+                """
+                {
+                  "Redirects": [
+                    {
+                      "id": "manual",
+                      "sourcePath": "/manual/",
+                      "targetUrl": "/target/",
+                      "status": 301
+                    }
+                  ]
+                }
+                """);
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                RedirectsPath = redirectsPath
+            });
+
+            var redirect = Assert.Single(dataSet.Redirects);
+            Assert.Equal("manual", redirect.Id);
         }
         finally
         {

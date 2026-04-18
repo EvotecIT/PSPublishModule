@@ -107,7 +107,7 @@ public static partial class WebLinkService
 
         usedSources.Add(resolved);
         JsonElement source = document.RootElement;
-        if (source.ValueKind == JsonValueKind.Object && source.TryGetProperty("redirects", out var nested))
+        if (source.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(source, "redirects", out var nested))
             source = nested;
         if (source.ValueKind != JsonValueKind.Array)
             return;
@@ -141,7 +141,7 @@ public static partial class WebLinkService
 
         usedSources.Add(resolved);
         JsonElement source = document.RootElement;
-        if (source.ValueKind == JsonValueKind.Object && source.TryGetProperty("shortlinks", out var nested))
+        if (source.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(source, "shortlinks", out var nested))
             source = nested;
         if (source.ValueKind != JsonValueKind.Array)
             return;
@@ -418,7 +418,7 @@ public static partial class WebLinkService
 
             var source = NormalizeSourcePath(redirect.SourcePath);
             if (string.Equals(source, target.Path, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.OrdinalIgnoreCase))
+                string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -516,7 +516,7 @@ public static partial class WebLinkService
         => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)));
 
     private static string NormalizeRedirectGraphQuery(string? query)
-        => string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim().TrimStart('?').ToLowerInvariant();
+        => string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim().TrimStart('?');
 
     private static string? ExtractLocalQuery(string? value)
     {
@@ -609,8 +609,13 @@ public static partial class WebLinkService
         => string.Join("|",
             NormalizeRedirectGraphHost(redirect.SourceHost),
             ((int)NormalizeRedirectKeyMatchType(redirect)).ToString(CultureInfo.InvariantCulture),
-            NormalizeSourcePath(redirect.SourcePath),
-            NormalizeRedirectGraphQuery(redirect.SourceQuery));
+            BuildRedirectSourceKey(redirect),
+            BuildOrdinalKey(NormalizeRedirectGraphQuery(redirect.SourceQuery)));
+
+    private static string BuildRedirectSourceKey(LinkRedirectRule redirect)
+        => redirect.MatchType == LinkRedirectMatchType.Regex
+            ? BuildOrdinalKey(redirect.SourcePath?.Trim() ?? string.Empty)
+            : NormalizeSourcePath(redirect.SourcePath);
 
     private static LinkRedirectMatchType NormalizeRedirectKeyMatchType(LinkRedirectRule redirect)
         => redirect.MatchType == LinkRedirectMatchType.Exact && !string.IsNullOrWhiteSpace(redirect.SourceQuery)
@@ -618,7 +623,10 @@ public static partial class WebLinkService
             : redirect.MatchType;
 
     private static string BuildRedirectGraphKey(string? host, string path, string? query)
-        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), NormalizeRedirectGraphQuery(query));
+        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), BuildOrdinalKey(NormalizeRedirectGraphQuery(query)));
+
+    private static string BuildOrdinalKey(string value)
+        => Convert.ToHexString(Encoding.UTF8.GetBytes(value));
 
     private static string NormalizeRedirectGraphHost(string? host)
     {
@@ -640,6 +648,25 @@ public static partial class WebLinkService
 
     private static int ResolveStatus(int status, int defaultStatus)
         => status <= 0 ? defaultStatus : status;
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.TryGetProperty(name, out value))
+            return true;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.NameEquals(name) ||
+                property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 
     private static int MatchTypeOrder(LinkRedirectMatchType matchType)
         => matchType switch
