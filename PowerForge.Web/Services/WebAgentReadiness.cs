@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using AngleSharp.Dom;
+using HtmlTinkerX;
 
 namespace PowerForge.Web;
 
@@ -34,6 +36,7 @@ public static class WebAgentReadiness
         var written = new List<string>();
         var warnings = new List<string>();
         var linkTargets = new List<HeaderLinkTarget>();
+        var markdownArtifactPaths = Array.Empty<string>();
 
         if (!spec.Enabled)
         {
@@ -98,6 +101,15 @@ public static class WebAgentReadiness
             }
         }
 
+        if (spec.MarkdownArtifacts?.Enabled == true)
+        {
+            var markdownArtifacts = WriteMarkdownArtifacts(siteRoot, spec.MarkdownArtifacts, warnings);
+            markdownArtifactPaths = markdownArtifacts.Paths;
+            written.AddRange(markdownArtifacts.Paths);
+            if (!string.IsNullOrWhiteSpace(markdownArtifacts.RootRoute))
+                linkTargets.Add(new HeaderLinkTarget(markdownArtifacts.RootRoute!, "alternate", "text/markdown"));
+        }
+
         if (File.Exists(Path.Combine(siteRoot, "llms.txt")))
             linkTargets.Add(new HeaderLinkTarget("/llms.txt", "service-doc", "text/plain"));
 
@@ -106,7 +118,7 @@ public static class WebAgentReadiness
             linkTargets.Add(new HeaderLinkTarget(openApiPath!, "service-desc", "application/openapi+json"));
 
         if (ShouldWriteHeaders(spec, linkTargets))
-            written.Add(UpdateHeaders(siteRoot, spec, linkTargets));
+            written.Add(UpdateHeaders(siteRoot, spec, linkTargets, markdownArtifactPaths));
 
         var verify = Verify(new WebAgentReadinessVerifyOptions
         {
@@ -191,6 +203,7 @@ public static class WebAgentReadiness
 
         var rootHtml = ReadFirstHtml(siteRoot);
         AddHtmlSemanticsChecks(checks, rootHtml.Text, rootHtml.Path);
+        AddMarkdownArtifactChecks(checks, siteRoot, spec.MarkdownArtifacts);
 
         var apiCatalogPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.ApiCatalog?.OutputPath) ? ".well-known/api-catalog" : spec.ApiCatalog!.OutputPath!);
         var apiCatalogValid = ValidateApiCatalog(apiCatalogPath, out var apiCatalogMessage);
@@ -237,7 +250,7 @@ public static class WebAgentReadiness
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
             spec.MarkdownNegotiation ? "warn" : "info",
             spec.MarkdownNegotiation
-                ? "Local static output cannot prove Accept: text/markdown negotiation. Use remote scan or Cloudflare Markdown for Agents."
+                ? "Local static output cannot prove Accept: text/markdown negotiation. Use remote scan or host-level rules that serve markdown artifacts for markdown requests."
                 : "Markdown negotiation is not expected for this site.",
             options.BaseUrl);
 
@@ -384,6 +397,7 @@ public static class WebAgentReadiness
                 McpServerCard = spec.McpServerCard,
                 OpenApi = spec.OpenApi,
                 WebMcp = spec.WebMcp,
+                MarkdownArtifacts = spec.MarkdownArtifacts,
                 MarkdownNegotiation = spec.MarkdownNegotiation
             };
 
@@ -590,6 +604,7 @@ public static class WebAgentReadiness
             ["capabilities"] = new JsonObject
             {
                 ["contentNegotiation"] = spec.MarkdownNegotiation ? "text/markdown" : null,
+                ["markdownArtifacts"] = spec.MarkdownArtifacts?.Enabled == true,
                 ["contentSignals"] = spec.ContentSignals?.Enabled == true,
                 ["webMcp"] = spec.WebMcp
             }
@@ -697,6 +712,224 @@ public static class WebAgentReadiness
         return outputPath;
     }
 
+    private static MarkdownArtifactWriteResult WriteMarkdownArtifacts(string siteRoot, AgentMarkdownArtifactsSpec spec, List<string> warnings)
+    {
+        if (!Directory.Exists(siteRoot))
+            return new MarkdownArtifactWriteResult(Array.Empty<string>(), null);
+
+        var extension = NormalizeMarkdownExtension(spec.Extension);
+        var candidates = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
+            .Where(path => !ShouldSkipMarkdownArtifactCandidate(siteRoot, path))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var maxPages = spec.MaxPages;
+        if (maxPages > 0 && candidates.Length > maxPages)
+        {
+            warnings.Add($"Markdown artifact generation limited to {maxPages} of {candidates.Length} HTML pages.");
+            candidates = candidates.Take(maxPages).ToArray();
+        }
+
+        var written = new List<string>();
+        foreach (var htmlPath in candidates)
+        {
+            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath), spec);
+            if (string.IsNullOrWhiteSpace(markdown))
+                continue;
+
+            var outputPath = Path.ChangeExtension(htmlPath, extension);
+            File.WriteAllText(outputPath, markdown);
+            written.Add(outputPath);
+        }
+
+        var rootMarkdown = Path.Combine(siteRoot, "index" + extension);
+        var rootRoute = File.Exists(rootMarkdown) ? ToSiteRoute(siteRoot, rootMarkdown) : null;
+        return new MarkdownArtifactWriteResult(written.ToArray(), rootRoute);
+    }
+
+    private static bool ShouldSkipMarkdownArtifactCandidate(string siteRoot, string path)
+    {
+        var relative = Path.GetRelativePath(siteRoot, path).Replace('\\', '/');
+        return relative.EndsWith(".head.html", StringComparison.OrdinalIgnoreCase) ||
+               relative.EndsWith(".scripts.html", StringComparison.OrdinalIgnoreCase) ||
+               relative.Contains("/api-fragments/", StringComparison.OrdinalIgnoreCase) ||
+               relative.StartsWith("api-fragments/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeMarkdownExtension(string? extension)
+    {
+        var value = string.IsNullOrWhiteSpace(extension) ? ".md" : extension!.Trim();
+        if (!value.StartsWith(".", StringComparison.Ordinal))
+            value = "." + value;
+        return value.Equals(".", StringComparison.Ordinal) ? ".md" : value;
+    }
+
+    private static string ConvertHtmlDocumentToMarkdown(string html, AgentMarkdownArtifactsSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var doc = HtmlParser.ParseWithAngleSharp(html);
+        var contentRoot = doc.QuerySelector("main,[role='main'],article") ?? doc.Body ?? doc.DocumentElement;
+        if (contentRoot is null)
+            return string.Empty;
+
+        var body = NormalizeMarkdownDocument(RenderMarkdownChildren(contentRoot));
+        var title = doc.Title?.Trim();
+        if (spec.IncludeTitle &&
+            !string.IsNullOrWhiteSpace(title) &&
+            !body.StartsWith("# " + title, StringComparison.OrdinalIgnoreCase))
+        {
+            body = "# " + title + Environment.NewLine + Environment.NewLine + body.TrimStart();
+        }
+
+        return body.Trim() + Environment.NewLine;
+    }
+
+    private static string RenderMarkdownChildren(INode node)
+    {
+        var sb = new StringBuilder();
+        foreach (var child in node.ChildNodes)
+            sb.Append(RenderMarkdownNode(child));
+        return sb.ToString();
+    }
+
+    private static string RenderMarkdownNode(INode node)
+    {
+        if (node.NodeType == NodeType.Text)
+            return NormalizeInlineWhitespace(node.TextContent);
+
+        if (node is not IElement element)
+            return string.Empty;
+
+        var tag = element.TagName.ToLowerInvariant();
+        return tag switch
+        {
+            "h1" => RenderHeading(element, 1),
+            "h2" => RenderHeading(element, 2),
+            "h3" => RenderHeading(element, 3),
+            "h4" => RenderHeading(element, 4),
+            "h5" => RenderHeading(element, 5),
+            "h6" => RenderHeading(element, 6),
+            "p" => Block(RenderMarkdownChildren(element)),
+            "br" => Environment.NewLine,
+            "strong" or "b" => WrapInline("**", RenderMarkdownChildren(element)),
+            "em" or "i" => WrapInline("*", RenderMarkdownChildren(element)),
+            "code" when !string.Equals(element.ParentElement?.TagName, "pre", StringComparison.OrdinalIgnoreCase) => "`" + element.TextContent.Trim() + "`",
+            "pre" => RenderCodeBlock(element),
+            "a" => RenderLink(element),
+            "img" => RenderImage(element),
+            "ul" => RenderList(element, ordered: false),
+            "ol" => RenderList(element, ordered: true),
+            "li" => RenderMarkdownChildren(element),
+            "blockquote" => RenderBlockquote(element),
+            "hr" => Environment.NewLine + Environment.NewLine + "---" + Environment.NewLine + Environment.NewLine,
+            "script" or "style" or "noscript" or "svg" => string.Empty,
+            _ => IsMarkdownBlockElement(tag) ? Block(RenderMarkdownChildren(element)) : RenderMarkdownChildren(element)
+        };
+    }
+
+    private static string RenderHeading(IElement element, int level)
+    {
+        var text = CollapseMarkdownInline(RenderMarkdownChildren(element));
+        return string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : Environment.NewLine + Environment.NewLine + new string('#', level) + " " + text + Environment.NewLine + Environment.NewLine;
+    }
+
+    private static string RenderCodeBlock(IElement element)
+    {
+        var text = element.TextContent.Trim('\r', '\n');
+        return string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : Environment.NewLine + Environment.NewLine + "```" + Environment.NewLine + text + Environment.NewLine + "```" + Environment.NewLine + Environment.NewLine;
+    }
+
+    private static string RenderLink(IElement element)
+    {
+        var text = CollapseMarkdownInline(RenderMarkdownChildren(element));
+        var href = element.GetAttribute("href")?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            text = href ?? string.Empty;
+        return string.IsNullOrWhiteSpace(href) ? text : $"[{EscapeMarkdownLinkText(text)}]({href})";
+    }
+
+    private static string RenderImage(IElement element)
+    {
+        var src = element.GetAttribute("src")?.Trim();
+        if (string.IsNullOrWhiteSpace(src))
+            return string.Empty;
+        var alt = element.GetAttribute("alt")?.Trim() ?? string.Empty;
+        return $"![{EscapeMarkdownLinkText(alt)}]({src})";
+    }
+
+    private static string RenderList(IElement element, bool ordered)
+    {
+        var index = 1;
+        var lines = new List<string>();
+        foreach (var item in element.Children.Where(static child => child.TagName.Equals("li", StringComparison.OrdinalIgnoreCase)))
+        {
+            var text = NormalizeMarkdownDocument(RenderMarkdownChildren(item)).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+            var prefix = ordered ? $"{index}. " : "- ";
+            lines.Add(prefix + text.Replace(Environment.NewLine, Environment.NewLine + "  ", StringComparison.Ordinal));
+            index++;
+        }
+
+        return lines.Count == 0
+            ? string.Empty
+            : Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, lines) + Environment.NewLine + Environment.NewLine;
+    }
+
+    private static string RenderBlockquote(IElement element)
+    {
+        var text = NormalizeMarkdownDocument(RenderMarkdownChildren(element)).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+        var quoted = string.Join(Environment.NewLine, text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Select(line => "> " + line));
+        return Environment.NewLine + Environment.NewLine + quoted + Environment.NewLine + Environment.NewLine;
+    }
+
+    private static string Block(string text)
+    {
+        var normalized = NormalizeMarkdownDocument(text).Trim();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? string.Empty
+            : Environment.NewLine + Environment.NewLine + normalized + Environment.NewLine + Environment.NewLine;
+    }
+
+    private static string WrapInline(string marker, string text)
+    {
+        var normalized = CollapseMarkdownInline(text);
+        return string.IsNullOrWhiteSpace(normalized) ? string.Empty : marker + normalized + marker;
+    }
+
+    private static bool IsMarkdownBlockElement(string tag)
+        => tag is "address" or "article" or "aside" or "div" or "dl" or "fieldset" or "figcaption" or "figure" or
+            "footer" or "form" or "header" or "main" or "nav" or "section" or "table";
+
+    private static string NormalizeInlineWhitespace(string text)
+        => string.IsNullOrWhiteSpace(text) ? string.Empty : Regex.Replace(text, @"\s+", " ");
+
+    private static string CollapseMarkdownInline(string text)
+        => Regex.Replace(NormalizeMarkdownDocument(text).Replace(Environment.NewLine, " ", StringComparison.Ordinal), @"\s+", " ").Trim();
+
+    private static string NormalizeMarkdownDocument(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        normalized = Regex.Replace(normalized, @"[ \t]+\n", "\n");
+        normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
+        normalized = Regex.Replace(normalized, @"[ \t]{2,}", " ");
+        return normalized.Replace("\n", Environment.NewLine, StringComparison.Ordinal).Trim();
+    }
+
+    private static string EscapeMarkdownLinkText(string text)
+        => text.Replace("[", "\\[", StringComparison.Ordinal).Replace("]", "\\]", StringComparison.Ordinal);
+
     private static bool ShouldWriteHeaders(AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
         => spec.SecurityHeaders?.Enabled == true ||
            (spec.LinkHeaders && linkTargets.Count > 0) ||
@@ -704,9 +937,10 @@ public static class WebAgentReadiness
            spec.AgentSkills?.Enabled == true ||
            spec.AgentsJson?.Enabled == true ||
            spec.A2AAgentCard?.Enabled == true ||
-           spec.McpServerCard?.Enabled == true;
+           spec.McpServerCard?.Enabled == true ||
+           spec.MarkdownArtifacts?.Enabled == true;
 
-    private static string UpdateHeaders(string siteRoot, AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
+    private static string UpdateHeaders(string siteRoot, AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets, IReadOnlyList<string> markdownArtifactPaths)
     {
         var headersPath = spec.HeadersPath;
         var path = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(headersPath) ? "_headers" : headersPath!);
@@ -732,7 +966,7 @@ public static class WebAgentReadiness
             }
         }
 
-        AppendDiscoveryResourceHeaders(sb, siteRoot, spec, security);
+        AppendDiscoveryResourceHeaders(sb, siteRoot, spec, security, markdownArtifactPaths);
         sb.AppendLine(AgentBlockEnd);
 
         var next = string.IsNullOrWhiteSpace(cleaned)
@@ -743,7 +977,7 @@ public static class WebAgentReadiness
         return path;
     }
 
-    private static void AppendDiscoveryResourceHeaders(StringBuilder sb, string siteRoot, AgentReadinessSpec spec, AgentSecurityHeadersSpec security)
+    private static void AppendDiscoveryResourceHeaders(StringBuilder sb, string siteRoot, AgentReadinessSpec spec, AgentSecurityHeadersSpec security, IReadOnlyList<string> markdownArtifactPaths)
     {
         if (spec.ApiCatalog?.Enabled == true)
         {
@@ -780,6 +1014,17 @@ public static class WebAgentReadiness
         {
             AppendResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json"),
                 "application/json", security);
+        }
+
+        if (spec.MarkdownArtifacts?.Enabled == true)
+        {
+            foreach (var route in markdownArtifactPaths
+                         .Select(path => ToSiteRoute(siteRoot, path))
+                         .Where(static route => route.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                AppendResourceHeaders(sb, route, "text/markdown; charset=utf-8", security);
+            }
         }
     }
 
@@ -1203,6 +1448,33 @@ public static class WebAgentReadiness
             : new HtmlReadResult(File.ReadAllText(path), path);
     }
 
+    private static void AddMarkdownArtifactChecks(List<WebAgentReadinessCheck> checks, string siteRoot, AgentMarkdownArtifactsSpec? spec)
+    {
+        var expected = spec?.Enabled == true;
+        var extension = NormalizeMarkdownExtension(spec?.Extension);
+        var rootMarkdown = Path.Combine(siteRoot, "index" + extension);
+        var markdownFiles = Directory.Exists(siteRoot)
+            ? Directory.EnumerateFiles(siteRoot, "*" + extension, SearchOption.AllDirectories)
+                .Where(path => !ShouldSkipMarkdownArtifactCandidate(siteRoot, path))
+                .Take(2)
+                .ToArray()
+            : Array.Empty<string>();
+
+        AddCheck(checks, "markdown-artifacts", "content", "Markdown artifacts",
+            markdownFiles.Length > 0 ? "pass" : (expected ? "fail" : "info"),
+            markdownFiles.Length > 0
+                ? "Static markdown artifacts exist for agent-readable content."
+                : (expected ? "Markdown artifact generation is enabled, but no markdown artifacts were found." : "Markdown artifact generation is disabled."),
+            siteRoot);
+
+        AddCheck(checks, "markdown-root-artifact", "content", "Root markdown artifact",
+            File.Exists(rootMarkdown) ? "pass" : (expected ? "fail" : "info"),
+            File.Exists(rootMarkdown)
+                ? "Root page has a markdown artifact for host-level Accept negotiation."
+                : (expected ? "Root markdown artifact is missing." : "Root markdown artifact generation is disabled."),
+            rootMarkdown);
+    }
+
     private static IEnumerable<string> ExtractJsonLd(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
@@ -1476,6 +1748,7 @@ public static class WebAgentReadiness
     }
 
     private sealed record HeaderLinkTarget(string Href, string Rel, string Type);
+    private sealed record MarkdownArtifactWriteResult(string[] Paths, string? RootRoute);
     private sealed record HtmlReadResult(string Text, string Path);
     private sealed record OpenApiScanResult(bool Success, string? Url);
     private sealed record HttpTextResult(bool Success, string Message, string Text, HttpResponseMessage? Response);

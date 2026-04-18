@@ -143,6 +143,75 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void Prepare_GeneratesMarkdownArtifactsWhenEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-markdown-artifacts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "docs"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example Home</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><main><h1>Welcome</h1><p>Hello <strong>agents</strong>.</p><p><a href="/docs/">Read docs</a></p></main></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "docs", "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Docs</title></head>
+                <body><main><h1>Docs</h1><ul><li>Install</li><li>Configure</li></ul></main></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true },
+                    MarkdownNegotiation = true,
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = true }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.True(File.Exists(Path.Combine(root, "index.md")));
+            Assert.True(File.Exists(Path.Combine(root, "docs", "index.md")));
+
+            var markdown = File.ReadAllText(Path.Combine(root, "index.md"));
+            Assert.Contains("# Example Home", markdown, StringComparison.Ordinal);
+            Assert.Contains("Hello **agents**.", markdown, StringComparison.Ordinal);
+            Assert.Contains("[Read docs](/docs/)", markdown, StringComparison.Ordinal);
+
+            var headers = File.ReadAllText(Path.Combine(root, "_headers"));
+            Assert.Contains("</index.md>; rel=\"alternate\"; type=\"text/markdown\"", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/index.md" + Environment.NewLine + "  Content-Type: text/markdown; charset=utf-8", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/index.md" + Environment.NewLine + "  Content-Type: text/markdown; charset=utf-8", headers, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(result.Checks, check => check.Id == "markdown-artifacts" && check.Status == "pass");
+            Assert.Contains(result.Checks, check => check.Id == "markdown-root-artifact" && check.Status == "pass");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Verify_DisabledAgentReadinessShortCircuits()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-all-" + Guid.NewGuid().ToString("N"));
@@ -339,6 +408,7 @@ public class WebAgentReadinessTests
         {
             var siteRoot = Path.Combine(root, "site");
             Directory.CreateDirectory(siteRoot);
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"), "<!doctype html><html><body><main><h1>Home</h1></main></body></html>");
             File.WriteAllText(Path.Combine(root, "site.json"),
                 """
                 {
@@ -349,7 +419,8 @@ public class WebAgentReadinessTests
                     "agentSkills": { "enabled": true, "indexPath": ".well-known/skills.json" },
                     "agentsJson": { "enabled": false },
                     "a2aAgentCard": { "enabled": false },
-                    "mcpServerCard": { "enabled": false }
+                    "mcpServerCard": { "enabled": false },
+                    "markdownArtifacts": { "enabled": true }
                   }
                 }
                 """);
@@ -362,6 +433,7 @@ public class WebAgentReadinessTests
 
             Assert.Contains(Path.Combine(siteRoot, "robots.txt"), outputs);
             Assert.Contains(Path.Combine(siteRoot, ".well-known", "skills.json"), outputs);
+            Assert.Contains(Path.Combine(siteRoot, "index.md"), outputs);
             Assert.Contains(Path.Combine(siteRoot, "_headers"), outputs);
             Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "api-catalog"), outputs);
             Assert.DoesNotContain(Path.Combine(siteRoot, ".well-known", "mcp", "server-card.json"), outputs);

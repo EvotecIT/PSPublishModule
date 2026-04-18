@@ -69,6 +69,7 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - static host `_headers` with Link headers and well-known content types
 - static security headers for HSTS, CSP, X-Content-Type-Options,
   X-Frame-Options, Referrer-Policy, and discovery-resource CORS
+- optional static Markdown artifacts generated from rendered HTML
 - API catalog Linkset generation
 - Agent Skills index + default SKILL.md generation
 - agents.json generation
@@ -82,6 +83,11 @@ PowerForge.Web can prepare and verify the common static-site subset:
 Cloudflare Markdown for Agents is a host-level feature. PowerForge verifies it
 with a live scan, but static output cannot prove that `Accept: text/markdown`
 will be negotiated by the deployed edge or origin.
+
+PowerForge can also generate Markdown artifacts itself. This is separate from
+live HTTP negotiation: the static site can contain `/index.md` and
+`/docs/index.md`, but the deployed host or edge still needs a rule if the same
+HTML route should return Markdown for `Accept: text/markdown`.
 
 ## Site Configuration
 
@@ -117,6 +123,12 @@ Add an `agentReadiness` block to `site.json`:
     "agentsJson": {
       "enabled": true
     },
+    "markdownArtifacts": {
+      "enabled": true,
+      "extension": ".md",
+      "maxPages": 0,
+      "includeTitle": true
+    },
     "a2aAgentCard": {
       "enabled": false
     },
@@ -138,6 +150,12 @@ Skills Discovery index.
 If `apiCatalog.entries` is empty but `_site/api/index.json` exists, PowerForge
 infers a basic API documentation entry. For public programmable APIs, prefer
 explicit entries that point `serviceDesc` at an OpenAPI document.
+
+If `markdownArtifacts.enabled` is true, `agent-ready prepare` converts rendered
+HTML pages to sibling Markdown files such as `index.md` and `docs/index.md`.
+These files are useful directly and can be served by host-level rules for
+`Accept: text/markdown`. Keep this disabled on very large sites unless the
+extra files are expected; use `maxPages` for staged rollouts.
 
 Do not enable MCP, WebMCP, OAuth, OpenAPI, A2A, or commerce settings just to
 make a scanner green. These discovery files are contracts. Publish them only
