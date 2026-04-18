@@ -405,6 +405,35 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirectGraph_DetectsLoopsThroughQuerylessExactNextHop()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "a",
+                    SourcePath = "/a",
+                    TargetUrl = "/b?x=1",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "b",
+                    SourcePath = "/b",
+                    TargetUrl = "/a",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+    }
+
+    [Fact]
     public void ValidateRedirectGraph_DetectsDirectSelfRedirects()
     {
         var dataSet = new WebLinkDataSet
@@ -603,6 +632,45 @@ public sealed class WebLinkServiceTests
             Assert.Contains("RewriteRule ^gone", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^legacy/.* - [G,L]", apache, StringComparison.Ordinal);
             Assert.Equal(2, CountOccurrences(apache, "[G,L]"));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_StripsLeadingSlashAfterRegexAnchor()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-regex-anchor-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Redirects = new[]
+                {
+                    new LinkRedirectRule
+                    {
+                        Id = "anchored-regex",
+                        SourcePath = "^/legacy/(.*)$",
+                        MatchType = LinkRedirectMatchType.Regex,
+                        TargetUrl = "/archive/{path}",
+                        Status = 301
+                    }
+                }
+            };
+
+            WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            });
+
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains("RewriteRule ^legacy/(.*)$ /archive/$1 [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^/legacy", apache, StringComparison.Ordinal);
         }
         finally
         {

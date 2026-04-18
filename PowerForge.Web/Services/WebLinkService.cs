@@ -435,7 +435,10 @@ public static partial class WebLinkService
             }
 
             if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(target.Path))
-                map[BuildRedirectGraphKey(redirect.SourceHost, source, redirect.SourceQuery)] = target;
+                map[BuildRedirectGraphKey(redirect.SourceHost, source, redirect.SourceQuery)] = target with
+                {
+                    MatchesAnyQuery = redirect.MatchType == LinkRedirectMatchType.Exact
+                };
         }
 
         foreach (var redirect in redirects)
@@ -493,10 +496,30 @@ public static partial class WebLinkService
             return true;
         }
 
-        return map.TryGetValue(BuildRedirectGraphKey(null, path, query), out target!);
+        if (map.TryGetValue(BuildRedirectGraphKey(null, path, query), out target!))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            if (!string.IsNullOrWhiteSpace(host) &&
+                map.TryGetValue(BuildRedirectGraphKey(host, path, null), out target!) &&
+                target.MatchesAnyQuery)
+            {
+                return true;
+            }
+
+            if (map.TryGetValue(BuildRedirectGraphKey(null, path, null), out target!) &&
+                target.MatchesAnyQuery)
+            {
+                return true;
+            }
+        }
+
+        target = default;
+        return false;
     }
 
-    private readonly record struct RedirectGraphTarget(string Path, string Query);
+    private readonly record struct RedirectGraphTarget(string Path, string Query, bool MatchesAnyQuery);
 
     private static bool TryBuildRedirectGraphTarget(LinkRedirectRule redirect, out RedirectGraphTarget target)
     {
@@ -519,12 +542,12 @@ public static partial class WebLinkService
             return false;
         }
 
-        target = new RedirectGraphTarget(NormalizeSourcePath(uri.AbsolutePath), NormalizeRedirectGraphQuery(uri.Query));
+        target = new RedirectGraphTarget(NormalizeSourcePath(uri.AbsolutePath), NormalizeRedirectGraphQuery(uri.Query), false);
         return true;
     }
 
     private static RedirectGraphTarget BuildRedirectGraphTarget(string targetUrl)
-        => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)));
+        => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)), false);
 
     private static bool IsDirectSelfRedirect(LinkRedirectRule redirect)
     {

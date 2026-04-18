@@ -193,7 +193,9 @@ public static partial class WebLinkService
             case LinkRedirectMatchType.Regex:
             {
                 var regex = rule.SourcePath.Trim();
-                if (regex.StartsWith("/", StringComparison.Ordinal))
+                if (regex.StartsWith("^/", StringComparison.Ordinal))
+                    regex = "^" + regex[2..].TrimStart('/');
+                else if (regex.StartsWith("/", StringComparison.Ordinal))
                     regex = regex.TrimStart('/');
                 pattern = regex.StartsWith("^", StringComparison.Ordinal) ? regex : "^" + regex;
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
