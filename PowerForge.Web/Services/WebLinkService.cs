@@ -413,11 +413,10 @@ public static partial class WebLinkService
         {
             if (redirect.MatchType != LinkRedirectMatchType.Exact && redirect.MatchType != LinkRedirectMatchType.Query)
                 continue;
-            if (!IsLocalPath(redirect.TargetUrl))
+            if (!TryBuildRedirectGraphTarget(redirect, out var target))
                 continue;
 
             var source = NormalizeSourcePath(redirect.SourcePath);
-            var target = BuildRedirectGraphTarget(redirect.TargetUrl);
             if (string.Equals(source, target.Path, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.OrdinalIgnoreCase))
             {
@@ -487,6 +486,31 @@ public static partial class WebLinkService
     }
 
     private readonly record struct RedirectGraphTarget(string Path, string Query);
+
+    private static bool TryBuildRedirectGraphTarget(LinkRedirectRule redirect, out RedirectGraphTarget target)
+    {
+        target = default;
+        if (redirect is null || string.IsNullOrWhiteSpace(redirect.TargetUrl))
+            return false;
+
+        if (IsLocalPath(redirect.TargetUrl))
+        {
+            target = BuildRedirectGraphTarget(redirect.TargetUrl);
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(redirect.SourceHost) ||
+            !Uri.TryCreate(redirect.TargetUrl.Trim(), UriKind.Absolute, out var uri) ||
+            (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+             !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
+            !uri.Host.Equals(redirect.SourceHost.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        target = new RedirectGraphTarget(NormalizeSourcePath(uri.AbsolutePath), NormalizeRedirectGraphQuery(uri.Query));
+        return true;
+    }
 
     private static RedirectGraphTarget BuildRedirectGraphTarget(string targetUrl)
         => new(NormalizeSourcePath(targetUrl), NormalizeRedirectGraphQuery(ExtractLocalQuery(targetUrl)));

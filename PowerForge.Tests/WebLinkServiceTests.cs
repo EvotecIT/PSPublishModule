@@ -289,6 +289,37 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ValidateRedirectGraph_DetectsLoopsThroughSameHostAbsoluteTargets()
+    {
+        var dataSet = new WebLinkDataSet
+        {
+            Redirects = new[]
+            {
+                new LinkRedirectRule
+                {
+                    Id = "a",
+                    SourceHost = "example.com",
+                    SourcePath = "/a",
+                    TargetUrl = "https://example.com/b",
+                    Status = 301
+                },
+                new LinkRedirectRule
+                {
+                    Id = "b",
+                    SourceHost = "example.com",
+                    SourcePath = "/b",
+                    TargetUrl = "/a",
+                    Status = 301
+                }
+            }
+        };
+
+        var result = WebLinkService.Validate(dataSet);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "PFLINK.REDIRECT.LOOP");
+    }
+
+    [Fact]
     public void ExportApache_EmitsHostScopedRedirectsAndShortlinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-" + Guid.NewGuid().ToString("N"));
@@ -388,6 +419,52 @@ public sealed class WebLinkServiceTests
 
             var apache = File.ReadAllText(outPath);
             Assert.Contains(@"RewriteRule ^foo\.bar/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_EmitsGoneRulesForPrefixAndRegexWithoutTarget()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-gone-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Redirects = new[]
+                {
+                    new LinkRedirectRule
+                    {
+                        Id = "gone-prefix",
+                        SourcePath = "/gone/*",
+                        MatchType = LinkRedirectMatchType.Prefix,
+                        Status = 410
+                    },
+                    new LinkRedirectRule
+                    {
+                        Id = "gone-regex",
+                        SourcePath = "/legacy/.*",
+                        MatchType = LinkRedirectMatchType.Regex,
+                        Status = 410
+                    }
+                }
+            };
+
+            WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            });
+
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains("RewriteRule ^gone", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^legacy/.* - [G,L]", apache, StringComparison.Ordinal);
+            Assert.Equal(2, CountOccurrences(apache, "[G,L]"));
         }
         finally
         {
@@ -1090,5 +1167,18 @@ public sealed class WebLinkServiceTests
         {
             // best-effort cleanup
         }
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
     }
 }

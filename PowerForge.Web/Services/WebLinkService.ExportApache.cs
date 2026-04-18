@@ -188,7 +188,7 @@ public static partial class WebLinkService
                     ? "^(.*)$"
                     : $"^{Regex.Escape(prefix)}(?:/(.*))?$";
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
-                return !string.IsNullOrWhiteSpace(destination);
+                return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
             case LinkRedirectMatchType.Regex:
             {
@@ -197,7 +197,7 @@ public static partial class WebLinkService
                     regex = regex.TrimStart('/');
                 pattern = regex.StartsWith("^", StringComparison.Ordinal) ? regex : "^" + regex;
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
-                return !string.IsNullOrWhiteSpace(destination);
+                return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
             case LinkRedirectMatchType.Query:
             case LinkRedirectMatchType.Exact:
