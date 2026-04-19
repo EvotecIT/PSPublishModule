@@ -75,8 +75,8 @@ public sealed class WebCliLinksTests
             Assert.True(File.Exists(outputPath));
             var apache = File.ReadAllText(outputPath);
             Assert.Contains("ErrorDocument 404 /404.html", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
         }
         finally
         {

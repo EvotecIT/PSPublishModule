@@ -185,18 +185,25 @@ public static partial class WebLinkService
                     prefix = prefix.Substring(0, starIndex);
                 prefix = prefix.Trim('/');
                 pattern = string.IsNullOrWhiteSpace(prefix)
-                    ? "^(.*)$"
-                    : $"^{Regex.Escape(prefix)}(?:/(.*))?$";
+                    ? "^/?(.*)$"
+                    : $"^/?{Regex.Escape(prefix)}(?:/(.*))?$";
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
             case LinkRedirectMatchType.Regex:
             {
                 var regex = rule.SourcePath.Trim();
-                if (regex.StartsWith("^/", StringComparison.Ordinal))
-                    regex = "^" + regex[2..].TrimStart('/');
-                else if (regex.StartsWith("/", StringComparison.Ordinal))
-                    regex = regex.TrimStart('/');
+                if (!regex.StartsWith("^/?", StringComparison.Ordinal))
+                {
+                    if (regex.StartsWith("^/", StringComparison.Ordinal))
+                        regex = "^/?" + regex[2..].TrimStart('/');
+                    else if (regex.StartsWith("^", StringComparison.Ordinal))
+                        regex = "^/?" + regex[1..].TrimStart('/');
+                    else if (regex.StartsWith("/", StringComparison.Ordinal))
+                        regex = "/?" + regex.TrimStart('/');
+                    else
+                        regex = "/?" + regex;
+                }
                 pattern = regex.StartsWith("^", StringComparison.Ordinal) ? regex : "^" + regex;
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
@@ -206,7 +213,7 @@ public static partial class WebLinkService
             default:
             {
                 var exact = NormalizeSourcePath(rule.SourcePath).Trim('/');
-                pattern = string.IsNullOrWhiteSpace(exact) ? "^$" : $"^{Regex.Escape(exact)}/?$";
+                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{Regex.Escape(exact)}/?$";
                 destination = NormalizeDestination(rule.TargetUrl);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
@@ -218,7 +225,9 @@ public static partial class WebLinkService
         if (string.IsNullOrWhiteSpace(host) || host.Trim().Equals("*", StringComparison.Ordinal))
             return;
 
-        lines.Add($"RewriteCond %{{HTTP_HOST}} ^(.+\\.)?{Regex.Escape(host.Trim())}$ [NC]");
+        var trimmed = host.Trim();
+        var prefix = trimmed.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? string.Empty : "(www\\.)?";
+        lines.Add($"RewriteCond %{{HTTP_HOST}} ^{prefix}{Regex.Escape(trimmed)}$ [NC]");
     }
 
     private static void AppendQueryCondition(List<string> lines, string? query)

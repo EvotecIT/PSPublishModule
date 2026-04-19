@@ -574,11 +574,11 @@ public sealed class WebLinkServiceTests
             Assert.Equal(3, result.RuleCount);
             var apache = File.ReadAllText(outPath);
             Assert.Contains("ErrorDocument 404 /404.html", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteCond %{HTTP_HOST} ^(.+\\.)?evotec\\.pl$ [NC]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^stary/?$ /nowy/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{HTTP_HOST} ^(www\\.)?evotec\\.pl$ [NC]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?stary/?$ /nowy/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{QUERY_STRING} (^|&)p=123(&|$)", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteCond %{HTTP_HOST} ^(.+\\.)?evo\\.yt$ [NC]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{HTTP_HOST} ^(www\\.)?evo\\.yt$ [NC]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
         }
         finally
         {
@@ -615,7 +615,7 @@ public sealed class WebLinkServiceTests
             });
 
             var apache = File.ReadAllText(outPath);
-            Assert.Contains(@"RewriteRule ^foo\.bar/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains(@"RewriteRule ^/?foo\.bar/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
         }
         finally
         {
@@ -649,6 +649,13 @@ public sealed class WebLinkServiceTests
                         SourcePath = "/legacy/.*",
                         MatchType = LinkRedirectMatchType.Regex,
                         Status = 410
+                    },
+                    new LinkRedirectRule
+                    {
+                        Id = "gone-bare-regex",
+                        SourcePath = "download\\/.*\\/feed\\/",
+                        MatchType = LinkRedirectMatchType.Regex,
+                        Status = 410
                     }
                 }
             };
@@ -659,9 +666,10 @@ public sealed class WebLinkServiceTests
             });
 
             var apache = File.ReadAllText(outPath);
-            Assert.Contains("RewriteRule ^gone", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^legacy/.* - [G,L]", apache, StringComparison.Ordinal);
-            Assert.Equal(2, CountOccurrences(apache, "[G,L]"));
+            Assert.Contains("RewriteRule ^/?gone", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?legacy/.* - [G,L]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?download\\/.*\\/feed\\/ - [G,L]", apache, StringComparison.Ordinal);
+            Assert.Equal(3, CountOccurrences(apache, "[G,L]"));
         }
         finally
         {
@@ -699,7 +707,7 @@ public sealed class WebLinkServiceTests
             });
 
             var apache = File.ReadAllText(outPath);
-            Assert.Contains("RewriteRule ^legacy/(.*)$ /archive/$1 [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?legacy/(.*)$ /archive/$1 [R=301,L,QSD]", apache, StringComparison.Ordinal);
             Assert.DoesNotContain("RewriteRule ^/legacy", apache, StringComparison.Ordinal);
         }
         finally
@@ -1461,7 +1469,7 @@ public sealed class WebLinkServiceTests
             });
 
             var apache = File.ReadAllText(outPath);
-            Assert.Contains("RewriteRule ^stary/?$ /blog/current/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?stary/?$ /blog/current/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
             Assert.DoesNotContain("/pl/blog/current/", apache, StringComparison.Ordinal);
         }
         finally
