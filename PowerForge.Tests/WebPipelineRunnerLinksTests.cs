@@ -83,8 +83,8 @@ public sealed class WebPipelineRunnerLinksTests
             var outputPath = Path.Combine(root, "deploy", "apache", "link-service-redirects.conf");
             Assert.True(File.Exists(outputPath));
             var apache = File.ReadAllText(outputPath);
-            Assert.Contains("RewriteRule ^old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
 
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "links-summary.json")));
             Assert.Equal(1, summary.RootElement.GetProperty("redirects").GetInt32());
