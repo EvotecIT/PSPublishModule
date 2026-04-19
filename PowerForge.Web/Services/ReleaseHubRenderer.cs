@@ -335,7 +335,7 @@ internal static class ReleaseHubRenderer
                     sb.Append("<a class=\"pf-release-asset-link\" href=\"")
                         .Append(Html(asset.DownloadUrl))
                         .Append("\">")
-                        .Append(Html(asset.Name))
+                        .Append(Html(ResolveChangelogAssetLabel(asset, release)))
                         .Append("</a>");
 
                     var meta = BuildAssetMeta(asset);
@@ -849,6 +849,17 @@ internal static class ReleaseHubRenderer
         if (!string.IsNullOrWhiteSpace(release.Tag))
             return release.Tag;
         return "Release";
+    }
+
+    private static string ResolveChangelogAssetLabel(ReleaseHubAssetView asset, ReleaseHubReleaseView release)
+    {
+        var name = string.IsNullOrWhiteSpace(asset.Name) ? "Download" : asset.Name.Trim();
+        var tag = release.Tag?.Trim();
+        if (string.IsNullOrWhiteSpace(tag) ||
+            name.Contains(tag, StringComparison.OrdinalIgnoreCase))
+            return name;
+
+        return $"{name} ({tag})";
     }
 
     private static string BuildAssetMeta(ReleaseHubAssetView asset)
