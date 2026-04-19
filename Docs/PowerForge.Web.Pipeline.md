@@ -113,6 +113,9 @@ Builds markdown + theme into static HTML.
 ```
 Notes:
 - `clean: true` clears the output directory before building (avoids stale files).
+- `language: "pl"` builds a single language slice.
+- `languages: ["en","fr","de","es"]` builds a selected multi-language subset into one artifact.
+- `languageAsRoot: true` only applies to single-language domain-style builds (for example `evotec.pl` as Polish at `/`).
 
 #### nav-export
 Exports a deterministic `site-nav.json` payload (including `surfaces` + `profiles`) from `site.json` + discovered content, without building HTML output.
@@ -736,6 +739,7 @@ Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash asset
 }
 ```
 Notes:
+- `minifyHtml`, `minifyCss`, and `minifyJs` default to `false`; the `optimize` task does not minify by name alone, so CI/deploy pipelines should set them explicitly.
 - `config` loads `AssetPolicy` from `site.json` (rewrites, hashing defaults, cache headers).
 - `hashAssets` fingerprints files and rewrites references (HTML + CSS).
 - `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).

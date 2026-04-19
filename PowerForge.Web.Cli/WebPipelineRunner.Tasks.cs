@@ -153,6 +153,42 @@ internal static partial class WebPipelineRunner
             case "apache-redirect":
                 ExecuteApacheRedirects(step, baseDir, stepResult);
                 break;
+            case "links-validate":
+            case "link-validate":
+            case "links":
+                ExecuteLinksValidate(step, baseDir, stepResult);
+                break;
+            case "links-export-apache":
+            case "link-export-apache":
+            case "links-export":
+                ExecuteLinksExportApache(step, baseDir, stepResult);
+                break;
+            case "links-import-wordpress":
+            case "link-import-wordpress":
+            case "links-import-pretty-links":
+            case "links-import":
+                ExecuteLinksImportWordPress(step, baseDir, stepResult);
+                break;
+            case "links-report-404":
+            case "link-report-404":
+            case "links-report":
+                ExecuteLinksReport404(step, baseDir, stepResult);
+                break;
+            case "links-promote-404":
+            case "link-promote-404":
+            case "links-promote":
+                ExecuteLinksPromote404(step, baseDir, stepResult);
+                break;
+            case "links-ignore-404":
+            case "link-ignore-404":
+            case "links-ignore":
+                ExecuteLinksIgnore404(step, baseDir, stepResult);
+                break;
+            case "links-apply-review":
+            case "link-apply-review":
+            case "links-apply":
+                ExecuteLinksApplyReview(step, baseDir, stepResult);
+                break;
             case "wordpress-normalize":
             case "wordpress-normalize-content":
             case "normalize-wordpress-content":

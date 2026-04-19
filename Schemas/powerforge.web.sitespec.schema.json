@@ -69,6 +69,8 @@
       "type": "array",
       "items": { "$ref": "#/$defs/RedirectSpec" }
     },
+    "Links": { "$ref": "#/$defs/LinkServiceSpec" },
+    "links": { "$ref": "#/$defs/LinkServiceSpec" },
     "EnableLegacyAmpRedirects": { "type": "boolean" },
     "enableLegacyAmpRedirects": { "type": "boolean" },
     "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
@@ -221,6 +223,49 @@
       },
       "required": ["From", "To"]
     },
+    "LinkServiceSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Redirects": { "type": "string" },
+        "redirects": { "type": "string" },
+        "Shortlinks": { "type": "string" },
+        "shortlinks": { "type": "string" },
+        "Ignored404": { "type": "string" },
+        "ignored404": { "type": "string" },
+        "Groups": { "type": "string" },
+        "groups": { "type": "string" },
+        "RedirectCsvPaths": { "type": "array", "items": { "type": "string" } },
+        "redirectCsvPaths": { "type": "array", "items": { "type": "string" } },
+        "redirect-csv-paths": { "type": "array", "items": { "type": "string" } },
+        "ApacheOut": { "type": "string" },
+        "apacheOut": { "type": "string" },
+        "apache-out": { "type": "string" },
+        "Hosts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "hosts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "LanguageRootHosts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Host-to-language-prefix map for domains where a language is deployed at the web root."
+        },
+        "languageRootHosts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Alias for LanguageRootHosts."
+        },
+        "language-root-hosts": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Alias for LanguageRootHosts."
+        }
+      }
+    },
     "SourceRepoSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -336,7 +381,10 @@
         "Replace": { "type": "string" },
         "MatchType": { "type": "string", "enum": ["contains", "prefix", "exact", "regex"] },
         "Source": { "type": "string" },
-        "Destination": { "type": "string" }
+        "SourceUrl": { "type": "string" },
+        "Destination": { "type": "string" },
+        "DownloadDependencies": { "type": "boolean" },
+        "UserAgent": { "type": "string" }
       },
       "required": ["Match", "Replace"]
     },
@@ -494,8 +542,17 @@
         "Rel": { "type": "string" },
         "Href": { "type": "string" },
         "Type": { "type": "string" },
+        "As": { "type": "string" },
         "Sizes": { "type": "string" },
-        "Crossorigin": { "type": "string" }
+        "Crossorigin": { "type": "string" },
+        "Attributes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "BooleanAttributes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "required": ["Rel", "Href"]
     },

@@ -68,6 +68,8 @@ public sealed class SiteSpec
     public RedirectSpec[] RouteOverrides { get; set; } = Array.Empty<RedirectSpec>();
     /// <summary>Redirect rules for legacy URLs.</summary>
     public RedirectSpec[] Redirects { get; set; } = Array.Empty<RedirectSpec>();
+    /// <summary>Reusable redirect, shortlink, and 404 workflow configuration.</summary>
+    public LinkServiceSpec? Links { get; set; }
     /// <summary>When enabled, emit legacy /amp redirects to canonical routes for generated pages.</summary>
     public bool EnableLegacyAmpRedirects { get; set; }
 
