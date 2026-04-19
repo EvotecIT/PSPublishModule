@@ -147,6 +147,22 @@ public class WebReleaseHubRenderingTests
     }
 
     [Fact]
+    public void Build_ReleaseChangelog_DisambiguatesRepeatedAssetNames()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< release-changelog product="intelligencex.reviewer" limit="5" includePreview="true" >}}
+            """,
+            setup: WriteRepeatedAssetNameReleaseHubData,
+            useScribanTheme: false,
+            scribanLayoutBody: null);
+
+        Assert.Contains("IntelligenceX.Reviewer-linux-x64.zip (reviewer-20260419115614)", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("IntelligenceX.Reviewer-linux-x64.zip (reviewer-20260419083150)", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(">IntelligenceX.Reviewer-linux-x64.zip</a>", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_ReleaseChangelog_PolishesGitHubReleaseLinks()
     {
         var html = BuildSinglePageSite(
@@ -587,6 +603,64 @@ public class WebReleaseHubRenderingTests
                       "arch": "any",
                       "kind": "zip",
                       "size": 2048000
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+    }
+
+    private static void WriteRepeatedAssetNameReleaseHubData(string root)
+    {
+        var dataDir = Path.Combine(root, "data");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "release-hub.json"),
+            """
+            {
+              "title": "IntelligenceX Reviewer Releases",
+              "products": [
+                { "id": "intelligencex.reviewer", "name": "IX Reviewer", "order": 10 }
+              ],
+              "releases": [
+                {
+                  "tag": "reviewer-20260419115614",
+                  "title": "IntelligenceX Reviewer reviewer-20260419115614",
+                  "url": "https://github.com/EvotecIT/IntelligenceX/releases/tag/reviewer-20260419115614",
+                  "publishedAt": "2026-04-19T09:57:13Z",
+                  "isPrerelease": false,
+                  "isLatestStable": true,
+                  "body_md": "## Fixed\n- Reviewer hardening",
+                  "assets": [
+                    {
+                      "name": "IntelligenceX.Reviewer-linux-x64.zip",
+                      "downloadUrl": "https://github.com/EvotecIT/IntelligenceX/releases/download/reviewer-20260419115614/IntelligenceX.Reviewer-linux-x64.zip",
+                      "product": "intelligencex.reviewer",
+                      "channel": "stable",
+                      "platform": "linux",
+                      "arch": "x64",
+                      "kind": "zip",
+                      "size": 5242880
+                    }
+                  ]
+                },
+                {
+                  "tag": "reviewer-20260419083150",
+                  "title": "IntelligenceX Reviewer visual formatting refresh",
+                  "url": "https://github.com/EvotecIT/IntelligenceX/releases/tag/reviewer-20260419083150",
+                  "publishedAt": "2026-04-19T08:32:09Z",
+                  "isPrerelease": false,
+                  "body_md": "## Fixed\n- Visual formatting",
+                  "assets": [
+                    {
+                      "name": "IntelligenceX.Reviewer-linux-x64.zip",
+                      "downloadUrl": "https://github.com/EvotecIT/IntelligenceX/releases/download/reviewer-20260419083150/IntelligenceX.Reviewer-linux-x64.zip",
+                      "product": "intelligencex.reviewer",
+                      "channel": "stable",
+                      "platform": "linux",
+                      "arch": "x64",
+                      "kind": "zip",
+                      "size": 5242880
                     }
                   ]
                 }
