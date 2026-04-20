@@ -1174,6 +1174,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             Directory.CreateDirectory(pagesPath);
             File.WriteAllText(Path.Combine(pagesPath, "index.md"), "---\ntitle: Home\nslug: index\n---\n\nHome");
             File.WriteAllText(Path.Combine(pagesPath, "contact.md"), "---\ntitle: Contact\n---\n\nContact");
+            File.WriteAllText(Path.Combine(pagesPath, "post.md"), "---\ntitle: Post\nslug: blog/post\naliases:\n  - /legacy-post/\n---\n\nPost");
 
             var themeRoot = Path.Combine(root, "themes", "amp-redirect-test");
             Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
@@ -1217,16 +1218,23 @@ public partial class WebSiteAuditOptimizeBuildTests
             var result = WebSiteBuilder.Build(spec, plan, outPath);
 
             var netlify = File.ReadAllText(Path.Combine(result.OutputPath, "_redirects"));
-            Assert.Contains("/amp/ / 301", netlify, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/contact/amp/ /contact/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/legacy-post/amp/ /blog/post/ 301", netlify, StringComparison.OrdinalIgnoreCase);
 
             var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.OutputPath, "_powerforge", "redirects.json")));
-            var redirectSources = metadata.RootElement.GetProperty("redirects")
+            var redirects = metadata.RootElement.GetProperty("redirects")
                 .EnumerateArray()
-                .Select(static entry => entry.GetProperty("from").GetString() ?? string.Empty)
+                .Select(static entry => new
+                {
+                    From = entry.GetProperty("from").GetString() ?? string.Empty,
+                    To = entry.GetProperty("to").GetString() ?? string.Empty
+                })
                 .ToArray();
-            Assert.Contains("/amp/", redirectSources, StringComparer.OrdinalIgnoreCase);
+            var redirectSources = redirects.Select(static entry => entry.From).ToArray();
             Assert.Contains("/contact/amp/", redirectSources, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(redirects, static entry =>
+                entry.From.Equals("/legacy-post/amp/", StringComparison.OrdinalIgnoreCase) &&
+                entry.To.Equals("/blog/post/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

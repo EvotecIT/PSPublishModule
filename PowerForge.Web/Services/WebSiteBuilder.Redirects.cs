@@ -29,6 +29,25 @@ public static partial class WebSiteBuilder
             existingSources.Add(NormalizeRouteForMatch(redirect.From));
         }
 
+        // When a legacy route already redirects to a canonical route such as /blog/<slug>/,
+        // emit a sibling /amp redirect as well so WordPress AMP URLs survive the cutover.
+        var redirectSnapshot = redirects.ToArray();
+        foreach (var redirect in redirectSnapshot)
+        {
+            if (redirect is null || string.IsNullOrWhiteSpace(redirect.From) || string.IsNullOrWhiteSpace(redirect.To))
+                continue;
+            if (IsExternalUrl(redirect.To))
+                continue;
+
+            var source = NormalizeRouteForMatch(redirect.From);
+            var target = NormalizeRouteForMatch(redirect.To);
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target))
+                continue;
+
+            foreach (var ampSource in BuildLegacyAmpSources(source))
+                TryAddAliasRedirect(ampSource, target, existingSources, redirects);
+        }
+
         foreach (var item in items)
         {
             if (item is null || string.IsNullOrWhiteSpace(item.OutputPath))
@@ -38,8 +57,18 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(target))
                 continue;
 
-            foreach (var source in BuildLegacyAmpSources(target))
-                TryAddAliasRedirect(source, target, existingSources, redirects);
+            var isRootTarget = target.Equals("/", StringComparison.OrdinalIgnoreCase);
+            if (!isRootTarget)
+            {
+                foreach (var source in BuildLegacyAmpSources(target))
+                    TryAddAliasRedirect(source, target, existingSources, redirects);
+            }
+
+            if (target.Equals("/blog", StringComparison.OrdinalIgnoreCase) || target.Equals("/blog/", StringComparison.OrdinalIgnoreCase))
+            {
+                TryAddAliasRedirect("/amp", target, existingSources, redirects);
+                TryAddAliasRedirect("/amp/", target, existingSources, redirects);
+            }
         }
     }
 
