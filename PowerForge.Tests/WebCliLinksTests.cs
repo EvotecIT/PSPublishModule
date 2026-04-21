@@ -85,7 +85,7 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
-    public void EvaluateBaseline_TreatsWarningIdsAsDistinctKeys()
+    public void EvaluateBaseline_AcceptsStableAndLegacyWarningKeys()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-baseline-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -94,14 +94,18 @@ public sealed class WebCliLinksTests
         {
             var baselinePath = Path.Combine(root, ".powerforge", "link-baseline.json");
             Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
-            var existingIssue = BuildMissingOwnerIssue("existing");
-            var newIssue = BuildMissingOwnerIssue("new");
+            var legacyBaselineIssue = BuildMissingOwnerIssue("legacy-baseline");
+            var stableBaselineIssue = BuildMissingOwnerIssue("stable-baseline", "/stable");
+            var legacyCurrentIssue = BuildMissingOwnerIssue("legacy-current");
+            var stableCurrentIssue = BuildMissingOwnerIssue("stable-current", "/stable");
+            var newIssue = BuildMissingOwnerIssue("new", "/new");
             File.WriteAllText(baselinePath,
                 $$"""
                 {
                   "version": 1,
                   "warningKeys": [
-                    {{JsonString(WebLinkCommandSupport.BuildIssueKey(existingIssue))}}
+                    {{JsonString(WebLinkCommandSupport.BuildLegacyIssueKey(legacyBaselineIssue))}},
+                    {{JsonString(WebLinkCommandSupport.BuildIssueKey(stableBaselineIssue))}}
                   ]
                 }
                 """);
@@ -111,8 +115,8 @@ public sealed class WebCliLinksTests
                 baselinePath,
                 new LinkValidationResult
                 {
-                    Issues = new[] { existingIssue, newIssue },
-                    WarningCount = 2
+                    Issues = new[] { legacyCurrentIssue, stableCurrentIssue, newIssue },
+                    WarningCount = 3
                 },
                 baselineGenerate: false,
                 baselineUpdate: false,
@@ -154,7 +158,7 @@ public sealed class WebCliLinksTests
         }
     }
 
-    private static LinkValidationIssue BuildMissingOwnerIssue(string id)
+    private static LinkValidationIssue BuildMissingOwnerIssue(string id, string sourcePath = "/go")
         => new()
         {
             Severity = LinkValidationSeverity.Warning,
@@ -162,7 +166,7 @@ public sealed class WebCliLinksTests
             Source = "shortlink",
             Id = id,
             SourceHost = "evo.yt",
-            SourcePath = "/go",
+            SourcePath = sourcePath,
             Status = 302,
             TargetUrl = "https://example.test"
         };

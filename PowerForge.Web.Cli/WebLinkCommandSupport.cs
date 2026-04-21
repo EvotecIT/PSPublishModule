@@ -275,13 +275,18 @@ internal static class WebLinkCommandSupport
         state.KeyCount = baselineKeys.Length;
 
         var baselineSet = state.Loaded
-            ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(
+                baselineKeys
+                    .Where(static key => !string.IsNullOrWhiteSpace(key))
+                    .SelectMany(static key => new[] { key, NormalizeBaselineKey(key) })
+                    .Where(static key => !string.IsNullOrWhiteSpace(key)),
+                StringComparer.OrdinalIgnoreCase)
             : null;
         state.NewWarnings = baselineSet is null
             ? Array.Empty<LinkValidationIssue>()
             : validation.Issues
                 .Where(static issue => issue.Severity == LinkValidationSeverity.Warning)
-                .Where(issue => !baselineSet.Contains(BuildIssueKey(issue)))
+                .Where(issue => !BuildIssueKeys(issue).Any(baselineSet.Contains))
                 .ToArray();
 
         return state;
@@ -310,6 +315,18 @@ internal static class WebLinkCommandSupport
         => string.Join("|",
             issue.Code ?? string.Empty,
             issue.Source ?? string.Empty,
+            issue.SourceHost ?? string.Empty,
+            issue.SourcePath ?? string.Empty,
+            issue.SourceQuery ?? string.Empty,
+            issue.Status.ToString(CultureInfo.InvariantCulture),
+            issue.NormalizedTargetUrl ?? issue.TargetUrl ?? string.Empty,
+            issue.RelatedStatus.ToString(CultureInfo.InvariantCulture),
+            issue.RelatedNormalizedTargetUrl ?? issue.RelatedTargetUrl ?? string.Empty);
+
+    internal static string BuildLegacyIssueKey(LinkValidationIssue issue)
+        => string.Join("|",
+            issue.Code ?? string.Empty,
+            issue.Source ?? string.Empty,
             issue.Id ?? string.Empty,
             issue.SourceHost ?? string.Empty,
             issue.SourcePath ?? string.Empty,
@@ -319,6 +336,39 @@ internal static class WebLinkCommandSupport
             issue.RelatedId ?? string.Empty,
             issue.RelatedStatus.ToString(CultureInfo.InvariantCulture),
             issue.RelatedNormalizedTargetUrl ?? issue.RelatedTargetUrl ?? string.Empty);
+
+    internal static IEnumerable<string> BuildIssueKeys(LinkValidationIssue issue)
+    {
+        // Baselines generated before the ID-based key change used semantic route data only.
+        var stableKey = BuildIssueKey(issue);
+        yield return stableKey;
+
+        // Accept the short-lived ID-based format too so existing baselines remain valid.
+        var legacyKey = BuildLegacyIssueKey(issue);
+        if (!string.Equals(legacyKey, stableKey, StringComparison.OrdinalIgnoreCase))
+            yield return legacyKey;
+    }
+
+    internal static string NormalizeBaselineKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return string.Empty;
+
+        var parts = key.Split('|');
+        if (parts.Length != 11)
+            return key;
+
+        return string.Join("|",
+            parts[0],
+            parts[1],
+            parts[3],
+            parts[4],
+            parts[5],
+            parts[6],
+            parts[7],
+            parts[9],
+            parts[10]);
+    }
 
     private static Ignored404Rule[] ReadIgnored404Rules(string path)
     {
