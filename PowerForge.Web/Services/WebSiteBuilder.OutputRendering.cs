@@ -80,7 +80,7 @@ public static partial class WebSiteBuilder
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry);
-        var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer></script>"));
+        var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer data-cfasync=\"false\"></script>"));
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)

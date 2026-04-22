@@ -90,11 +90,13 @@ internal static partial class WebCliCommandHandlers
                 : ResolvePathRelative(baseDir, publishSpec.Optimize.SiteRoot);
 
             AssetPolicySpec? policy = null;
+            string? cssStrategy = null;
             if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.Config))
             {
                 var optimizeConfigPath = ResolvePathRelative(baseDir, publishSpec.Optimize.Config);
                 var (optimizeSpec, _) = WebSiteSpecLoader.LoadWithPath(optimizeConfigPath, WebCliJson.Options);
                 policy = optimizeSpec.AssetPolicy;
+                cssStrategy = optimizeSpec.AssetRegistry?.CssStrategy;
             }
 
             if (publishSpec.Optimize.CacheHeaders)
@@ -140,6 +142,7 @@ internal static partial class WebCliCommandHandlers
                 HashExtensions = publishSpec.Optimize.HashExtensions is { Length: > 0 } ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
                 HashExclude = publishSpec.Optimize.HashExclude ?? Array.Empty<string>(),
                 HashManifestPath = publishSpec.Optimize.HashManifest,
+                CssStrategy = string.IsNullOrWhiteSpace(publishSpec.Optimize.CssStrategy) ? (cssStrategy ?? "blocking") : publishSpec.Optimize.CssStrategy!,
                 AssetPolicy = policy
             };
             if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CssPattern))
@@ -679,6 +682,7 @@ internal static partial class WebCliCommandHandlers
         var configPath = TryGetOptionValue(subArgs, "--config");
         var criticalCss = TryGetOptionValue(subArgs, "--critical-css");
         var cssPattern = TryGetOptionValue(subArgs, "--css-pattern");
+        var cssStrategy = TryGetOptionValue(subArgs, "--css-strategy");
         var minifyHtml = subArgs.Any(a => a.Equals("--minify-html", StringComparison.OrdinalIgnoreCase));
         var minifyCss = subArgs.Any(a => a.Equals("--minify-css", StringComparison.OrdinalIgnoreCase));
         var minifyJs = subArgs.Any(a => a.Equals("--minify-js", StringComparison.OrdinalIgnoreCase));
@@ -710,11 +714,13 @@ internal static partial class WebCliCommandHandlers
             return Fail("Missing required --site-root.", outputJson, logger, "web.optimize");
 
         AssetPolicySpec? policy = null;
+        string? siteCssStrategy = null;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
             var resolved = ResolveExistingFilePath(configPath);
             var (spec, _) = WebSiteSpecLoader.LoadWithPath(resolved, WebCliJson.Options);
             policy = spec.AssetPolicy;
+            siteCssStrategy = spec.AssetRegistry?.CssStrategy;
         }
 
         if (headersEnabled)
@@ -735,6 +741,7 @@ internal static partial class WebCliCommandHandlers
             SiteRoot = siteRoot,
             CriticalCssPath = criticalCss,
             CssLinkPattern = string.IsNullOrWhiteSpace(cssPattern) ? "(app|api-docs)\\.css" : cssPattern,
+            CssStrategy = string.IsNullOrWhiteSpace(cssStrategy) ? (siteCssStrategy ?? "blocking") : cssStrategy,
             MinifyHtml = minifyHtml,
             MinifyCss = minifyCss,
             MinifyJs = minifyJs,

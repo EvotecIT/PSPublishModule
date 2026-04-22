@@ -115,6 +115,14 @@ Deliverables:
   - emit reviewable patch JSON before apply
 - Integrate with existing redirect artifact emitters.
 
+Current helper:
+- `Build/Compare-WebSitemaps.ps1`
+  - compares one or more live sitemap indexes/sitemaps with a generated local sitemap
+  - reports exact overlap vs missing legacy URLs
+  - emits reviewable JSON/CSV redirect candidates for migration work
+  - includes safe heuristics for common shape changes such as root-to-`/blog/`, `category`-to-`/categories/`, and `tag`-to-`/tags/`
+  - treats AMP routes as manual-review cases instead of auto-redirecting blindly
+
 Why:
 - Safer migrations (especially WordPress/legacy blog imports).
 

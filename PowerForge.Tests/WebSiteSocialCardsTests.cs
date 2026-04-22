@@ -358,7 +358,7 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
-    public void Build_UsesGeneratedCard_ForBlogSocialPreview_WhenAutoGenerateCardsEnabled_EvenWithBodyImage()
+    public void Build_UsesFirstMarkdownImage_ForBlogSocialPreview_WhenNoExplicitSocialImage_EvenWhenAutoGenerateCardsEnabled()
     {
         var root = CreateTempRoot("pf-web-social-blog-first-image-");
         try
@@ -400,9 +400,9 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, Path.Combine("blog", "multilanguage-support-in-action", "index.html"));
-            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/generated/blog-multilanguage-support-in-action-", html, StringComparison.Ordinal);
-            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/generated/blog-multilanguage-support-in-action-", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("https://example.test/assets/screenshots/multilang-01.png", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -453,6 +453,113 @@ public class WebSiteSocialCardsTests
             var html = BuildAndRead(root, spec, Path.Combine("blog", "inline-image-fallback", "index.html"));
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/fallback-01.png\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/fallback-01.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_UsesFirstMarkdownImage_ForEditorialSocialPreview_WhenNoExplicitSocialImage()
+    {
+        var root = CreateTempRoot("pf-web-social-news-first-image-");
+        try
+        {
+            var newsPath = Path.Combine(root, "content", "news");
+            Directory.CreateDirectory(newsPath);
+            File.WriteAllText(Path.Combine(newsPath, "release-roundup.md"),
+                """
+                ---
+                title: Release Roundup
+                description: News with a lead image.
+                slug: release-roundup
+                date: 2026-04-19
+                ---
+
+                Intro paragraph.
+
+                ![Lead image](/assets/news/release-roundup.png)
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                Image = "/assets/social/default.png",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "news",
+                    Input = "content/news",
+                    Output = "/news",
+                    Preset = "editorial"
+                }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("news", "release-roundup", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/news/release-roundup.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/news/release-roundup.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_PrefersExplicitEditorialImageMetadata_OverFirstBodyImage()
+    {
+        var root = CreateTempRoot("pf-web-social-editorial-explicit-image-");
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "hero-image-wins.md"),
+                """
+                ---
+                title: Hero Image Wins
+                description: Explicit image metadata should win.
+                slug: hero-image-wins
+                image: /assets/social/hero-image.png
+                ---
+
+                Intro text.
+
+                ![Body image](/assets/social/body-image.png)
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                Image = "/assets/social/default.png",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Input = "content/blog",
+                    Output = "/blog"
+                }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("blog", "hero-image-wins", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/hero-image.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/hero-image.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("property=\"og:image\" content=\"https://example.test/assets/social/body-image.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("name=\"twitter:image\" content=\"https://example.test/assets/social/body-image.png\"", html, StringComparison.Ordinal);
             Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
         }
         finally

@@ -762,6 +762,21 @@ internal static partial class WebPipelineRunner
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
                     GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reportPath") ??
+                    GetString(step, "report-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "duplicateReportPath") ??
+                    GetString(step, "duplicate-report-path")));
+                if ((GetBool(step, "baselineGenerate") ?? GetBool(step, "baseline-generate") ?? false) ||
+                    (GetBool(step, "baselineUpdate") ?? GetBool(step, "baseline-update") ?? false))
+                {
+                    outputs.AddRange(ResolveOutputCandidates(baseDir,
+                        GetString(step, "baselinePath") ??
+                        GetString(step, "baseline-path") ??
+                        GetString(step, "baseline") ??
+                        ".powerforge/link-baseline.json"));
+                }
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -866,6 +881,154 @@ internal static partial class WebPipelineRunner
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
                     GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reportPath") ??
+                    GetString(step, "report-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "duplicateReportPath") ??
+                    GetString(step, "duplicate-report-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-validate":
+            case "link-validate":
+            case "links":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reportPath") ??
+                    GetString(step, "report-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-export-apache":
+            case "link-export-apache":
+            case "links-export":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "apacheOut") ??
+                    GetString(step, "apache-out") ??
+                    "./deploy/apache/link-service-redirects.conf"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reportPath") ??
+                    GetString(step, "report-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-import-wordpress":
+            case "link-import-wordpress":
+            case "links-import-pretty-links":
+            case "links-import":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "shortlinks") ??
+                    GetString(step, "shortlinksPath") ??
+                    GetString(step, "shortlinks-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-report-404":
+            case "link-report-404":
+            case "links-report":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "reportPath") ??
+                    GetString(step, "report-path") ??
+                    "./Build/link-reports/404-suggestions.json"));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reviewCsv") ??
+                    GetString(step, "review-csv") ??
+                    GetString(step, "reviewCsvPath") ??
+                    GetString(step, "review-csv-path") ??
+                    GetString(step, "csvReport") ??
+                    GetString(step, "csv-report")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-promote-404":
+            case "link-promote-404":
+            case "links-promote":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "redirects") ??
+                    GetString(step, "redirectsPath") ??
+                    GetString(step, "redirects-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reviewCsv") ??
+                    GetString(step, "review-csv") ??
+                    GetString(step, "reviewCsvPath") ??
+                    GetString(step, "review-csv-path") ??
+                    GetString(step, "csvReport") ??
+                    GetString(step, "csv-report")));
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "links-ignore-404":
+            case "link-ignore-404":
+            case "links-ignore":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "ignored404") ??
+                    GetString(step, "ignored-404") ??
+                    GetString(step, "ignored404Path") ??
+                    GetString(step, "ignored-404-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "summaryPath") ??
+                    GetString(step, "summary-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "reviewCsv") ??
+                    GetString(step, "review-csv") ??
+                    GetString(step, "reviewCsvPath") ??
+                    GetString(step, "review-csv-path") ??
+                    GetString(step, "csvReport") ??
+                    GetString(step, "csv-report")));
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)

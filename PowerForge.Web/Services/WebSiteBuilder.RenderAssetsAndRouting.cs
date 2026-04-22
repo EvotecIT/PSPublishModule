@@ -53,18 +53,44 @@ public static partial class WebSiteBuilder
         var links = cssLinks.ToArray();
         if (links.Length == 0) return string.Empty;
 
-        if (assets?.CssStrategy is not null &&
-            assets.CssStrategy.Equals("async", StringComparison.OrdinalIgnoreCase))
-        {
+        var strategy = NormalizeCssStrategy(assets?.CssStrategy);
+        if (strategy.Equals("async", StringComparison.OrdinalIgnoreCase))
             return string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink));
-        }
+
+        if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
+            return string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink));
 
         return string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />"));
+    }
+
+    private static string NormalizeCssStrategy(string? cssStrategy)
+    {
+        if (string.IsNullOrWhiteSpace(cssStrategy))
+            return "blocking";
+
+        return cssStrategy.Trim().ToLowerInvariant() switch
+        {
+            "sync" => "blocking",
+            "inline" => "blocking",
+            "render-blocking" => "blocking",
+            "renderblocking" => "blocking",
+            "preload" => "preload",
+            "async" => "async",
+            "async-print" => "async",
+            "print" => "async",
+            _ => "blocking"
+        };
     }
 
     private static string RenderAsyncCssLink(string href)
     {
         return $@"<link rel=""stylesheet"" href=""{href}"" media=""print"" onload=""this.media='all'"" />
+<noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
+    }
+
+    private static string RenderPreloadCssLink(string href)
+    {
+        return $@"<link rel=""preload"" href=""{href}"" as=""style"" onload=""this.onload=null;this.rel='stylesheet'"" />
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
@@ -287,37 +313,62 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(link.Rel) || string.IsNullOrWhiteSpace(link.Href))
                 continue;
 
-            var rel = System.Web.HttpUtility.HtmlEncode(link.Rel);
-            var href = System.Web.HttpUtility.HtmlEncode(link.Href);
-            var type = string.IsNullOrWhiteSpace(link.Type) ? string.Empty : $" type=\"{System.Web.HttpUtility.HtmlEncode(link.Type)}\"";
-            var asAttribute = string.IsNullOrWhiteSpace(link.As) ? string.Empty : $" as=\"{System.Web.HttpUtility.HtmlEncode(link.As)}\"";
-            var sizes = string.IsNullOrWhiteSpace(link.Sizes) ? string.Empty : $" sizes=\"{System.Web.HttpUtility.HtmlEncode(link.Sizes)}\"";
-            var cross = string.IsNullOrWhiteSpace(link.Crossorigin) ? string.Empty : $" crossorigin=\"{System.Web.HttpUtility.HtmlEncode(link.Crossorigin)}\"";
-            var extraAttributes = string.Empty;
+            sb.Append("<link");
+            AppendHtmlAttribute(sb, "rel", link.Rel);
+            AppendHtmlAttribute(sb, "href", link.Href);
+            AppendHtmlAttribute(sb, "type", link.Type);
+            AppendHtmlAttribute(sb, "as", link.As);
+            AppendHtmlAttribute(sb, "sizes", link.Sizes);
+            AppendHtmlAttribute(sb, "crossorigin", link.Crossorigin);
+
             if (link.Attributes is { Count: > 0 })
             {
-                foreach (var pair in link.Attributes.OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
+                foreach (var attribute in link.Attributes
+                             .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
-                        continue;
-
-                    if (pair.Key.Equals("rel", StringComparison.OrdinalIgnoreCase) ||
-                        pair.Key.Equals("href", StringComparison.OrdinalIgnoreCase) ||
-                        pair.Key.Equals("type", StringComparison.OrdinalIgnoreCase) ||
-                        pair.Key.Equals("as", StringComparison.OrdinalIgnoreCase) ||
-                        pair.Key.Equals("sizes", StringComparison.OrdinalIgnoreCase) ||
-                        pair.Key.Equals("crossorigin", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrWhiteSpace(attribute.Key) ||
+                        string.IsNullOrWhiteSpace(attribute.Value) ||
+                        attribute.Key.Equals("rel", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("href", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("type", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("as", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("sizes", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Key.Equals("crossorigin", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
 
-                    extraAttributes += $" {System.Web.HttpUtility.HtmlEncode(pair.Key)}=\"{System.Web.HttpUtility.HtmlEncode(pair.Value)}\"";
+                    AppendHtmlAttribute(sb, attribute.Key, attribute.Value);
                 }
             }
 
-            sb.AppendLine($"<link rel=\"{rel}\" href=\"{href}\"{type}{asAttribute}{sizes}{cross}{extraAttributes} />");
+            if (link.BooleanAttributes is { Length: > 0 })
+            {
+                foreach (var attributeName in link.BooleanAttributes
+                             .Where(static value => !string.IsNullOrWhiteSpace(value))
+                             .Distinct(StringComparer.OrdinalIgnoreCase)
+                             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(' ')
+                        .Append(System.Web.HttpUtility.HtmlEncode(attributeName));
+                }
+            }
+
+            sb.AppendLine(" />");
         }
         return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendHtmlAttribute(System.Text.StringBuilder sb, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+            return;
+
+        sb.Append(' ')
+            .Append(System.Web.HttpUtility.HtmlEncode(name))
+            .Append("=\"")
+            .Append(System.Web.HttpUtility.HtmlEncode(value))
+            .Append('"');
     }
 
     private static string RenderHeadMeta(HeadSpec head)
@@ -1104,7 +1155,7 @@ public static partial class WebSiteBuilder
     private static string NormalizeAlias(string alias)
     {
         if (Uri.TryCreate(alias, UriKind.Absolute, out var uri))
-            return uri.AbsolutePath;
+            return uri.AbsolutePath + uri.Query;
         return alias;
     }
 
@@ -1122,7 +1173,8 @@ public static partial class WebSiteBuilder
             normalized
         };
 
-        if (!normalized.Contains('*', StringComparison.Ordinal) &&
+        if (!normalized.Contains('?', StringComparison.Ordinal) &&
+            !normalized.Contains('*', StringComparison.Ordinal) &&
             !normalized.Contains('{', StringComparison.Ordinal) &&
             !normalized.Equals("/", StringComparison.Ordinal))
         {

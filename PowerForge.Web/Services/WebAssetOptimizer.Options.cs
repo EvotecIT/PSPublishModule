@@ -9,6 +9,8 @@ public sealed class WebAssetOptimizerOptions
     public string? CriticalCssPath { get; set; }
     /// <summary>Regex pattern used to match stylesheet links.</summary>
     public string CssLinkPattern { get; set; } = "(app|api-docs)\\.css";
+    /// <summary>How stylesheet links should be emitted after critical CSS injection (blocking, preload, or async).</summary>
+    public string CssStrategy { get; set; } = "blocking";
     /// <summary>When true, minify HTML files.</summary>
     public bool MinifyHtml { get; set; } = false;
     /// <summary>Glob-style include patterns for HTML processing (empty means include all).</summary>
@@ -60,4 +62,3 @@ public sealed class WebAssetOptimizerOptions
     /// <summary>Optional asset policy for rewrites and headers.</summary>
     public AssetPolicySpec? AssetPolicy { get; set; }
 }
-

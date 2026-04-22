@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -11,6 +13,7 @@ namespace PowerForge.Web;
 public static partial class WebAssetOptimizer
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -36,6 +39,19 @@ public static partial class WebAssetOptimizer
         public int OriginalWidth { get; set; }
         public int OriginalHeight { get; set; }
         public List<ImageVariantPlan> ResponsiveVariants { get; } = new();
+    }
+
+    private static HttpClient CreateRewriteDownloadClient()
+    {
+        var handler = new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All
+        };
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = TimeSpan.FromSeconds(60)
+        };
+        return client;
     }
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
     /// <param name="options">Optimization options.</param>
@@ -102,6 +118,7 @@ public static partial class WebAssetOptimizer
                 var content = File.ReadAllText(htmlFile);
                 if (string.IsNullOrWhiteSpace(content)) continue;
                 var updated = RewriteHtmlAssets(content, policy.Rewrites);
+                updated = WebSiteBuilder.OptimizeNetworkHints(updated);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
                     File.WriteAllText(htmlFile, updated);
@@ -128,7 +145,7 @@ public static partial class WebAssetOptimizer
 
             if (!string.IsNullOrWhiteSpace(criticalCss) && !content.Contains("<!-- critical-css -->", StringComparison.OrdinalIgnoreCase))
             {
-                var updated = InlineCriticalCss(content, criticalCss, cssPattern);
+                var updated = InlineCriticalCss(content, criticalCss, cssPattern, options.CssStrategy);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
                     File.WriteAllText(htmlFile, updated);
@@ -324,11 +341,8 @@ public static partial class WebAssetOptimizer
     {
         foreach (var rewrite in rewrites)
         {
-            if (string.IsNullOrWhiteSpace(rewrite.Source) || string.IsNullOrWhiteSpace(rewrite.Destination))
+            if (string.IsNullOrWhiteSpace(rewrite.Destination))
                 continue;
-
-            var source = Path.GetFullPath(rewrite.Source);
-            if (!File.Exists(source)) continue;
 
             var destRelative = rewrite.Destination.TrimStart('/', '\\');
             if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
@@ -336,9 +350,171 @@ public static partial class WebAssetOptimizer
                 Trace.TraceWarning($"Asset rewrite destination outside site root: {rewrite.Destination}");
                 continue;
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(source, dest, overwrite: true);
+
+            if (!string.IsNullOrWhiteSpace(rewrite.Source))
+            {
+                var source = Path.GetFullPath(rewrite.Source);
+                if (!File.Exists(source))
+                    continue;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(source, dest, overwrite: true);
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(rewrite.SourceUrl))
+            {
+                DownloadRewriteAsset(rewrite, dest);
+            }
         }
+    }
+
+    private static void DownloadRewriteAsset(AssetRewriteSpec rewrite, string destinationPath)
+    {
+        if (string.IsNullOrWhiteSpace(rewrite.SourceUrl))
+            return;
+
+        if (!Uri.TryCreate(rewrite.SourceUrl, UriKind.Absolute, out var sourceUri) ||
+            (sourceUri.Scheme != Uri.UriSchemeHttp && sourceUri.Scheme != Uri.UriSchemeHttps))
+        {
+            Trace.TraceWarning($"Asset rewrite sourceUrl is not a valid http(s) URL: {rewrite.SourceUrl}");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+            if (destinationPath.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+            {
+                var css = DownloadText(sourceUri, rewrite.UserAgent);
+                if (rewrite.DownloadDependencies)
+                    css = RewriteDownloadedCssDependencies(css, sourceUri, destinationPath, rewrite.UserAgent);
+                File.WriteAllText(destinationPath, css, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                return;
+            }
+
+            var bytes = DownloadBytes(sourceUri, rewrite.UserAgent);
+            File.WriteAllBytes(destinationPath, bytes);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Asset rewrite download failed for {rewrite.SourceUrl}: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static string RewriteDownloadedCssDependencies(string css, Uri sourceUri, string destinationPath, string? userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(css))
+            return css;
+
+        var destinationDir = Path.GetDirectoryName(destinationPath);
+        if (string.IsNullOrWhiteSpace(destinationDir))
+            return css;
+
+        var downloaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        return CssUrlRegex.Replace(css, match =>
+        {
+            var url = match.Groups["url"].Value.Trim();
+            if (!TryResolveDownloadUri(sourceUri, url, out var resolvedUri))
+                return match.Value;
+
+            if (!downloaded.TryGetValue(resolvedUri.AbsoluteUri, out var fileName))
+            {
+                fileName = BuildDownloadedAssetFileName(resolvedUri);
+                var localPath = Path.Combine(destinationDir, fileName);
+                try
+                {
+                    var bytes = DownloadBytes(resolvedUri, userAgent);
+                    File.WriteAllBytes(localPath, bytes);
+                    downloaded[resolvedUri.AbsoluteUri] = fileName;
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"Asset rewrite dependency download failed for {resolvedUri}: {ex.GetType().Name}: {ex.Message}");
+                    return match.Value;
+                }
+            }
+
+            var quote = match.Groups["quote"].Value;
+            return $"url({quote}{fileName}{quote})";
+        });
+    }
+
+    private static bool TryResolveDownloadUri(Uri baseUri, string rawUrl, out Uri resolvedUri)
+    {
+        resolvedUri = baseUri;
+        if (string.IsNullOrWhiteSpace(rawUrl) ||
+            rawUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+            rawUrl.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+            rawUrl.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            rawUrl.StartsWith("#", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var absoluteUri))
+        {
+            resolvedUri = absoluteUri;
+            return resolvedUri.Scheme == Uri.UriSchemeHttp || resolvedUri.Scheme == Uri.UriSchemeHttps;
+        }
+
+        if (rawUrl.StartsWith("//", StringComparison.Ordinal))
+        {
+            if (Uri.TryCreate($"{baseUri.Scheme}:{rawUrl}", UriKind.Absolute, out var protocolRelativeUri))
+            {
+                resolvedUri = protocolRelativeUri;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (!Uri.TryCreate(baseUri, rawUrl, out var relativeUri))
+            return false;
+
+        resolvedUri = relativeUri;
+        return resolvedUri.Scheme == Uri.UriSchemeHttp || resolvedUri.Scheme == Uri.UriSchemeHttps;
+    }
+
+    private static string BuildDownloadedAssetFileName(Uri uri)
+    {
+        var pathName = Path.GetFileName(uri.AbsolutePath);
+        if (string.IsNullOrWhiteSpace(pathName))
+            pathName = "asset";
+
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+            pathName = pathName.Replace(invalid, '-');
+
+        var extension = Path.GetExtension(pathName);
+        var stem = pathName[..Math.Max(0, pathName.Length - extension.Length)];
+        if (string.IsNullOrWhiteSpace(stem))
+            stem = "asset";
+
+        var hash = ComputeShortHash(Encoding.UTF8.GetBytes(uri.AbsoluteUri));
+        return $"{stem}.{hash}{extension}";
+    }
+
+    private static string DownloadText(Uri uri, string? userAgent)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (!string.IsNullOrWhiteSpace(userAgent))
+            request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+
+        using var response = RewriteDownloadClient.Send(request);
+        response.EnsureSuccessStatusCode();
+        return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+    }
+
+    private static byte[] DownloadBytes(Uri uri, string? userAgent)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (!string.IsNullOrWhiteSpace(userAgent))
+            request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+
+        using var response = RewriteDownloadClient.Send(request);
+        response.EnsureSuccessStatusCode();
+        return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
     }
 
     private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)
@@ -347,7 +523,8 @@ public static partial class WebAssetOptimizer
         return HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
-            var replaced = ApplyRewriteRules(url, rewrites);
+            var decodedUrl = System.Web.HttpUtility.HtmlDecode(url);
+            var replaced = ApplyRewriteRules(decodedUrl, rewrites);
             return replaced == url ? match.Value : $"{match.Groups["attr"].Value}=\"{replaced}\"";
         });
     }

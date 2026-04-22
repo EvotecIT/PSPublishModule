@@ -988,7 +988,7 @@ Generated card typography/layout can also follow theme tokens:
 Generated cards can also include a site/page logo and editorial inline media:
 - logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
 - inline media source precedence: `meta.social_card_image` / `meta.social.card_image` / `meta.social_card_media` -> existing social image metadata -> first body image for editorial collections
-- blog/editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
+- editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
 
 Preset precedence for generated social cards:
 1. per-page `meta.social_card_*` overrides
@@ -996,8 +996,10 @@ Preset precedence for generated social cards:
 3. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
 4. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
 
-If `meta.social_image` is not set, blog posts also try to use the first markdown image in the post body
-before falling back to generated/default site image.
+If `meta.social_image` is not set, editorial posts (for example `blog`/`news`/`changelog`) also try to use:
+- explicit image aliases such as `image`, `cover_image`, `thumbnail`, `og_image`, or `twitter_image`
+- then the first markdown or inline HTML image in the post body
+- and only then fall back to generated/default site image.
 Pages can opt out using front matter:
 ```
 meta.social: false

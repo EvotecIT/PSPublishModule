@@ -48,7 +48,7 @@ public static partial class WebSiteBuilder
         "manifest"
     };
 
-    private static string OptimizeNetworkHints(string html)
+    internal static string OptimizeNetworkHints(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
             return html;

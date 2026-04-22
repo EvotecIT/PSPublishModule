@@ -161,6 +161,70 @@ This is useful for turning CDN links into local files.
 
 Supported `MatchType`: `contains` (default), `prefix`, `exact`, `regex`.
 
+Local checked-in asset example:
+```json
+{
+  "AssetPolicy": {
+    "Rewrites": [
+      {
+        "Match": "https://cdn.example.com/prism/",
+        "Replace": "/assets/prism/",
+        "MatchType": "prefix",
+        "Source": "./themes/site/assets/prism/prism-core.js",
+        "Destination": "/assets/prism/prism-core.js"
+      }
+    ]
+  }
+}
+```
+
+Remote self-host example:
+```json
+{
+  "AssetPolicy": {
+    "Rewrites": [
+      {
+        "Match": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
+        "Replace": "/assets/fonts/site-fonts.css",
+        "MatchType": "exact",
+        "SourceUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
+        "Destination": "/assets/fonts/site-fonts.css",
+        "DownloadDependencies": true,
+        "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+      }
+    ]
+  }
+}
+```
+
+Notes:
+- `SourceUrl` downloads the remote asset during `optimize`.
+- `DownloadDependencies:true` localizes `url(...)` references inside downloaded CSS (useful for font binaries).
+- This works well with structured `Head.Links`, so pages can keep canonical external URLs in source config while optimized output rewrites them to first-party assets.
+
+## Structured head links
+`site.json -> Head -> Links` supports the common `rel`/`href`/`type`/`as`/`sizes`/`crossorigin` fields plus:
+- `Attributes`: extra string attributes such as `media`, `as`, `fetchpriority`, `onload`, or `data-*`
+- `BooleanAttributes`: valueless attributes such as `disabled`
+
+Example:
+```json
+{
+  "Head": {
+    "Links": [
+      {
+        "Rel": "preload",
+        "Href": "/assets/fonts/site-fonts.css",
+        "Attributes": {
+          "as": "style",
+          "onload": "this.onload=null;this.rel='stylesheet'"
+        }
+      }
+    ]
+  }
+}
+```
+
 ## Best practices for 100/100/100
 - Keep CSS/JS route‑specific (use `routeBundles`).
 - Hash assets and serve them with immutable cache headers.

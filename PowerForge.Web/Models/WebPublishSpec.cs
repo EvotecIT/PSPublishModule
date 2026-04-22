@@ -77,6 +77,8 @@ public sealed class WebPublishOptimizeSpec
     public string? CriticalCss { get; set; }
     /// <summary>CSS file glob pattern.</summary>
     public string? CssPattern { get; set; }
+    /// <summary>CSS loading strategy after critical CSS injection (blocking, preload, or async).</summary>
+    public string? CssStrategy { get; set; }
     /// <summary>When true, minify HTML output.</summary>
     public bool MinifyHtml { get; set; }
     /// <summary>When true, minify CSS output.</summary>

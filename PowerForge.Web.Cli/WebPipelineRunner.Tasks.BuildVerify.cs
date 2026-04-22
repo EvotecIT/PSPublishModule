@@ -21,6 +21,7 @@ internal static partial class WebPipelineRunner
         var config = ResolvePath(baseDir, GetString(step, "config"));
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
         var language = GetString(step, "language") ?? GetString(step, "lang");
+        var languages = GetArrayOfStrings(step, "languages") ?? GetArrayOfStrings(step, "langs");
         var languageAsRoot = GetBool(step, "languageAsRoot") ?? GetBool(step, "language-as-root") ?? false;
         var cleanOutput = GetBool(step, "clean") ?? false;
         if (string.IsNullOrWhiteSpace(config) || string.IsNullOrWhiteSpace(outPath))
@@ -38,13 +39,16 @@ internal static partial class WebPipelineRunner
             WebCliJson.Options,
             language,
             languageAsRoot,
+            languages,
             progress: logger is null ? null : message => logger.Info($"build: {message}"));
         lastBuildOutPath = Path.GetFullPath(build.OutputPath);
         lastBuildUpdatedFiles = build.UpdatedFiles ?? Array.Empty<string>();
 
         stepResult.Success = true;
         stepResult.Message = string.IsNullOrWhiteSpace(language)
-            ? $"Built {build.OutputPath}"
+            ? languages is { Length: > 0 }
+                ? $"Built {build.OutputPath} (languages={string.Join(",", languages)})"
+                : $"Built {build.OutputPath}"
             : $"Built {build.OutputPath} (language={language}, as-root={languageAsRoot.ToString().ToLowerInvariant()})";
     }
 

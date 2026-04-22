@@ -22,19 +22,22 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSocialImageOverride(ContentItem item)
     {
-        var explicitMetaImage =
-            GetMetaString(item.Meta, "social_image") ??
-            GetMetaString(item.Meta, "social.image") ??
-            GetMetaString(item.Meta, "og_image") ??
-            GetMetaString(item.Meta, "twitter_image") ??
-            GetMetaString(item.Meta, "cover_image") ??
-            GetMetaString(item.Meta, "thumbnail") ??
-            GetMetaString(item.Meta, "image");
+        var explicitMetaImage = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_image"),
+            GetMetaString(item.Meta, "social.image"),
+            GetMetaString(item.Meta, "og_image"),
+            GetMetaString(item.Meta, "twitter_image"),
+            GetMetaString(item.Meta, "cover_image"),
+            GetMetaString(item.Meta, "thumbnail"),
+            GetMetaString(item.Meta, "image"));
 
         if (!string.IsNullOrWhiteSpace(explicitMetaImage))
             return explicitMetaImage!;
 
-        return string.Empty;
+        if (!IsEditorialCollection(item.Collection))
+            return string.Empty;
+
+        return TryExtractFirstBodyImage(item.SourcePath);
     }
 
     private static string ResolveSocialImagePath(
@@ -165,9 +168,9 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSocialRouteLabel(ContentItem item, string? route)
     {
-        var routeOverride =
-            GetMetaString(item.Meta, "social_card_route") ??
-            GetMetaString(item.Meta, "social.route");
+        var routeOverride = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_route"),
+            GetMetaString(item.Meta, "social.route"));
         if (!string.IsNullOrWhiteSpace(routeOverride))
             return routeOverride!.Trim();
 
@@ -186,9 +189,9 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSocialBadge(ContentItem item, string route)
     {
-        var metaBadge =
-            GetMetaString(item.Meta, "social_card_badge") ??
-            GetMetaString(item.Meta, "social.badge");
+        var metaBadge = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_badge"),
+            GetMetaString(item.Meta, "social.badge"));
         if (!string.IsNullOrWhiteSpace(metaBadge))
             return metaBadge!.Trim().ToUpperInvariant();
 
@@ -226,9 +229,9 @@ public static partial class WebSiteBuilder
         string badge,
         string route)
     {
-        var styleOverride =
-            GetMetaString(item.Meta, "social_card_style") ??
-            GetMetaString(item.Meta, "social.style");
+        var styleOverride = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_style"),
+            GetMetaString(item.Meta, "social.style"));
         if (!string.IsNullOrWhiteSpace(styleOverride))
             return styleOverride!.Trim();
 
@@ -249,9 +252,9 @@ public static partial class WebSiteBuilder
         string styleKey,
         string route)
     {
-        var variantOverride =
-            GetMetaString(item.Meta, "social_card_variant") ??
-            GetMetaString(item.Meta, "social.variant");
+        var variantOverride = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_variant"),
+            GetMetaString(item.Meta, "social.variant"));
         if (!string.IsNullOrWhiteSpace(variantOverride))
             return variantOverride!.Trim();
 
@@ -268,9 +271,9 @@ public static partial class WebSiteBuilder
 
     private static string? ResolveSocialCardColorScheme(SiteSpec spec, ContentItem item)
     {
-        var colorSchemeOverride =
-            GetMetaString(item.Meta, "social_card_color_scheme") ??
-            GetMetaString(item.Meta, "social.color_scheme");
+        var colorSchemeOverride = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_color_scheme"),
+            GetMetaString(item.Meta, "social.color_scheme"));
         if (!string.IsNullOrWhiteSpace(colorSchemeOverride))
             return colorSchemeOverride!.Trim();
 
@@ -579,25 +582,26 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSocialCardLogoCandidate(SiteSpec spec, ContentItem item)
     {
-        return GetMetaString(item.Meta, "social_card_logo") ??
-               GetMetaString(item.Meta, "social.logo") ??
-               spec.Social?.GeneratedCardLogo ??
-               spec.StructuredData?.OrganizationLogo ??
+        return FirstNonEmpty(
+                   GetMetaString(item.Meta, "social_card_logo"),
+                   GetMetaString(item.Meta, "social.logo"),
+                   spec.Social?.GeneratedCardLogo,
+                   spec.StructuredData?.OrganizationLogo) ??
                string.Empty;
     }
 
     private static string ResolveSocialCardInlineImageCandidate(ContentItem item)
     {
-        var explicitCardImage =
-            GetMetaString(item.Meta, "social_card_image") ??
-            GetMetaString(item.Meta, "social.card_image") ??
-            GetMetaString(item.Meta, "social_card_media") ??
-            GetMetaString(item.Meta, "social.media") ??
-            GetMetaString(item.Meta, "social_image") ??
-            GetMetaString(item.Meta, "social.image") ??
-            GetMetaString(item.Meta, "cover_image") ??
-            GetMetaString(item.Meta, "thumbnail") ??
-            GetMetaString(item.Meta, "image");
+        var explicitCardImage = FirstNonEmpty(
+            GetMetaString(item.Meta, "social_card_image"),
+            GetMetaString(item.Meta, "social.card_image"),
+            GetMetaString(item.Meta, "social_card_media"),
+            GetMetaString(item.Meta, "social.media"),
+            GetMetaString(item.Meta, "social_image"),
+            GetMetaString(item.Meta, "social.image"),
+            GetMetaString(item.Meta, "cover_image"),
+            GetMetaString(item.Meta, "thumbnail"),
+            GetMetaString(item.Meta, "image"));
 
         if (!string.IsNullOrWhiteSpace(explicitCardImage))
             return explicitCardImage!;

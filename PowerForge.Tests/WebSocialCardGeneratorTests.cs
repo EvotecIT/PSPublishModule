@@ -210,7 +210,66 @@ public class WebSocialCardGeneratorTests
             ThemeTokens = safeMarginTokens
         });
         Assert.NotNull(logoFrame);
-        Assert.Equal(68, logoFrame!.Value.Y);
+        Assert.True(logoFrame!.Value.Y > 68, "Spotlight logo should sit within the branded right-side panel, not at the top safe margin.");
+        Assert.True(logoFrame.Value.X > 800, "Spotlight logo should remain anchored on the right side of the card.");
+    }
+
+    [Fact]
+    public void NormalizeFontFamilyForRaster_UsesPlatformFriendlySansFallback_ForGenericStacks()
+    {
+        var resolved = WebSocialCardGenerator.NormalizeFontFamilyForRaster(
+            "system-ui, sans-serif",
+            "Segoe UI, Arial, sans-serif");
+
+        var expected = OperatingSystem.IsWindows()
+            ? "Segoe UI"
+            : OperatingSystem.IsMacOS()
+                ? "Helvetica Neue"
+                : "DejaVu Sans";
+
+        Assert.Equal(expected, resolved);
+    }
+
+    [Fact]
+    public void NormalizeFontFamilyForRaster_UsesPlatformFriendlyMonoFallback_ForGenericStacks()
+    {
+        var resolved = WebSocialCardGenerator.NormalizeFontFamilyForRaster(
+            "ui-monospace, monospace",
+            "Cascadia Code, Consolas, monospace",
+            monospace: true);
+
+        var expected = OperatingSystem.IsWindows()
+            ? "Consolas"
+            : OperatingSystem.IsMacOS()
+                ? "Menlo"
+                : "DejaVu Sans Mono";
+
+        Assert.Equal(expected, resolved);
+    }
+
+    [Fact]
+    public void GetTitleOpticalOffsetForTesting_ReturnsReasonableMeasuredInset()
+    {
+        var blogOffset = WebSocialCardGenerator.GetTitleOpticalOffsetForTesting(72, "Blog");
+        var aboutOffset = WebSocialCardGenerator.GetTitleOpticalOffsetForTesting(72, "About Us");
+
+        Assert.InRange(blogOffset, 0, 32);
+        Assert.InRange(aboutOffset, 0, 32);
+    }
+
+    [Fact]
+    public void GetTitleOpticalOffsetForTesting_UsesConfiguredOverride_WhenProvided()
+    {
+        var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["titleOpticalOffset"] = "18px"
+            }
+        };
+
+        var offset = WebSocialCardGenerator.GetTitleOpticalOffsetForTesting(72, "Blog", tokens);
+        Assert.Equal(18, offset);
     }
 
     [Fact]
