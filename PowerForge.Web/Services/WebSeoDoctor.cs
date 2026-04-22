@@ -959,7 +959,7 @@ public static class WebSeoDoctor
             return false;
 
         var candidate = Path.GetFullPath(Path.Combine(siteRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        if (!candidate.StartsWith(siteRoot, FileSystemPathComparison))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
         resolvedPath = candidate;
@@ -1790,6 +1790,18 @@ public static class WebSeoDoctor
         return href.TrimEnd('/');
     }
 
+    private static string NormalizeRootPath(string rootPath)
+    {
+        var full = Path.GetFullPath(rootPath);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
+    }
+
     private static bool TryResolveLocalTarget(string siteRoot, string baseDir, string href, out string resolvedPath)
     {
         resolvedPath = string.Empty;
@@ -1805,7 +1817,7 @@ public static class WebSeoDoctor
 
         var candidateBase = isRooted ? siteRoot : baseDir;
         var candidate = Path.GetFullPath(Path.Combine(candidateBase, relative));
-        if (!candidate.StartsWith(siteRoot, FileSystemPathComparison))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
         if (isExplicitDir)

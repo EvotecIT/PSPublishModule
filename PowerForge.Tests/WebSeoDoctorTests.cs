@@ -1032,6 +1032,181 @@ public class WebSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void Analyze_PageAssertions_DoesNotReportMissingPageWhenMustExistIsFalse()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-optional-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/fr/contact/",
+                        Label = "Optional French contact",
+                        MustExist = false,
+                        Contains = new[] { "Contactez-nous" }
+                    }
+                }
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "page-assertion-missing-page");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_PageAssertions_HtmlScopeInspectsRawMarkup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-html-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Home</title>
+                  <script type="application/ld+json">{"@type":"Organization"}</script>
+                </head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/",
+                        Label = "Home raw html",
+                        Scope = "html",
+                        Contains = new[] { "application/ld+json" },
+                        NotContains = new[] { "meta.raw_html: true" }
+                    }
+                }
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint is "page-assertion-contains" or "page-assertion-not-contains");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_PageAssertions_DoNotResolveSiblingPathsThatOnlyShareTheRootPrefix()
+    {
+        var parentRoot = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-prefix-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(parentRoot, "site");
+        var sibling = Path.Combine(parentRoot, "site-copy");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(sibling);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            Directory.CreateDirectory(Path.Combine(sibling, "fr", "contact"));
+            File.WriteAllText(Path.Combine(sibling, "fr", "contact", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Leaked sibling</title></head>
+                <body><p>Contactez-nous</p></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "../site-copy/fr/contact/",
+                        Label = "Sibling path traversal"
+                    }
+                }
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "page-assertion-missing-page" &&
+                issue.Path == "../site-copy/fr/contact/index.html");
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Hint == "page-assertion-contains" ||
+                issue.Hint == "page-assertion-not-contains" ||
+                issue.Message.Contains("Contactez-nous", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(parentRoot);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

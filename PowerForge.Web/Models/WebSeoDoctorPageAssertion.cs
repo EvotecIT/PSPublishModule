@@ -13,6 +13,9 @@ public sealed class WebSeoDoctorPageAssertion
     public string[] Contains { get; set; } = Array.Empty<string>();
     /// <summary>Text snippets that must not appear in the selected page scope.</summary>
     public string[] NotContains { get; set; } = Array.Empty<string>();
-    /// <summary>Content scope to inspect. Supported values are <c>body</c>, <c>rendered</c>, and <c>html</c>.</summary>
+    /// <summary>
+    /// Content scope to inspect. Supported values are <c>body</c>, <c>rendered</c>, and <c>html</c>.
+    /// Unknown values fall back to <c>body</c>.
+    /// </summary>
     public string Scope { get; set; } = "body";
 }
