@@ -343,9 +343,6 @@ public static partial class WebSiteBuilder
         string defaultLanguage,
         string? defaultLanguageBaseUrl)
     {
-        var fallbackCanonical = string.IsNullOrWhiteSpace(source.Canonical)
-            ? ResolveAbsoluteUrl(defaultLanguageBaseUrl, source.OutputPath)
-            : source.Canonical;
         return new ContentItem
         {
             SourcePath = source.SourcePath,
@@ -362,7 +359,10 @@ public static partial class WebSiteBuilder
             Categories = source.Categories?.ToArray() ?? Array.Empty<string>(),
             Aliases = Array.Empty<string>(),
             Draft = false,
-            Canonical = fallbackCanonical,
+            // Materialized fallback pages should be treated as real localized routes.
+            // Let the normal head-generation path self-canonicalize to the localized output route
+            // instead of inheriting the default-language canonical.
+            Canonical = null,
             EditPath = source.EditPath,
             EditUrl = source.EditUrl,
             Layout = source.Layout,

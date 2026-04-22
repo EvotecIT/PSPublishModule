@@ -3657,6 +3657,16 @@
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "siteRoot": { "type": "string" },
         "site-root": { "type": "string" },
+        "referenceSiteRoots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional additional generated site roots used when validating canonical and hreflang targets across localized companion sites."
+        },
+        "reference-site-roots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alias for referenceSiteRoots."
+        },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
         "scopeFromBuildUpdated": {
@@ -3682,6 +3692,14 @@
         "check-hreflang": { "type": "boolean", "description": "Alias for checkHreflang." },
         "checkStructuredData": { "type": "boolean" },
         "check-structured-data": { "type": "boolean", "description": "Alias for checkStructuredData." },
+        "checkContentLeaks": {
+          "type": "boolean",
+          "description": "When true, detect rendered pages that visibly leak front matter, raw HTML blocks, or obvious Markdown syntax."
+        },
+        "check-content-leaks": {
+          "type": "boolean",
+          "description": "Alias for checkContentLeaks."
+        },
         "requireCanonical": { "type": "boolean" },
         "require-canonical": { "type": "boolean", "description": "Alias for requireCanonical." },
         "requireHreflang": { "type": "boolean" },

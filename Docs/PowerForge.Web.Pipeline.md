@@ -856,6 +856,7 @@ Runs editorial + technical SEO heuristics over generated HTML.
 {
   "task": "seo-doctor",
   "siteRoot": "./_site",
+  "referenceSiteRoots": ["../LocalizedSite/_site"],
   "checkTitleLength": true,
   "checkDescriptionLength": true,
   "checkH1": true,
@@ -863,6 +864,7 @@ Runs editorial + technical SEO heuristics over generated HTML.
   "checkDuplicateTitles": true,
   "checkOrphanPages": true,
   "checkFocusKeyphrase": false,
+  "checkContentLeaks": true,
   "baseline": "./.powerforge/seo-baseline.json",
   "baselineGenerate": true,
   "reportPath": "./_reports/seo-doctor.json",
@@ -880,8 +882,11 @@ Notes:
   - canonical checks (duplicate/absolute URL + optional required canonical)
   - canonical alias hygiene (`*.html` pages that duplicate `/<slug>/index.html` must include `robots noindex`)
   - hreflang checks (duplicate/invalid/absolute URL + optional required `x-default`)
+  - optional cross-site canonical / hreflang target validation via `referenceSiteRoots`
   - JSON-LD checks (invalid payload shape/JSON + missing `@context` or `@type`)
+  - rendered content leak checks for visible front matter, raw HTML dumps, or obvious Markdown syntax
 - `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
+- `checkContentLeaks` defaults to `true` and should stay enabled in CI to catch broken localized pages before deploy.
 - Requirement flags are opt-in (default `false`): `requireCanonical`, `requireHreflang`, `requireHreflangXDefault`, `requireStructuredData`.
 - Baselines follow the same CI pattern as audit:
   - `baselineGenerate` / `baselineUpdate`

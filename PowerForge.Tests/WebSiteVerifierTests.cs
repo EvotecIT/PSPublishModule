@@ -3,6 +3,178 @@ using PowerForge.Web;
 public partial class WebSiteVerifierTests
 {
     [Fact]
+    public void Verify_FailsWhenFrontMatterIsCollapsedOntoSingleLine()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-collapsed-frontmatter-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "contact.md"),
+                """
+                --- title: Contact description: Broken localized page slug: contact language: fr layout: contact meta.raw_html: true ---
+                <div class="ev-contact-info"><h2>Informations de contact</h2></div>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Collapsed Front Matter Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/",
+                        DefaultLayout = "page"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error =>
+                error.Contains("Collapsed front matter detected", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("content/pages/contact.md", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_FailsWhenRawHtmlPageStillContainsFrontMatterAndMarkdownSyntax()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-raw-html-markdown-leak-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "contact.md"),
+                """
+                ---
+                title: Contact
+                slug: contact
+                language: fr
+                layout: contact
+                meta.raw_html: true
+                ---
+                <div class="ev-contact-info">
+                translation_key: contact
+                # Contact
+                - Office
+                [Write to us](/contact/)
+                </div>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Raw Html Hygiene Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/",
+                        DefaultLayout = "page"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error =>
+                error.Contains("meta.raw_html=true", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("front matter-like lines", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("Markdown block syntax", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("Markdown links or images", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains("content/pages/contact.md", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_AllowsRawHtmlPageWhenBodyIsActualHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-raw-html-clean-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "contact.md"),
+                """
+                ---
+                title: Contact
+                slug: contact
+                layout: contact
+                meta.raw_html: true
+                ---
+                <div class="ev-contact-info">
+                  <h2>Contact</h2>
+                  <p>Office location</p>
+                  <a href="/contact/">Write to us</a>
+                </div>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Raw Html Safe Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/",
+                        DefaultLayout = "page"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Errors, error =>
+                error.Contains("meta.raw_html=true", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenVersioningIsMisconfigured()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-versioning-" + Guid.NewGuid().ToString("N"));

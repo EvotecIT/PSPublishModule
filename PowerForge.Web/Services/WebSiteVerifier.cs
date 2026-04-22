@@ -20,9 +20,21 @@ public static partial class WebSiteVerifier
         "^\\s*(#{1,6}\\s+|[-*+]\\s+|\\d+\\.\\s+)",
         RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    private static readonly Regex FrontMatterBodyLineRegex = new(
+        "^\\s*(?:---\\s*$|(?:title|description|slug|language|layout|translation_key|meta\\.[A-Za-z0-9_.-]+)\\s*:)",
+        RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex CollapsedFrontMatterKeyRegex = new(
+        "^---\\s+[A-Za-z0-9_.-]+\\s*:\\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
     private static readonly Regex MarkdownMultilineMediaHtmlRegex = new(
         "<\\s*(img|iframe|video|source|picture)\\b(?=[^>]*\\r?\\n)[\\s\\S]*?>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex MarkdownLinkOrImageRegex = new(
+        "(?:^|[\\s(])!?\\[[^\\]\\r\\n]+\\]\\([^)\\r\\n]+\\)",
+        RegexOptions.Multiline | RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
 
     /// <summary>Validates the site spec against discovered content.</summary>
@@ -71,6 +83,15 @@ public static partial class WebSiteVerifier
                     continue;
 
                 var markdown = File.ReadAllText(file);
+                var relativeFile = Path.GetRelativePath(plan.RootPath, file).Replace('\\', '/');
+                if (TryGetCollapsedFrontMatterPreview(markdown, out var collapsedFrontMatterPreview))
+                {
+                    errors.Add(
+                        $"Collapsed front matter detected in '{relativeFile}'. Front matter must open with a line containing only '---' " +
+                        $"and close on its own line before the body. Sample: {collapsedFrontMatterPreview}");
+                    continue;
+                }
+
                 var (matter, body) = FrontMatterParser.Parse(markdown);
                 CollectReleaseProductReferencesFromMarkdown(body, releaseProductReferences);
                 CollectReleasePlacementReferencesFromMarkdown(body, releasePlacementReferences);
@@ -79,7 +100,8 @@ public static partial class WebSiteVerifier
                 {
                     errors.Add($"Missing title in: {file}");
                 }
-                ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, matter?.Meta, body, warnings);
+                ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, matter?.Meta, body, errors, warnings);
+                ValidateReferencedMetaFiles(plan.RootPath, file, matter?.Meta, errors);
 
                 var collectionRoot = WebSiteBuilder.ResolveCollectionRootForDiscovery(plan, collection, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
@@ -95,7 +117,6 @@ public static partial class WebSiteVerifier
                     !isBundleIndex &&
                     !(matter?.Date.HasValue ?? false))
                 {
-                    var relativeFile = Path.GetRelativePath(plan.RootPath, file).Replace('\\', '/');
                     warnings.Add($"Editorial content '{relativeFile}' is missing front matter 'date'. Add a publish date for stable SEO/social metadata and chronological ordering.");
                 }
                 var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
@@ -214,6 +235,32 @@ public static partial class WebSiteVerifier
             return "[PFWEB.SEO.DATE] " + warning;
 
         return warning;
+    }
+
+    private static bool TryGetCollapsedFrontMatterPreview(string markdown, out string preview)
+    {
+        preview = string.Empty;
+        if (string.IsNullOrWhiteSpace(markdown))
+            return false;
+
+        using var reader = new StringReader(markdown);
+        var firstLine = reader.ReadLine();
+        if (string.IsNullOrWhiteSpace(firstLine))
+            return false;
+
+        var trimmed = firstLine.TrimStart('\uFEFF', ' ', '\t');
+        if (string.Equals(trimmed, "---", StringComparison.Ordinal) ||
+            !trimmed.StartsWith("---", StringComparison.Ordinal) ||
+            !CollapsedFrontMatterKeyRegex.IsMatch(trimmed) ||
+            !trimmed.Contains(" ---", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        preview = trimmed.Length <= 180
+            ? trimmed
+            : trimmed[..180] + "...";
+        return true;
     }
 
     private static string BuildRoute(string baseOutput, string slug, TrailingSlashMode slashMode)

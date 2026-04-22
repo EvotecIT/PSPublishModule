@@ -324,11 +324,11 @@ public static partial class WebSiteAuditor
         var tokens = new List<string>();
         foreach (var link in nav.QuerySelectorAll("a"))
         {
-            var href = link.GetAttribute("href") ?? string.Empty;
+            var href = NormalizeNavHref(link.GetAttribute("href"));
             var text = link.TextContent?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(text))
                 text = link.GetAttribute("aria-label") ?? link.GetAttribute("title") ?? string.Empty;
-            tokens.Add($"{href.Trim()}|{text.Trim()}");
+            tokens.Add($"{href}|{text.Trim()}");
         }
         return string.Join("||", tokens);
     }

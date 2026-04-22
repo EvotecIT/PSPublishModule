@@ -73,6 +73,10 @@ on:
         required: false
         type: string
         default: ""
+      require_seo_doctor_guardrail:
+        required: false
+        type: boolean
+        default: true
       post_deploy_use_playwright_cache:
         required: false
         type: boolean
@@ -101,7 +105,99 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  guardrails:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ github.token }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate deploy guardrails
+        shell: pwsh
+        env:
+          PIPELINE_CONFIG: ${{ inputs.pipeline_config }}
+          REQUIRE_SEO_DOCTOR_GUARDRAIL: ${{ inputs.require_seo_doctor_guardrail }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ($env:REQUIRE_SEO_DOCTOR_GUARDRAIL -ne 'true') {
+            Write-Host 'SEO doctor deploy guardrail disabled for this workflow call.'
+            exit 0
+          }
+
+          function Get-ResolvedPipelineSteps {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string] $PipelinePath,
+
+              [Parameter(Mandatory = $true)]
+              [System.Collections.Generic.HashSet[string]] $Visited
+            )
+
+            $resolvedPath = [System.IO.Path]::GetFullPath($PipelinePath)
+            if (-not $Visited.Add($resolvedPath)) {
+              return @()
+            }
+
+            if (-not (Test-Path -LiteralPath $resolvedPath)) {
+              throw "Pipeline config not found: $resolvedPath"
+            }
+
+            $document = Get-Content -LiteralPath $resolvedPath -Raw | ConvertFrom-Json -AsHashtable
+            $steps = @()
+
+            $extendsPath = $null
+            if ($document.ContainsKey('extends')) {
+              $extendsPath = [string] $document['extends']
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($extendsPath)) {
+              $parentConfig = Join-Path ([System.IO.Path]::GetDirectoryName($resolvedPath)) $extendsPath
+              $steps += @(Get-ResolvedPipelineSteps -PipelinePath $parentConfig -Visited $Visited)
+            }
+
+            if ($document.ContainsKey('steps') -and $null -ne $document['steps']) {
+              $steps += @($document['steps'])
+            }
+
+            return $steps
+          }
+
+          $pipelinePath = Join-Path (Get-Location) $env:PIPELINE_CONFIG
+          $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          $steps = @(Get-ResolvedPipelineSteps -PipelinePath $pipelinePath -Visited $visited)
+
+          $seoDoctorSteps = @(
+            $steps | Where-Object {
+              $_ -is [System.Collections.IDictionary] -and
+              $_.Contains('task') -and
+              [string]::Equals([string] $_['task'], 'seo-doctor', [System.StringComparison]::OrdinalIgnoreCase)
+            }
+          )
+
+          if ($seoDoctorSteps.Count -eq 0) {
+            throw "Deploy guardrail requires a seo-doctor step in the resolved pipeline config chain before deployment. Add a gating seo-doctor step or set require_seo_doctor_guardrail to false for an intentional exception."
+          }
+
+          $gatingSeoDoctorSteps = @(
+            $seoDoctorSteps | Where-Object {
+              (($_.Contains('failOnWarnings')) -and ($_['failOnWarnings'] -eq $true)) -or
+              (($_.Contains('failOnNewIssues')) -and ($_['failOnNewIssues'] -eq $true)) -or
+              (($_.Contains('failOnNew')) -and ($_['failOnNew'] -eq $true))
+            }
+          )
+
+          if ($gatingSeoDoctorSteps.Count -eq 0) {
+            throw "Deploy guardrail found seo-doctor, but none of the resolved seo-doctor steps are configured to gate deploys. Set failOnWarnings or failOnNewIssues, or opt out with require_seo_doctor_guardrail: false."
+          }
+
+          Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSeoDoctorSteps.Count) gate deployment."
+
   build:
+    needs: guardrails
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}

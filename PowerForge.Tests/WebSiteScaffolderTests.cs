@@ -112,6 +112,17 @@ public class WebSiteScaffolderTests
                 string.Equals(step.GetProperty("task").GetString(), "github-artifacts-prune", StringComparison.OrdinalIgnoreCase));
             Assert.True(artifactsStep.GetProperty("optional").GetBoolean());
             Assert.True(artifactsStep.GetProperty("dryRun").GetBoolean());
+            var seoDoctorStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "seo-doctor", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("build-site", seoDoctorStep.GetProperty("dependsOn").GetString());
+            Assert.Equal("./_site", seoDoctorStep.GetProperty("siteRoot").GetString());
+            Assert.Equal("./.powerforge/seo-baseline.json", seoDoctorStep.GetProperty("baseline").GetString());
+            Assert.True(seoDoctorStep.GetProperty("failOnNewIssues").GetBoolean());
+            Assert.True(seoDoctorStep.GetProperty("checkContentLeaks").GetBoolean());
+            Assert.True(seoDoctorStep.GetProperty("requireCanonical").GetBoolean());
+            Assert.Equal("./_reports/seo-doctor.json", seoDoctorStep.GetProperty("reportPath").GetString());
+            Assert.Equal("./_reports/seo-doctor.md", seoDoctorStep.GetProperty("summaryPath").GetString());
+            Assert.Contains(seoDoctorStep.GetProperty("modes").EnumerateArray().Select(e => e.GetString() ?? string.Empty), mode => string.Equals(mode, "ci", StringComparison.OrdinalIgnoreCase));
 
             using var maintenancePresetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-maintenance.json")));
             var maintenanceSteps = maintenancePresetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
@@ -248,6 +259,9 @@ public class WebSiteScaffolderTests
             Assert.Equal("./data/projects/catalog.json", apiStep.GetProperty("catalog").GetString());
             Assert.Equal("./data/projects/api-suite-narrative.json", apiStep.GetProperty("suiteNarrativeManifest").GetString());
             Assert.Equal("/themes/nova/assets/app.css,/themes/nova/assets/api.css", apiStep.GetProperty("css").GetString());
+            var seoDoctorStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "seo-doctor", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("project-apis", seoDoctorStep.GetProperty("dependsOn").GetString());
 
             var readme = File.ReadAllText(Path.Combine(root, "README.md"));
             Assert.Contains("Starter profile:", readme, StringComparison.Ordinal);

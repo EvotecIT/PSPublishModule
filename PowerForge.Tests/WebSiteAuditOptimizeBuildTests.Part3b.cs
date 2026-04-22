@@ -378,6 +378,56 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_IgnoresTrailingSlashOnlyNavDifferences()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-nav-trailing-slash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <header><nav><a href="/">Home</a><a href="/services/">Services</a><a href="/contact/">Contact</a></nav></header>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "404.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Not found</title></head>
+                <body>
+                  <header><nav><a href="/">Home</a><a href="/services">Services</a><a href="/contact">Contact</a></nav></header>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                NavSelector = "header nav",
+                NavCanonicalPath = "index.html",
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(0, result.NavMismatchCount);
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("nav differs from baseline", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_DetectsInvalidUtf8()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-utf8-" + Guid.NewGuid().ToString("N"));

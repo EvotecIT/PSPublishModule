@@ -337,6 +337,376 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_LocalizedAlternates_FlagRenderAtRootBreakage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-localized-root-breakage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "kontakt"));
+            Directory.CreateDirectory(Path.Combine(root, "en", "contact"));
+
+            File.WriteAllText(Path.Combine(root, "kontakt", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Kontakt</title>
+                  <link rel="canonical" href="https://pl.example.test/pl/kontakt/" />
+                  <link rel="alternate" hreflang="pl" href="https://pl.example.test/pl/kontakt/" />
+                  <link rel="alternate" hreflang="en" href="https://en.example.test/en/contact/" />
+                </head>
+                <body>
+                  <h1>Kontakt</h1>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "en", "contact", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Contact</title>
+                  <link rel="canonical" href="https://en.example.test/en/contact/" />
+                  <link rel="alternate" hreflang="en" href="https://en.example.test/en/contact/" />
+                </head>
+                <body>
+                  <h1>Contact</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = false
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "canonical-route-missing" && issue.Path == "kontakt/index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-route-missing" && issue.Path == "kontakt/index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-self-missing" && issue.Path == "kontakt/index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-return-link-missing" && issue.Path == "kontakt/index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_LocalizedAlternates_FlagTargetCanonicalMismatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-localized-canonical-mismatch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "kontakt"));
+            Directory.CreateDirectory(Path.Combine(root, "en", "contact"));
+
+            File.WriteAllText(Path.Combine(root, "en", "contact", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Contact</title>
+                  <link rel="canonical" href="https://en.example.test/en/contact/" />
+                  <link rel="alternate" hreflang="en" href="https://en.example.test/en/contact/" />
+                  <link rel="alternate" hreflang="pl" href="https://pl.example.test/kontakt/" />
+                </head>
+                <body>
+                  <h1>Contact</h1>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "kontakt", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Kontakt</title>
+                  <link rel="canonical" href="https://pl.example.test/support/kontakt/" />
+                  <link rel="alternate" hreflang="pl" href="https://pl.example.test/kontakt/" />
+                  <link rel="alternate" hreflang="en" href="https://en.example.test/en/contact/" />
+                </head>
+                <body>
+                  <h1>Kontakt</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = false
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-target-canonical-mismatch" && issue.Path == "en/contact/index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_LocalizedAlternates_ResolveAcrossReferenceSiteRoots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-reference-roots-" + Guid.NewGuid().ToString("N"));
+        var xyzRoot = Path.Combine(root, "_site-xyz");
+        var plRoot = Path.Combine(root, "_site-pl");
+        Directory.CreateDirectory(xyzRoot);
+        Directory.CreateDirectory(plRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(xyzRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Home</title>
+                  <link rel="canonical" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/" />
+                </head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(plRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Start</title>
+                  <link rel="canonical" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/" />
+                </head>
+                <body><h1>Start</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = xyzRoot,
+                ReferenceSiteRoots = new[] { plRoot },
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = false
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-route-missing");
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-target-canonical-mismatch");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_LocalizedAlternates_ResolveAcrossSameSiteRoot_WhenIncludedSubsetOmitsTargets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-same-root-subset-" + Guid.NewGuid().ToString("N"));
+        var xyzRoot = Path.Combine(root, "_site-xyz");
+        var plRoot = Path.Combine(root, "_site-pl");
+        Directory.CreateDirectory(xyzRoot);
+        Directory.CreateDirectory(plRoot);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(xyzRoot, "projects", "pswritehtml"));
+            Directory.CreateDirectory(Path.Combine(plRoot, "projects", "pswritehtml"));
+            Directory.CreateDirectory(Path.Combine(xyzRoot, "fr", "projects", "pswritehtml"));
+            Directory.CreateDirectory(Path.Combine(xyzRoot, "de", "projects", "pswritehtml"));
+            Directory.CreateDirectory(Path.Combine(xyzRoot, "es", "projects", "pswritehtml"));
+
+            File.WriteAllText(Path.Combine(xyzRoot, "projects", "pswritehtml", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PSWriteHTML</title>
+                  <link rel="canonical" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="fr" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="de" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="es" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/pswritehtml" />
+                </head>
+                <body><h1>PSWriteHTML</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(plRoot, "projects", "pswritehtml", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PSWriteHTML PL</title>
+                  <meta name="robots" content="noindex,follow" />
+                  <link rel="canonical" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="fr" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="de" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="es" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/pswritehtml" />
+                </head>
+                <body><h1>PSWriteHTML PL</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(xyzRoot, "fr", "projects", "pswritehtml", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PSWriteHTML FR</title>
+                  <meta name="robots" content="noindex,follow" />
+                  <link rel="canonical" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="fr" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="de" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="es" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/pswritehtml" />
+                </head>
+                <body><h1>PSWriteHTML FR</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(xyzRoot, "de", "projects", "pswritehtml", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PSWriteHTML DE</title>
+                  <meta name="robots" content="noindex,follow" />
+                  <link rel="canonical" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="de" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="fr" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="es" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/pswritehtml" />
+                </head>
+                <body><h1>PSWriteHTML DE</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(xyzRoot, "es", "projects", "pswritehtml", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PSWriteHTML ES</title>
+                  <meta name="robots" content="noindex,follow" />
+                  <link rel="canonical" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="es" href="https://evotec.xyz/es/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="fr" href="https://evotec.xyz/fr/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="de" href="https://evotec.xyz/de/projects/pswritehtml" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects/pswritehtml" />
+                </head>
+                <body><h1>PSWriteHTML ES</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = xyzRoot,
+                ReferenceSiteRoots = new[] { plRoot },
+                Include = new[] { "projects/**" },
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = false
+            });
+
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Path == "projects/pswritehtml/index.html" &&
+                issue.Hint == "hreflang-route-missing");
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Path == "projects/pswritehtml/index.html" &&
+                issue.Hint == "hreflang-target-canonical-mismatch");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_DoesNotFlagContentLeak_ForInlineBootstrapScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-inline-script-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <script>(function(){ var stored = localStorage.getItem('theme'); })();</script>
+                  <main><h1>Home</h1><p>Rendered content only.</p></main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "content-frontmatter-leak");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_FlagsFlatAliasWithoutNoIndex_WhenDirectoryCanonicalExists()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-alias-noindex-" + Guid.NewGuid().ToString("N"));
@@ -428,6 +798,153 @@ public class WebSeoDoctorTests
             Assert.DoesNotContain(result.Issues, issue =>
                 issue.Hint == "canonical-alias-noindex" &&
                 issue.Path == "api/sample-type.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsRenderedFrontMatterAndRawHtmlLeaks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-content-leak-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Contact</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <p>-- title: "Contact" description: "Contact us" layout: contact translation_key: "contact" meta.raw_html: true -- &lt;div class="ev-contact-info"&gt;&lt;h2&gt;Contact&lt;/h2&gt;</p>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "content-frontmatter-leak" &&
+                issue.Path == "index.html" &&
+                issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsRenderedMarkdownLeakWhenEscapedHtmlAndMarkdownAreVisible()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-markdown-leak-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Contact</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <p>&lt;div class="ev-contact-info"&gt; # Contact [Write to us](/contact/) &lt;/div&gt;</p>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "content-markdown-leak" &&
+                issue.Path == "index.html" &&
+                issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_DoesNotFlagContentLeak_ForVisibleLanguageMetricLabel()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-language-metric-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Project page</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <h1>PSWriteHTML</h1>
+                      <div class="ev-project-telemetry">
+                        <span class="ev-project-metric">Language: PowerShell</span>
+                        <span class="ev-project-metric">Updated: 2026-04-21</span>
+                      </div>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "content-frontmatter-leak");
+            Assert.True(result.Success);
         }
         finally
         {

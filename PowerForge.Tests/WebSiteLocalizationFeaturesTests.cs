@@ -317,7 +317,7 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
-    public void Build_LocalizedFallbackPages_KeepLocalizedRoutesAndCanonicalizeToDefaultLanguage()
+    public void Build_LocalizedFallbackPages_KeepLocalizedRoutesAndSelfCanonicalize()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-fallback-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -325,7 +325,7 @@ public class WebSiteLocalizationFeaturesTests
         try
         {
             CreateDefaultLanguageOnlyDocsContent(root);
-            CreateSimpleTheme(root, "localization-fallback-theme", "docs");
+            CreateSeoTheme(root, "localization-fallback-theme", "docs");
 
             var spec = CreateLocalizedDocsSpec("Localization Features Fallback Build Test", "localization-fallback-theme");
             spec.Localization!.FallbackToDefaultLanguage = true;
@@ -345,9 +345,12 @@ public class WebSiteLocalizationFeaturesTests
 
             Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs", enHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<link rel=\"canonical\" href=\"https://evotec.xyz/docs/\" />", enHtml, StringComparison.OrdinalIgnoreCase);
 
             Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<link rel=\"canonical\" href=\"https://evotec.pl/pl/docs/\" />", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<link rel=\"canonical\" href=\"https://evotec.xyz/docs/\" />", plHtml, StringComparison.OrdinalIgnoreCase);
 
             var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
             Assert.True(File.Exists(allSearchPath));

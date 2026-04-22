@@ -713,6 +713,7 @@ body.pf-api-body { background:
 
 """
             : string.Empty;
+        var seoDoctorDependsOn = multiProjectApiSuiteStarter ? "project-apis" : "build-site";
 
         var pipelinePresetJson = InsertSchema(
             $$"""
@@ -724,7 +725,8 @@ body.pf-api-body { background:
               "steps": [
                 { "task": "engine-lock", "id": "engine-lock-ci", "modes": ["ci"], "operation": "verify", "path": "./.powerforge/engine-lock.json", "failOnDrift": true, "requireImmutableRef": true, "reportPath": "./_reports/engine-lock.json", "summaryPath": "./_reports/engine-lock.md" },
                 { "task": "build", "id": "build-site", "config": "./site.json", "out": "./_site", "clean": true },
-                {{projectApiDocsStepJson}}                { "task": "sitemap", "id": "sitemap", "dependsOn": "build-site", "config": "./site.json", "siteRoot": "./_site", "baseUrl": "{{baseUrl}}", "json": true, "jsonOut": "./_site/sitemap/index.json" },
+                {{projectApiDocsStepJson}}                { "task": "seo-doctor", "id": "seo-doctor-ci", "dependsOn": "{{seoDoctorDependsOn}}", "modes": ["ci"], "siteRoot": "./_site", "baseline": "./.powerforge/seo-baseline.json", "failOnNewIssues": true, "checkContentLeaks": true, "requireCanonical": true, "reportPath": "./_reports/seo-doctor.json", "summaryPath": "./_reports/seo-doctor.md" },
+                { "task": "sitemap", "id": "sitemap", "dependsOn": "{{seoDoctorDependsOn}}", "config": "./site.json", "siteRoot": "./_site", "baseUrl": "{{baseUrl}}", "json": true, "jsonOut": "./_site/sitemap/index.json" },
                 { "task": "indexnow", "id": "indexnow-ci", "dependsOn": "sitemap", "modes": ["ci"], "sitemap": "./_site/sitemap.xml", "keyEnv": "INDEXNOW_KEY", "optionalKey": true, "continueOnError": true, "reportPath": "./_reports/indexnow.json", "summaryPath": "./_reports/indexnow.md" },
                 { "task": "github-artifacts-prune", "id": "github-artifacts-hygiene-ci", "modes": ["ci"], "tokenEnv": "GITHUB_TOKEN", "optional": true, "dryRun": true, "reportPath": "./_reports/github-artifacts.json", "summaryPath": "./_reports/github-artifacts.md" },
 

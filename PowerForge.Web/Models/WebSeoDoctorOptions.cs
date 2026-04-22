@@ -5,6 +5,8 @@ public sealed class WebSeoDoctorOptions
 {
     /// <summary>Generated site root.</summary>
     public string SiteRoot { get; set; } = string.Empty;
+    /// <summary>Optional additional generated site roots used for cross-site canonical and hreflang target validation.</summary>
+    public string[] ReferenceSiteRoots { get; set; } = Array.Empty<string>();
     /// <summary>Optional include glob filters (relative to site root).</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob filters (relative to site root).</summary>
@@ -36,6 +38,8 @@ public sealed class WebSeoDoctorOptions
     public bool CheckHreflang { get; set; } = true;
     /// <summary>When true, validate JSON-LD structured data blocks.</summary>
     public bool CheckStructuredData { get; set; } = true;
+    /// <summary>When true, detect leaked front matter and raw HTML blocks rendered as visible page text.</summary>
+    public bool CheckContentLeaks { get; set; } = true;
     /// <summary>When true, emit warning when canonical is missing.</summary>
     public bool RequireCanonical { get; set; }
     /// <summary>When true, emit warning when hreflang alternates are missing.</summary>

@@ -43,10 +43,20 @@ internal static partial class WebPipelineRunner
 
         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
         var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
+        var referenceSiteRoots = GetArrayOfStrings(step, "referenceSiteRoots")
+                                 ?? GetArrayOfStrings(step, "reference-site-roots")
+                                 ?? CliPatternHelper.SplitPatterns(
+                                     GetString(step, "referenceSiteRoots") ??
+                                     GetString(step, "reference-site-roots"));
 
         var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
         {
             SiteRoot = siteRoot,
+            ReferenceSiteRoots = referenceSiteRoots
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => ResolvePath(baseDir, path))
+                .OfType<string>()
+                .ToArray(),
             Include = CliPatternHelper.SplitPatterns(include),
             Exclude = CliPatternHelper.SplitPatterns(exclude),
             UseDefaultExcludes = useDefaultExclude,
@@ -62,6 +72,7 @@ internal static partial class WebPipelineRunner
             CheckCanonical = GetBool(step, "checkCanonical") ?? GetBool(step, "check-canonical") ?? true,
             CheckHreflang = GetBool(step, "checkHreflang") ?? GetBool(step, "check-hreflang") ?? true,
             CheckStructuredData = GetBool(step, "checkStructuredData") ?? GetBool(step, "check-structured-data") ?? true,
+            CheckContentLeaks = GetBool(step, "checkContentLeaks") ?? GetBool(step, "check-content-leaks") ?? true,
             RequireCanonical = GetBool(step, "requireCanonical") ?? GetBool(step, "require-canonical") ?? false,
             RequireHreflang = GetBool(step, "requireHreflang") ?? GetBool(step, "require-hreflang") ?? false,
             RequireHreflangXDefault = GetBool(step, "requireHreflangXDefault") ?? GetBool(step, "require-hreflang-x-default") ?? false,

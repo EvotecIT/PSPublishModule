@@ -168,6 +168,7 @@ public static partial class WebSiteVerifier
         string? collectionName,
         Dictionary<string, object?>? meta,
         string body,
+        List<string> errors,
         List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(body))
@@ -191,12 +192,24 @@ public static partial class WebSiteVerifier
         if (meta is not null &&
             TryGetMetaString(meta, "raw_html", out var rawHtmlValue) &&
             bool.TryParse(rawHtmlValue, out var rawHtml) &&
-            rawHtml &&
-            MarkdownBlockSyntaxRegex.IsMatch(withoutCodeBlocks))
+            rawHtml)
         {
-            warnings.Add(
-                $"Markdown hygiene: '{relative}' sets meta.raw_html=true but still contains Markdown block syntax (headings or lists). " +
-                "This content will render as literal text. Remove meta.raw_html or convert the body to HTML.");
+            var rawHtmlProblems = new List<string>();
+            if (FrontMatterBodyLineRegex.IsMatch(body))
+                rawHtmlProblems.Add("front matter-like lines");
+            if (fenceLineCount > 0)
+                rawHtmlProblems.Add("fenced code markers");
+            if (MarkdownBlockSyntaxRegex.IsMatch(withoutCodeBlocks))
+                rawHtmlProblems.Add("Markdown block syntax (headings or lists)");
+            if (MarkdownLinkOrImageRegex.IsMatch(withoutCodeBlocks))
+                rawHtmlProblems.Add("Markdown links or images");
+
+            if (rawHtmlProblems.Count > 0)
+            {
+                errors.Add(
+                    $"Markdown hygiene: '{relative}' sets meta.raw_html=true but still contains {string.Join(", ", rawHtmlProblems.Distinct(StringComparer.OrdinalIgnoreCase))}. " +
+                    "This content will render as literal text. Remove meta.raw_html or convert the body to HTML.");
+            }
         }
 
         var multilineMediaMatches = MarkdownMultilineMediaHtmlRegex.Matches(withoutCodeBlocks);
@@ -242,6 +255,90 @@ public static partial class WebSiteVerifier
     {
         var withoutExtension = NormalizePath(Path.ChangeExtension(relativePath, null) ?? string.Empty);
         return ApplySlugOverride(withoutExtension, slugOverride);
+    }
+
+    private static void ValidateReferencedMetaFiles(
+        string rootPath,
+        string filePath,
+        Dictionary<string, object?>? meta,
+        List<string> errors)
+    {
+        if (meta is null || meta.Count == 0)
+            return;
+
+        ValidateReferencedMetaFile(rootPath, filePath, meta, "head_file", errors);
+        ValidateReferencedMetaFile(rootPath, filePath, meta, "extra_scripts_file", errors);
+    }
+
+    private static void ValidateReferencedMetaFile(
+        string rootPath,
+        string filePath,
+        Dictionary<string, object?> meta,
+        string metaKey,
+        List<string> errors)
+    {
+        if (!TryGetMetaString(meta, metaKey, out var configuredPath) || string.IsNullOrWhiteSpace(configuredPath))
+            return;
+
+        var resolved = ResolveVerifierMetaFilePath(rootPath, filePath, configuredPath);
+        if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            return;
+
+        var relative = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+        errors.Add(
+            $"Content '{relative}' references meta.{metaKey} '{configuredPath}', but the file could not be resolved within the site root or the source file directory.");
+    }
+
+    private static string? ResolveVerifierMetaFilePath(string rootPath, string filePath, string metaFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(metaFilePath))
+            return null;
+
+        var allowedRoots = new List<string> { NormalizeVerifierRootPath(rootPath) };
+        var baseDir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrWhiteSpace(baseDir))
+            allowedRoots.Add(NormalizeVerifierRootPath(baseDir));
+
+        if (Path.IsPathRooted(metaFilePath))
+        {
+            var rootedPath = Path.GetFullPath(metaFilePath);
+            return IsVerifierPathWithinAnyRoot(allowedRoots, rootedPath) ? rootedPath : null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(baseDir, metaFilePath));
+            if (IsVerifierPathWithinAnyRoot(allowedRoots, candidate) && File.Exists(candidate))
+                return candidate;
+        }
+
+        var rootCandidate = Path.GetFullPath(Path.Combine(rootPath, metaFilePath));
+        return IsVerifierPathWithinAnyRoot(allowedRoots, rootCandidate) ? rootCandidate : null;
+    }
+
+    private static string NormalizeVerifierRootPath(string path)
+    {
+        var normalized = Path.GetFullPath(path);
+        return normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static bool IsVerifierPathWithinAnyRoot(IEnumerable<string> roots, string path)
+    {
+        var candidate = NormalizeVerifierRootPath(path);
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+
+            if (candidate.Equals(root, FileSystemPathComparison) ||
+                candidate.StartsWith(root + Path.DirectorySeparatorChar, FileSystemPathComparison) ||
+                candidate.StartsWith(root + Path.AltDirectorySeparatorChar, FileSystemPathComparison))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string ApplySlugOverride(string basePath, string? slugOverride)
