@@ -464,6 +464,86 @@ public class WebPipelineRunnerSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_SeoDoctor_PageAssertions_FailOnLocalizedLeakAndMissingText()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-seo-doctor-page-assertions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "_site");
+            Directory.CreateDirectory(Path.Combine(siteRoot, "fr", "contact"));
+
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(siteRoot, "fr", "contact", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Contact</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <h1>Contact</h1>
+                      <p>translation_key: "contact" meta.raw_html: true</p>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "seo-doctor",
+                      "siteRoot": "./_site",
+                      "maxHtmlFiles": 1,
+                      "checkTitleLength": false,
+                      "checkDescriptionLength": false,
+                      "checkH1": false,
+                      "checkImageAlt": false,
+                      "checkDuplicateTitles": false,
+                      "checkOrphanPages": false,
+                      "checkCanonical": false,
+                      "checkHreflang": false,
+                      "checkStructuredData": false,
+                      "checkContentLeaks": false,
+                      "pageAssertions": [
+                        {
+                          "path": "/fr/contact/",
+                          "label": "French contact",
+                          "contains": ["Contactez-nous"],
+                          "notContains": ["translation_key:", "meta.raw_html: true"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("errors", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

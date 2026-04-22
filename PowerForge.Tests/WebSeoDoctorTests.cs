@@ -952,6 +952,86 @@ public class WebSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void Analyze_PageAssertions_ValidateRepresentativeLocalizedPageOutsideScannedSubset()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "fr", "contact"));
+
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "fr", "contact", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Contact</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <h1>Contact</h1>
+                      <p>translation_key: "contact" meta.raw_html: true</p>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/fr/contact/",
+                        Label = "French contact",
+                        Contains = new[] { "Contactez-nous" },
+                        NotContains = new[] { "translation_key:", "meta.raw_html: true" }
+                    }
+                }
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "page-assertion-contains" &&
+                issue.Path == "fr/contact/index.html" &&
+                issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "page-assertion-not-contains" &&
+                issue.Path == "fr/contact/index.html" &&
+                issue.Message.Contains("translation_key:", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "page-assertion-not-contains" &&
+                issue.Path == "fr/contact/index.html" &&
+                issue.Message.Contains("meta.raw_html: true", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

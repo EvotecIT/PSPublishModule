@@ -17,6 +17,8 @@ public sealed class WebSeoDoctorOptions
     public int MaxHtmlFiles { get; set; }
     /// <summary>When false, pages declaring robots noindex are skipped.</summary>
     public bool IncludeNoIndexPages { get; set; }
+    /// <summary>Representative page assertions evaluated independently from the scanned page subset.</summary>
+    public WebSeoDoctorPageAssertion[] PageAssertions { get; set; } = Array.Empty<WebSeoDoctorPageAssertion>();
 
     /// <summary>When true, run title length checks.</summary>
     public bool CheckTitleLength { get; set; } = true;

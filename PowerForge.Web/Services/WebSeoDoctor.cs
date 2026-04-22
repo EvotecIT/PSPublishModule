@@ -324,6 +324,8 @@ public static class WebSeoDoctor
             }
         }
 
+        ValidatePageAssertions(siteRoot, options.PageAssertions, AddIssue);
+
         if (pages.Count == 0)
             AddIssue("warning", "general", null, "No HTML pages selected for SEO doctor checks.", "no-pages");
 
@@ -785,6 +787,210 @@ public static class WebSeoDoctor
                 "content-markdown-leak",
                 sample);
         }
+    }
+
+    private static void ValidatePageAssertions(
+        string siteRoot,
+        IReadOnlyList<WebSeoDoctorPageAssertion>? assertions,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (assertions is null || assertions.Count == 0)
+            return;
+
+        foreach (var assertion in assertions)
+        {
+            if (assertion is null || string.IsNullOrWhiteSpace(assertion.Path))
+                continue;
+
+            var displayName = GetPageAssertionDisplayName(assertion);
+            if (!TryResolvePageAssertionPath(siteRoot, assertion.Path, out var assertedFile, out var relativePath))
+            {
+                if (assertion.MustExist)
+                {
+                    AddPageAssertionIssue(
+                        addIssue,
+                        relativePath,
+                        displayName,
+                        NormalizePageAssertionScope(assertion.Scope),
+                        "page-assertion-missing-page",
+                        "asserted page is missing.",
+                        assertion.Path);
+                }
+
+                continue;
+            }
+
+            string html;
+            try
+            {
+                html = File.ReadAllText(assertedFile);
+            }
+            catch (Exception ex)
+            {
+                AddPageAssertionIssue(
+                    addIssue,
+                    relativePath,
+                    displayName,
+                    NormalizePageAssertionScope(assertion.Scope),
+                    "page-assertion-read",
+                    $"failed to read asserted page ({ex.Message}).",
+                    ex.GetType().Name);
+                continue;
+            }
+
+            string inspectedText;
+            var scope = NormalizePageAssertionScope(assertion.Scope);
+            if (scope.Equals("html", StringComparison.OrdinalIgnoreCase))
+            {
+                inspectedText = NormalizeWhitespace(html);
+            }
+            else
+            {
+                AngleSharp.Dom.IDocument doc;
+                try
+                {
+                    doc = HtmlParser.ParseWithAngleSharp(html);
+                }
+                catch (Exception ex)
+                {
+                    AddPageAssertionIssue(
+                        addIssue,
+                        relativePath,
+                        displayName,
+                        scope,
+                        "page-assertion-parse",
+                        $"failed to parse asserted page ({ex.Message}).",
+                        ex.GetType().Name);
+                    continue;
+                }
+
+                inspectedText = GetVisibleBodyText(doc.Body);
+            }
+
+            foreach (var expected in NormalizePageAssertionValues(assertion.Contains))
+            {
+                if (inspectedText.IndexOf(expected, StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+
+                AddPageAssertionIssue(
+                    addIssue,
+                    relativePath,
+                    displayName,
+                    scope,
+                    "page-assertion-contains",
+                    $"missing expected {scope} text '{expected}'.",
+                    expected);
+            }
+
+            foreach (var forbidden in NormalizePageAssertionValues(assertion.NotContains))
+            {
+                if (inspectedText.IndexOf(forbidden, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                AddPageAssertionIssue(
+                    addIssue,
+                    relativePath,
+                    displayName,
+                    scope,
+                    "page-assertion-not-contains",
+                    $"contains forbidden {scope} text '{forbidden}'.",
+                    forbidden);
+            }
+        }
+    }
+
+    private static void AddPageAssertionIssue(
+        Action<string, string, string?, string, string?, string?> addIssue,
+        string relativePath,
+        string displayName,
+        string scope,
+        string hint,
+        string detail,
+        string? keyHint)
+    {
+        addIssue(
+            "error",
+            "page-assertion",
+            relativePath,
+            $"page assertion '{displayName}' failed: {detail}",
+            hint,
+            $"{scope}|{keyHint}");
+    }
+
+    private static string[] NormalizePageAssertionValues(string[]? values)
+    {
+        return (values ?? Array.Empty<string>())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(NormalizeWhitespace)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string NormalizePageAssertionScope(string? scope)
+    {
+        var normalized = NormalizeWhitespace(scope);
+        if (normalized.Equals("html", StringComparison.OrdinalIgnoreCase))
+            return "html";
+        if (normalized.Equals("rendered", StringComparison.OrdinalIgnoreCase))
+            return "body";
+        return "body";
+    }
+
+    private static string GetPageAssertionDisplayName(WebSeoDoctorPageAssertion assertion)
+    {
+        var label = NormalizeWhitespace(assertion.Label);
+        if (!string.IsNullOrWhiteSpace(label))
+            return label;
+
+        var normalizedPath = NormalizeAssertionRelativePath(assertion.Path);
+        return string.IsNullOrWhiteSpace(normalizedPath) ? assertion.Path.Trim() : normalizedPath;
+    }
+
+    private static bool TryResolvePageAssertionPath(
+        string siteRoot,
+        string assertionPath,
+        out string resolvedPath,
+        out string relativePath)
+    {
+        resolvedPath = string.Empty;
+        relativePath = NormalizeAssertionRelativePath(assertionPath);
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var candidate = Path.GetFullPath(Path.Combine(siteRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!candidate.StartsWith(siteRoot, FileSystemPathComparison))
+            return false;
+
+        resolvedPath = candidate;
+        relativePath = Path.GetRelativePath(siteRoot, candidate).Replace('\\', '/');
+        return File.Exists(candidate);
+    }
+
+    private static string NormalizeAssertionRelativePath(string? assertionPath)
+    {
+        var normalized = StripQueryAndFragment(assertionPath ?? string.Empty)
+            .Replace('\\', '/')
+            .Trim();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Equals("/", StringComparison.Ordinal))
+            return "index.html";
+
+        normalized = normalized.TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return "index.html";
+
+        var explicitDirectory = normalized.EndsWith("/", StringComparison.Ordinal);
+        normalized = normalized.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return "index.html";
+
+        if (explicitDirectory)
+            return normalized + "/index.html";
+
+        if (Path.HasExtension(normalized))
+            return normalized;
+
+        return normalized + "/index.html";
     }
 
     private static void ValidateStructuredData(
