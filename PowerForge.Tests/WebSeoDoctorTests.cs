@@ -1140,6 +1140,110 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_PageAssertions_RenderedScopeAliasesToBody()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-rendered-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Contactez-nous</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/",
+                        Label = "Home rendered alias",
+                        Scope = "rendered",
+                        Contains = new[] { "Contactez-nous" }
+                    }
+                }
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Category == "page-assertion");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_PageAssertions_MissingInRootPathReportsRelativeIndex()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/fr/contact/",
+                        Label = "French contact must exist"
+                    }
+                }
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "page-assertion-missing-page" &&
+                issue.Path == "fr/contact/index.html" &&
+                issue.Message.Contains("French contact must exist", StringComparison.OrdinalIgnoreCase));
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_PageAssertions_DoNotResolveSiblingPathsThatOnlyShareTheRootPrefix()
     {
         var parentRoot = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-prefix-" + Guid.NewGuid().ToString("N"));

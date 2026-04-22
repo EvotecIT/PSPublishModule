@@ -15,7 +15,8 @@ public sealed class WebSeoDoctorPageAssertion
     public string[] NotContains { get; set; } = Array.Empty<string>();
     /// <summary>
     /// Content scope to inspect. Supported values are <c>body</c>, <c>rendered</c>, and <c>html</c>.
-    /// Unknown values fall back to <c>body</c>.
+    /// <c>rendered</c> is accepted as an alias of <c>body</c>, and diagnostics report the canonical
+    /// <c>body</c> scope name. Unknown values also fall back to <c>body</c>.
     /// </summary>
     public string Scope { get; set; } = "body";
 }
