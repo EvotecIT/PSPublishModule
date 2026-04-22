@@ -987,7 +987,9 @@ public static class WebSeoDoctor
         if (explicitDirectory)
             return normalized + "/index.html";
 
-        if (Path.HasExtension(normalized))
+        var extension = Path.GetExtension(normalized);
+        if (!string.IsNullOrWhiteSpace(extension) &&
+            DefaultHtmlExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
             return normalized;
 
         return normalized + "/index.html";

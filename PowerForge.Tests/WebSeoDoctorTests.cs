@@ -1244,6 +1244,70 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_PageAssertions_TreatsDottedRouteSegmentsAsDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-dotted-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            var dottedRoute = Path.Combine(root, "docs", "v1.0");
+            Directory.CreateDirectory(dottedRoute);
+            File.WriteAllText(Path.Combine(dottedRoute, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Versioned docs</title></head>
+                <body><h1>Documentation v1.0</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = false,
+                PageAssertions = new[]
+                {
+                    new WebSeoDoctorPageAssertion
+                    {
+                        Path = "/docs/v1.0",
+                        Label = "Versioned docs route",
+                        Contains = new[] { "Documentation v1.0" }
+                    }
+                }
+            });
+
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Hint == "page-assertion-missing-page" ||
+                issue.Hint == "page-assertion-contains");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_PageAssertions_DoNotResolveSiblingPathsThatOnlyShareTheRootPrefix()
     {
         var parentRoot = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-prefix-" + Guid.NewGuid().ToString("N"));
