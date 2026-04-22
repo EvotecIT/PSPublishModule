@@ -194,7 +194,20 @@ jobs:
             throw "Deploy guardrail found seo-doctor, but none of the resolved seo-doctor steps are configured to gate deploys. Set failOnWarnings or failOnNewIssues, or opt out with require_seo_doctor_guardrail: false."
           }
 
-          Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSeoDoctorSteps.Count) gate deployment."
+          $fullyConfiguredSeoDoctorSteps = @(
+            $gatingSeoDoctorSteps | Where-Object {
+              $_.Contains('checkContentLeaks') -and ($_['checkContentLeaks'] -eq $true) -and
+              $_.Contains('requireCanonical') -and ($_['requireCanonical'] -eq $true) -and
+              $_.Contains('requireHreflang') -and ($_['requireHreflang'] -eq $true) -and
+              $_.Contains('requireHreflangXDefault') -and ($_['requireHreflangXDefault'] -eq $true)
+            }
+          )
+
+          if ($fullyConfiguredSeoDoctorSteps.Count -eq 0) {
+            throw "Deploy guardrail requires at least one gating seo-doctor step with checkContentLeaks=true, requireCanonical=true, requireHreflang=true, and requireHreflangXDefault=true. This protects deploys from localized content leaks and canonical/hreflang regressions."
+          }
+
+          Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSeoDoctorSteps.Count) gate deployment; $($fullyConfiguredSeoDoctorSteps.Count) enforce localized SEO/content-leak guardrails."
 
   build:
     needs: guardrails

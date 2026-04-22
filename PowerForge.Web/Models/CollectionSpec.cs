@@ -45,6 +45,12 @@ public sealed class CollectionSpec
     /// When omitted, all configured site languages may receive fallback copies.
     /// </summary>
     public string[] FallbackLanguages { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Optional per-collection override for localized fallback page materialization.
+    /// Set to <c>false</c> to prevent fallback-only localized copies for this collection even when
+    /// site-level localization enables <c>materializeFallbackPages</c>.
+    /// </summary>
+    public bool? MaterializeFallbackPages { get; set; }
     /// <summary>Collection-level SEO configuration (overrides site-level templates).</summary>
     public SeoSpec? Seo { get; set; }
     /// <summary>Optional page size for generated section pagination.</summary>

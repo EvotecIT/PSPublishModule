@@ -727,6 +727,134 @@ public class WebPipelineRunnerProjectApiDocsTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_LocalizesProjectTabsAndFallsBackToDefaultLanguageForUnsupportedCollections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-localized-tabs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "alpha",
+                      "name": "Alpha",
+                      "mode": "hub-full",
+                      "surfaces": {
+                        "apiPowerShell": true,
+                        "docs": true,
+                        "examples": true
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Localized API Docs Test",
+                  "baseUrl": "https://example.test",
+                  "localization": {
+                    "enabled": true,
+                    "defaultLanguage": "en",
+                    "prefixDefaultLanguage": false,
+                    "languages": [
+                      {
+                        "code": "en",
+                        "label": "English",
+                        "baseUrl": "https://example.test",
+                        "renderAtRoot": true,
+                        "default": true
+                      },
+                      {
+                        "code": "fr",
+                        "label": "Français",
+                        "baseUrl": "https://example.test"
+                      }
+                    ]
+                  },
+                  "collections": [
+                    {
+                      "name": "projects",
+                      "input": "content/projects",
+                      "output": "/projects",
+                      "localizedLanguages": [ "en", "fr" ]
+                    },
+                    {
+                      "name": "docs",
+                      "input": "content/project-docs",
+                      "output": "/projects",
+                      "localizedLanguages": [ "en" ]
+                    },
+                    {
+                      "name": "examples",
+                      "input": "content/project-examples",
+                      "output": "/projects",
+                      "localizedLanguages": [ "en" ]
+                    }
+                  ]
+                }
+                """);
+
+            var powerShellRoot = Path.Combine(root, "data", "project-api", "alpha", "powershell");
+            Directory.CreateDirectory(powerShellRoot);
+            File.WriteAllText(Path.Combine(powerShellRoot, "Alpha-help.xml"), SamplePowerShellHelpXml("Get-AlphaItem", "Returns alpha items."));
+
+            var fragmentsRoot = Path.Combine(root, "fragments");
+            Directory.CreateDirectory(fragmentsRoot);
+            File.WriteAllText(Path.Combine(fragmentsRoot, "header.html"),
+                """
+                <header>
+                  <a id="overview" href="{{PROJECT_OVERVIEW_URL}}">Overview</a>
+                  <a id="docs" href="{{PROJECT_DOCS_URL}}"{{PROJECT_DOCS_HIDDEN}}>Docs</a>
+                  <a id="api" href="{{PROJECT_API_URL}}">API</a>
+                  <a id="examples" href="{{PROJECT_EXAMPLES_URL}}"{{PROJECT_EXAMPLES_HIDDEN}}>Examples</a>
+                </header>
+                """);
+            File.WriteAllText(Path.Combine(fragmentsRoot, "footer.html"), "<footer>Footer</footer>");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-apidocs",
+                      "catalog": "./data/projects/catalog.json",
+                      "apiRoot": "./data/project-api",
+                      "siteRoot": "./_site-fr",
+                      "language": "fr",
+                      "config": "./site.json",
+                      "template": "docs",
+                      "format": "html",
+                      "headerHtml": "./fragments/header.html",
+                      "footerHtml": "./fragments/footer.html"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var html = File.ReadAllText(Path.Combine(root, "_site-fr", "projects", "alpha", "api", "index.html"));
+            Assert.Contains("id=\"overview\" href=\"/fr/projects/alpha/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("id=\"api\" href=\"/fr/projects/alpha/api/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("id=\"docs\" href=\"https://example.test/projects/alpha/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("id=\"examples\" href=\"https://example.test/projects/alpha/examples/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("id=\"docs\" href=\"/fr/projects/alpha/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("id=\"examples\" href=\"/fr/projects/alpha/examples/\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void WriteCatalog(string root, string content)
     {
         var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");

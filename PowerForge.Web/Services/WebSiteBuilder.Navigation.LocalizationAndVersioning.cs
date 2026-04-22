@@ -118,9 +118,9 @@ public static partial class WebSiteBuilder
                             return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
                         }
 
-                        return fallback.OutputPath;
+                        return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
                     }
-                    return fallback.OutputPath;
+                    return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
                 }
             }
         }
@@ -139,7 +139,7 @@ public static partial class WebSiteBuilder
                     CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage))
                     return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
 
-                return ApplyLanguagePrefixToRoute(spec, baseRoute, localization.DefaultLanguage);
+                return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, baseRoute);
             }
             return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
         }
@@ -523,6 +523,22 @@ public static partial class WebSiteBuilder
         return normalizedSiteBase ?? spec.BaseUrl;
     }
 
+    private static string ResolveAbsoluteLanguageRoute(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string? languageCode,
+        string route)
+    {
+        if (string.IsNullOrWhiteSpace(route) || IsAbsoluteHttpUrl(route))
+            return route;
+
+        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, languageCode);
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, languageCode);
+        return string.IsNullOrWhiteSpace(baseUrl)
+            ? publicRoute
+            : ResolveAbsoluteUrl(baseUrl, publicRoute);
+    }
+
     private static bool ShouldRenderLanguageAtRoot(ResolvedLocalizationConfig localization, string? languageCode)
     {
         if (!localization.Enabled)
@@ -704,6 +720,9 @@ public static partial class WebSiteBuilder
         ResolvedLocalizationConfig localization,
         CollectionSpec? collection)
     {
+        if (collection?.MaterializeFallbackPages == false)
+            return Array.Empty<string>();
+
         if (!localization.Enabled || localization.Languages.Length == 0)
             return new[] { localization.DefaultLanguage };
 

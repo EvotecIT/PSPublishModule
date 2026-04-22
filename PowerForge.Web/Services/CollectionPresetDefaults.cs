@@ -121,6 +121,7 @@ internal static class CollectionPresetDefaults
             ExpectedTranslationLanguages = collection.ExpectedTranslationLanguages ?? Array.Empty<string>(),
             LocalizedLanguages = collection.LocalizedLanguages ?? Array.Empty<string>(),
             FallbackLanguages = collection.FallbackLanguages ?? Array.Empty<string>(),
+            MaterializeFallbackPages = collection.MaterializeFallbackPages,
             Seo = collection.Seo,
             PageSize = collection.PageSize,
             AutoGenerateSectionIndex = collection.AutoGenerateSectionIndex,

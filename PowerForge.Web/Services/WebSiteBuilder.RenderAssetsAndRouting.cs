@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -93,7 +94,17 @@ public static partial class WebSiteBuilder
         {
             var resolved = ResolveMetaFilePath(item, rootPath, headFile);
             if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            {
                 parts.Add(File.ReadAllText(resolved));
+            }
+            else
+            {
+                Trace.TraceWarning(
+                    "PowerForge.Web: unable to resolve head_file '{0}' for '{1}' (source: {2}).",
+                    headFile,
+                    item.OutputPath,
+                    item.SourcePath);
+            }
         }
 
         var languageAlternates = BuildLanguageAlternateHeadLinks(spec, item, allItems);
@@ -224,8 +235,11 @@ public static partial class WebSiteBuilder
         if (fallbackSource is null)
             return false;
 
+        if (!supportsFallbackLanguage)
+            return false;
+
         var route = fallbackSource.OutputPath;
-        if (localization.MaterializeFallbackPages && supportsFallbackLanguage)
+        if (localization.MaterializeFallbackPages)
         {
             var fallbackBaseRoute = StripLanguagePrefix(localization, fallbackSource.OutputPath);
             route = ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
@@ -276,9 +290,32 @@ public static partial class WebSiteBuilder
             var rel = System.Web.HttpUtility.HtmlEncode(link.Rel);
             var href = System.Web.HttpUtility.HtmlEncode(link.Href);
             var type = string.IsNullOrWhiteSpace(link.Type) ? string.Empty : $" type=\"{System.Web.HttpUtility.HtmlEncode(link.Type)}\"";
+            var asAttribute = string.IsNullOrWhiteSpace(link.As) ? string.Empty : $" as=\"{System.Web.HttpUtility.HtmlEncode(link.As)}\"";
             var sizes = string.IsNullOrWhiteSpace(link.Sizes) ? string.Empty : $" sizes=\"{System.Web.HttpUtility.HtmlEncode(link.Sizes)}\"";
             var cross = string.IsNullOrWhiteSpace(link.Crossorigin) ? string.Empty : $" crossorigin=\"{System.Web.HttpUtility.HtmlEncode(link.Crossorigin)}\"";
-            sb.AppendLine($"<link rel=\"{rel}\" href=\"{href}\"{type}{sizes}{cross} />");
+            var extraAttributes = string.Empty;
+            if (link.Attributes is { Count: > 0 })
+            {
+                foreach (var pair in link.Attributes.OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+                        continue;
+
+                    if (pair.Key.Equals("rel", StringComparison.OrdinalIgnoreCase) ||
+                        pair.Key.Equals("href", StringComparison.OrdinalIgnoreCase) ||
+                        pair.Key.Equals("type", StringComparison.OrdinalIgnoreCase) ||
+                        pair.Key.Equals("as", StringComparison.OrdinalIgnoreCase) ||
+                        pair.Key.Equals("sizes", StringComparison.OrdinalIgnoreCase) ||
+                        pair.Key.Equals("crossorigin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    extraAttributes += $" {System.Web.HttpUtility.HtmlEncode(pair.Key)}=\"{System.Web.HttpUtility.HtmlEncode(pair.Value)}\"";
+                }
+            }
+
+            sb.AppendLine($"<link rel=\"{rel}\" href=\"{href}\"{type}{asAttribute}{sizes}{cross}{extraAttributes} />");
         }
         return sb.ToString().TrimEnd();
     }
@@ -317,7 +354,17 @@ public static partial class WebSiteBuilder
         {
             var resolved = ResolveMetaFilePath(item, rootPath, scriptsFile);
             if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            {
                 parts.Add(File.ReadAllText(resolved));
+            }
+            else
+            {
+                Trace.TraceWarning(
+                    "PowerForge.Web: unable to resolve extra_scripts_file '{0}' for '{1}' (source: {2}).",
+                    scriptsFile,
+                    item.OutputPath,
+                    item.SourcePath);
+            }
         }
 
         return string.Join(Environment.NewLine, parts);

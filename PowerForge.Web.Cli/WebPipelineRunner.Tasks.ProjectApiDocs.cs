@@ -180,6 +180,7 @@ internal static partial class WebPipelineRunner
             PropertyNameCaseInsensitive = true,
             WriteIndented = true
         };
+        var siteSpec = TryLoadProjectApiSiteSpec(siteConfigPath, logger);
 
         var catalog = JsonSerializer.Deserialize<ProjectCatalogDocument>(File.ReadAllText(catalogPath), serializerOptions)
                       ?? new ProjectCatalogDocument();
@@ -243,6 +244,7 @@ internal static partial class WebPipelineRunner
                 outRoot,
                 cleanOutput,
                 defaultCssHref,
+                siteSpec,
                 apiLanguage,
                 navSurfaceName,
                 GetProjectApiDocsOverrides(project, baseDir)));
@@ -788,17 +790,23 @@ internal static partial class WebPipelineRunner
         string outRoot,
         bool cleanOutput,
         string? cssHref,
+        SiteSpec? siteSpec,
         string language,
         string navSurfaceName,
         ProjectApiDocsCatalogOverrides? apiDocsOverrides)
     {
         var name = NormalizeOptionalString(project.Name) ?? slug;
         var hubPath = NormalizeOptionalString(project.HubPath) ?? $"/projects/{slug}/";
-        var apiBaseUrl = $"/projects/{slug}/api";
-        var overviewUrl = EnsureProjectRouteTrailingSlash(hubPath);
-        var docsUrl = $"/projects/{slug}/docs/";
-        var apiUrl = $"{apiBaseUrl}/";
-        var examplesUrl = $"/projects/{slug}/examples/";
+        var overviewRoute = EnsureProjectRouteTrailingSlash(hubPath);
+        var apiRoute = $"/projects/{slug}/api/";
+        var docsRoute = $"/projects/{slug}/docs/";
+        var examplesRoute = $"/projects/{slug}/examples/";
+        var overviewUrl = ResolveProjectApiCollectionUrl(siteSpec, "projects", overviewRoute, language);
+        var docsHomeUrl = ResolveProjectApiCollectionRelativeUrl(siteSpec, "projects", overviewRoute, language);
+        var docsUrl = ResolveProjectApiCollectionUrl(siteSpec, "docs", docsRoute, language);
+        var apiUrl = ResolveProjectApiCollectionRelativeUrl(siteSpec, "projects", apiRoute, language);
+        var apiBaseUrl = apiUrl.TrimEnd('/');
+        var examplesUrl = ResolveProjectApiCollectionUrl(siteSpec, "examples", examplesRoute, language);
         var outputPath = Path.Combine(outRoot, slug, "api");
         var templateTokens = BuildProjectApiTemplateTokens(project, slug, name, overviewUrl, docsUrl, apiUrl, examplesUrl);
         var node = new JsonObject
@@ -808,7 +816,7 @@ internal static partial class WebPipelineRunner
             ["out"] = outputPath,
             ["baseUrl"] = apiBaseUrl,
             ["language"] = string.IsNullOrWhiteSpace(language) ? "en" : language,
-            ["docsHome"] = hubPath,
+            ["docsHome"] = docsHomeUrl,
             ["navContextPath"] = "/",
             ["navContextProject"] = slug,
             ["navSurface"] = string.IsNullOrWhiteSpace(navSurfaceName) ? "main" : navSurfaceName,
@@ -865,6 +873,23 @@ internal static partial class WebPipelineRunner
         return normalizedLanguage.Equals("en", StringComparison.OrdinalIgnoreCase)
             ? "main"
             : $"main-{normalizedLanguage}";
+    }
+
+    private static SiteSpec? TryLoadProjectApiSiteSpec(string? siteConfigPath, WebConsoleLogger? logger)
+    {
+        if (string.IsNullOrWhiteSpace(siteConfigPath) || !File.Exists(siteConfigPath))
+            return null;
+
+        try
+        {
+            var (spec, _) = WebSiteSpecLoader.LoadWithPath(siteConfigPath, WebCliJson.Options);
+            return spec;
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"project-apidocs: unable to load site config for localized project routes ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
     }
 
     private static ProjectApiDocsCatalogOverrides? GetProjectApiDocsOverrides(ProjectCatalogEntry project, string baseDir)
@@ -2410,6 +2435,125 @@ internal static partial class WebPipelineRunner
         if (!normalized.StartsWith("/", StringComparison.Ordinal))
             normalized = "/" + normalized;
         return normalized.EndsWith("/", StringComparison.Ordinal) ? normalized : normalized + "/";
+    }
+
+    private static string ResolveProjectApiCollectionUrl(
+        SiteSpec? siteSpec,
+        string? collectionName,
+        string route,
+        string? currentLanguage)
+    {
+        var localizedRoute = ResolveProjectApiCollectionRelativeUrl(siteSpec, collectionName, route, currentLanguage);
+        if (siteSpec is null || ProjectApiCollectionSupportsLanguage(siteSpec, collectionName, currentLanguage))
+            return localizedRoute;
+
+        var fallbackLanguage = ResolveProjectApiLanguageCode(siteSpec, siteSpec.Localization?.DefaultLanguage);
+        var fallbackRoute = ResolveProjectApiCollectionRelativeUrl(siteSpec, collectionName, route, fallbackLanguage);
+        return ResolveProjectApiAbsoluteUrl(siteSpec, fallbackLanguage, fallbackRoute);
+    }
+
+    private static string ResolveProjectApiCollectionRelativeUrl(
+        SiteSpec? siteSpec,
+        string? collectionName,
+        string route,
+        string? targetLanguage)
+    {
+        var normalizedRoute = EnsureProjectRouteTrailingSlash(route);
+        if (siteSpec is null || IsAbsoluteHttpUrl(normalizedRoute))
+            return normalizedRoute;
+
+        var localization = siteSpec.Localization;
+        if (localization?.Enabled != true || localization.Languages is not { Length: > 0 })
+            return normalizedRoute;
+
+        var language = ResolveProjectApiLanguageSpec(siteSpec, targetLanguage);
+        if (language is null)
+            return normalizedRoute;
+
+        var isDefaultLanguage = language.Default ||
+                                string.Equals(language.Code, localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase);
+        if (language.RenderAtRoot || (isDefaultLanguage && !localization.PrefixDefaultLanguage))
+            return normalizedRoute;
+
+        var prefix = NormalizeOptionalString(language.Prefix) ?? language.Code;
+        if (string.IsNullOrWhiteSpace(prefix))
+            return normalizedRoute;
+
+        var combined = "/" + prefix.Trim('/') + "/" + normalizedRoute.TrimStart('/');
+        return EnsureProjectRouteTrailingSlash(combined);
+    }
+
+    private static string ResolveProjectApiAbsoluteUrl(SiteSpec siteSpec, string? targetLanguage, string route)
+    {
+        if (IsAbsoluteHttpUrl(route))
+            return route;
+
+        var baseUrl = NormalizeOptionalString(ResolveProjectApiLanguageSpec(siteSpec, targetLanguage)?.BaseUrl) ??
+                      NormalizeOptionalString(siteSpec.BaseUrl);
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return route;
+
+        var normalizedBaseUrl = baseUrl.TrimEnd('/') + "/";
+        var normalizedRoute = EnsureProjectRouteTrailingSlash(route).TrimStart('/');
+        return new Uri(new Uri(normalizedBaseUrl, UriKind.Absolute), normalizedRoute).ToString();
+    }
+
+    private static bool ProjectApiCollectionSupportsLanguage(SiteSpec siteSpec, string? collectionName, string? languageCode)
+    {
+        var collection = ResolveProjectApiCollectionSpec(siteSpec, collectionName);
+        if (collection is null)
+            return true;
+
+        var localization = siteSpec.Localization;
+        if (localization?.Enabled != true || localization.Languages is not { Length: > 0 })
+            return true;
+
+        var configuredLanguages = collection.LocalizedLanguages is { Length: > 0 }
+            ? collection.LocalizedLanguages
+            : collection.ExpectedTranslationLanguages;
+        if (configuredLanguages is not { Length: > 0 })
+            return true;
+
+        var normalizedLanguage = ResolveProjectApiLanguageCode(siteSpec, languageCode);
+        return configuredLanguages
+            .Select(static value => NormalizeOptionalString(value))
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Contains(normalizedLanguage, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static CollectionSpec? ResolveProjectApiCollectionSpec(SiteSpec siteSpec, string? collectionName)
+    {
+        if (siteSpec.Collections is not { Length: > 0 } || string.IsNullOrWhiteSpace(collectionName))
+            return null;
+
+        return siteSpec.Collections.FirstOrDefault(collection =>
+            string.Equals(collection.Name, collectionName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static LanguageSpec? ResolveProjectApiLanguageSpec(SiteSpec siteSpec, string? languageCode)
+    {
+        var localization = siteSpec.Localization;
+        if (localization?.Languages is not { Length: > 0 })
+            return null;
+
+        var normalizedCode = ResolveProjectApiLanguageCode(siteSpec, languageCode);
+        return localization.Languages.FirstOrDefault(language =>
+                   string.Equals(language.Code, normalizedCode, StringComparison.OrdinalIgnoreCase))
+               ?? localization.Languages.FirstOrDefault(language => language.Default)
+               ?? localization.Languages.FirstOrDefault();
+    }
+
+    private static string ResolveProjectApiLanguageCode(SiteSpec siteSpec, string? languageCode)
+    {
+        return NormalizeOptionalString(languageCode) ??
+               NormalizeOptionalString(siteSpec.Localization?.DefaultLanguage) ??
+               "en";
+    }
+
+    private static bool IsAbsoluteHttpUrl(string value)
+    {
+        return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string EncodeToken(string? value)

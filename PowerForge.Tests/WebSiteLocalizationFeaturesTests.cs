@@ -375,6 +375,50 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedFallbackPages_CanBeDisabledPerCollection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-fallback-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateDefaultLanguageOnlyDocsContent(root);
+            CreateSeoTheme(root, "localization-fallback-disabled-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Fallback Disabled Test", "localization-fallback-disabled-theme");
+            spec.Localization!.FallbackToDefaultLanguage = true;
+            spec.Localization.MaterializeFallbackPages = true;
+            spec.Localization.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+            spec.Collections[0].MaterializeFallbackPages = false;
+
+            var result = BuildSite(root, spec);
+
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+            Assert.False(File.Exists(plHtmlPath));
+
+            var enHtml = File.ReadAllText(enHtmlPath);
+            Assert.DoesNotContain("hreflang=\"pl\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<link rel=\"canonical\" href=\"https://evotec.xyz/docs/\" />", enHtml, StringComparison.OrdinalIgnoreCase);
+
+            var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
+            Assert.True(File.Exists(allSearchPath));
+            var entries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
+            Assert.Single(entries);
+            Assert.Equal("en", entries[0].GetProperty("language").GetString());
+            Assert.DoesNotContain(entries, entry =>
+                string.Equals(entry.GetProperty("url").GetString()?.TrimEnd('/'), "/pl/docs", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizedFallbackPages_MaterializeForSelectedRootLanguageBuild()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-root-fallback-" + Guid.NewGuid().ToString("N"));

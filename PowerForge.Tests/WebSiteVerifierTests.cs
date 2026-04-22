@@ -694,6 +694,87 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenRootRenderedLanguageMenuUsesPrefixedLocalRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-root-rendered-nav-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var plPath = Path.Combine(root, "content", "pages", "pl");
+            Directory.CreateDirectory(plPath);
+            File.WriteAllText(Path.Combine(plPath, "contact.md"),
+                """
+                ---
+                title: Kontakt
+                slug: contact
+                ---
+
+                Kontakt
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Root Rendered Navigation Route Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Prefix = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl", RenderAtRoot = true }
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main-pl",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Kontakt", Url = "/pl/contact/" }
+                            }
+                        }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("renderAtRoot=true", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("/pl/contact/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("public route '/contact/'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenLocalizationContainsDuplicates()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-localization-duplicates-" + Guid.NewGuid().ToString("N"));

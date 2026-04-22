@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
@@ -239,6 +240,162 @@ public class WebSiteBuilderSafetyAndParityTests
             Assert.DoesNotContain(verify.Warnings, warning =>
                 warning.Contains("Collection 'docs' has no files.", StringComparison.OrdinalIgnoreCase));
             Assert.True(File.Exists(Path.Combine(build.OutputPath, "docs", "index.html")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_EmitsTraceWarning_WhenHeadFileCannotBeResolved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-headfile-warning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var writer = new StringWriter();
+        var listener = new TextWriterTraceListener(writer);
+        var listeners = Trace.Listeners.Cast<TraceListener>().ToArray();
+        var previousAutoFlush = Trace.AutoFlush;
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                meta.head_file: shared/head/pages/missing.head.html
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            Trace.Listeners.Clear();
+            Trace.Listeners.Add(listener);
+            Trace.AutoFlush = true;
+
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            Assert.True(File.Exists(Path.Combine(build.OutputPath, "index.html")));
+
+            listener.Flush();
+            var traceOutput = writer.ToString();
+            Assert.Contains("unable to resolve head_file", traceOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("shared/head/pages/missing.head.html", traceOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            listener.Flush();
+            listener.Close();
+            Trace.Listeners.Clear();
+            foreach (var existing in listeners)
+                Trace.Listeners.Add(existing);
+            Trace.AutoFlush = previousAutoFlush;
+
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_Fails_WhenHeadFileCannotBeResolved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-headfile-verify-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                meta.head_file: shared/head/pages/missing.head.html
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var verify = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(verify.Success);
+            Assert.Contains(verify.Errors, error => error.Contains("meta.head_file", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_RendersHeadLinks_WithAsAndCustomAttributes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-links-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous",
+                        Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["title"] = "Test font",
+                            ["data-asset-role"] = "font-preload"
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            Assert.Contains("rel=\"preload\"", html, StringComparison.Ordinal);
+            Assert.Contains("as=\"font\"", html, StringComparison.Ordinal);
+            Assert.Contains("data-asset-role=\"font-preload\"", html, StringComparison.Ordinal);
+            Assert.Contains("title=\"Test font\"", html, StringComparison.Ordinal);
         }
         finally
         {

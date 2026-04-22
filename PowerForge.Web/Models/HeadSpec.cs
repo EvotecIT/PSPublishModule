@@ -28,11 +28,17 @@ public sealed class HeadLinkSpec
     /// <summary>Optional MIME type.</summary>
     public string? Type { get; set; }
 
+    /// <summary>Optional preload destination type.</summary>
+    public string? As { get; set; }
+
     /// <summary>Optional sizes attribute.</summary>
     public string? Sizes { get; set; }
 
     /// <summary>Optional crossorigin attribute value.</summary>
     public string? Crossorigin { get; set; }
+
+    /// <summary>Optional additional link attributes.</summary>
+    public Dictionary<string, string>? Attributes { get; set; }
 }
 
 /// <summary>Represents a structured &lt;meta&gt; element.</summary>
