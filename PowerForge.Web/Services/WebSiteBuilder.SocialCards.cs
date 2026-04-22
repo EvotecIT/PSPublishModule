@@ -34,10 +34,7 @@ public static partial class WebSiteBuilder
         if (!string.IsNullOrWhiteSpace(explicitMetaImage))
             return explicitMetaImage!;
 
-        if (!string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
-            return string.Empty;
-
-        return TryExtractFirstBodyImage(item.SourcePath);
+        return string.Empty;
     }
 
     private static string ResolveSocialImagePath(
@@ -59,7 +56,13 @@ public static partial class WebSiteBuilder
                 return generated;
         }
 
-        return spec.Social?.Image ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(spec.Social?.Image))
+            return spec.Social.Image!;
+
+        if (string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
+            return TryExtractFirstBodyImage(item.SourcePath);
+
+        return string.Empty;
     }
 
     private static string TryGenerateSocialCardPath(

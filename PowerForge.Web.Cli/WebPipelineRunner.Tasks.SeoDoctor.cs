@@ -62,6 +62,7 @@ internal static partial class WebPipelineRunner
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             IncludeNoIndexPages = GetBool(step, "includeNoIndexPages") ?? false,
+            PageAssertions = ResolvePageAssertions(step),
             CheckTitleLength = GetBool(step, "checkTitleLength") ?? true,
             CheckDescriptionLength = GetBool(step, "checkDescriptionLength") ?? true,
             CheckH1 = GetBool(step, "checkH1") ?? GetBool(step, "checkHeading") ?? true,
@@ -283,6 +284,58 @@ internal static partial class WebPipelineRunner
         }
 
         return sb.ToString().Trim('-');
+    }
+
+    private static WebSeoDoctorPageAssertion[] ResolvePageAssertions(JsonElement step)
+    {
+        var items = GetArrayOfObjects(step, "pageAssertions") ??
+                    GetArrayOfObjects(step, "page-assertions");
+        if (items is not { Length: > 0 })
+            return Array.Empty<WebSeoDoctorPageAssertion>();
+
+        var assertions = new List<WebSeoDoctorPageAssertion>();
+        foreach (var item in items)
+        {
+            var path = GetString(item, "path") ??
+                       GetString(item, "page") ??
+                       GetString(item, "route");
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            assertions.Add(new WebSeoDoctorPageAssertion
+            {
+                Path = path,
+                Label = GetString(item, "label") ?? string.Empty,
+                MustExist = GetBool(item, "mustExist") ?? GetBool(item, "must-exist") ?? true,
+                Contains = ResolveStringArrayOrSingle(item, "contains"),
+                NotContains = ResolveStringArrayOrSingle(item, "notContains", "not-contains"),
+                Scope = GetString(item, "scope") ??
+                        GetString(item, "matchIn") ??
+                        GetString(item, "match-in") ??
+                        "body"
+            });
+        }
+
+        return assertions.ToArray();
+    }
+
+    private static string[] ResolveStringArrayOrSingle(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var values = GetArrayOfStrings(element, name);
+            if (values is { Length: > 0 })
+                return values;
+
+            var single = GetString(element, name);
+            if (!string.IsNullOrWhiteSpace(single))
+                return new[] { single };
+        }
+
+        return Array.Empty<string>();
     }
 
     private static string[] ResolveFocusKeyphraseMetaNames(JsonElement step)
