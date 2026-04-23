@@ -172,6 +172,14 @@ public sealed class ModuleInstaller
         if (handling != LegacyFlatModuleHandling.Convert)
             return;
 
+        if (!LegacyFlatManifestHasModuleVersion(flatManifest))
+        {
+            var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "unknown");
+            _logger.Warn($"Legacy flat install detected but ModuleVersion could not be read. Quarantining to '{target}'.");
+            MoveLegacyFlatItems(moduleRoot, target);
+            return;
+        }
+
         var metadata = TryReadManifestMetadata(flatManifest);
         if (string.IsNullOrWhiteSpace(metadata?.ModuleVersion))
         {
@@ -282,6 +290,20 @@ public sealed class ModuleInstaller
         {
             _logger.Warn($"Failed to read manifest metadata from '{manifestPath}': {ex.Message}");
             return null;
+        }
+    }
+
+    private static bool LegacyFlatManifestHasModuleVersion(string manifestPath)
+    {
+        try
+        {
+            var content = File.ReadAllText(manifestPath);
+            return ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var version) &&
+                   !string.IsNullOrWhiteSpace(version);
+        }
+        catch
+        {
+            return false;
         }
     }
 

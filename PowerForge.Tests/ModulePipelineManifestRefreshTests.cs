@@ -382,10 +382,10 @@ public sealed class ModulePipelineManifestRefreshTests
 
             Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out RequiredModuleReference[]? requiredModules));
             Assert.NotNull(requiredModules);
-            Assert.Equal(2, requiredModules!.Length);
+            Assert.Single(requiredModules!);
             Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "ExternalModuleDependencies", out var externalModules));
             Assert.Equal(new[] { "Az.Accounts" }, externalModules);

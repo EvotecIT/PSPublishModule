@@ -147,7 +147,7 @@ public sealed class ModulePipelineApprovedModulesTests
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
@@ -198,12 +198,12 @@ public sealed class ModulePipelineApprovedModulesTests
 
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
             Assert.Contains("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
 
             Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var externalDeps));
             Assert.NotNull(externalDeps);
-            Assert.Contains("Microsoft.PowerShell.Utility", externalDeps!, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Microsoft.PowerShell.Management", externalDeps!, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Microsoft.PowerShell.Utility", externalDeps!, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Microsoft.PowerShell.Management", externalDeps!, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

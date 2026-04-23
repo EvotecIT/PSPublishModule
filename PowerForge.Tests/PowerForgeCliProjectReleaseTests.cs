@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliProjectReleaseTests
 {
     [Fact]
-    public void ProjectRelease_CliPreservesProjectDefaultsFromConfig()
+    public async Task ProjectRelease_CliPreservesProjectDefaultsFromConfig()
     {
         var repoRoot = FindRepositoryRoot();
         var tempRoot = CreateTempDirectory();
@@ -61,9 +61,16 @@ public sealed class PowerForgeCliProjectReleaseTests
             };
 
             process.Start();
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(120_000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                throw new TimeoutException("PowerForge CLI project release plan test timed out.");
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
 
             Assert.True(process.ExitCode == 0, $"CLI exit code {process.ExitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
 
