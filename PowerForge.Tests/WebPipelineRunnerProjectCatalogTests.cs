@@ -406,6 +406,8 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("\"examples\": \"/projects/alpha/examples/\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"artifacts\":", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"docs\": \"https://example.invalid/alpha-docs.zip\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"manifestPath\": \"projects-sources/alpha/WebsiteArtifacts/project-manifest.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(root.Replace("\\", "/", StringComparison.Ordinal), catalogText, StringComparison.OrdinalIgnoreCase);
 
             var overviewPath = Path.Combine(root, "content", "projects", "alpha.md");
             var examplesSectionPath = Path.Combine(root, "content", "projects", "alpha.examples.md");

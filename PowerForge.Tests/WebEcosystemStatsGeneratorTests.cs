@@ -100,6 +100,36 @@ public sealed class WebEcosystemStatsGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_GitHubUnauthorizedWithToken_RetriesWithoutAuthorizationForPublicOrg()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-ecosystem-stats-unauthorized-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "data", "ecosystem-stats.json");
+            var handler = new GitHubUnauthorizedFallbackHandler();
+
+            var result = WebEcosystemStatsGenerator.Generate(new WebEcosystemStatsOptions
+            {
+                OutputPath = outPath,
+                GitHubOrganization = "EvotecIT",
+                GitHubToken = "test-token",
+                MaxItems = 10
+            }, handler);
+
+            Assert.Equal(1, result.RepositoryCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("retried anonymously", StringComparison.OrdinalIgnoreCase));
+            Assert.True(handler.SawAuthorizedUnauthorized);
+            Assert.True(handler.SawAnonymousSuccess);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -374,6 +404,63 @@ public sealed class WebEcosystemStatsGeneratorTests
             }
 
             return fallback;
+        }
+    }
+
+    private sealed class GitHubUnauthorizedFallbackHandler : HttpMessageHandler
+    {
+        public bool SawAuthorizedUnauthorized { get; private set; }
+        public bool SawAnonymousSuccess { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri;
+            if (uri is null)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("missing uri", Encoding.UTF8, "text/plain")
+                });
+            }
+
+            if (uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                if (request.Headers.Authorization is not null)
+                {
+                    SawAuthorizedUnauthorized = true;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    {
+                        Content = new StringContent("unauthorized", Encoding.UTF8, "text/plain")
+                    });
+                }
+
+                SawAnonymousSuccess = true;
+                const string githubPayload = """
+                [
+                  {
+                    "name":"PSWriteHTML",
+                    "full_name":"EvotecIT/PSWriteHTML",
+                    "html_url":"https://github.com/EvotecIT/PSWriteHTML",
+                    "language":"PowerShell",
+                    "archived":false,
+                    "stargazers_count":10,
+                    "forks_count":2,
+                    "watchers_count":10,
+                    "open_issues_count":1,
+                    "pushed_at":"2026-03-04T10:00:00Z"
+                  }
+                ]
+                """;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(githubPayload, Encoding.UTF8, "application/json")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            });
         }
     }
 }

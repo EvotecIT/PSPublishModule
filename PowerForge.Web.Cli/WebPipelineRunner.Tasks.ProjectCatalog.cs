@@ -159,7 +159,7 @@ internal static partial class WebPipelineRunner
                     createdProjects++;
                 }
 
-                MergeManifestIntoProject(project, manifest, manifestPath);
+                MergeManifestIntoProject(project, manifest, manifestPath, baseDir);
                 importedManifests++;
             }
         }
@@ -306,7 +306,7 @@ internal static partial class WebPipelineRunner
             .FirstOrDefault();
     }
 
-    private static void MergeManifestIntoProject(ProjectCatalogEntry project, ProjectManifestData manifest, string manifestPath)
+    private static void MergeManifestIntoProject(ProjectCatalogEntry project, ProjectManifestData manifest, string manifestPath, string? baseDir)
     {
         if (!string.IsNullOrWhiteSpace(manifest.Name))
             project.Name = manifest.Name!.Trim();
@@ -372,9 +372,46 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(manifest.Status))
             project.Status = manifest.Status!.Trim();
 
-        project.ManifestPath = manifestPath.Replace('\\', '/');
+        project.ManifestPath = BuildPortableCatalogPath(manifestPath, baseDir);
         if (string.IsNullOrWhiteSpace(project.HubPath) && !string.IsNullOrWhiteSpace(project.Slug))
             project.HubPath = $"/projects/{NormalizeSlug(project.Slug)}/";
+    }
+
+    private static string BuildPortableCatalogPath(string path, string? baseDir)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (!string.IsNullOrWhiteSpace(baseDir))
+            {
+                var fullBaseDir = Path.GetFullPath(baseDir);
+                if (IsProjectCatalogPathWithinRoot(fullPath, fullBaseDir))
+                    return Path.GetRelativePath(fullBaseDir, fullPath).Replace('\\', '/');
+            }
+
+            return Path.GetFileName(fullPath).Replace('\\', '/');
+        }
+        catch
+        {
+            return path.Replace('\\', '/');
+        }
+    }
+
+    private static bool IsProjectCatalogPathWithinRoot(string path, string root)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+
+        if (fullPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var rootWithSeparator = fullRoot + Path.DirectorySeparatorChar;
+        var rootWithAltSeparator = fullRoot + Path.AltDirectorySeparatorChar;
+        return fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) ||
+               fullPath.StartsWith(rootWithAltSeparator, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void MergeManifestExtensionData(
