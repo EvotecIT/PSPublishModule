@@ -58,6 +58,7 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebLink404IgnoreResult))]
 [JsonSerializable(typeof(WebLink404ReviewResult))]
 [JsonSerializable(typeof(WebLinkReviewApplyResult))]
+[JsonSerializable(typeof(WebLegacyAmpRedirectResult))]
 [JsonSerializable(typeof(WebLinkCommandSummary))]
 internal partial class PowerForgeWebCliJsonContext : JsonSerializerContext
 {

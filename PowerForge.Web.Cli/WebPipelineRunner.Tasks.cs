@@ -169,6 +169,11 @@ internal static partial class WebPipelineRunner
             case "links-import":
                 ExecuteLinksImportWordPress(step, baseDir, stepResult);
                 break;
+            case "links-generate-legacy-amp":
+            case "link-generate-legacy-amp":
+            case "legacy-amp-redirects":
+                ExecuteLinksGenerateLegacyAmp(step, baseDir, stepResult);
+                break;
             case "links-report-404":
             case "link-report-404":
             case "links-report":

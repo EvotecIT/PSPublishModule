@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace PowerForge.Web;
 
 /// <summary>SEO doctor options for generated HTML output.</summary>
@@ -7,6 +9,8 @@ public sealed class WebSeoDoctorOptions
     public string SiteRoot { get; set; } = string.Empty;
     /// <summary>Optional additional generated site roots used for cross-site canonical and hreflang target validation.</summary>
     public string[] ReferenceSiteRoots { get; set; } = Array.Empty<string>();
+    /// <summary>Optional host-to-language-prefix map for domains served at the web root but stored under a language folder in the scanned site root.</summary>
+    public Dictionary<string, string> LanguageRootHosts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Optional include glob filters (relative to site root).</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob filters (relative to site root).</summary>
@@ -28,6 +32,12 @@ public sealed class WebSeoDoctorOptions
     public bool CheckH1 { get; set; } = true;
     /// <summary>When true, detect images missing alt attributes.</summary>
     public bool CheckImageAlt { get; set; } = true;
+    /// <summary>When true, detect visible images with empty alt text for editorial review.</summary>
+    public bool CheckEmptyImageAlt { get; set; }
+    /// <summary>When true, scan source Markdown for empty image alt text.</summary>
+    public bool CheckSourceMarkdownImageAlt { get; set; }
+    /// <summary>Optional source content root used by source Markdown checks.</summary>
+    public string? ContentRoot { get; set; }
     /// <summary>When true, detect duplicate title intent across pages.</summary>
     public bool CheckDuplicateTitles { get; set; } = true;
     /// <summary>When true, detect orphan page candidates (zero inbound links).</summary>

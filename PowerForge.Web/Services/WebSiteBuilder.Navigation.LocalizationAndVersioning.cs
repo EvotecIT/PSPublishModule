@@ -533,7 +533,11 @@ public static partial class WebSiteBuilder
             return route;
 
         var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, languageCode);
-        var baseUrl = ResolveLanguageBaseUrl(spec, localization, languageCode);
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        var baseUrl = localization.ByCode.TryGetValue(effectiveLanguage, out var language) &&
+                      !string.IsNullOrWhiteSpace(language.BaseUrl)
+            ? language.BaseUrl
+            : null;
         return string.IsNullOrWhiteSpace(baseUrl)
             ? publicRoute
             : ResolveAbsoluteUrl(baseUrl, publicRoute);

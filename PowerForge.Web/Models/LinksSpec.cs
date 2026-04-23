@@ -227,3 +227,33 @@ public sealed class LinkValidationResult
     /// <summary>True when no errors were found.</summary>
     public bool Success => ErrorCount == 0;
 }
+
+/// <summary>Options for generating legacy WordPress AMP continuity redirects.</summary>
+public sealed class WebLegacyAmpRedirectOptions
+{
+    /// <summary>Source legacy redirect CSV path.</summary>
+    public string SourceCsvPath { get; set; } = string.Empty;
+    /// <summary>Output CSV path for generated AMP redirects.</summary>
+    public string OutputCsvPath { get; set; } = string.Empty;
+    /// <summary>Default URL scheme used when generating absolute legacy AMP sources and targets.</summary>
+    public string DefaultScheme { get; set; } = "https";
+    /// <summary>Default English/root host for relative legacy rows.</summary>
+    public string DefaultEnglishHost { get; set; } = "evotec.xyz";
+    /// <summary>Default Polish host for relative Polish legacy rows.</summary>
+    public string DefaultPolishHost { get; set; } = "evotec.pl";
+}
+
+/// <summary>Result for generated legacy WordPress AMP continuity redirects.</summary>
+public sealed class WebLegacyAmpRedirectResult
+{
+    /// <summary>Resolved source legacy redirect CSV path.</summary>
+    public string SourceCsvPath { get; set; } = string.Empty;
+    /// <summary>Resolved output generated AMP redirect CSV path.</summary>
+    public string OutputCsvPath { get; set; } = string.Empty;
+    /// <summary>Number of source CSV rows considered.</summary>
+    public int SourceRowCount { get; set; }
+    /// <summary>Number of AMP redirects generated.</summary>
+    public int GeneratedCount { get; set; }
+    /// <summary>Number of skipped rows.</summary>
+    public int SkippedCount { get; set; }
+}

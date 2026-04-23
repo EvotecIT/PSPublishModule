@@ -26,8 +26,11 @@ public static class WebSeoDoctor
     private static readonly Regex FrontMatterLeakPattern = new(
         @"(?:^|\s)(?:--\s*)?(?<key>title|description|slug|language|layout|translation_key|meta\.raw_html)\s*:",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex FrontMatterDelimiterPattern = new(
+        @"(?:^|\s)--{2,3}(?:\s|$)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex VisibleMarkdownLeakPattern = new(
-        @"(?:^|[\s(])(?:!\[[^\]\r\n]*\]\([^)]+\)|\[[^\]\r\n]+\]\([^)]+\)|#{1,6}\s+\S+|```)",
+        @"(?:^|[\s(])(?:!\[[^\]\r\n]*\]\([^)]+\)|\[[^\]\r\n]+\]\([^)]+\)|```)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly TimeSpan GlobMatchRegexTimeout = TimeSpan.FromMilliseconds(100);
     private const int MaxJsonLdPayloadLength = 1_000_000;
@@ -52,11 +55,14 @@ public static class WebSeoDoctor
             .Where(path => !path.Equals(siteRoot, FileSystemPathComparison))
             .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
+        var languageRootHosts = NormalizeLanguageRootHosts(options.LanguageRootHosts);
 
         var issues = new List<WebSeoDoctorIssue>();
         var errors = new List<string>();
         var warnings = new List<string>();
         var pages = new List<PageScan>(capacity: 256);
+        var pageMetrics = new List<WebSeoDoctorPageMetric>(capacity: 256);
+        var sourceMarkdownMetrics = new List<WebSeoDoctorSourceMarkdownMetric>();
 
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -160,6 +166,22 @@ public static class WebSeoDoctor
             var bodyText = GetVisibleBodyText(doc.Body);
             var canonicalLinks = GetCanonicalLinks(doc);
             var hreflangAlternates = GetHreflangAlternates(doc);
+            var titleTagCount = doc.QuerySelectorAll("title").Count();
+            var visibleH1Count = doc.QuerySelectorAll("h1")
+                .Count(heading => !IsElementHidden(heading));
+            var visibleImages = doc.QuerySelectorAll("img[src]")
+                .Where(image => !IsElementHidden(image))
+                .ToArray();
+            var missingAltSources = visibleImages
+                .Where(image => !image.HasAttribute("alt"))
+                .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
+                .Where(src => !string.IsNullOrWhiteSpace(src))
+                .ToArray();
+            var emptyAltSources = visibleImages
+                .Where(image => image.HasAttribute("alt") && string.IsNullOrWhiteSpace(image.GetAttribute("alt")))
+                .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
+                .Where(src => !string.IsNullOrWhiteSpace(src))
+                .ToArray();
 
             if (options.CheckContentLeaks)
             {
@@ -180,6 +202,25 @@ public static class WebSeoDoctor
                 : string.Empty;
             page.HreflangAlternates.AddRange(hreflangAlternates);
             pages.Add(page);
+            pageMetrics.Add(new WebSeoDoctorPageMetric
+            {
+                Path = "/" + relativePath,
+                Title = title,
+                TitleTagCount = titleTagCount,
+                DescriptionLength = description.Length,
+                MissingDescription = string.IsNullOrWhiteSpace(description),
+                ShortDescription = !string.IsNullOrWhiteSpace(description) && description.Length < descriptionMin,
+                LongDescription = description.Length > descriptionMax,
+                H1Count = visibleH1Count,
+                MissingH1 = visibleH1Count == 0,
+                MultipleH1 = visibleH1Count > 1,
+                ImageCount = visibleImages.Length,
+                MissingAltCount = missingAltSources.Length,
+                EmptyAltCount = emptyAltSources.Length,
+                MissingAltSamples = string.Join("; ", missingAltSources.Distinct(StringComparer.OrdinalIgnoreCase).Take(3)),
+                EmptyAltSamples = string.Join("; ", emptyAltSources.Distinct(StringComparer.OrdinalIgnoreCase).Take(3)),
+                NoIndex = hasNoIndexRobots
+            });
 
             if (options.CheckTitleLength)
             {
@@ -231,8 +272,6 @@ public static class WebSeoDoctor
 
             if (options.CheckH1)
             {
-                var visibleH1Count = doc.QuerySelectorAll("h1")
-                    .Count(heading => !IsElementHidden(heading));
                 if (visibleH1Count == 0)
                     AddIssue("warning", "heading", relativePath, "missing visible <h1>.", "h1-missing");
                 else if (visibleH1Count > 1)
@@ -241,11 +280,7 @@ public static class WebSeoDoctor
 
             if (options.CheckImageAlt)
             {
-                var missingAlt = doc.QuerySelectorAll("img[src]")
-                    .Where(image => !IsElementHidden(image))
-                    .Where(image => !image.HasAttribute("alt"))
-                    .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
-                    .Where(src => !string.IsNullOrWhiteSpace(src))
+                var missingAlt = missingAltSources
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Take(3)
                     .ToArray();
@@ -254,6 +289,20 @@ public static class WebSeoDoctor
                     AddIssue("warning", "image-alt", relativePath,
                         $"image(s) missing alt attribute. Sample: {string.Join(", ", missingAlt)}.",
                         "image-alt-missing");
+                }
+            }
+
+            if (options.CheckEmptyImageAlt)
+            {
+                var emptyAlt = emptyAltSources
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(3)
+                    .ToArray();
+                if (emptyAlt.Length > 0)
+                {
+                    AddIssue("review", "image-alt", relativePath,
+                        $"image(s) have empty alt text. Review whether they are decorative. Sample: {string.Join(", ", emptyAlt)}.",
+                        "image-alt-empty");
                 }
             }
 
@@ -325,6 +374,11 @@ public static class WebSeoDoctor
         }
 
         ValidatePageAssertions(siteRoot, options.PageAssertions, AddIssue);
+        if (options.CheckSourceMarkdownImageAlt)
+        {
+            foreach (var row in ScanSourceMarkdownEmptyAlt(options.ContentRoot, AddIssue))
+                sourceMarkdownMetrics.Add(row);
+        }
 
         if (pages.Count == 0)
             AddIssue("warning", "general", null, "No HTML pages selected for SEO doctor checks.", "no-pages");
@@ -402,6 +456,7 @@ public static class WebSeoDoctor
             ValidateLocalizedAlternateTargets(
                 pages,
                 localizedValidationPages,
+                languageRootHosts,
                 AddIssue);
         }
 
@@ -412,6 +467,17 @@ public static class WebSeoDoctor
             HtmlSelectedFileCount = htmlFiles.Count,
             PageCount = pages.Count,
             OrphanPageCount = orphanPageCount,
+            PagesMissingDescription = pageMetrics.Count(static page => page.MissingDescription),
+            PagesWithShortDescription = pageMetrics.Count(static page => page.ShortDescription),
+            PagesWithLongDescription = pageMetrics.Count(static page => page.LongDescription),
+            PagesMissingH1 = pageMetrics.Count(static page => page.MissingH1),
+            PagesWithMultipleH1 = pageMetrics.Count(static page => page.MultipleH1),
+            PagesWithMissingAlt = pageMetrics.Count(static page => page.MissingAltCount > 0),
+            PagesWithEmptyAlt = pageMetrics.Count(static page => page.EmptyAltCount > 0),
+            TotalMissingAlt = pageMetrics.Sum(static page => page.MissingAltCount),
+            TotalEmptyAlt = pageMetrics.Sum(static page => page.EmptyAltCount),
+            SourceMarkdownFilesWithEmptyAlt = sourceMarkdownMetrics.Count,
+            TotalSourceMarkdownEmptyAlt = sourceMarkdownMetrics.Sum(static row => row.EmptyMarkdownAltCount),
             IssueCount = issues.Count,
             ErrorCount = errors.Count,
             WarningCount = warnings.Count,
@@ -421,9 +487,87 @@ public static class WebSeoDoctor
             NewWarningCount = issues.Count(issue =>
                 issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase)),
             Issues = issues.ToArray(),
+            PageMetrics = pageMetrics.ToArray(),
+            SourceMarkdownMetrics = sourceMarkdownMetrics.ToArray(),
             Errors = errors.ToArray(),
             Warnings = warnings.ToArray()
         };
+    }
+
+    private static IEnumerable<WebSeoDoctorSourceMarkdownMetric> ScanSourceMarkdownEmptyAlt(
+        string? contentRoot,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (string.IsNullOrWhiteSpace(contentRoot))
+            yield break;
+
+        var root = Path.GetFullPath(contentRoot);
+        if (!Directory.Exists(root))
+            yield break;
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            string content;
+            try
+            {
+                content = File.ReadAllText(file);
+            }
+            catch
+            {
+                continue;
+            }
+
+            var matches = Regex.Matches(
+                content,
+                @"!\[\]\((?<target>[^)\r\n]+)\)",
+                RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(250));
+            if (matches.Count == 0)
+                continue;
+
+            var relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
+            var samples = matches
+                .Select(match => match.Groups["target"].Value.Trim())
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(3)
+                .ToArray();
+            var lineNumbers = matches
+                .Select(match => CountLinesBefore(content, match.Index) + 1)
+                .Distinct()
+                .Take(5)
+                .ToArray();
+            var metric = new WebSeoDoctorSourceMarkdownMetric
+            {
+                Path = relativePath,
+                EmptyMarkdownAltCount = matches.Count,
+                SampleTargets = string.Join("; ", samples),
+                SampleLineNumbers = string.Join("; ", lineNumbers)
+            };
+
+            addIssue(
+                "review",
+                "source-image-alt",
+                "/source/" + relativePath,
+                $"Markdown source contains {matches.Count} empty image alt tag(s) on lines {metric.SampleLineNumbers}.",
+                "source-image-alt-empty",
+                relativePath);
+            yield return metric;
+        }
+    }
+
+    private static int CountLinesBefore(string content, int index)
+    {
+        var count = 0;
+        var length = Math.Min(Math.Max(index, 0), content.Length);
+        for (var i = 0; i < length; i++)
+        {
+            if (content[i] == '\n')
+                count++;
+        }
+
+        return count;
     }
 
     private sealed class PageScan
@@ -655,6 +799,7 @@ public static class WebSeoDoctor
     private static void ValidateLocalizedAlternateTargets(
         IReadOnlyList<PageScan> sourcePages,
         IReadOnlyList<PageScan> lookupPages,
+        IReadOnlyDictionary<string, string> languageRootHosts,
         Action<string, string, string?, string, string?, string?> addIssue)
     {
         var routeIndex = lookupPages
@@ -663,7 +808,7 @@ public static class WebSeoDoctor
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var canonicalIndex = lookupPages
             .Where(page => !string.IsNullOrWhiteSpace(page.CanonicalHref))
-            .Where(IsCanonicalConsistentWithPageRoute)
+            .Where(page => IsCanonicalConsistentWithPageRoute(page, languageRootHosts))
             .Select(page => (Page: page, Key: TryGetComparableUrlKey(page.CanonicalHref)))
             .Where(static pair => !string.IsNullOrWhiteSpace(pair.Key))
             .GroupBy(pair => pair.Key!, StringComparer.OrdinalIgnoreCase)
@@ -671,7 +816,7 @@ public static class WebSeoDoctor
 
         foreach (var page in sourcePages.Where(page => page.HreflangAlternates.Count > 0))
         {
-            if (TryResolveReferencedPage(routeIndex, canonicalIndex, page.CanonicalHref, out var canonicalPage, out var canonicalRoute) &&
+            if (TryResolveReferencedPage(routeIndex, canonicalIndex, page.CanonicalHref, languageRootHosts, out var canonicalPage, out var canonicalRoute) &&
                 canonicalPage is null)
             {
                 addIssue("warning", "canonical", page.RelativePath,
@@ -682,7 +827,7 @@ public static class WebSeoDoctor
 
             var hasSelfAlternate = page.HreflangAlternates
                 .Where(alternate => !alternate.HrefLang.Equals("x-default", StringComparison.OrdinalIgnoreCase))
-                .Any(alternate => HrefMatchesPage(page, alternate.Href, routeIndex, canonicalIndex));
+                .Any(alternate => HrefMatchesPage(page, alternate.Href, routeIndex, canonicalIndex, languageRootHosts));
             if (!hasSelfAlternate)
             {
                 addIssue("warning", "hreflang", page.RelativePath,
@@ -693,7 +838,7 @@ public static class WebSeoDoctor
 
             foreach (var alternate in page.HreflangAlternates)
             {
-                if (!TryResolveReferencedPage(routeIndex, canonicalIndex, alternate.Href, out var targetPage, out var alternateRoute))
+                if (!TryResolveReferencedPage(routeIndex, canonicalIndex, alternate.Href, languageRootHosts, out var targetPage, out var alternateRoute))
                     continue;
 
                 if (targetPage is null)
@@ -707,7 +852,7 @@ public static class WebSeoDoctor
 
                 if (!alternate.HrefLang.Equals("x-default", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(targetPage.CanonicalHref) &&
-                    !UrlsReferenceSamePage(alternate.Href, targetPage.CanonicalHref, routeIndex))
+                    !UrlsReferenceSamePage(alternate.Href, targetPage.CanonicalHref, routeIndex, languageRootHosts))
                 {
                     addIssue("warning", "hreflang", page.RelativePath,
                         $"hreflang '{alternate.HrefLang}' points to '{alternate.Href}' but the target page canonical is '{targetPage.CanonicalHref}'.",
@@ -722,7 +867,7 @@ public static class WebSeoDoctor
                 }
 
                 var hasReturnLink = targetPage.HreflangAlternates.Any(targetAlternate =>
-                    HrefMatchesPage(page, targetAlternate.Href, routeIndex, canonicalIndex));
+                    HrefMatchesPage(page, targetAlternate.Href, routeIndex, canonicalIndex, languageRootHosts));
                 if (!hasReturnLink)
                 {
                     addIssue("warning", "hreflang", page.RelativePath,
@@ -759,12 +904,15 @@ public static class WebSeoDoctor
         var hasHighConfidenceFrontMatterTokens = frontMatterKeys.Any(static key =>
             key.Equals("translation_key", StringComparison.OrdinalIgnoreCase) ||
             key.Equals("meta.raw_html", StringComparison.OrdinalIgnoreCase));
+        var hasFrontMatterDelimiter = FrontMatterDelimiterPattern.IsMatch(bodyText);
         var looksLikeFrontMatterDump =
             hasHighConfidenceFrontMatterTokens ||
-            frontMatterKeys.Length >= 3 ||
+            (hasFrontMatterDelimiter && frontMatterKeys.Length >= 3) ||
             bodyText.IndexOf("translation_key:", StringComparison.OrdinalIgnoreCase) >= 0 ||
             bodyText.IndexOf("meta.raw_html", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            (bodyText.IndexOf("layout:", StringComparison.OrdinalIgnoreCase) >= 0 && hasFrontMatterTokens);
+            (hasFrontMatterDelimiter &&
+             bodyText.IndexOf("layout:", StringComparison.OrdinalIgnoreCase) >= 0 &&
+             hasFrontMatterTokens);
 
         var looksLikeMarkdownLeak = looksLikeEscapedHtmlBlock && VisibleMarkdownLeakPattern.IsMatch(bodyText);
         if (!looksLikeFrontMatterDump && !looksLikeMarkdownLeak)
@@ -1469,10 +1617,11 @@ public static class WebSeoDoctor
     private static bool TryResolveReferencedRoute(
         IReadOnlyDictionary<string, PageScan> routeIndex,
         string href,
+        IReadOnlyDictionary<string, string> languageRootHosts,
         out string route)
     {
         route = string.Empty;
-        if (!TryGetUrlRouteCandidate(href, out var candidate))
+        if (!TryGetUrlRouteCandidate(href, languageRootHosts, out var candidate))
             return false;
 
         foreach (var possibleRoute in EnumerateRouteCandidates(candidate))
@@ -1492,6 +1641,7 @@ public static class WebSeoDoctor
         IReadOnlyDictionary<string, PageScan> routeIndex,
         IReadOnlyDictionary<string, PageScan> canonicalIndex,
         string href,
+        IReadOnlyDictionary<string, string> languageRootHosts,
         out PageScan? page,
         out string route)
     {
@@ -1507,14 +1657,17 @@ public static class WebSeoDoctor
             return true;
         }
 
-        if (!TryResolveReferencedRoute(routeIndex, href, out route))
+        if (!TryResolveReferencedRoute(routeIndex, href, languageRootHosts, out route))
             return false;
 
         routeIndex.TryGetValue(route, out page);
         return true;
     }
 
-    private static bool TryGetUrlRouteCandidate(string href, out string route)
+    private static bool TryGetUrlRouteCandidate(
+        string href,
+        IReadOnlyDictionary<string, string> languageRootHosts,
+        out string route)
     {
         route = string.Empty;
         if (string.IsNullOrWhiteSpace(href))
@@ -1526,6 +1679,8 @@ public static class WebSeoDoctor
              absoluteUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
         {
             path = absoluteUri.AbsolutePath;
+            if (TryMapLanguageRootHostPath(absoluteUri, languageRootHosts, out var remappedPath))
+                path = remappedPath;
         }
         else if (href.StartsWith("/", StringComparison.Ordinal))
         {
@@ -1582,9 +1737,10 @@ public static class WebSeoDoctor
         PageScan page,
         string href,
         IReadOnlyDictionary<string, PageScan> routeIndex,
-        IReadOnlyDictionary<string, PageScan> canonicalIndex)
+        IReadOnlyDictionary<string, PageScan> canonicalIndex,
+        IReadOnlyDictionary<string, string> languageRootHosts)
     {
-        if (TryResolveReferencedPage(routeIndex, canonicalIndex, href, out var referencedPage, out var route) &&
+        if (TryResolveReferencedPage(routeIndex, canonicalIndex, href, languageRootHosts, out var referencedPage, out var route) &&
             ((referencedPage is not null && referencedPage.Route.Equals(page.Route, StringComparison.OrdinalIgnoreCase)) ||
              route.Equals(page.Route, StringComparison.OrdinalIgnoreCase)))
         {
@@ -1592,13 +1748,13 @@ public static class WebSeoDoctor
         }
 
         if (string.IsNullOrWhiteSpace(page.CanonicalHref) ||
-            !TryResolveReferencedRoute(routeIndex, page.CanonicalHref, out var canonicalRoute) ||
+            !TryResolveReferencedRoute(routeIndex, page.CanonicalHref, languageRootHosts, out var canonicalRoute) ||
             !canonicalRoute.Equals(page.Route, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        return UrlsReferenceSamePage(href, page.CanonicalHref, routeIndex);
+        return UrlsReferenceSamePage(href, page.CanonicalHref, routeIndex, languageRootHosts);
     }
 
     private static string? TryGetComparableUrlKey(string value)
@@ -1606,12 +1762,12 @@ public static class WebSeoDoctor
         return TryNormalizeAbsoluteComparableUrl(value, out var comparable) ? comparable : null;
     }
 
-    private static bool IsCanonicalConsistentWithPageRoute(PageScan page)
+    private static bool IsCanonicalConsistentWithPageRoute(PageScan page, IReadOnlyDictionary<string, string> languageRootHosts)
     {
         if (string.IsNullOrWhiteSpace(page.CanonicalHref) || string.IsNullOrWhiteSpace(page.Route))
             return false;
 
-        if (!TryGetUrlRouteCandidate(page.CanonicalHref, out var canonicalRoute))
+        if (!TryGetUrlRouteCandidate(page.CanonicalHref, languageRootHosts, out var canonicalRoute))
             return false;
 
         return EnumerateRouteCandidates(canonicalRoute)
@@ -1621,7 +1777,8 @@ public static class WebSeoDoctor
     private static bool UrlsReferenceSamePage(
         string left,
         string right,
-        IReadOnlyDictionary<string, PageScan> routeIndex)
+        IReadOnlyDictionary<string, PageScan> routeIndex,
+        IReadOnlyDictionary<string, string> languageRootHosts)
     {
         if (TryNormalizeAbsoluteComparableUrl(left, out var leftComparable) &&
             TryNormalizeAbsoluteComparableUrl(right, out var rightComparable))
@@ -1629,9 +1786,96 @@ public static class WebSeoDoctor
             return leftComparable.Equals(rightComparable, StringComparison.OrdinalIgnoreCase);
         }
 
-        return TryResolveReferencedRoute(routeIndex, left, out var leftRoute) &&
-               TryResolveReferencedRoute(routeIndex, right, out var rightRoute) &&
+        return TryResolveReferencedRoute(routeIndex, left, languageRootHosts, out var leftRoute) &&
+               TryResolveReferencedRoute(routeIndex, right, languageRootHosts, out var rightRoute) &&
                leftRoute.Equals(rightRoute, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, string> NormalizeLanguageRootHosts(IReadOnlyDictionary<string, string>? languageRootHosts)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (languageRootHosts is null || languageRootHosts.Count == 0)
+            return normalized;
+
+        foreach (var pair in languageRootHosts)
+        {
+            var hostKey = NormalizeLanguageRootHostKey(pair.Key);
+            var prefix = NormalizeLanguageRootPrefix(pair.Value);
+            if (string.IsNullOrWhiteSpace(hostKey) || string.IsNullOrWhiteSpace(prefix))
+                continue;
+            normalized[hostKey] = prefix;
+        }
+
+        return normalized;
+    }
+
+    private static bool TryMapLanguageRootHostPath(
+        Uri absoluteUri,
+        IReadOnlyDictionary<string, string> languageRootHosts,
+        out string mappedPath)
+    {
+        mappedPath = string.Empty;
+        if (languageRootHosts.Count == 0)
+            return false;
+
+        var hostKey = NormalizeLanguageRootHostKey(absoluteUri);
+        if (!languageRootHosts.TryGetValue(hostKey, out var prefix))
+        {
+            var hostOnly = absoluteUri.IdnHost.ToLowerInvariant();
+            if (!languageRootHosts.TryGetValue(hostOnly, out prefix))
+                return false;
+        }
+
+        prefix = NormalizeLanguageRootPrefix(prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        var normalizedPath = absoluteUri.AbsolutePath.Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(normalizedPath))
+            normalizedPath = "/";
+
+        var prefixPath = "/" + prefix;
+        if (normalizedPath.Equals("/", StringComparison.Ordinal))
+        {
+            mappedPath = prefixPath;
+            return true;
+        }
+
+        if (normalizedPath.Equals(prefixPath, StringComparison.OrdinalIgnoreCase) ||
+            normalizedPath.StartsWith(prefixPath + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            mappedPath = normalizedPath;
+            return true;
+        }
+
+        mappedPath = prefixPath + (normalizedPath.StartsWith("/", StringComparison.Ordinal) ? normalizedPath : "/" + normalizedPath);
+        return true;
+    }
+
+    private static string NormalizeLanguageRootHostKey(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return string.Empty;
+
+        var trimmed = host.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return NormalizeLanguageRootHostKey(uri);
+
+        return trimmed.TrimEnd('/').ToLowerInvariant();
+    }
+
+    private static string NormalizeLanguageRootHostKey(Uri uri)
+    {
+        var host = uri.IdnHost.ToLowerInvariant();
+        return uri.IsDefaultPort ? host : host + ":" + uri.Port;
+    }
+
+    private static string NormalizeLanguageRootPrefix(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            return string.Empty;
+
+        return prefix.Trim().Trim('/').Replace('\\', '/');
     }
 
     private static bool TryNormalizeAbsoluteComparableUrl(string value, out string comparable)

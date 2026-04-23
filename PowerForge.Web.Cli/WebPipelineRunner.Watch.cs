@@ -443,8 +443,12 @@ internal static partial class WebPipelineRunner
                 continue;
 
             var message = current.Message?.Trim();
-            if (string.IsNullOrWhiteSpace(message))
+            var hasMessage = !string.IsNullOrWhiteSpace(message);
+            if (!hasMessage && segments.Count > 0)
+                continue;
+            if (!hasMessage)
                 message = current.GetType().Name;
+            message ??= current.GetType().Name;
 
             if (current is FileNotFoundException fileNotFound &&
                 !string.IsNullOrWhiteSpace(fileNotFound.FileName) &&
@@ -453,7 +457,9 @@ internal static partial class WebPipelineRunner
                 message += $" [file: {fileNotFound.FileName}]";
             }
 
-            var segment = $"{current.GetType().Name}: {message}";
+            var segment = string.Equals(message, current.GetType().Name, StringComparison.Ordinal)
+                ? current.GetType().Name
+                : $"{current.GetType().Name}: {message}";
             if (segments.Count == 0 || !segments[^1].Equals(segment, StringComparison.Ordinal))
                 segments.Add(segment);
 
@@ -473,7 +479,7 @@ internal static partial class WebPipelineRunner
         if (segments.Count == 0)
             return ex.GetType().Name;
 
-        return string.Join(" <-- ", segments);
+        return string.Join(" -> ", segments);
     }
 
     private static string FormatDuration(TimeSpan elapsed)

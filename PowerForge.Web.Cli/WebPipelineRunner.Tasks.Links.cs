@@ -154,6 +154,45 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"links-import-wordpress ok: imported={result.ImportedCount}; written={result.WrittenCount}; skippedDuplicates={result.SkippedDuplicateCount}";
     }
 
+    private static void ExecuteLinksGenerateLegacyAmp(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var sourcePath = ResolvePath(baseDir,
+            GetString(step, "source") ??
+            GetString(step, "sourceCsv") ??
+            GetString(step, "source-csv") ??
+            GetString(step, "sourceCsvPath") ??
+            GetString(step, "source-csv-path"));
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            throw new InvalidOperationException("links-generate-legacy-amp requires sourceCsvPath.");
+
+        var outputPath = ResolvePath(baseDir,
+            GetString(step, "out") ??
+            GetString(step, "output") ??
+            GetString(step, "outputPath") ??
+            GetString(step, "output-path") ??
+            GetString(step, "outputCsv") ??
+            GetString(step, "output-csv") ??
+            GetString(step, "outputCsvPath") ??
+            GetString(step, "output-csv-path"));
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new InvalidOperationException("links-generate-legacy-amp requires outputCsvPath or out.");
+
+        var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+        {
+            SourceCsvPath = sourcePath,
+            OutputCsvPath = outputPath,
+            DefaultScheme = GetString(step, "defaultScheme") ?? GetString(step, "default-scheme") ?? "https",
+            DefaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host") ?? "evotec.xyz",
+            DefaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host") ?? "evotec.pl"
+        });
+
+        var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        WriteLinksLegacyAmpSummary(summaryPath, result);
+
+        stepResult.Success = true;
+        stepResult.Message = $"links-generate-legacy-amp ok: generated={result.GeneratedCount}; sourceRows={result.SourceRowCount}; output={result.OutputCsvPath}";
+    }
+
     private static void ExecuteLinksReport404(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var loaded = LoadLinksSpec(step, baseDir);
@@ -577,6 +616,18 @@ internal static partial class WebPipelineRunner
             Directory.CreateDirectory(summaryDirectory);
 
         File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLink404IgnoreResult));
+    }
+
+    private static void WriteLinksLegacyAmpSummary(string? summaryPath, WebLegacyAmpRedirectResult result)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+            return;
+
+        var summaryDirectory = Path.GetDirectoryName(summaryPath);
+        if (!string.IsNullOrWhiteSpace(summaryDirectory))
+            Directory.CreateDirectory(summaryDirectory);
+
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLegacyAmpRedirectResult));
     }
 
     private static string[] GetStringOrArrayOfStrings(JsonElement step, params string[] names)

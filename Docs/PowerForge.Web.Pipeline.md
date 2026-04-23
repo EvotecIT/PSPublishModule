@@ -861,6 +861,9 @@ Runs editorial + technical SEO heuristics over generated HTML.
   "checkDescriptionLength": true,
   "checkH1": true,
   "checkImageAlt": true,
+  "checkEmptyImageAlt": false,
+  "checkSourceMarkdownImageAlt": false,
+  "contentRoot": "./content",
   "checkDuplicateTitles": true,
   "checkOrphanPages": true,
   "checkFocusKeyphrase": false,
@@ -868,7 +871,11 @@ Runs editorial + technical SEO heuristics over generated HTML.
   "baseline": "./.powerforge/seo-baseline.json",
   "baselineGenerate": true,
   "reportPath": "./_reports/seo-doctor.json",
-  "summaryPath": "./_reports/seo-doctor.md"
+  "summaryPath": "./_reports/seo-doctor.md",
+  "backlogSummaryPath": "./_reports/seo-backlog-summary.json",
+  "pageMetricsPath": "./_reports/seo-page-metrics.csv",
+  "issuesCsvPath": "./_reports/seo-issues.csv",
+  "sourceMarkdownPath": "./_reports/seo-source-empty-alt.csv"
 }
 ```
 Notes:
@@ -876,6 +883,8 @@ Notes:
   - title/meta-description length heuristics
   - missing/multiple visible `h1`
   - images missing `alt` attribute
+  - optional explicit empty `alt=""` review issues
+  - optional source Markdown `![](...)` empty-alt backlog scan
   - duplicate title intent across pages
   - orphan page candidates (zero inbound links from scanned pages)
   - optional focus-keyphrase checks via page meta tags
@@ -893,6 +902,7 @@ Notes:
   - `failOnNewIssues` (alias `failOnNew`)
   - `failOnWarnings`, `maxErrors`, `maxWarnings`
 - `reportPath` writes full JSON; `summaryPath` writes markdown summary.
+- Backlog artifact paths are optional: `backlogSummaryPath`, `pageMetricsPath`, `issuesCsvPath`, and `sourceMarkdownPath` emit site-maintenance reports without a site-local PowerShell scanner.
 - `scopeFromBuildUpdated` supports incremental runs in `--fast` mode when a preceding build step updated HTML files.
 
 #### dotnet-build
@@ -1240,6 +1250,25 @@ Notes:
 - Recommended workflow:
   - In CI: use `lockMode: verify` with a committed lock file.
   - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
+
+#### links-generate-legacy-amp
+Generates legacy WordPress AMP continuity redirects as a CSV consumed by link validation/export and Apache redirect generation.
+
+```json
+{
+  "task": "links-generate-legacy-amp",
+  "sourceCsvPath": "./data/redirects/legacy-wordpress-generated.csv",
+  "outputCsvPath": "./data/redirects/legacy-amp-generated.csv",
+  "defaultEnglishHost": "evotec.xyz",
+  "defaultPolishHost": "evotec.pl",
+  "summaryPath": "./Build/generate-legacy-amp-redirects-last-run.json"
+}
+```
+
+Notes:
+- This preserves WordPress-era `/<slug>/amp/` URLs after static migration.
+- Query-style legacy URLs and rows already ending in `/amp/` are skipped.
+- Polish relative targets can be host-rooted for split-domain deployments such as `evotec.pl`.
 
 #### project-docs-sync
 Synchronizes project documentation, curated public examples, and optionally API artifacts from source repositories listed in your project catalog.
