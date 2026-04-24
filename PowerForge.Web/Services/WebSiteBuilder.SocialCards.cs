@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -88,19 +89,26 @@ public static partial class WebSiteBuilder
             routeSlug = "page";
 
         var badge = ResolveSocialBadge(item, routeForSlug);
-        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
+        var themeKey = ResolveSocialCardThemeKey(spec, item);
+        var cardTheme = ResolveSocialCardTheme(spec.Social, themeKey);
+        var hashThemeKey = cardTheme is null ? string.Empty : themeKey;
+        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug, cardTheme);
         var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
-        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
-        var colorScheme = ResolveSocialCardColorScheme(spec, item) ?? string.Empty;
-        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item);
-        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item));
+        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
+        var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
+        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
+        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme));
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
             : string.Empty;
-        var themeTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
+        var metrics = ResolveSocialCardMetrics(spec, item, cardTheme);
+        var themeTokens = MergeSocialCardThemeTokens(BuildRenderCacheScope.Value?.Manifest?.Tokens, cardTheme?.Tokens);
         var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
+        var metricsFingerprint = ComputeSocialCardMetricsFingerprint(metrics);
         var hashInput = string.Join("|", new[]
         {
+            WebSocialCardGenerator.RendererVersion,
+            hashThemeKey,
             routeForSlug,
             title ?? string.Empty,
             description ?? string.Empty,
@@ -111,6 +119,7 @@ public static partial class WebSiteBuilder
             colorScheme,
             allowRemoteMediaFetch ? "remote-media-enabled" : "remote-media-disabled",
             themeTokenFingerprint,
+            metricsFingerprint,
             logoSource,
             inlineImageSource
         });
@@ -135,7 +144,8 @@ public static partial class WebSiteBuilder
             ThemeTokens = themeTokens,
             AllowRemoteMediaFetch = allowRemoteMediaFetch,
             LogoDataUri = logoSource,
-            InlineImageDataUri = inlineImageSource
+            InlineImageDataUri = inlineImageSource,
+            Metrics = metrics
         });
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
@@ -198,6 +208,24 @@ public static partial class WebSiteBuilder
         if (item.Kind == PageKind.Home)
             return "HOME";
 
+        var normalizedRoute = NormalizePath(route).Trim('/');
+        if (normalizedRoute.Contains("examples", StringComparison.OrdinalIgnoreCase))
+            return "EXAMPLE";
+        if (normalizedRoute.Contains("api", StringComparison.OrdinalIgnoreCase))
+            return "API";
+        if (normalizedRoute.Contains("docs", StringComparison.OrdinalIgnoreCase))
+            return "DOCS";
+        if (normalizedRoute.Contains("download", StringComparison.OrdinalIgnoreCase))
+            return "DOWNLOAD";
+        if (normalizedRoute.Contains("changelog", StringComparison.OrdinalIgnoreCase) ||
+            normalizedRoute.Contains("release", StringComparison.OrdinalIgnoreCase))
+            return "RELEASE";
+        if (normalizedRoute.Contains("rss", StringComparison.OrdinalIgnoreCase) ||
+            normalizedRoute.Contains("feed", StringComparison.OrdinalIgnoreCase))
+            return "FEED";
+        if (normalizedRoute.Contains("benchmark", StringComparison.OrdinalIgnoreCase))
+            return "BENCH";
+
         if (!string.IsNullOrWhiteSpace(item.Collection))
         {
             var collection = item.Collection.Trim();
@@ -210,7 +238,6 @@ public static partial class WebSiteBuilder
             return collection.ToUpperInvariant();
         }
 
-        var normalizedRoute = NormalizePath(route).Trim('/');
         if (normalizedRoute.StartsWith("docs", StringComparison.OrdinalIgnoreCase))
             return "DOCS";
         if (normalizedRoute.StartsWith("contact", StringComparison.OrdinalIgnoreCase) ||
@@ -227,7 +254,8 @@ public static partial class WebSiteBuilder
         SiteSpec spec,
         ContentItem item,
         string badge,
-        string route)
+        string route,
+        SocialCardThemeSpec? cardTheme)
     {
         var styleOverride = FirstNonEmpty(
             GetMetaString(item.Meta, "social_card_style"),
@@ -240,6 +268,9 @@ public static partial class WebSiteBuilder
             TryResolveCollectionCardPreset(spec.Social?.GeneratedCardStylesByCollection, collection!, out var collectionStyle))
             return collectionStyle;
 
+        if (!string.IsNullOrWhiteSpace(cardTheme?.Style))
+            return cardTheme.Style!.Trim();
+
         if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardStyle))
             return spec.Social.GeneratedCardStyle!.Trim();
 
@@ -250,7 +281,8 @@ public static partial class WebSiteBuilder
         SiteSpec spec,
         ContentItem item,
         string styleKey,
-        string route)
+        string route,
+        SocialCardThemeSpec? cardTheme)
     {
         var variantOverride = FirstNonEmpty(
             GetMetaString(item.Meta, "social_card_variant"),
@@ -263,13 +295,16 @@ public static partial class WebSiteBuilder
             TryResolveCollectionCardPreset(spec.Social?.GeneratedCardVariantsByCollection, collection!, out var collectionVariant))
             return collectionVariant;
 
+        if (!string.IsNullOrWhiteSpace(cardTheme?.Variant))
+            return cardTheme.Variant!.Trim();
+
         if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardVariant))
             return spec.Social.GeneratedCardVariant!.Trim();
 
         return InferSocialCardVariant(item, styleKey, route);
     }
 
-    private static string? ResolveSocialCardColorScheme(SiteSpec spec, ContentItem item)
+    private static string? ResolveSocialCardColorScheme(SiteSpec spec, ContentItem item, SocialCardThemeSpec? cardTheme)
     {
         var colorSchemeOverride = FirstNonEmpty(
             GetMetaString(item.Meta, "social_card_color_scheme"),
@@ -282,13 +317,16 @@ public static partial class WebSiteBuilder
             TryResolveCollectionCardPreset(spec.Social?.GeneratedCardColorSchemesByCollection, collection!, out var collectionScheme))
             return collectionScheme;
 
+        if (!string.IsNullOrWhiteSpace(cardTheme?.ColorScheme))
+            return cardTheme.ColorScheme!.Trim();
+
         if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardColorScheme))
             return spec.Social.GeneratedCardColorScheme!.Trim();
 
         return null;
     }
 
-    private static bool ResolveSocialCardAllowRemoteMediaFetch(SiteSpec spec, ContentItem item)
+    private static bool ResolveSocialCardAllowRemoteMediaFetch(SiteSpec spec, ContentItem item, SocialCardThemeSpec? cardTheme)
     {
         if (TryGetMetaBool(item.Meta, "social_card_allow_remote_media_fetch", out var explicitValue))
             return explicitValue;
@@ -302,7 +340,247 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(item.Meta, "social.allow_remote_media", out explicitValue))
             return explicitValue;
 
+        if (cardTheme?.AllowRemoteMediaFetch is not null)
+            return cardTheme.AllowRemoteMediaFetch.Value;
+
         return spec.Social?.GeneratedCardAllowRemoteMediaFetch ?? false;
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> ResolveSocialCardMetrics(
+        SiteSpec spec,
+        ContentItem item,
+        SocialCardThemeSpec? cardTheme)
+    {
+        if (TryGetMetaValue(item.Meta, "social_card_metrics", out var metaMetrics) ||
+            TryGetMetaValue(item.Meta, "social.metrics", out metaMetrics))
+        {
+            return NormalizeSocialCardMetrics(ParseSocialCardMetrics(metaMetrics));
+        }
+
+        if (cardTheme?.Metrics is { Count: > 0 })
+            return NormalizeSocialCardMetrics(cardTheme.Metrics);
+
+        if (spec.Social?.GeneratedCardMetrics is { Count: > 0 })
+            return NormalizeSocialCardMetrics(spec.Social.GeneratedCardMetrics);
+
+        return InferSocialCardMetrics(item);
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> InferSocialCardMetrics(ContentItem item)
+    {
+        var metrics = new List<SocialCardMetricSpec>();
+
+        AddMetricFromMeta(metrics, item.Meta, "project_github_stars", "star", "Stars");
+        AddMetricFromMeta(metrics, item.Meta, "project_github_forks", "fork", "Forks");
+        AddMetricFromMeta(metrics, item.Meta, "project_github_open_issues", "issue", "Issues");
+        AddMetricFromMeta(metrics, item.Meta, "project_downloads_total", "download", "Downloads");
+        AddMetricFromMeta(metrics, item.Meta, "project_psgallery_downloads", "download", "Downloads");
+        AddMetricFromMeta(metrics, item.Meta, "project_release_latest_tag", "tag", "Release", abbreviateNumber: false);
+        AddMetricFromMeta(metrics, item.Meta, "project_github_language", "code", "Language", abbreviateNumber: false);
+
+        if (TryGetMetaBool(item.Meta, "project_surface_docs", out var docs) && docs)
+            metrics.Add(new SocialCardMetricSpec { Icon = "book", Value = "yes", Label = "Docs" });
+        if (TryGetMetaBool(item.Meta, "project_surface_examples", out var examples) && examples)
+            metrics.Add(new SocialCardMetricSpec { Icon = "code", Value = "yes", Label = "Examples" });
+
+        return NormalizeSocialCardMetrics(metrics);
+    }
+
+    private static void AddMetricFromMeta(
+        List<SocialCardMetricSpec> metrics,
+        Dictionary<string, object?>? meta,
+        string key,
+        string icon,
+        string label,
+        bool abbreviateNumber = true)
+    {
+        if (metrics.Count >= 5 || meta is null || !TryGetMetaValue(meta, key, out var raw) || raw is null)
+            return;
+
+        var value = FormatSocialCardMetricValue(raw, abbreviateNumber);
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value, "0", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (metrics.Any(metric => string.Equals(metric.Label, label, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        metrics.Add(new SocialCardMetricSpec
+        {
+            Icon = icon,
+            Value = value,
+            Label = label
+        });
+    }
+
+    private static string FormatSocialCardMetricValue(object raw, bool abbreviateNumber)
+    {
+        if (!abbreviateNumber)
+            return TrimSocialCardMetricText(Convert.ToString(raw), 16);
+
+        if (raw is int i)
+            return AbbreviateSocialCardNumber(i);
+        if (raw is long l)
+            return AbbreviateSocialCardNumber(l);
+        if (raw is double d)
+            return AbbreviateSocialCardNumber((long)Math.Round(d));
+        if (raw is decimal m)
+            return AbbreviateSocialCardNumber((long)Math.Round(m));
+
+        var text = Convert.ToString(raw);
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+        if (long.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+            return AbbreviateSocialCardNumber(number);
+
+        return TrimSocialCardMetricText(text, 16);
+    }
+
+    private static string AbbreviateSocialCardNumber(long value)
+    {
+        var absolute = Math.Abs(value);
+        if (absolute >= 1_000_000)
+            return (value / 1_000_000d).ToString("0.#", CultureInfo.InvariantCulture) + "M";
+        if (absolute >= 1_000)
+            return (value / 1_000d).ToString("0.#", CultureInfo.InvariantCulture) + "k";
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> ParseSocialCardMetrics(object? value)
+    {
+        if (value is null)
+            return Array.Empty<SocialCardMetricSpec>();
+
+        if (value is IEnumerable<SocialCardMetricSpec> typedMetrics)
+            return typedMetrics.ToList();
+
+        if (value is System.Text.Json.JsonElement element)
+            return ParseSocialCardMetrics(ConvertJsonElement(element));
+
+        if (value is string text)
+            return ParseSocialCardMetricsString(text);
+
+        if (value is IDictionary dictionary)
+        {
+            var metric = ParseSocialCardMetricMap(dictionary);
+            return metric is null ? Array.Empty<SocialCardMetricSpec>() : [metric];
+        }
+
+        if (value is IEnumerable enumerable)
+        {
+            var metrics = new List<SocialCardMetricSpec>();
+            foreach (var item in enumerable)
+            {
+                metrics.AddRange(ParseSocialCardMetrics(item));
+                if (metrics.Count >= 5)
+                    break;
+            }
+
+            return metrics;
+        }
+
+        return Array.Empty<SocialCardMetricSpec>();
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> ParseSocialCardMetricsString(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<SocialCardMetricSpec>();
+
+        var metrics = new List<SocialCardMetricSpec>();
+        foreach (var segment in value.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = segment.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length >= 2)
+            {
+                metrics.Add(new SocialCardMetricSpec { Value = parts[0], Label = parts[1], Icon = parts.Length > 2 ? parts[2] : null });
+                continue;
+            }
+
+            var equalsIndex = segment.IndexOf('=', StringComparison.Ordinal);
+            if (equalsIndex > 0)
+                metrics.Add(new SocialCardMetricSpec { Label = segment[..equalsIndex], Value = segment[(equalsIndex + 1)..] });
+        }
+
+        return metrics;
+    }
+
+    private static SocialCardMetricSpec? ParseSocialCardMetricMap(IDictionary dictionary)
+    {
+        static string? Read(IDictionary map, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                foreach (DictionaryEntry entry in map)
+                {
+                    if (entry.Key is not null &&
+                        string.Equals(Convert.ToString(entry.Key), key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Convert.ToString(entry.Value);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        var metric = new SocialCardMetricSpec
+        {
+            Icon = Read(dictionary, "icon", "glyph"),
+            Value = Read(dictionary, "value", "number", "count"),
+            Label = Read(dictionary, "label", "name", "title"),
+            Color = Read(dictionary, "color", "accent")
+        };
+
+        return string.IsNullOrWhiteSpace(metric.Value) && string.IsNullOrWhiteSpace(metric.Label)
+            ? null
+            : metric;
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> NormalizeSocialCardMetrics(IEnumerable<SocialCardMetricSpec>? metrics)
+    {
+        if (metrics is null)
+            return Array.Empty<SocialCardMetricSpec>();
+
+        return metrics
+            .Select(static metric => new SocialCardMetricSpec
+            {
+                Icon = TrimSocialCardMetricText(metric.Icon, 24),
+                Value = TrimSocialCardMetricText(metric.Value, 16),
+                Label = TrimSocialCardMetricText(metric.Label, 24),
+                Color = TrimSocialCardMetricText(metric.Color, 32)
+            })
+            .Where(static metric => !string.IsNullOrWhiteSpace(metric.Value) || !string.IsNullOrWhiteSpace(metric.Label))
+            .Take(5)
+            .ToList();
+    }
+
+    private static string ComputeSocialCardMetricsFingerprint(IReadOnlyList<SocialCardMetricSpec> metrics)
+    {
+        if (metrics.Count == 0)
+            return string.Empty;
+
+        var canonical = metrics.Select(static metric => new
+        {
+            metric.Icon,
+            metric.Value,
+            metric.Label,
+            metric.Color
+        });
+        return ComputeSocialHash(System.Text.Json.JsonSerializer.Serialize(canonical));
+    }
+
+    private static string TrimSocialCardMetricText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return maxLength <= 3
+            ? normalized[..maxLength]
+            : normalized[..(maxLength - 3)] + "...";
     }
 
     private static bool TryResolveCollectionCardPreset(
@@ -342,6 +620,26 @@ public static partial class WebSiteBuilder
             return "api";
         if (combined.Contains("doc", StringComparison.Ordinal))
             return "docs";
+        if (combined.Contains("example", StringComparison.Ordinal) ||
+            combined.Contains("sample", StringComparison.Ordinal))
+            return "examples";
+        if (combined.Contains("download", StringComparison.Ordinal) ||
+            combined.Contains("package", StringComparison.Ordinal) ||
+            combined.Contains("gallery", StringComparison.Ordinal))
+            return "downloads";
+        if (combined.Contains("release", StringComparison.Ordinal) ||
+            combined.Contains("changelog", StringComparison.Ordinal))
+            return "release";
+        if (combined.Contains("rss", StringComparison.Ordinal) ||
+            combined.Contains("atom", StringComparison.Ordinal) ||
+            combined.Contains("feed", StringComparison.Ordinal))
+            return "feed";
+        if (combined.Contains("benchmark", StringComparison.Ordinal) ||
+            combined.Contains("performance", StringComparison.Ordinal))
+            return "benchmark";
+        if (combined.Contains("qr", StringComparison.Ordinal) ||
+            combined.Contains("barcode", StringComparison.Ordinal))
+            return "code";
         if (combined.Contains("contact", StringComparison.Ordinal) ||
             combined.Contains("support", StringComparison.Ordinal))
             return "contact";
@@ -370,6 +668,12 @@ public static partial class WebSiteBuilder
             "api" => "reference",
             "blog" => "editorial",
             "contact" => "connect",
+            "examples" => "code",
+            "downloads" => "metrics",
+            "release" => "timeline",
+            "feed" => "feed",
+            "benchmark" => "metrics",
+            "code" => "code",
             _ => "product"
         };
     }
@@ -379,57 +683,6 @@ public static partial class WebSiteBuilder
         var bytes = System.Text.Encoding.UTF8.GetBytes(input ?? string.Empty);
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant()[..10];
-    }
-
-    internal static string ComputeThemeTokenFingerprint(IReadOnlyDictionary<string, object?>? themeTokens)
-    {
-        if (themeTokens is null || themeTokens.Count == 0)
-            return string.Empty;
-
-        var canonical = NormalizeThemeTokenValue(themeTokens);
-        var serialized = System.Text.Json.JsonSerializer.Serialize(canonical);
-        return ComputeSocialHash(serialized);
-    }
-
-    private static object? NormalizeThemeTokenValue(object? value)
-    {
-        if (value is null)
-            return null;
-
-        if (value is System.Text.Json.JsonElement element)
-            return NormalizeThemeTokenValue(ConvertJsonElement(element));
-
-        if (value is IReadOnlyDictionary<string, object?> map)
-        {
-            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
-            foreach (var pair in map.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
-                normalized[pair.Key] = NormalizeThemeTokenValue(pair.Value);
-            return normalized;
-        }
-
-        if (value is IDictionary dictionary)
-        {
-            var normalized = new SortedDictionary<string, object?>(StringComparer.Ordinal);
-            foreach (DictionaryEntry entry in dictionary)
-            {
-                if (entry.Key is null)
-                    continue;
-
-                normalized[Convert.ToString(entry.Key) ?? string.Empty] = NormalizeThemeTokenValue(entry.Value);
-            }
-
-            return normalized;
-        }
-
-        if (value is IEnumerable enumerable && value is not string)
-        {
-            var list = new List<object?>();
-            foreach (var item in enumerable)
-                list.Add(NormalizeThemeTokenValue(item));
-            return list;
-        }
-
-        return value;
     }
 
     private static bool WriteAllBytesIfChanged(string path, byte[] content)
@@ -580,11 +833,12 @@ public static partial class WebSiteBuilder
         return string.Empty;
     }
 
-    private static string ResolveSocialCardLogoCandidate(SiteSpec spec, ContentItem item)
+    private static string ResolveSocialCardLogoCandidate(SiteSpec spec, ContentItem item, SocialCardThemeSpec? cardTheme)
     {
         return FirstNonEmpty(
                    GetMetaString(item.Meta, "social_card_logo"),
                    GetMetaString(item.Meta, "social.logo"),
+                   cardTheme?.Logo,
                    spec.Social?.GeneratedCardLogo,
                    spec.StructuredData?.OrganizationLogo) ??
                string.Empty;

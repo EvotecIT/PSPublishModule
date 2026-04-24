@@ -912,7 +912,41 @@ themes/nova/assets/app.css
     "GeneratedCardHeight": 630,
     "GeneratedCardStyle": "default",
     "GeneratedCardVariant": "product",
+    "GeneratedCardTheme": "product-modern",
     "GeneratedCardLogo": "/assets/brand/logo.png",
+    "GeneratedCardThemes": {
+      "product-modern": {
+        "Style": "default",
+        "Variant": "product",
+        "ColorScheme": "light",
+        "Logo": "/assets/brand/logo.png",
+        "Tokens": {
+          "socialCard": {
+            "accent": "#2563eb",
+            "backgroundStart": "#ffffff",
+            "backgroundEnd": "#f8fafc",
+            "surface": "#eef2ff",
+            "textPrimary": "#0f172a",
+            "textSecondary": "#475569",
+            "badgeRadius": "16px"
+          }
+        },
+        "Metrics": [
+          { "Icon": "star", "Value": "8k", "Label": "Stars" },
+          { "Icon": "issue", "Value": "55", "Label": "Issues" },
+          { "Icon": "fork", "Value": "948", "Label": "Forks" }
+        ]
+      },
+      "editorial-modern": {
+        "Style": "blog",
+        "Variant": "editorial",
+        "ColorScheme": "light"
+      }
+    },
+    "GeneratedCardThemesByCollection": {
+      "blog": "editorial-modern",
+      "news": "editorial-modern"
+    },
     "GeneratedCardStylesByCollection": {
       "docs": "docs",
       "blog": "editorial",
@@ -957,11 +991,13 @@ Per-page override:
 You can also control generated card presentation:
 - `meta.social_card_badge`: top-right category badge text
 - `meta.social_card_route`: bottom route label text
-- `meta.social_card_style`: style key (`home`, `default`, `docs`, `api`, `blog`, `contact`)
-- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`)
+- `meta.social_card_theme`: named generated card theme from `Social.GeneratedCardThemes`
+- `meta.social_card_style`: style key (`home`, `default`, `docs`, `api`, `blog`, `contact`, `examples`, `downloads`, `release`, `feed`, `benchmark`, `code`)
+- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`, `metrics`, `timeline`, `feed`, `code`)
 - `meta.social_card_logo`: optional logo path/URL used inside generated cards
 - `meta.social_card_image`: optional inline media path/URL for generated cards
 - `meta.social_card_image_inline`: force/skip inline media rendering for generated cards
+- `meta.social_card_metrics`: optional list/string of metric chips rendered on generated cards
 
 Generated card colors are theme-aware when theme tokens are present:
 - generic theme tokens under `Tokens.color.*` are used as the default palette source
@@ -969,6 +1005,14 @@ Generated card colors are theme-aware when theme tokens are present:
 - optional dedicated overrides under `Tokens.socialCard.*` take precedence when present
   - supported keys: `backgroundStart`, `backgroundMid`, `backgroundEnd`, `surface`, `surfaceStroke`, `accent`, `accentSoft`, `accentStrong`, `textPrimary`, `textSecondary`, `chipBackground`, `chipBorder`, `chipText`
 - when no usable theme tokens are available, PowerForge.Web falls back to built-in card palettes
+
+Named generated card themes make the same visual system portable across multiple sites without
+copying front matter to every page. `Social.GeneratedCardThemes` entries can set `Style`, `Variant`,
+`ColorScheme`, `Logo`, `AllowRemoteMediaFetch`, and `Tokens`; `Tokens` are deep-merged over the active
+theme manifest tokens before rendering. Use `Social.GeneratedCardTheme` as the site default,
+`Social.GeneratedCardThemesByCollection` for collection defaults, or `meta.social_card_theme` for a
+single page. Direct page overrides and collection-specific style/variant/color maps still win over
+named theme defaults.
 
 Generated card typography/layout can also follow theme tokens:
 - generic font tokens under `Tokens.font.*`
@@ -981,20 +1025,65 @@ Generated card typography/layout can also follow theme tokens:
   - `sm` is used as the fallback for badge/footer/top-band radius
 - optional dedicated layout overrides under `Tokens.socialCard.*`
   - supported size keys: `frameInset`, `panelInset`, `contentPadding`, `safeMarginX`, `safeMarginY`, `topBandHeight`
+  - supported vertical rhythm keys: `badgeToEyebrowGap`, `eyebrowToTitleGap`, `titleToDescriptionGap`, `descriptionToFooterGap`
   - supported radius keys: `frameRadius`, `panelRadius`, `footerRadius`, `badgeRadius`, `topBandRadius`
   - supported badge/footer keys: `badgeAlign` (`left`/`right`), `badgePaddingX`, `badgeHeight`, `badgeFontSize`, `badgeMinWidth`, `badgeMaxWidth`, `footerPaddingX`, `footerHeight`, `footerFontSize`, `footerMinWidth`, `footerMaxWidth`
   - supported text size keys: `eyebrowFontSize`, `titleFontSize`, `descriptionFontSize`
+  - supported metric keys: `metricRowHeight`, `descriptionToMetricsGap`, `metricValueFontSize`, `metricLabelFontSize`, `metricIconSize`
+  - optional optical alignment: title text uses measured glyph ink alignment by default; set `titleOpticalOffset` explicitly to override, set `titleInkAlignInset` to tune the target visible inset, or set `titleOpticalOffsetMode: "none"` to force raw SVG text-origin alignment; set `monogramOpticalOffset` to tune fallback logo/monogram centering
+
+Generated card data widgets:
+- Metric chips can be defined at site level (`Social.GeneratedCardMetrics`), named-theme level (`Social.GeneratedCardThemes.<name>.Metrics`), or page level (`meta.social_card_metrics` / `meta.social.metrics`).
+- Page-level metrics replace theme/site metrics for that page. Named-theme metrics replace site defaults when the theme is selected.
+- When no metrics are configured, project pages can infer metrics from hub metadata such as `meta.project_github_stars`, `meta.project_github_forks`, `meta.project_github_open_issues`, `meta.project_downloads_total`, `meta.project_psgallery_downloads`, `meta.project_release_latest_tag`, `meta.project_github_language`, `meta.project_surface_docs`, and `meta.project_surface_examples`.
+- Each metric supports `Icon`, `Value`, `Label`, and optional `Color`. Values should be short (`8k`, `55`, `1.2M`) so cards stay legible in link previews.
+- Preferred built-in metric icons are semantic names: `star`, `issue`, `fork`, `users`, `download`, `discussion`, `pull-request`, `commit`, `tag`, `shield`, `clock`, `book`, `code`, `globe`, `activity`, `scale`, `lock`, `rocket`, `alert`, `x`, `check`, and `package`. Common aliases such as `stars`, `issues`, `pull-requests`, `release`, `security`, `docs`, `license`, and `deploy` are normalized. Older placeholder glyphs such as `*`, `!`, and `Y` are mapped to proper icons, but new configs should use semantic names.
+- Front matter can use an object list:
+  ```yaml
+  social_card_metrics:
+    - icon: "star"
+      value: "8k"
+      label: "Stars"
+    - icon: "issue"
+      value: "55"
+      label: "Issues"
+  ```
+- Short string form is also supported for simple pages: `social_card_metrics: "8k|Stars|star;55|Issues|issue;948|Forks|fork"`.
+- Treat metric cards as data-driven layouts, similar to Railway-style OG layouts: data enters as structured config, while rendering stays in the PowerForge.Web engine. Avoid generating custom images from PowerShell scripts unless a site needs an external data prefetch step.
+
+Recommended generated-card presets for owned sites:
+- Project overview pages: `style: default`, `variant: product` or `variant: metrics`; use inferred GitHub/Gallery/release metrics where available.
+- Project examples and CodeGlyphX/HtmlForgeX sample pages: `style: examples`, `variant: code`; metrics can show examples, snippets, downloads, or supported formats.
+- API/reference pages: `style: api`, `variant: reference`.
+- Docs pages: `style: docs`, `variant: shelf`.
+- Blog/news/RSS/feed pages: `style: blog` for editorial pages, `style: feed` / `variant: feed` for feed landing pages.
+- Changelog/release pages: `style: release`, `variant: timeline`.
+- Benchmark/status/Syncse-style system pages: `style: benchmark`, `variant: metrics`.
+- QR/barcode/code-generation pages: `style: code`, `variant: code`, with `code`, `download`, `globe`, or `check` metrics as appropriate.
+
+Generated card design guidelines:
+- Keep the content column visually disciplined: badge, eyebrow, title, and description should read as one left-aligned block. The renderer aligns title ink optically so bold display glyphs such as `E`, `A`, or `T` do not appear shifted.
+- Keep vertical rhythm balanced: the badge-to-eyebrow and eyebrow-to-title gaps should feel related, while title-to-description should leave enough air for wrapped titles. Use the vertical rhythm tokens rather than changing renderer coordinates.
+- Treat the badge as metadata, not the main brand. It should be compact, centered in its pill, and secondary to the title block.
+- Use the eyebrow for brand/product/collection context. Keep it short enough to scan at social-card sizes.
+- Prefer a real logo from site/page/theme config. If no logo is available, the fallback monogram is optically centered inside its frame and can be tuned with `monogramOpticalOffset`.
+- Keep brand panels decorative and low contrast. They should support recognition without competing with the title.
+- Keep cards theme-consistent across owned sites by defining named card themes once per site, then assigning them through `GeneratedCardTheme`, `GeneratedCardThemesByCollection`, or `meta.social_card_theme`.
+- Prefer token changes over page front matter when a visual decision applies to a whole site or collection. Page-level overrides are for exceptions.
+- Validate new card styles with at least one short homepage-style title, one long wrapped editorial title, and one docs/API/reference card before shipping a theme.
+- For data-heavy cards, prefer one clear metric row over dense dashboards. If a layout needs charts, language bars, or repository-style callouts, add a reusable renderer layout/variant rather than embedding one-off SVG snippets in front matter.
 
 Generated cards can also include a site/page logo and editorial inline media:
-- logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
+- logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> named generated card theme `Logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
 - inline media source precedence: `meta.social_card_image` / `meta.social.card_image` / `meta.social_card_media` -> existing social image metadata -> first body image for editorial collections
 - editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
 
 Preset precedence for generated social cards:
 1. per-page `meta.social_card_*` overrides
 2. `Social.GeneratedCard*ByCollection` for the page collection
-3. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
-4. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
+3. selected named generated card theme defaults
+4. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
+5. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
 
 If `meta.social_image` is not set, editorial posts (for example `blog`/`news`/`changelog`) also try to use:
 - explicit image aliases such as `image`, `cover_image`, `thumbnail`, `og_image`, or `twitter_image`

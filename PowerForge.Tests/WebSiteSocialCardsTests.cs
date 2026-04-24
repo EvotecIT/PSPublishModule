@@ -261,6 +261,62 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_AppliesNamedGeneratedCardTheme_ForCollectionCards()
+    {
+        var firstRoot = CreateTempRoot("pf-web-social-theme-a-");
+        var secondRoot = CreateTempRoot("pf-web-social-theme-b-");
+        try
+        {
+            var firstImage = BuildNamedThemeCardAndGetImage(firstRoot, "#0ea5e9");
+            var secondImage = BuildNamedThemeCardAndGetImage(secondRoot, "#f97316");
+
+            Assert.Contains("/assets/social/generated/", firstImage, StringComparison.Ordinal);
+            Assert.Contains("/assets/social/generated/", secondImage, StringComparison.Ordinal);
+            Assert.NotEqual(firstImage, secondImage);
+        }
+        finally
+        {
+            Cleanup(firstRoot);
+            Cleanup(secondRoot);
+        }
+    }
+
+    [Fact]
+    public void MergeSocialCardThemeTokens_DeepMergesThemeOverrides()
+    {
+        var baseTokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["bg"] = "#111827",
+                ["accent"] = "#38bdf8"
+            },
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["titleFontSize"] = "56px",
+                ["badgeRadius"] = "12px"
+            }
+        };
+        var themeTokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["accent"] = "#f97316",
+                ["badgeRadius"] = "18px"
+            }
+        };
+
+        var merged = WebSiteBuilder.MergeSocialCardThemeTokens(baseTokens, themeTokens);
+
+        Assert.NotNull(merged);
+        var socialCard = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(merged!["socialCard"]);
+        Assert.Equal("56px", socialCard["titleFontSize"]);
+        Assert.Equal("18px", socialCard["badgeRadius"]);
+        Assert.Equal("#f97316", socialCard["accent"]);
+        Assert.True(merged.ContainsKey("color"));
+    }
+
+    [Fact]
     public void ResolveSocialCardAssetDataUri_PreservesRemoteUrls()
     {
         var spec = BuildPagesSpec();
@@ -836,6 +892,70 @@ public class WebSiteSocialCardsTests
         var outPath = Path.Combine(root, "_site");
         WebSiteBuilder.Build(spec, plan, outPath);
         return File.ReadAllText(Path.Combine(outPath, relativeOutputFile));
+    }
+
+    private static string BuildNamedThemeCardAndGetImage(string root, string accent)
+    {
+        WritePage(root, "release-roundup.md",
+            """
+            ---
+            title: Release Roundup
+            description: Modern named theme social card.
+            slug: release-roundup
+            date: 2026-04-19
+            ---
+
+            Release notes.
+            """);
+
+        var spec = BuildPagesSpec();
+        spec.Social = new SocialSpec
+        {
+            Enabled = true,
+            SiteName = "Example Site",
+            AutoGenerateCards = true,
+            GeneratedCardsPath = "/assets/social/generated",
+            GeneratedCardThemesByCollection = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pages"] = "modern-editorial"
+            },
+            GeneratedCardThemes = new Dictionary<string, SocialCardThemeSpec>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["modern-editorial"] = new()
+                {
+                    Style = "blog",
+                    Variant = "editorial",
+                    ColorScheme = "light",
+                    Tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["accent"] = accent,
+                            ["backgroundStart"] = "#ffffff",
+                            ["backgroundEnd"] = "#f8fafc",
+                            ["surface"] = "#eef2ff",
+                            ["textPrimary"] = "#0f172a",
+                            ["textSecondary"] = "#475569"
+                        }
+                    }
+                }
+            }
+        };
+
+        var html = BuildAndRead(root, spec, Path.Combine("release-roundup", "index.html"));
+        return ExtractOgImage(html);
+    }
+
+    private static string ExtractOgImage(string html)
+    {
+        const string marker = "property=\"og:image\" content=\"";
+        var start = html.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, "Expected og:image meta tag.");
+
+        var valueStart = start + marker.Length;
+        var valueEnd = html.IndexOf('"', valueStart);
+        Assert.True(valueEnd > valueStart, "Expected og:image content value.");
+        return html[valueStart..valueEnd];
     }
 
     private static void WritePage(string root, string fileName, string markdown)

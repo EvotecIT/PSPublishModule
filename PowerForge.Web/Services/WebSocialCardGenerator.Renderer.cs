@@ -10,12 +10,15 @@ namespace PowerForge.Web;
 
 internal static partial class WebSocialCardGenerator
 {
+    internal const string RendererVersion = "social-card-renderer-v8";
+
     private static readonly HttpClient SocialImageHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
     private static readonly ConcurrentDictionary<string, Lazy<byte[]>> RemoteImageByteCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, int> TitleGlyphInsetCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, int> CenteredTextOffsetCache = new(StringComparer.Ordinal);
 
     internal static byte[]? RenderPng(SocialCardRenderOptions options)
     {
@@ -58,7 +61,7 @@ internal static partial class WebSocialCardGenerator
     {
         var svg = new StringBuilder();
         svg.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" xmlns:xlink=""http://www.w3.org/1999/xlink"" width=""{state.Width}"" height=""{state.Height}"" viewBox=""0 0 {state.Width} {state.Height}"">");
-        svg.AppendLine($@"  <!-- layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
+        svg.AppendLine($@"  <!-- renderer:{RendererVersion} layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
         svg.AppendLine(@"  <defs>");
         AppendDefs(svg, state);
         if (string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
@@ -141,6 +144,7 @@ internal static partial class WebSocialCardGenerator
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
+            Metrics = NormalizeSocialCardMetrics(options.Metrics),
             AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = options.EmbedReferencedMediaInSvg,
             CtaLabel = ResolveCtaLabel(styleKey, normalizedBadge),
@@ -164,6 +168,13 @@ internal static partial class WebSocialCardGenerator
             return "reference";
         if (string.Equals(variantKey, "connect", StringComparison.OrdinalIgnoreCase))
             return "connect";
+        if (string.Equals(variantKey, "metrics", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(variantKey, "timeline", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(variantKey, "feed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(variantKey, "code", StringComparison.OrdinalIgnoreCase))
+        {
+            return "product";
+        }
         if (string.Equals(variantKey, "inline-image", StringComparison.OrdinalIgnoreCase))
             return hasInlineImage ? "inline-image" : "editorial";
 
@@ -173,6 +184,12 @@ internal static partial class WebSocialCardGenerator
             "docs" => "shelf",
             "api" => "reference",
             "contact" => "connect",
+            "examples" => "product",
+            "downloads" => "product",
+            "release" => "product",
+            "feed" => "product",
+            "benchmark" => "product",
+            "code" => "product",
             "blog" when hasInlineImage => "inline-image",
             "blog" => "editorial",
             _ => "product"
@@ -224,6 +241,7 @@ internal static partial class WebSocialCardGenerator
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
+            Metrics = options.Metrics,
             ColorScheme = options.ColorScheme,
             AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = embedReferencedMediaInSvg,
@@ -274,9 +292,9 @@ internal static partial class WebSocialCardGenerator
         var textWidth = EstimateTextWidth(badgeText, fontSize, glyphFactor: 0.6);
         var width = textWidth + (paddingX * 2);
         var radius = Math.Max(GetScaledPixels(state.Width, state.Height, 6, 4), height / 6);
-        var textY = y + (height / 2);
+        var textY = GetCenteredTextBaseline(y, height, fontSize);
         svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""{height}"" rx=""{radius}"" fill=""{state.Palette.Accent}""/>");
-        svg.AppendLine($@"  <text x=""{x + (width / 2)}"" y=""{textY}"" dy=""0.06em"" fill=""{state.Palette.BackgroundStart}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BadgeFontFamily)}"" font-weight=""800"" letter-spacing=""0.6"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(badgeText)}</text>");
+        svg.AppendLine($@"  <text x=""{x + (width / 2)}"" y=""{textY}"" fill=""{state.Palette.BackgroundStart}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BadgeFontFamily)}"" font-weight=""800"" letter-spacing=""0.6"" text-anchor=""middle"">{EscapeXml(badgeText)}</text>");
     }
 
     private static void AppendEyebrowText(StringBuilder svg, SocialCardRenderState state, int x, int y)
@@ -313,6 +331,13 @@ internal static partial class WebSocialCardGenerator
         if (TryParsePixelishInt(configured, out var value))
             return value;
 
+        var offsetMode = ReadThemeToken(state.ThemeTokens, "socialCard", "titleOpticalOffsetMode");
+        if (string.Equals(offsetMode, "none", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(offsetMode, "off", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
         var firstGlyph = GetLeadingTitleGlyph(titleLine);
         if (firstGlyph is null)
             return 0;
@@ -322,9 +347,11 @@ internal static partial class WebSocialCardGenerator
             CultureInfo.InvariantCulture,
             $"{fontFamily}|{fontSize}|{firstGlyph.Value}");
 
-        return TitleGlyphInsetCache.GetOrAdd(
+        var measuredOffset = TitleGlyphInsetCache.GetOrAdd(
             cacheKey,
             _ => MeasureRenderedTitleGlyphInset(fontFamily, fontSize, firstGlyph.Value));
+        var targetInkInset = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 1, 0, "socialCard", "titleInkAlignInset");
+        return measuredOffset + targetInkInset;
     }
 
     private static char? GetLeadingTitleGlyph(string? titleLine)
@@ -353,7 +380,7 @@ internal static partial class WebSocialCardGenerator
 
             using var image = new MagickImage(MagickColors.Transparent, (uint)canvasWidth, (uint)canvasHeight);
             new Drawables()
-                .Font(fontFamily)
+                .Font(fontFamily, FontStyleType.Normal, FontWeight.ExtraBold, FontStretch.Normal)
                 .FontPointSize(fontSize)
                 .FillColor(MagickColors.White)
                 .Text(startX, baselineY, glyph.ToString(CultureInfo.InvariantCulture))
@@ -379,9 +406,9 @@ internal static partial class WebSocialCardGenerator
             if (minX >= width)
                 return EstimateTitleGlyphInset(fontSize, glyph);
 
-            return Math.Max(0, startX - minX);
+            return Math.Clamp(startX - minX, -fontSize / 2, fontSize / 2);
         }
-        catch
+        catch (Exception)
         {
             return EstimateTitleGlyphInset(fontSize, glyph);
         }
@@ -389,13 +416,78 @@ internal static partial class WebSocialCardGenerator
 
     private static int EstimateTitleGlyphInset(int fontSize, char glyph)
     {
-        return glyph switch
+        _ = fontSize;
+        _ = glyph;
+        return 0;
+    }
+
+    private static int ResolveCenteredTextInkOffset(string fontFamily, int fontSize, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || fontSize <= 0)
+            return 0;
+
+        var normalizedFontFamily = NormalizeFontFamilyForRaster(fontFamily, fontFamily);
+        var cacheKey = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{normalizedFontFamily}|{fontSize}|{text}");
+
+        return CenteredTextOffsetCache.GetOrAdd(
+            cacheKey,
+            _ => MeasureCenteredTextInkOffset(normalizedFontFamily, fontSize, text));
+    }
+
+    private static int MeasureCenteredTextInkOffset(string fontFamily, int fontSize, string text)
+    {
+        try
         {
-            'B' or 'D' or 'E' or 'F' or 'H' or 'K' or 'L' or 'P' or 'R' => Math.Max(8, fontSize / 10),
-            'A' or 'C' or 'G' or 'J' or 'N' or 'O' or 'Q' or 'S' or 'U' or 'V' or 'X' or 'Y' or 'Z' => Math.Max(6, fontSize / 12),
-            'I' or 'M' or 'T' or 'W' => Math.Max(4, fontSize / 16),
-            _ => Math.Max(4, fontSize / 18)
-        };
+            const int startX = 96;
+            const int alphaThreshold = 12;
+            var canvasWidth = Math.Max(320, fontSize * Math.Max(4, text.Length + 2));
+            var canvasHeight = Math.Max(256, fontSize * 3);
+            var baselineY = Math.Min(canvasHeight - 32, Math.Max(fontSize * 2, 128));
+            var drawables = new Drawables()
+                .Font(fontFamily, FontStyleType.Normal, FontWeight.ExtraBold, FontStretch.Normal)
+                .FontPointSize(fontSize);
+            var metrics = drawables.FontTypeMetrics(text);
+            if (metrics is null)
+                return 0;
+
+            using var image = new MagickImage(MagickColors.Transparent, (uint)canvasWidth, (uint)canvasHeight);
+            drawables
+                .FillColor(MagickColors.White)
+                .Text(startX, baselineY, text)
+                .Draw(image);
+
+            var pixels = image.GetPixels().ToByteArray(PixelMapping.RGBA);
+            if (pixels is null || pixels.Length == 0)
+                return 0;
+
+            var minX = canvasWidth;
+            var maxX = -1;
+            for (var y = 0; y < canvasHeight; y++)
+            {
+                for (var x = 0; x < canvasWidth; x++)
+                {
+                    var index = ((y * canvasWidth) + x) * 4;
+                    if (pixels[index + 3] <= alphaThreshold)
+                        continue;
+
+                    minX = Math.Min(minX, x);
+                    maxX = Math.Max(maxX, x);
+                }
+            }
+
+            if (maxX < minX)
+                return 0;
+
+            var inkCenter = (((double)minX + maxX) / 2d) - startX;
+            var advanceCenter = metrics.TextWidth / 2d;
+            return (int)Math.Round(Math.Clamp(advanceCenter - inkCenter, -fontSize / 3d, fontSize / 3d));
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private static void AppendLogo(StringBuilder svg, SocialCardRenderState state, int x, int y, int size)
@@ -416,12 +508,273 @@ internal static partial class WebSocialCardGenerator
         }
 
         var monogram = BuildMonogram(state.Eyebrow, state.Badge);
-        svg.AppendLine($@"  <text x=""{x + (size / 2)}"" y=""{y + (size / 2)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{Math.Max(18, size * 2 / 5)}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" dominant-baseline=""central"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
+        var monogramFontSize = Math.Max(18, size * 2 / 5);
+        var monogramX = x + (size / 2) + ResolveMonogramOpticalOffset(state, monogramFontSize, monogram);
+        svg.AppendLine($@"  <text x=""{monogramX}"" y=""{GetCenteredTextBaseline(y, size, monogramFontSize)}"" fill=""{state.Palette.TextPrimary}"" font-size=""{monogramFontSize}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-weight=""800"" text-anchor=""middle"">{EscapeXml(monogram)}</text>");
+    }
+
+    private static int ResolveMonogramOpticalOffset(SocialCardRenderState state, int fontSize, string monogram)
+    {
+        var configured = ReadThemeToken(state.ThemeTokens, "socialCard", "monogramOpticalOffset");
+        if (TryParsePixelishInt(configured, out var value))
+            return value;
+
+        return ResolveCenteredTextInkOffset(state.Typography.TitleFontFamily, fontSize, monogram) -
+               GetScaledPixels(state.Width, state.Height, 2, 1);
     }
 
     private static void AppendSeparator(StringBuilder svg, SocialCardRenderState state, int x, int y, int width)
     {
         svg.AppendLine($@"  <rect x=""{x}"" y=""{y}"" width=""{width}"" height=""1"" fill=""{state.Palette.SurfaceStroke}"" fill-opacity=""0.3""/>");
+    }
+
+    private static bool HasMetrics(SocialCardRenderState state) => state.Metrics.Count > 0;
+
+    private static int GetMetricRowHeight(SocialCardRenderState state)
+    {
+        return HasMetrics(state)
+            ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 54, 36, "socialCard", "metricRowHeight")
+            : 0;
+    }
+
+    private static void AppendMetricRow(StringBuilder svg, SocialCardRenderState state, int x, int y, int width, int rowHeight)
+    {
+        if (!HasMetrics(state) || width <= 0 || rowHeight <= 0)
+            return;
+
+        var metrics = state.Metrics.Take(5).ToArray();
+        var columnWidth = Math.Max(GetScaledPixels(state.Width, state.Height, 84, 62), width / metrics.Length);
+        var valueFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 15, "socialCard", "metricValueFontSize");
+        var labelFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 13, 10, "socialCard", "metricLabelFontSize");
+        var iconSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 18, 12, "socialCard", "metricIconSize");
+        var labelY = y + rowHeight - Math.Max(4, labelFontSize / 3);
+        var valueY = y + Math.Max(valueFontSize, rowHeight / 2);
+        var gap = GetScaledPixels(state.Width, state.Height, 9, 5);
+
+        for (var i = 0; i < metrics.Length; i++)
+        {
+            var metric = metrics[i];
+            var columnX = x + (i * columnWidth);
+            var color = IsSafeCssColor(metric.Color) ? metric.Color!.Trim() : state.Palette.TextPrimary;
+            var valueX = columnX + iconSize + gap;
+            var iconY = valueY - iconSize + 1;
+            AppendMetricIcon(svg, ResolveMetricIconKey(metric), columnX, iconY, iconSize, color);
+
+            svg.AppendLine($@"  <text x=""{valueX}"" y=""{valueY}"" fill=""{color}"" font-size=""{valueFontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""800"">{EscapeXml(metric.Value ?? string.Empty)}</text>");
+            if (!string.IsNullOrWhiteSpace(metric.Label))
+                svg.AppendLine($@"  <text x=""{columnX}"" y=""{labelY}"" fill=""{state.Palette.TextSecondary}"" fill-opacity=""0.72"" font-size=""{labelFontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""600"">{EscapeXml(metric.Label)}</text>");
+        }
+    }
+
+    private static string ResolveMetricIconKey(SocialCardMetricSpec metric)
+    {
+        var raw = string.IsNullOrWhiteSpace(metric.Icon) ? metric.Label : metric.Icon;
+        var key = NormalizeMetricIconKey(raw);
+        if (!string.IsNullOrWhiteSpace(key))
+            return key;
+
+        return NormalizeMetricIconKey(metric.Label) switch
+        {
+            "stars" => "star",
+            "issues" => "issue",
+            "forks" => "fork",
+            "downloads" => "download",
+            "contributors" => "users",
+            "discussions" => "discussion",
+            "pull requests" => "pull-request",
+            "pull-requests" => "pull-request",
+            "prs" => "pull-request",
+            "releases" => "tag",
+            "versions" => "tag",
+            "commits" => "commit",
+            "security" => "shield",
+            "coverage" => "shield",
+            "build" => "activity",
+            "status" => "activity",
+            "docs" => "book",
+            "documentation" => "book",
+            "license" => "scale",
+            "uptime" => "clock",
+            _ => "dot"
+        };
+    }
+
+    private static string NormalizeMetricIconKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = value.Trim().ToLowerInvariant().Replace("_", "-", StringComparison.Ordinal);
+        return normalized switch
+        {
+            "*" or "star" or "stars" => "star",
+            "!" or "issue" or "issues" or "bug" or "bugs" => "issue",
+            "y" or "fork" or "forks" or "branch" or "branches" => "fork",
+            "user" or "users" or "contributor" or "contributors" => "users",
+            "download" or "downloads" => "download",
+            "discussion" or "discussions" or "comment" or "comments" => "discussion",
+            "pull-request" or "pull-requests" or "pr" or "prs" or "merge" => "pull-request",
+            "commit" or "commits" => "commit",
+            "tag" or "tags" or "release" or "releases" or "version" or "versions" => "tag",
+            "shield" or "security" or "coverage" or "verified" => "shield",
+            "clock" or "time" or "uptime" or "duration" => "clock",
+            "book" or "docs" or "documentation" or "guide" or "guides" => "book",
+            "code" or "language" or "languages" => "code",
+            "globe" or "website" or "site" or "web" => "globe",
+            "activity" or "build" or "status" or "pipeline" or "ci" => "activity",
+            "scale" or "license" => "scale",
+            "lock" or "private" or "secure" => "lock",
+            "rocket" or "deploy" or "deployment" => "rocket",
+            "alert" or "warning" or "failed" => "alert",
+            "x" or "error" or "fail" => "x",
+            "check" or "success" or "passed" => "check",
+            "package" or "packages" or "module" or "modules" => "package",
+            _ => string.Empty
+        };
+    }
+
+    private static void AppendMetricIcon(StringBuilder svg, string iconKey, int x, int y, int size, string color)
+    {
+        var scale = size / 24d;
+        svg.AppendLine($@"  <g transform=""translate({x} {y}) scale({scale.ToString("0.###", CultureInfo.InvariantCulture)})"" fill=""none"" stroke=""{color}"" stroke-opacity=""0.78"" stroke-width=""2.2"" stroke-linecap=""round"" stroke-linejoin=""round"">");
+        switch (iconKey)
+        {
+            case "star":
+                svg.AppendLine(@"    <path d=""M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3 1.1-6.5-4.7-4.6 6.5-.9L12 2.6z""/>");
+                break;
+            case "issue":
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""8""/>");
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""1.6"" fill=""currentColor"" stroke=""none""/>".Replace("currentColor", color, StringComparison.Ordinal));
+                break;
+            case "fork":
+                svg.AppendLine(@"    <circle cx=""6"" cy=""5"" r=""2.2""/>");
+                svg.AppendLine(@"    <circle cx=""18"" cy=""5"" r=""2.2""/>");
+                svg.AppendLine(@"    <circle cx=""12"" cy=""19"" r=""2.2""/>");
+                svg.AppendLine(@"    <path d=""M6 7.2v3.2c0 2.2 1.8 4 4 4h2""/>");
+                svg.AppendLine(@"    <path d=""M18 7.2v3.2c0 2.2-1.8 4-4 4h-2v2.4""/>");
+                break;
+            case "users":
+                svg.AppendLine(@"    <circle cx=""9"" cy=""8"" r=""3""/>");
+                svg.AppendLine(@"    <path d=""M3.5 20c.8-3.5 3-5.2 5.5-5.2s4.7 1.7 5.5 5.2""/>");
+                svg.AppendLine(@"    <path d=""M15.8 11.2c1.7.2 3.2 1.6 3.2 3.3"" opacity=""0.7""/>");
+                svg.AppendLine(@"    <path d=""M16.5 20c.5-1.9 1.7-3.2 3.5-3.8"" opacity=""0.7""/>");
+                break;
+            case "download":
+                svg.AppendLine(@"    <path d=""M12 3v10""/>");
+                svg.AppendLine(@"    <path d=""M8 9l4 4 4-4""/>");
+                svg.AppendLine(@"    <path d=""M5 19h14""/>");
+                break;
+            case "discussion":
+                svg.AppendLine(@"    <path d=""M5 6h14v9H9l-4 4V6z""/>");
+                break;
+            case "pull-request":
+                svg.AppendLine(@"    <circle cx=""6"" cy=""6"" r=""2.3""/>");
+                svg.AppendLine(@"    <circle cx=""18"" cy=""18"" r=""2.3""/>");
+                svg.AppendLine(@"    <path d=""M6 8.3V18""/>");
+                svg.AppendLine(@"    <path d=""M10 6h4a4 4 0 0 1 4 4v5.7""/>");
+                svg.AppendLine(@"    <path d=""M12 4l-2 2 2 2""/>");
+                break;
+            case "commit":
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""4""/>");
+                svg.AppendLine(@"    <path d=""M3 12h5""/>");
+                svg.AppendLine(@"    <path d=""M16 12h5""/>");
+                break;
+            case "tag":
+                svg.AppendLine(@"    <path d=""M4 5v6.2L13.8 21 21 13.8 11.2 4H5a1 1 0 0 0-1 1z""/>");
+                svg.AppendLine(@"    <circle cx=""8"" cy=""8"" r=""1.4""/>");
+                break;
+            case "shield":
+                svg.AppendLine(@"    <path d=""M12 3l7 3v5.5c0 4.3-2.8 7.7-7 9.5-4.2-1.8-7-5.2-7-9.5V6l7-3z""/>");
+                break;
+            case "clock":
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""8""/>");
+                svg.AppendLine(@"    <path d=""M12 7v5l3.5 2""/>");
+                break;
+            case "book":
+                svg.AppendLine(@"    <path d=""M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3V4z""/>");
+                svg.AppendLine(@"    <path d=""M8 4v15""/>");
+                break;
+            case "code":
+                svg.AppendLine(@"    <path d=""M8 8l-4 4 4 4""/>");
+                svg.AppendLine(@"    <path d=""M16 8l4 4-4 4""/>");
+                svg.AppendLine(@"    <path d=""M14 5l-4 14""/>");
+                break;
+            case "globe":
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""8""/>");
+                svg.AppendLine(@"    <path d=""M4 12h16""/>");
+                svg.AppendLine(@"    <path d=""M12 4c2.2 2.4 3.2 5 3.2 8s-1 5.6-3.2 8c-2.2-2.4-3.2-5-3.2-8s1-5.6 3.2-8z""/>");
+                break;
+            case "activity":
+                svg.AppendLine(@"    <path d=""M3 12h4l2-5 5 11 3-6h4""/>");
+                break;
+            case "scale":
+                svg.AppendLine(@"    <path d=""M12 3v18""/>");
+                svg.AppendLine(@"    <path d=""M5 6h14""/>");
+                svg.AppendLine(@"    <path d=""M6 6l-3 6h6L6 6z""/>");
+                svg.AppendLine(@"    <path d=""M18 6l-3 6h6l-3-6z""/>");
+                break;
+            case "lock":
+                svg.AppendLine(@"    <rect x=""5"" y=""10"" width=""14"" height=""10"" rx=""2""/>");
+                svg.AppendLine(@"    <path d=""M8 10V7a4 4 0 0 1 8 0v3""/>");
+                break;
+            case "rocket":
+                svg.AppendLine(@"    <path d=""M13 4c3.5.5 5.8 2.8 6.3 6.3L13 16.6 7.4 11 13 4z""/>");
+                svg.AppendLine(@"    <path d=""M7.4 11H4l3 3v3.4l3-3""/>");
+                svg.AppendLine(@"    <circle cx=""14.7"" cy=""8.6"" r=""1.3""/>");
+                break;
+            case "alert":
+                svg.AppendLine(@"    <path d=""M12 4l9 16H3L12 4z""/>");
+                svg.AppendLine(@"    <path d=""M12 9v5""/>");
+                svg.AppendLine(@"    <path d=""M12 17h.1""/>");
+                break;
+            case "x":
+                svg.AppendLine(@"    <path d=""M6 6l12 12""/>");
+                svg.AppendLine(@"    <path d=""M18 6L6 18""/>");
+                break;
+            case "check":
+                svg.AppendLine(@"    <path d=""M4.5 12.5l5 5L20 7""/>");
+                break;
+            case "package":
+                svg.AppendLine(@"    <path d=""M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z""/>");
+                svg.AppendLine(@"    <path d=""M4.5 7.8L12 12l7.5-4.2""/>");
+                svg.AppendLine(@"    <path d=""M12 12v8.5""/>");
+                break;
+            default:
+                svg.AppendLine(@"    <circle cx=""12"" cy=""12"" r=""4""/>");
+                break;
+        }
+
+        svg.AppendLine("  </g>");
+    }
+
+    private static bool IsSafeCssColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("#", StringComparison.Ordinal))
+            return trimmed.Length is 4 or 7 or 9 && trimmed.Skip(1).All(Uri.IsHexDigit);
+
+        return trimmed.All(static c => char.IsLetter(c) || c is '-' or ' ');
+    }
+
+    private static IReadOnlyList<SocialCardMetricSpec> NormalizeSocialCardMetrics(IEnumerable<SocialCardMetricSpec>? metrics)
+    {
+        if (metrics is null)
+            return Array.Empty<SocialCardMetricSpec>();
+
+        return metrics
+            .Select(static metric => new SocialCardMetricSpec
+            {
+                Icon = TrimSingleLine(metric.Icon, 24).Trim(),
+                Value = TrimSingleLine(metric.Value, 16).Trim(),
+                Label = TrimSingleLine(metric.Label, 24).Trim(),
+                Color = TrimSingleLine(metric.Color, 32).Trim()
+            })
+            .Where(static metric => !string.IsNullOrWhiteSpace(metric.Value) || !string.IsNullOrWhiteSpace(metric.Label))
+            .Take(5)
+            .ToList();
     }
 
     // ── Layout: Spotlight (Home) ───────────────────────────────────────
@@ -445,14 +798,18 @@ internal static partial class WebSocialCardGenerator
         var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "descriptionFontSize");
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 30, 19);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
-        var gapBadgeToEyebrow = GetScaledPixels(state.Width, state.Height, 28, 18);
-        var gapEyebrowToTitle = GetScaledPixels(state.Width, state.Height, 22, 14);
-        var gapTitleToDescription = GetScaledPixels(state.Width, state.Height, 24, 14);
+        var gapBadgeToEyebrow = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 28, 18, "socialCard", "badgeToEyebrowGap");
+        var gapEyebrowToTitle = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 10, 6, "socialCard", "eyebrowToTitleGap");
+        var gapTitleToDescription = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 14, "socialCard", "titleToDescriptionGap");
+        var metricRowHeight = GetMetricRowHeight(state);
+        var gapDescriptionToMetrics = HasMetrics(state)
+            ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 30, 18, "socialCard", "descriptionToMetricsGap")
+            : 0;
         var footerLabel = TrimSingleLine(state.FooterLabel, 64).Trim();
         var hasFooterLabel = !string.IsNullOrWhiteSpace(footerLabel) && footerLabel != "/";
         var footerFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "footerFontSize");
         var gapDescriptionToFooter = hasFooterLabel
-            ? GetScaledPixels(state.Width, state.Height, 54, 30)
+            ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 54, 30, "socialCard", "descriptionToFooterGap")
             : 0;
 
         var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
@@ -467,11 +824,12 @@ internal static partial class WebSocialCardGenerator
                           gapTitleToDescription +
                           descFontSize +
                           (Math.Max(0, descLines.Count - 1) * descLineHeight) +
+                          (HasMetrics(state) ? gapDescriptionToMetrics + metricRowHeight : 0) +
                           (hasFooterLabel ? gapDescriptionToFooter + footerFontSize : 0);
 
         var availableTop = padY;
         var availableBottom = state.Height - padY;
-        var blockStartY = availableTop + Math.Max(0, (availableBottom - availableTop - blockHeight) / 2) + contentInsetY;
+        var blockStartY = ResolveVerticalBlockStart(availableTop, availableBottom, blockHeight);
 
         if (brandPanel is not null)
             AppendBrandPanel(svg, state, brandPanel);
@@ -492,10 +850,18 @@ internal static partial class WebSocialCardGenerator
         var descY = titleY + (Math.Max(0, titleLines.Count - 1) * titleLineHeight) + gapTitleToDescription + descFontSize;
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
+        var nextY = descY + (Math.Max(0, descLines.Count - 1) * descLineHeight);
+        if (HasMetrics(state))
+        {
+            var metricsY = nextY + gapDescriptionToMetrics;
+            AppendMetricRow(svg, state, x, metricsY, contentWidth, metricRowHeight);
+            nextY = metricsY + metricRowHeight;
+        }
+
         // Footer route
         if (hasFooterLabel)
         {
-            var footerY = descY + (Math.Max(0, descLines.Count - 1) * descLineHeight) + gapDescriptionToFooter + footerFontSize;
+            var footerY = nextY + gapDescriptionToFooter + footerFontSize;
             AppendFooterRoute(svg, state, x, footerY);
         }
 
@@ -742,14 +1108,18 @@ internal static partial class WebSocialCardGenerator
         var descFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 20, 14, "socialCard", "descriptionFontSize");
         var descLineHeight = GetScaledPixels(state.Width, state.Height, 28, 18);
         var badgeHeight = GetScaledPixels(state.Width, state.Height, 32, 22);
-        var gapBadgeToEyebrow = GetScaledPixels(state.Width, state.Height, 28, 18);
-        var gapEyebrowToTitle = GetScaledPixels(state.Width, state.Height, 22, 14);
-        var gapTitleToDescription = GetScaledPixels(state.Width, state.Height, 22, 14);
+        var gapBadgeToEyebrow = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 28, 18, "socialCard", "badgeToEyebrowGap");
+        var gapEyebrowToTitle = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 10, 6, "socialCard", "eyebrowToTitleGap");
+        var gapTitleToDescription = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 22, 14, "socialCard", "titleToDescriptionGap");
+        var metricRowHeight = GetMetricRowHeight(state);
+        var gapDescriptionToMetrics = HasMetrics(state)
+            ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 28, 18, "socialCard", "descriptionToMetricsGap")
+            : 0;
         var footerLabel = TrimSingleLine(state.FooterLabel, 64).Trim();
         var hasFooterLabel = !string.IsNullOrWhiteSpace(footerLabel) && footerLabel != "/";
         var footerFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 16, 11, "socialCard", "footerFontSize");
         var gapDescriptionToFooter = hasFooterLabel
-            ? GetScaledPixels(state.Width, state.Height, 50, 28)
+            ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 50, 28, "socialCard", "descriptionToFooterGap")
             : 0;
 
         var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
@@ -764,11 +1134,12 @@ internal static partial class WebSocialCardGenerator
                           gapTitleToDescription +
                           descFontSize +
                           (Math.Max(0, descLines.Count - 1) * descLineHeight) +
+                          (HasMetrics(state) ? gapDescriptionToMetrics + metricRowHeight : 0) +
                           (hasFooterLabel ? gapDescriptionToFooter + footerFontSize : 0);
 
         var availableTop = padY;
         var availableBottom = state.Height - padY;
-        var blockStartY = availableTop + Math.Max(0, (availableBottom - availableTop - blockHeight) / 2) + contentInsetY;
+        var blockStartY = ResolveVerticalBlockStart(availableTop, availableBottom, blockHeight);
 
         if (brandPanel is not null)
             AppendBrandPanel(svg, state, brandPanel);
@@ -789,10 +1160,18 @@ internal static partial class WebSocialCardGenerator
         var descY = titleY + (Math.Max(0, titleLines.Count - 1) * titleLineHeight) + gapTitleToDescription + descFontSize;
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
+        var nextY = descY + (Math.Max(0, descLines.Count - 1) * descLineHeight);
+        if (HasMetrics(state))
+        {
+            var metricsY = nextY + gapDescriptionToMetrics;
+            AppendMetricRow(svg, state, x, metricsY, contentWidth, metricRowHeight);
+            nextY = metricsY + metricRowHeight;
+        }
+
         // Footer route
         if (hasFooterLabel)
         {
-            var footerY = descY + (Math.Max(0, descLines.Count - 1) * descLineHeight) + gapDescriptionToFooter + footerFontSize;
+            var footerY = nextY + gapDescriptionToFooter + footerFontSize;
             AppendFooterRoute(svg, state, x, footerY);
         }
 
@@ -872,6 +1251,22 @@ internal static partial class WebSocialCardGenerator
             width,
             Math.Max(160, imgHeight),
             GetScaledPixels(state.Width, state.Height, 12, 6));
+    }
+
+    private static int GetCenteredTextBaseline(int y, int height, int fontSize)
+    {
+        return y + (height / 2) + (int)Math.Round(fontSize * 0.35);
+    }
+
+    private static int ResolveVerticalBlockStart(int availableTop, int availableBottom, int blockHeight)
+    {
+        if (availableBottom <= availableTop || blockHeight <= 0)
+            return availableTop;
+
+        var availableHeight = availableBottom - availableTop;
+        var centered = availableTop + Math.Max(0, (availableHeight - blockHeight) / 2);
+        var latestStart = Math.Max(availableTop, availableBottom - blockHeight);
+        return Math.Clamp(centered, availableTop, latestStart);
     }
 
     private static SocialRect? GetBrandPanelRect(SocialCardRenderState state)
@@ -1104,7 +1499,8 @@ internal static partial class WebSocialCardGenerator
             SafeMarginX = 0,
             SafeMarginY = 0,
             AllowRemoteMediaFetch = false,
-            EmbedReferencedMediaInSvg = false
+            EmbedReferencedMediaInSvg = false,
+            Metrics = Array.Empty<SocialCardMetricSpec>()
         };
 
         return ResolveTitleOpticalOffset(state, fontSize, titleLine);
@@ -1241,6 +1637,7 @@ internal static partial class WebSocialCardGenerator
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; set; }
         public string? LogoDataUri { get; set; }
         public string? InlineImageDataUri { get; set; }
+        public IReadOnlyList<SocialCardMetricSpec>? Metrics { get; set; }
         /// <summary>"light", "dark", or null (auto = dark).</summary>
         public string? ColorScheme { get; set; }
         public bool AllowRemoteMediaFetch { get; set; }
@@ -1275,6 +1672,7 @@ internal static partial class WebSocialCardGenerator
         public IReadOnlyDictionary<string, object?>? ThemeTokens { get; init; }
         public string? LogoDataUri { get; init; }
         public string? InlineImageDataUri { get; init; }
+        public required IReadOnlyList<SocialCardMetricSpec> Metrics { get; init; }
     }
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);

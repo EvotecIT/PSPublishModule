@@ -414,7 +414,10 @@ internal static partial class WebSocialCardGenerator
 
                 lines.Add(current.ToString());
                 if (lines.Count >= maxLines)
-                    return ClampLineCount(lines, maxLines);
+                {
+                    MarkLastLineTruncated(lines);
+                    return lines;
+                }
                 current.Clear();
                 current.Append(token);
             }
@@ -426,16 +429,24 @@ internal static partial class WebSocialCardGenerator
         return ClampLineCount(lines, maxLines);
     }
 
+    private static void MarkLastLineTruncated(List<string> lines)
+    {
+        if (lines.Count == 0 || lines[^1].EndsWith("...", StringComparison.Ordinal))
+            return;
+
+        if (lines[^1].Length > 3)
+            lines[^1] = lines[^1][..^3] + "...";
+        else
+            lines[^1] += "...";
+    }
+
     private static List<string> ClampLineCount(List<string> lines, int maxLines)
     {
         if (lines.Count <= maxLines)
             return lines;
 
         var clamped = lines.Take(maxLines).ToList();
-        if (clamped[^1].Length > 3)
-            clamped[^1] = clamped[^1][..^3] + "...";
-        else
-            clamped[^1] += "...";
+        MarkLastLineTruncated(clamped);
         return clamped;
     }
 
@@ -988,6 +999,26 @@ internal static partial class WebSocialCardGenerator
             return "api";
         if (combined.Contains("doc", StringComparison.Ordinal))
             return "docs";
+        if (combined.Contains("example", StringComparison.Ordinal) ||
+            combined.Contains("sample", StringComparison.Ordinal))
+            return "examples";
+        if (combined.Contains("download", StringComparison.Ordinal) ||
+            combined.Contains("package", StringComparison.Ordinal) ||
+            combined.Contains("gallery", StringComparison.Ordinal))
+            return "downloads";
+        if (combined.Contains("release", StringComparison.Ordinal) ||
+            combined.Contains("changelog", StringComparison.Ordinal))
+            return "release";
+        if (combined.Contains("rss", StringComparison.Ordinal) ||
+            combined.Contains("atom", StringComparison.Ordinal) ||
+            combined.Contains("feed", StringComparison.Ordinal))
+            return "feed";
+        if (combined.Contains("benchmark", StringComparison.Ordinal) ||
+            combined.Contains("performance", StringComparison.Ordinal))
+            return "benchmark";
+        if (combined.Contains("qr", StringComparison.Ordinal) ||
+            combined.Contains("barcode", StringComparison.Ordinal))
+            return "code";
         if (combined.Contains("contact", StringComparison.Ordinal) ||
             combined.Contains("support", StringComparison.Ordinal))
             return "contact";
@@ -1014,6 +1045,12 @@ internal static partial class WebSocialCardGenerator
             "api" => "reference",
             "blog" => "editorial",
             "contact" => "connect",
+            "examples" => "code",
+            "downloads" => "metrics",
+            "release" => "timeline",
+            "feed" => "feed",
+            "benchmark" => "metrics",
+            "code" => "code",
             _ => "product"
         };
     }
@@ -1040,6 +1077,26 @@ internal static partial class WebSocialCardGenerator
             "news" => "blog",
             "article" => "blog",
             "marketing" => "blog",
+            "example" => "examples",
+            "examples" => "examples",
+            "sample" => "examples",
+            "samples" => "examples",
+            "download" => "downloads",
+            "downloads" => "downloads",
+            "gallery" => "downloads",
+            "release" => "release",
+            "releases" => "release",
+            "changelog" => "release",
+            "feed" => "feed",
+            "rss" => "feed",
+            "atom" => "feed",
+            "benchmark" => "benchmark",
+            "benchmarks" => "benchmark",
+            "performance" => "benchmark",
+            "qr" => "code",
+            "qrcode" => "code",
+            "barcode" => "code",
+            "code" => "code",
             "contact" => "contact",
             "contacts" => "contact",
             "support" => "contact",
@@ -1072,6 +1129,16 @@ internal static partial class WebSocialCardGenerator
             "inline-image" => "inline-image",
             "connect" => "connect",
             "contact" => "connect",
+            "metrics" => "metrics",
+            "stats" => "metrics",
+            "statistics" => "metrics",
+            "timeline" => "timeline",
+            "release" => "timeline",
+            "feed" => "feed",
+            "stream" => "feed",
+            "code" => "code",
+            "examples" => "code",
+            "showcase" => "product",
             _ => null
         };
     }
@@ -1147,6 +1214,12 @@ internal static partial class WebSocialCardGenerator
             "docs" => "DOCS",
             "blog" => "BLOG",
             "contact" => "CONTACT",
+            "examples" => "EXAMPLE",
+            "downloads" => "DOWNLOAD",
+            "release" => "RELEASE",
+            "feed" => "FEED",
+            "benchmark" => "BENCH",
+            "code" => "CODE",
             _ => "PAGE"
         };
     }
@@ -1159,6 +1232,12 @@ internal static partial class WebSocialCardGenerator
             "docs" => "/docs",
             "blog" => "/blog",
             "contact" => "/contact",
+            "examples" => "/examples",
+            "downloads" => "/downloads",
+            "release" => "/releases",
+            "feed" => "/feed",
+            "benchmark" => "/benchmarks",
+            "code" => "/examples",
             _ => "/"
         };
     }
