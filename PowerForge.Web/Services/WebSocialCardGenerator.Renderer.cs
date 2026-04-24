@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 using System.Text;
@@ -57,8 +58,9 @@ internal static partial class WebSocialCardGenerator
             image.Write(stream);
             return stream.ToArray();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"Social card PNG render failed: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -420,8 +422,9 @@ internal static partial class WebSocialCardGenerator
 
             return Math.Clamp(startX - minX, -fontSize / 2, fontSize / 2);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Trace.TraceInformation($"Social card title glyph measurement fell back to default inset: {ex.GetType().Name}: {ex.Message}");
             return DefaultTitleGlyphInset();
         }
     }
@@ -494,8 +497,9 @@ internal static partial class WebSocialCardGenerator
             var advanceCenter = metrics.TextWidth / 2d;
             return (int)Math.Round(Math.Clamp(advanceCenter - inkCenter, -fontSize / 3d, fontSize / 3d));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Trace.TraceInformation($"Social card centered text measurement fell back to zero offset: {ex.GetType().Name}: {ex.Message}");
             return 0;
         }
     }
@@ -1668,8 +1672,9 @@ internal static partial class WebSocialCardGenerator
 
             return null;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Trace.TraceInformation($"Social card media source could not be loaded: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -1736,8 +1741,9 @@ internal static partial class WebSocialCardGenerator
 
             return Encoding.UTF8.GetBytes(document.ToString(SaveOptions.DisableFormatting));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"Social card SVG media sanitization failed: {ex.GetType().Name}: {ex.Message}");
             return Array.Empty<byte>();
         }
     }

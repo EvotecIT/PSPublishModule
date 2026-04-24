@@ -837,6 +837,17 @@ public partial class WebSiteAuditOptimizeBuildTests
             new Uri("https://cdn.example.test/assets/app.css"),
             new[] { "*.example.test" }));
         Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://example.test/assets/app.css"),
+            new[] { "*.example.test" }));
+        Assert.True(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "*" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css")));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("http://cdn.example.test/assets/app.css"),
+            new[] { "*" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
             new Uri("http://169.254.169.254/latest/meta-data/")));
         Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
             new Uri("https://cdn.example.test/assets/app.css"),

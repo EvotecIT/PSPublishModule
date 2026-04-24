@@ -456,6 +456,7 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, Path.Combine("blog", "multilanguage-support-in-action", "index.html"));
+            // Intended precedence: explicit social metadata wins first, then the first body image, then generated/default cards.
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
             Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);

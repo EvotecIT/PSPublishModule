@@ -379,9 +379,9 @@ public static partial class WebAssetOptimizer
             return;
 
         if (!Uri.TryCreate(rewrite.SourceUrl, UriKind.Absolute, out var sourceUri) ||
-            (sourceUri.Scheme != Uri.UriSchemeHttp && sourceUri.Scheme != Uri.UriSchemeHttps))
+            sourceUri.Scheme != Uri.UriSchemeHttps)
         {
-            Trace.TraceWarning($"Asset rewrite sourceUrl is not a valid http(s) URL: {rewrite.SourceUrl}");
+            Trace.TraceWarning($"Asset rewrite sourceUrl is not a valid https URL: {rewrite.SourceUrl}");
             return;
         }
 
@@ -568,7 +568,7 @@ public static partial class WebAssetOptimizer
     private static bool IsAllowedRewriteSourceUri(Uri uri, string[]? allowedHosts)
     {
         if (uri is null ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
             IsUnsafeRemoteHost(uri.Host))
         {
             return false;
@@ -579,11 +579,14 @@ public static partial class WebAssetOptimizer
             .Where(static host => host.Length > 0)
             .ToArray() ?? Array.Empty<string>();
         if (configuredHosts.Length == 0)
-            return true;
+            return false;
 
         var sourceHost = uri.Host.TrimEnd('.').ToLowerInvariant();
         foreach (var allowedHost in configuredHosts)
         {
+            if (string.Equals(allowedHost, "*", StringComparison.Ordinal))
+                return true;
+
             if (string.Equals(sourceHost, allowedHost, StringComparison.OrdinalIgnoreCase))
                 return true;
 

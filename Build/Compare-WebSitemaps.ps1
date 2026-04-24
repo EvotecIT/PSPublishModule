@@ -20,12 +20,24 @@ param(
 
     [switch] $IncludeAmpListingRoots,
 
+    [int] $FetchTimeoutSec = 30,
+
+    [int] $MaxSitemapDepth = 4,
+
     [switch] $PassThru
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+if ($FetchTimeoutSec -lt 1) {
+    throw "FetchTimeoutSec must be greater than zero."
+}
+
+if ($MaxSitemapDepth -lt 0) {
+    throw "MaxSitemapDepth must be zero or greater."
+}
 
 function Get-NormalizedUrl {
     param(
@@ -73,17 +85,22 @@ function Get-UrlOrigin {
 function Import-SitemapUrls {
     param(
         [Parameter(Mandatory)]
-        [string] $Url
+        [string] $Url,
+        [int] $Depth = 0
     )
 
-    $content = [string] (Invoke-WebRequest -UseBasicParsing -Uri $Url).Content
+    if ($Depth -gt $MaxSitemapDepth) {
+        throw "Sitemap nesting exceeded MaxSitemapDepth ($MaxSitemapDepth) at $Url"
+    }
+
+    $content = [string] (Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec $FetchTimeoutSec).Content
     $content = $content.TrimStart([char] 0xFEFF)
     [xml] $xml = $content
 
     if ($xml.PSObject.Properties.Name -contains 'sitemapindex' -and $xml.sitemapindex -and $xml.sitemapindex.sitemap) {
         $nested = foreach ($node in $xml.sitemapindex.sitemap) {
             if ($node.loc) {
-                Import-SitemapUrls -Url ([string] $node.loc)
+                Import-SitemapUrls -Url ([string] $node.loc) -Depth ($Depth + 1)
             }
         }
         return $nested
@@ -376,7 +393,7 @@ function Get-AmpHtmlAlternateUrl {
     )
 
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $Url
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec $FetchTimeoutSec
     } catch {
         return $null
     }
