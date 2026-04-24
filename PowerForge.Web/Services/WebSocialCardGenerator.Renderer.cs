@@ -12,6 +12,7 @@ namespace PowerForge.Web;
 internal static partial class WebSocialCardGenerator
 {
     internal const string RendererVersion = "social-card-renderer-v8";
+    internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
 
     private static readonly HttpClient SocialImageHttpClient = new(new SocketsHttpHandler
     {
@@ -1544,8 +1545,33 @@ internal static partial class WebSocialCardGenerator
             return null;
 
         using var stream = response.Content.ReadAsStream();
+        if (response.Content.Headers.ContentLength is > MaxRemoteImageBytes)
+            return null;
+
+        return ReadRemoteImageBytes(stream);
+    }
+
+    internal static byte[]? ReadRemoteImageBytesForTesting(Stream stream)
+    {
+        return ReadRemoteImageBytes(stream);
+    }
+
+    private static byte[]? ReadRemoteImageBytes(Stream stream)
+    {
+        if (stream is null)
+            return null;
+
         using var memory = new MemoryStream();
-        stream.CopyTo(memory);
+        var buffer = new byte[81920];
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            if (memory.Length + read > MaxRemoteImageBytes)
+                return null;
+
+            memory.Write(buffer, 0, read);
+        }
+
         return memory.ToArray();
     }
 

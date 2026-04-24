@@ -693,6 +693,16 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void ReadRemoteImageBytesForTesting_ReturnsNull_WhenPayloadExceedsLimit()
+    {
+        using var stream = new LimitOverflowStream(WebSocialCardGenerator.MaxRemoteImageBytes + 1);
+
+        var bytes = WebSocialCardGenerator.ReadRemoteImageBytesForTesting(stream);
+
+        Assert.Null(bytes);
+    }
+
+    [Fact]
     public void IsRenderableImageSource_ReturnsFalse_WhenRemoteFetchFails()
     {
         WebSocialCardGenerator.ClearRemoteImageCache();
@@ -848,4 +858,46 @@ public class WebSocialCardGeneratorTests
     }
 
     private readonly record struct InkBox(int Left, int Top, int Right, int Bottom);
+
+    private sealed class LimitOverflowStream : Stream
+    {
+        private readonly long _length;
+        private long _position;
+
+        public LimitOverflowStream(long length)
+        {
+            _length = length;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _length;
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_position >= _length)
+                return 0;
+
+            var read = (int)Math.Min(count, _length - _position);
+            Array.Fill<byte>(buffer, 1, offset, read);
+            _position += read;
+            return read;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 }

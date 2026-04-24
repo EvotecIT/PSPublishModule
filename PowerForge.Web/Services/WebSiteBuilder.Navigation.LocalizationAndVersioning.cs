@@ -118,9 +118,9 @@ public static partial class WebSiteBuilder
                             return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
                         }
 
-                        return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
+                        return ResolveDefaultLanguageFallbackRoute(spec, localization, fallback.OutputPath);
                     }
-                    return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
+                    return ResolveDefaultLanguageFallbackRoute(spec, localization, fallback.OutputPath);
                 }
             }
         }
@@ -139,12 +139,20 @@ public static partial class WebSiteBuilder
                     CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage))
                     return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
 
-                return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, baseRoute);
+                return ResolveDefaultLanguageFallbackRoute(spec, localization, baseRoute);
             }
             return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
         }
 
         return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedCurrentLanguage);
+    }
+
+    private static string ResolveDefaultLanguageFallbackRoute(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string route)
+    {
+        return ResolvePublicRouteForLanguage(spec, localization, route, localization.DefaultLanguage);
     }
 
     private static bool TryResolveExplicitLocalizedRoute(
