@@ -43,9 +43,10 @@ public static partial class WebAssetOptimizer
 
     private static HttpClient CreateRewriteDownloadClient()
     {
-        var handler = new HttpClientHandler
+        var handler = new SocketsHttpHandler
         {
-            AutomaticDecompression = DecompressionMethods.All
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10)
         };
         var client = new HttpClient(handler, disposeHandler: true)
         {
@@ -503,7 +504,9 @@ public static partial class WebAssetOptimizer
 
         using var response = RewriteDownloadClient.Send(request);
         response.EnsureSuccessStatusCode();
-        return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var stream = response.Content.ReadAsStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static byte[] DownloadBytes(Uri uri, string? userAgent)
@@ -514,7 +517,10 @@ public static partial class WebAssetOptimizer
 
         using var response = RewriteDownloadClient.Send(request);
         response.EnsureSuccessStatusCode();
-        return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+        using var stream = response.Content.ReadAsStream();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
     }
 
     private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)
@@ -525,7 +531,9 @@ public static partial class WebAssetOptimizer
             var url = match.Groups["url"].Value;
             var decodedUrl = System.Web.HttpUtility.HtmlDecode(url);
             var replaced = ApplyRewriteRules(decodedUrl, rewrites);
-            return replaced == url ? match.Value : $"{match.Groups["attr"].Value}=\"{replaced}\"";
+            return string.Equals(replaced, decodedUrl, StringComparison.Ordinal)
+                ? match.Value
+                : $"{match.Groups["attr"].Value}=\"{System.Web.HttpUtility.HtmlAttributeEncode(replaced)}\"";
         });
     }
 

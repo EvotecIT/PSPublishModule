@@ -648,7 +648,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(path))
             return string.Empty;
 
-        var exactPath = path == "/" ? "/" : path.TrimEnd('/');
+        var exactPath = path;
         var literal = exactPath + "?" + sourceQuery;
         return "\"^" + Regex.Escape(literal) + "$\"";
     }

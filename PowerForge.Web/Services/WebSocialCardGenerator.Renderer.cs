@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -12,7 +13,11 @@ internal static partial class WebSocialCardGenerator
 {
     internal const string RendererVersion = "social-card-renderer-v8";
 
-    private static readonly HttpClient SocialImageHttpClient = new()
+    private static readonly HttpClient SocialImageHttpClient = new(new SocketsHttpHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+    }, disposeHandler: true)
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
@@ -45,7 +50,7 @@ internal static partial class WebSocialCardGenerator
             image.Write(stream);
             return stream.ToArray();
         }
-        catch
+        catch (Exception)
         {
             return null;
         }
@@ -388,7 +393,7 @@ internal static partial class WebSocialCardGenerator
 
             var pixels = image.GetPixels().ToByteArray(PixelMapping.RGBA);
             if (pixels is null || pixels.Length == 0)
-                return EstimateTitleGlyphInset(fontSize, glyph);
+                return DefaultTitleGlyphInset();
             var width = (int)image.Width;
             var height = (int)image.Height;
             var minX = width;
@@ -404,20 +409,18 @@ internal static partial class WebSocialCardGenerator
             }
 
             if (minX >= width)
-                return EstimateTitleGlyphInset(fontSize, glyph);
+                return DefaultTitleGlyphInset();
 
             return Math.Clamp(startX - minX, -fontSize / 2, fontSize / 2);
         }
         catch (Exception)
         {
-            return EstimateTitleGlyphInset(fontSize, glyph);
+            return DefaultTitleGlyphInset();
         }
     }
 
-    private static int EstimateTitleGlyphInset(int fontSize, char glyph)
+    private static int DefaultTitleGlyphInset()
     {
-        _ = fontSize;
-        _ = glyph;
         return 0;
     }
 
@@ -484,7 +487,7 @@ internal static partial class WebSocialCardGenerator
             var advanceCenter = metrics.TextWidth / 2d;
             return (int)Math.Round(Math.Clamp(advanceCenter - inkCenter, -fontSize / 3d, fontSize / 3d));
         }
-        catch
+        catch (Exception)
         {
             return 0;
         }
@@ -754,27 +757,25 @@ internal static partial class WebSocialCardGenerator
 
         var trimmed = value.Trim();
         if (trimmed.StartsWith("#", StringComparison.Ordinal))
-            return trimmed.Length is 4 or 7 or 9 && trimmed.Skip(1).All(Uri.IsHexDigit);
+        {
+            if (trimmed.Length is not (4 or 7 or 9))
+                return false;
+
+            for (var i = 1; i < trimmed.Length; i++)
+            {
+                if (!Uri.IsHexDigit(trimmed[i]))
+                    return false;
+            }
+
+            return true;
+        }
 
         return trimmed.All(static c => char.IsLetter(c) || c is '-' or ' ');
     }
 
     private static IReadOnlyList<SocialCardMetricSpec> NormalizeSocialCardMetrics(IEnumerable<SocialCardMetricSpec>? metrics)
     {
-        if (metrics is null)
-            return Array.Empty<SocialCardMetricSpec>();
-
-        return metrics
-            .Select(static metric => new SocialCardMetricSpec
-            {
-                Icon = TrimSingleLine(metric.Icon, 24).Trim(),
-                Value = TrimSingleLine(metric.Value, 16).Trim(),
-                Label = TrimSingleLine(metric.Label, 24).Trim(),
-                Color = TrimSingleLine(metric.Color, 32).Trim()
-            })
-            .Where(static metric => !string.IsNullOrWhiteSpace(metric.Value) || !string.IsNullOrWhiteSpace(metric.Label))
-            .Take(5)
-            .ToList();
+        return SocialCardMetricNormalizer.Normalize(metrics);
     }
 
     // ── Layout: Spotlight (Home) ───────────────────────────────────────
@@ -1489,8 +1490,7 @@ internal static partial class WebSocialCardGenerator
             Palette = SelectPalette("default", "test", themeTokens),
             Typography = ResolveTypography(themeTokens, preferRasterSafeFonts: true),
             ThemeTokens = themeTokens,
-            CtaLabel = "Learn More"
-            ,
+            CtaLabel = "Learn More",
             FrameInset = 0,
             PanelInset = 0,
             ContentPadding = 0,
@@ -1523,7 +1523,7 @@ internal static partial class WebSocialCardGenerator
         {
             return lazy.Value;
         }
-        catch
+        catch (Exception)
         {
             RemoteImageByteCache.TryRemove(new KeyValuePair<string, Lazy<byte[]>>(source, lazy));
             return null;
@@ -1538,11 +1538,15 @@ internal static partial class WebSocialCardGenerator
 
     private static byte[]? FetchRemoteImageBytes(string source)
     {
-        using var response = SocialImageHttpClient.GetAsync(source).GetAwaiter().GetResult();
+        using var request = new HttpRequestMessage(HttpMethod.Get, source);
+        using var response = SocialImageHttpClient.Send(request);
         if (!response.IsSuccessStatusCode)
             return null;
 
-        return response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+        using var stream = response.Content.ReadAsStream();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
     }
 
     private static MagickImage? TryLoadImageSource(string source, int widthHint, int heightHint, bool allowRemoteMediaFetch)
@@ -1595,7 +1599,7 @@ internal static partial class WebSocialCardGenerator
 
             return null;
         }
-        catch
+        catch (Exception)
         {
             return null;
         }

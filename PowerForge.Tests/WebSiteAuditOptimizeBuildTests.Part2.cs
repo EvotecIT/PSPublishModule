@@ -776,6 +776,52 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_AssetRewrites_PreservesEncodedUrlWhenNoRuleMatches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-rewrite-encoded-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                  <body><a href="/search?q=one&amp;page=2">Search</a></body>
+                </html>
+                """);
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Rewrites = new[]
+                    {
+                        new AssetRewriteSpec
+                        {
+                            Match = "/cdn/",
+                            Replace = "/assets/",
+                            MatchType = "prefix"
+                        }
+                    }
+                }
+            });
+
+            var html = File.ReadAllText(htmlPath);
+            Assert.Equal(0, result.UpdatedCount);
+            Assert.Contains("href=\"/search?q=one&amp;page=2\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("href=\"/search?q=one&page=2\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));

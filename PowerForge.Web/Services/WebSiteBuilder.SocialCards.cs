@@ -415,7 +415,7 @@ public static partial class WebSiteBuilder
     private static string FormatSocialCardMetricValue(object raw, bool abbreviateNumber)
     {
         if (!abbreviateNumber)
-            return TrimSocialCardMetricText(Convert.ToString(raw), 16);
+            return SocialCardMetricNormalizer.Trim(Convert.ToString(raw), 16);
 
         if (raw is int i)
             return AbbreviateSocialCardNumber(i);
@@ -432,7 +432,7 @@ public static partial class WebSiteBuilder
         if (long.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
             return AbbreviateSocialCardNumber(number);
 
-        return TrimSocialCardMetricText(text, 16);
+        return SocialCardMetricNormalizer.Trim(text, 16);
     }
 
     private static string AbbreviateSocialCardNumber(long value)
@@ -538,20 +538,7 @@ public static partial class WebSiteBuilder
 
     private static IReadOnlyList<SocialCardMetricSpec> NormalizeSocialCardMetrics(IEnumerable<SocialCardMetricSpec>? metrics)
     {
-        if (metrics is null)
-            return Array.Empty<SocialCardMetricSpec>();
-
-        return metrics
-            .Select(static metric => new SocialCardMetricSpec
-            {
-                Icon = TrimSocialCardMetricText(metric.Icon, 24),
-                Value = TrimSocialCardMetricText(metric.Value, 16),
-                Label = TrimSocialCardMetricText(metric.Label, 24),
-                Color = TrimSocialCardMetricText(metric.Color, 32)
-            })
-            .Where(static metric => !string.IsNullOrWhiteSpace(metric.Value) || !string.IsNullOrWhiteSpace(metric.Label))
-            .Take(5)
-            .ToList();
+        return SocialCardMetricNormalizer.Normalize(metrics);
     }
 
     private static string ComputeSocialCardMetricsFingerprint(IReadOnlyList<SocialCardMetricSpec> metrics)
@@ -567,20 +554,6 @@ public static partial class WebSiteBuilder
             metric.Color
         });
         return ComputeSocialHash(System.Text.Json.JsonSerializer.Serialize(canonical));
-    }
-
-    private static string TrimSocialCardMetricText(string? value, int maxLength)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
-
-        var normalized = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        if (normalized.Length <= maxLength)
-            return normalized;
-
-        return maxLength <= 3
-            ? normalized[..maxLength]
-            : normalized[..(maxLength - 3)] + "...";
     }
 
     private static bool TryResolveCollectionCardPreset(
@@ -699,7 +672,7 @@ public static partial class WebSiteBuilder
                     return false;
             }
         }
-        catch
+        catch (Exception)
         {
             // Fall back to writing when comparison fails.
         }
@@ -793,7 +766,7 @@ public static partial class WebSiteBuilder
                     return normalized;
             }
         }
-        catch
+        catch (Exception)
         {
             // Ignore extraction errors and fall back to generated/default image.
         }
@@ -1023,7 +996,7 @@ public static partial class WebSiteBuilder
             if (htmlMatch.Success)
                 return NormalizeSocialCardMediaCandidate(htmlMatch.Groups["src"].Value);
         }
-        catch
+        catch (Exception)
         {
             // Ignore extraction errors and fall back to generated/default image.
         }
