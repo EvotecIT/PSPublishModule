@@ -115,6 +115,12 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
         Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
+        Console.WriteLine("  powerforge-web links validate --config <site.json> [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
+        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--out <file>] [--include-404] [--output json]");
+        Console.WriteLine("  powerforge-web links import-wordpress --source <pretty-links.csv> --config <site.json> [--out <shortlinks.json>] [--owner <name>] [--tag <tag>] [--output json]");
+        Console.WriteLine("  powerforge-web links report-404 --site-root <dir> [--source <access.log|observations.csv>] [--out <report.json>] [--review-csv <file>] [--output json]");
+        Console.WriteLine("  powerforge-web links promote-404 --source <404-suggestions.json> --config <site.json> [--out <redirects.json>] [--review-csv <file>] [--enable] [--output json]");
+        Console.WriteLine("  powerforge-web links ignore-404 --source <404-suggestions.json> --config <site.json> (--path <url>|--without-suggestions|--all) [--reason <text>] [--review-csv <file>] [--output json]");
         Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
         Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");

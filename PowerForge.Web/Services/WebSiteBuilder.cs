@@ -39,6 +39,7 @@ public static partial class WebSiteBuilder
     /// <param name="options">Optional JSON serializer options.</param>
     /// <param name="language">Optional language code filter (for example: en, pl).</param>
     /// <param name="languageAsRoot">When true and language is set, render selected language routes without language prefix.</param>
+    /// <param name="languages">Optional language code allow-list. When provided, only these languages are rendered.</param>
     /// <param name="progress">Optional progress sink for long-running build phases.</param>
     /// <returns>Result payload describing the build output.</returns>
     public static WebBuildResult Build(
@@ -48,6 +49,7 @@ public static partial class WebSiteBuilder
         JsonSerializerOptions? options = null,
         string? language = null,
         bool languageAsRoot = false,
+        string[]? languages = null,
         Action<string>? progress = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
@@ -146,7 +148,7 @@ public static partial class WebSiteBuilder
             ReportProgress($"with taxonomy items: {allItems.Count}");
             allItems = BuildPaginatedItems(spec, allItems);
             ReportProgress($"with pagination items: {allItems.Count}");
-            var renderItems = FilterItemsForLanguage(spec, allItems, language);
+            var renderItems = FilterItemsForLanguages(spec, allItems, language, languages);
             ReportProgress($"render queue size: {renderItems.Count}");
 
             AddLegacyAmpRedirects(spec, redirects, renderItems);
@@ -264,16 +266,39 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static List<ContentItem> FilterItemsForLanguage(SiteSpec spec, IReadOnlyList<ContentItem> items, string? language)
+    private static List<ContentItem> FilterItemsForLanguages(
+        SiteSpec spec,
+        IReadOnlyList<ContentItem> items,
+        string? language,
+        IReadOnlyCollection<string>? languages)
     {
-        if (items.Count == 0 || string.IsNullOrWhiteSpace(language))
+        if (items.Count == 0)
             return items.ToList();
 
         var localization = ResolveLocalizationConfig(spec);
-        var targetLanguage = ResolveEffectiveLanguageCode(localization, language);
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            var targetLanguage = ResolveEffectiveLanguageCode(localization, language);
+            return items
+                .Where(item => ResolveEffectiveLanguageCode(localization, item.Language)
+                    .Equals(targetLanguage, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (languages is null || languages.Count == 0)
+            return items.ToList();
+
+        var allowed = new HashSet<string>(
+            languages
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => ResolveEffectiveLanguageCode(localization, value)),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (allowed.Count == 0)
+            return items.ToList();
+
         return items
-            .Where(item => ResolveEffectiveLanguageCode(localization, item.Language)
-                .Equals(targetLanguage, StringComparison.OrdinalIgnoreCase))
+            .Where(item => allowed.Contains(ResolveEffectiveLanguageCode(localization, item.Language)))
             .ToList();
     }
 

@@ -10,6 +10,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private static readonly UTF8Encoding ApacheUtf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly Regex ApacheLegacyPostIdRegex = new(@"^\s*/\?p=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex ApacheLegacyPageIdRegex = new(@"^\s*/\?page_id=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -19,6 +20,8 @@ internal static partial class WebPipelineRunner
         var strict = GetBool(step, "strict") ?? false;
         var includeHeader = GetBool(step, "includeHeader") ?? GetBool(step, "include-header") ?? true;
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        var languageHostMap = GetApacheLanguageHostMap(step);
+        var stripLanguagePrefixes = new HashSet<string>(languageHostMap.Keys, StringComparer.OrdinalIgnoreCase);
 
         var configuredSources = GetArrayOfStrings(step, "sources")
                                 ?? GetArrayOfStrings(step, "sourcePaths")
@@ -79,12 +82,7 @@ internal static partial class WebPipelineRunner
 
         var uniqueRows = rows
             .Where(static row => !string.IsNullOrWhiteSpace(row.LegacyUrl) && !string.IsNullOrWhiteSpace(row.TargetUrl))
-            .Select(static row => new ApacheRedirectRow
-            {
-                LegacyUrl = row.LegacyUrl.Trim(),
-                TargetUrl = row.TargetUrl.Trim(),
-                Status = row.Status > 0 ? row.Status : 301
-            })
+            .Select(row => NormalizeApacheRedirectRow(row, languageHostMap, stripLanguagePrefixes))
             .GroupBy(static row => $"{row.LegacyUrl}|{row.TargetUrl}|{row.Status}", StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .OrderBy(static row => row.LegacyUrl, StringComparer.OrdinalIgnoreCase)
@@ -103,27 +101,33 @@ internal static partial class WebPipelineRunner
 
         foreach (var row in uniqueRows)
         {
-            var postMatch = ApacheLegacyPostIdRegex.Match(row.LegacyUrl);
+            var source = ParseApacheLegacySource(row.LegacyUrl);
+            var hostCondition = source.HostPattern;
+            var postMatch = ApacheLegacyPostIdRegex.Match(source.PathAndQuery);
             if (postMatch.Success)
             {
                 var id = postMatch.Groups[1].Value;
+                if (!string.IsNullOrWhiteSpace(hostCondition))
+                    lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 lines.Add($"RewriteCond %{{QUERY_STRING}} (^|&)p={id}(&|$)");
-                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L]");
+                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L,QSD]");
                 lines.Add(string.Empty);
                 continue;
             }
 
-            var pageMatch = ApacheLegacyPageIdRegex.Match(row.LegacyUrl);
+            var pageMatch = ApacheLegacyPageIdRegex.Match(source.PathAndQuery);
             if (pageMatch.Success)
             {
                 var id = pageMatch.Groups[1].Value;
+                if (!string.IsNullOrWhiteSpace(hostCondition))
+                    lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 lines.Add($"RewriteCond %{{QUERY_STRING}} (^|&)page_id={id}(&|$)");
-                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L]");
+                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L,QSD]");
                 lines.Add(string.Empty);
                 continue;
             }
 
-            var path = row.LegacyUrl.Trim();
+            var path = source.PathOnly.Trim();
             if (string.IsNullOrWhiteSpace(path))
                 continue;
             if (!path.StartsWith("/", StringComparison.Ordinal))
@@ -131,12 +135,16 @@ internal static partial class WebPipelineRunner
 
             if (path.Equals("/", StringComparison.Ordinal))
             {
+                if (!string.IsNullOrWhiteSpace(hostCondition))
+                    lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L]");
                 lines.Add(string.Empty);
                 continue;
             }
 
             var escapedPath = Regex.Escape(path.TrimStart('/'));
+            if (!string.IsNullOrWhiteSpace(hostCondition))
+                lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
             lines.Add($"RewriteRule ^{escapedPath}/?$ {row.TargetUrl} [R={row.Status},L]");
             lines.Add(string.Empty);
         }
@@ -144,7 +152,7 @@ internal static partial class WebPipelineRunner
         var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
             Directory.CreateDirectory(outputDirectory);
-        File.WriteAllText(outputPath, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+        File.WriteAllText(outputPath, string.Join(Environment.NewLine, lines), ApacheUtf8NoBom);
 
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
@@ -182,6 +190,7 @@ internal static partial class WebPipelineRunner
         var legacyIndex = Array.FindIndex(header, static h => h.Equals("legacy_url", StringComparison.OrdinalIgnoreCase));
         var targetIndex = Array.FindIndex(header, static h => h.Equals("target_url", StringComparison.OrdinalIgnoreCase));
         var statusIndex = Array.FindIndex(header, static h => h.Equals("status", StringComparison.OrdinalIgnoreCase));
+        var languageIndex = Array.FindIndex(header, static h => h.Equals("language", StringComparison.OrdinalIgnoreCase));
 
         if (legacyIndex < 0 || targetIndex < 0)
             return rows;
@@ -208,11 +217,86 @@ internal static partial class WebPipelineRunner
             {
                 LegacyUrl = legacy,
                 TargetUrl = target,
-                Status = status
+                Status = status,
+                Language = languageIndex >= 0 && languageIndex < parts.Length ? parts[languageIndex].Trim() : string.Empty
             });
         }
 
         return rows;
+    }
+
+    private static Dictionary<string, string> GetApacheLanguageHostMap(JsonElement step)
+    {
+        if (!TryGetObject(step, "languageHostMap", out var mapElement) &&
+            !TryGetObject(step, "language-host-map", out mapElement))
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in mapElement.EnumerateObject())
+        {
+            if (property.Value.ValueKind != JsonValueKind.String)
+                continue;
+
+            var language = property.Name?.Trim();
+            var host = property.Value.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(language) || string.IsNullOrWhiteSpace(host))
+                continue;
+
+            map[language] = host;
+        }
+
+        return map;
+    }
+
+    private static ApacheRedirectRow NormalizeApacheRedirectRow(
+        ApacheRedirectRow row,
+        IReadOnlyDictionary<string, string> languageHostMap,
+        ISet<string> stripLanguagePrefixes)
+    {
+        var legacy = row.LegacyUrl.Trim();
+        var target = row.TargetUrl.Trim();
+        var language = row.Language?.Trim() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            if (!Uri.TryCreate(legacy, UriKind.Absolute, out _) &&
+                languageHostMap.TryGetValue(language, out var host) &&
+                !string.IsNullOrWhiteSpace(host))
+            {
+                var relativeLegacy = legacy.StartsWith("/", StringComparison.Ordinal) ? legacy : "/" + legacy;
+                legacy = $"https://{host}{relativeLegacy}";
+            }
+
+            if (stripLanguagePrefixes.Contains(language))
+                target = StripLeadingLanguagePrefix(target, language);
+        }
+
+        return new ApacheRedirectRow
+        {
+            LegacyUrl = legacy,
+            TargetUrl = target,
+            Status = row.Status > 0 ? row.Status : 301,
+            Language = language
+        };
+    }
+
+    private static string StripLeadingLanguagePrefix(string targetUrl, string language)
+    {
+        if (string.IsNullOrWhiteSpace(targetUrl) || string.IsNullOrWhiteSpace(language))
+            return targetUrl;
+
+        var prefix = "/" + language;
+        if (targetUrl.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+            targetUrl.Equals(prefix + "/", StringComparison.OrdinalIgnoreCase))
+            return "/";
+
+        if (targetUrl.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            var stripped = targetUrl.Substring(prefix.Length);
+            return string.IsNullOrWhiteSpace(stripped) ? "/" : stripped;
+        }
+
+        return targetUrl;
     }
 
     private static string[] SplitApacheCsvLine(string line)
@@ -253,10 +337,50 @@ internal static partial class WebPipelineRunner
         return values.ToArray();
     }
 
+    private static ApacheLegacySource ParseApacheLegacySource(string value)
+    {
+        var trimmed = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return new ApacheLegacySource();
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new ApacheLegacySource
+            {
+                PathAndQuery = trimmed,
+                PathOnly = trimmed
+            };
+        }
+
+        var path = string.IsNullOrWhiteSpace(uri.AbsolutePath) ? "/" : uri.AbsolutePath;
+        if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
+            path = path.TrimEnd('/');
+
+        var query = uri.Query ?? string.Empty;
+        var pathAndQuery = path + query;
+        var hostPattern = $"^(.+\\.)?{Regex.Escape(uri.Host)}$";
+
+        return new ApacheLegacySource
+        {
+            PathAndQuery = pathAndQuery,
+            PathOnly = path,
+            HostPattern = hostPattern
+        };
+    }
+
     private sealed class ApacheRedirectRow
     {
         public string LegacyUrl { get; set; } = string.Empty;
         public string TargetUrl { get; set; } = string.Empty;
         public int Status { get; set; }
+        public string Language { get; set; } = string.Empty;
+    }
+
+    private sealed class ApacheLegacySource
+    {
+        public string PathAndQuery { get; set; } = string.Empty;
+        public string PathOnly { get; set; } = string.Empty;
+        public string HostPattern { get; set; } = string.Empty;
     }
 }

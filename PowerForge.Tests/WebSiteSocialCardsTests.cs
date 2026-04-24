@@ -261,6 +261,62 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_AppliesNamedGeneratedCardTheme_ForCollectionCards()
+    {
+        var firstRoot = CreateTempRoot("pf-web-social-theme-a-");
+        var secondRoot = CreateTempRoot("pf-web-social-theme-b-");
+        try
+        {
+            var firstImage = BuildNamedThemeCardAndGetImage(firstRoot, "#0ea5e9");
+            var secondImage = BuildNamedThemeCardAndGetImage(secondRoot, "#f97316");
+
+            Assert.Contains("/assets/social/generated/", firstImage, StringComparison.Ordinal);
+            Assert.Contains("/assets/social/generated/", secondImage, StringComparison.Ordinal);
+            Assert.NotEqual(firstImage, secondImage);
+        }
+        finally
+        {
+            Cleanup(firstRoot);
+            Cleanup(secondRoot);
+        }
+    }
+
+    [Fact]
+    public void MergeSocialCardThemeTokens_DeepMergesThemeOverrides()
+    {
+        var baseTokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["bg"] = "#111827",
+                ["accent"] = "#38bdf8"
+            },
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["titleFontSize"] = "56px",
+                ["badgeRadius"] = "12px"
+            }
+        };
+        var themeTokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["accent"] = "#f97316",
+                ["badgeRadius"] = "18px"
+            }
+        };
+
+        var merged = WebSiteBuilder.MergeSocialCardThemeTokens(baseTokens, themeTokens);
+
+        Assert.NotNull(merged);
+        var socialCard = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(merged!["socialCard"]);
+        Assert.Equal("56px", socialCard["titleFontSize"]);
+        Assert.Equal("18px", socialCard["badgeRadius"]);
+        Assert.Equal("#f97316", socialCard["accent"]);
+        Assert.True(merged.ContainsKey("color"));
+    }
+
+    [Fact]
     public void ResolveSocialCardAssetDataUri_PreservesRemoteUrls()
     {
         var spec = BuildPagesSpec();
@@ -358,7 +414,7 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
-    public void Build_UsesGeneratedCard_ForBlogSocialPreview_WhenAutoGenerateCardsEnabled_EvenWithBodyImage()
+    public void Build_UsesFirstMarkdownImage_ForBlogSocialPreview_WhenNoExplicitSocialImage_EvenWhenAutoGenerateCardsEnabled()
     {
         var root = CreateTempRoot("pf-web-social-blog-first-image-");
         try
@@ -400,9 +456,10 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, Path.Combine("blog", "multilanguage-support-in-action", "index.html"));
-            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/generated/blog-multilanguage-support-in-action-", html, StringComparison.Ordinal);
-            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/generated/blog-multilanguage-support-in-action-", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("https://example.test/assets/screenshots/multilang-01.png", html, StringComparison.Ordinal);
+            // Intended precedence: explicit social metadata wins first, then the first body image, then generated/default cards.
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -453,6 +510,113 @@ public class WebSiteSocialCardsTests
             var html = BuildAndRead(root, spec, Path.Combine("blog", "inline-image-fallback", "index.html"));
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/fallback-01.png\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/fallback-01.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_UsesFirstMarkdownImage_ForEditorialSocialPreview_WhenNoExplicitSocialImage()
+    {
+        var root = CreateTempRoot("pf-web-social-news-first-image-");
+        try
+        {
+            var newsPath = Path.Combine(root, "content", "news");
+            Directory.CreateDirectory(newsPath);
+            File.WriteAllText(Path.Combine(newsPath, "release-roundup.md"),
+                """
+                ---
+                title: Release Roundup
+                description: News with a lead image.
+                slug: release-roundup
+                date: 2026-04-19
+                ---
+
+                Intro paragraph.
+
+                ![Lead image](/assets/news/release-roundup.png)
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                Image = "/assets/social/default.png",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "news",
+                    Input = "content/news",
+                    Output = "/news",
+                    Preset = "editorial"
+                }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("news", "release-roundup", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/news/release-roundup.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/news/release-roundup.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_PrefersExplicitEditorialImageMetadata_OverFirstBodyImage()
+    {
+        var root = CreateTempRoot("pf-web-social-editorial-explicit-image-");
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "hero-image-wins.md"),
+                """
+                ---
+                title: Hero Image Wins
+                description: Explicit image metadata should win.
+                slug: hero-image-wins
+                image: /assets/social/hero-image.png
+                ---
+
+                Intro text.
+
+                ![Body image](/assets/social/body-image.png)
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                Image = "/assets/social/default.png",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Input = "content/blog",
+                    Output = "/blog"
+                }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("blog", "hero-image-wins", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/hero-image.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/hero-image.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("property=\"og:image\" content=\"https://example.test/assets/social/body-image.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("name=\"twitter:image\" content=\"https://example.test/assets/social/body-image.png\"", html, StringComparison.Ordinal);
             Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
         }
         finally
@@ -729,6 +893,70 @@ public class WebSiteSocialCardsTests
         var outPath = Path.Combine(root, "_site");
         WebSiteBuilder.Build(spec, plan, outPath);
         return File.ReadAllText(Path.Combine(outPath, relativeOutputFile));
+    }
+
+    private static string BuildNamedThemeCardAndGetImage(string root, string accent)
+    {
+        WritePage(root, "release-roundup.md",
+            """
+            ---
+            title: Release Roundup
+            description: Modern named theme social card.
+            slug: release-roundup
+            date: 2026-04-19
+            ---
+
+            Release notes.
+            """);
+
+        var spec = BuildPagesSpec();
+        spec.Social = new SocialSpec
+        {
+            Enabled = true,
+            SiteName = "Example Site",
+            AutoGenerateCards = true,
+            GeneratedCardsPath = "/assets/social/generated",
+            GeneratedCardThemesByCollection = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["pages"] = "modern-editorial"
+            },
+            GeneratedCardThemes = new Dictionary<string, SocialCardThemeSpec>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["modern-editorial"] = new()
+                {
+                    Style = "blog",
+                    Variant = "editorial",
+                    ColorScheme = "light",
+                    Tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["accent"] = accent,
+                            ["backgroundStart"] = "#ffffff",
+                            ["backgroundEnd"] = "#f8fafc",
+                            ["surface"] = "#eef2ff",
+                            ["textPrimary"] = "#0f172a",
+                            ["textSecondary"] = "#475569"
+                        }
+                    }
+                }
+            }
+        };
+
+        var html = BuildAndRead(root, spec, Path.Combine("release-roundup", "index.html"));
+        return ExtractOgImage(html);
+    }
+
+    private static string ExtractOgImage(string html)
+    {
+        const string marker = "property=\"og:image\" content=\"";
+        var start = html.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, "Expected og:image meta tag.");
+
+        var valueStart = start + marker.Length;
+        var valueEnd = html.IndexOf('"', valueStart);
+        Assert.True(valueEnd > valueStart, "Expected og:image content value.");
+        return html[valueStart..valueEnd];
     }
 
     private static void WritePage(string root, string fileName, string markdown)

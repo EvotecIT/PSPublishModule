@@ -61,6 +61,9 @@ internal static partial class WebCliCommandHandlers
                       TryGetOptionValue(subArgs, "--output-path");
         var language = TryGetOptionValue(subArgs, "--language") ??
                        TryGetOptionValue(subArgs, "--lang");
+        var languages = SplitListOption(
+            TryGetOptionValue(subArgs, "--languages") ??
+            TryGetOptionValue(subArgs, "--langs"));
         var languageAsRoot = HasOption(subArgs, "--language-as-root") ||
                              HasOption(subArgs, "--lang-as-root");
         var cleanOutput = HasOption(subArgs, "--clean") || HasOption(subArgs, "--clean-out");
@@ -130,8 +133,14 @@ internal static partial class WebCliCommandHandlers
 
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
-        var result = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options, language, languageAsRoot);
-
+        var result = WebSiteBuilder.Build(
+            spec,
+            plan,
+            outPath,
+            WebCliJson.Options,
+            language,
+            languageAsRoot,
+            languages.Length > 0 ? languages : null);
         if (outputJson)
         {
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
@@ -152,11 +161,18 @@ internal static partial class WebCliCommandHandlers
         logger.Success($"Web build output: {result.OutputPath}");
         if (!string.IsNullOrWhiteSpace(language))
             logger.Info($"Language build: {language} (as-root={languageAsRoot.ToString().ToLowerInvariant()})");
+        else if (languages.Length > 0)
+            logger.Info($"Language build set: {string.Join(", ", languages)}");
         logger.Info($"Plan: {result.PlanPath}");
         logger.Info($"Spec: {result.SpecPath}");
         logger.Info($"Redirects: {result.RedirectsPath}");
         return 0;
     }
+
+    private static string[] SplitListOption(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static int HandleVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {

@@ -14,6 +14,7 @@ internal static partial class WebSocialCardGenerator
         "\\s+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         SocialRegexTimeout);
+    private static readonly Lazy<HashSet<string>> AvailableMagickFontFamilies = new(CreateAvailableMagickFontFamilies);
 
     private static readonly SocialPalette[] Palettes =
     [
@@ -413,7 +414,10 @@ internal static partial class WebSocialCardGenerator
 
                 lines.Add(current.ToString());
                 if (lines.Count >= maxLines)
-                    return ClampLineCount(lines, maxLines);
+                {
+                    MarkLastLineTruncated(lines);
+                    return lines;
+                }
                 current.Clear();
                 current.Append(token);
             }
@@ -425,16 +429,24 @@ internal static partial class WebSocialCardGenerator
         return ClampLineCount(lines, maxLines);
     }
 
+    private static void MarkLastLineTruncated(List<string> lines)
+    {
+        if (lines.Count == 0 || lines[^1].EndsWith("...", StringComparison.Ordinal))
+            return;
+
+        if (lines[^1].Length > 3)
+            lines[^1] = lines[^1][..^3] + "...";
+        else
+            lines[^1] += "...";
+    }
+
     private static List<string> ClampLineCount(List<string> lines, int maxLines)
     {
         if (lines.Count <= maxLines)
             return lines;
 
         var clamped = lines.Take(maxLines).ToList();
-        if (clamped[^1].Length > 3)
-            clamped[^1] = clamped[^1][..^3] + "...";
-        else
-            clamped[^1] += "...";
+        MarkLastLineTruncated(clamped);
         return clamped;
     }
 
@@ -478,13 +490,15 @@ internal static partial class WebSocialCardGenerator
     {
         var minFontSize = Math.Max(24, (int)Math.Round(baseFontSize * 0.75));
         var fontSize = baseFontSize;
-        var lineHeight = baseLineHeight;
+        var lineHeight = EnsureReadableLineHeight(fontSize, baseLineHeight);
         var lines = WrapText(title, GetTitleWrapWidth(contentWidth, fontSize), maxLines);
 
         if (lines.Count > 0 && lines[^1].EndsWith("...", StringComparison.Ordinal))
         {
             var reducedFontSize = Math.Max(minFontSize, (int)Math.Round(baseFontSize * 0.82));
-            var reducedLineHeight = Math.Max(24, (int)Math.Round(baseLineHeight * 0.82));
+            var reducedLineHeight = EnsureReadableLineHeight(
+                reducedFontSize,
+                Math.Max(24, (int)Math.Round(baseLineHeight * 0.82)));
             var reducedLines = WrapText(title, GetTitleWrapWidth(contentWidth, reducedFontSize), maxLines);
             if (reducedLines.Count > 0)
             {
@@ -501,6 +515,12 @@ internal static partial class WebSocialCardGenerator
         }
 
         return (fontSize, lineHeight, lines);
+    }
+
+    private static int EnsureReadableLineHeight(int fontSize, int requestedLineHeight)
+    {
+        var minimumFromFont = Math.Max(fontSize + 4, (int)Math.Ceiling(fontSize * 1.08));
+        return Math.Max(requestedLineHeight, minimumFromFont);
     }
 
     private static int CountVisibleCharacters(IReadOnlyList<string> lines)
@@ -728,30 +748,170 @@ internal static partial class WebSocialCardGenerator
         return currentValue?.ToString();
     }
 
-    private static SocialCardTypography ResolveTypography(IReadOnlyDictionary<string, object?>? themeTokens)
+    private static SocialCardTypography ResolveTypography(IReadOnlyDictionary<string, object?>? themeTokens, bool preferRasterSafeFonts = false)
     {
         var display = NormalizeFontFamily(
             ReadThemeToken(themeTokens, "socialCard", "fontDisplay") ??
             ReadThemeToken(themeTokens, "font", "display"),
-            "Segoe UI, Arial, sans-serif");
+            "Segoe UI, Arial, sans-serif",
+            preferRasterSafeFonts,
+            SocialCardFontIntent.Display);
         var body = NormalizeFontFamily(
             ReadThemeToken(themeTokens, "socialCard", "fontBody") ??
             ReadThemeToken(themeTokens, "font", "body"),
-            "Segoe UI, Arial, sans-serif");
+            "Segoe UI, Arial, sans-serif",
+            preferRasterSafeFonts,
+            SocialCardFontIntent.Body);
         var mono = NormalizeFontFamily(
             ReadThemeToken(themeTokens, "socialCard", "fontMono") ??
             ReadThemeToken(themeTokens, "font", "mono"),
-            "Cascadia Code, Consolas, monospace");
-        var eyebrow = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontEyebrow"), display);
-        var badge = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontBadge"), body);
-        var footer = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontFooter"), body);
+            "Cascadia Code, Consolas, monospace",
+            preferRasterSafeFonts,
+            SocialCardFontIntent.Mono);
+        var eyebrow = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontEyebrow"), display, preferRasterSafeFonts, SocialCardFontIntent.Display);
+        var badge = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontBadge"), body, preferRasterSafeFonts, SocialCardFontIntent.Body);
+        var footer = NormalizeFontFamily(ReadThemeToken(themeTokens, "socialCard", "fontFooter"), body, preferRasterSafeFonts, SocialCardFontIntent.Body);
         return new SocialCardTypography(display, body, mono, eyebrow, badge, footer);
     }
 
-    private static string NormalizeFontFamily(string? value, string fallback)
+    internal static string NormalizeFontFamilyForRaster(string? value, string fallback, bool monospace = false)
+    {
+        return NormalizeFontFamily(
+            value,
+            fallback,
+            preferRasterSafeFonts: true,
+            monospace ? SocialCardFontIntent.Mono : SocialCardFontIntent.Body);
+    }
+
+    private static string NormalizeFontFamily(
+        string? value,
+        string fallback,
+        bool preferRasterSafeFonts,
+        SocialCardFontIntent intent)
     {
         var candidate = (value ?? string.Empty).Trim();
-        return string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;
+        if (string.IsNullOrWhiteSpace(candidate))
+            candidate = fallback;
+
+        if (!preferRasterSafeFonts)
+            return candidate;
+
+        return ResolveRasterSafeFontFamily(candidate, intent);
+    }
+
+    private static string ResolveRasterSafeFontFamily(string stack, SocialCardFontIntent intent)
+    {
+        foreach (var family in ParseFontFamilyStack(stack))
+        {
+            if (TryMapGenericFontFamily(family, intent, out var mapped))
+                return mapped;
+
+            if (IsFontFamilyAvailable(family))
+                return family;
+        }
+
+        return GetDefaultRasterFontFamily(intent);
+    }
+
+    private static IEnumerable<string> ParseFontFamilyStack(string stack)
+    {
+        if (string.IsNullOrWhiteSpace(stack))
+            yield break;
+
+        foreach (var rawSegment in stack.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var normalized = rawSegment.Trim().Trim('"', '\'');
+            if (!string.IsNullOrWhiteSpace(normalized))
+                yield return normalized;
+        }
+    }
+
+    private static bool TryMapGenericFontFamily(string family, SocialCardFontIntent intent, out string mapped)
+    {
+        mapped = string.Empty;
+        if (string.IsNullOrWhiteSpace(family))
+            return false;
+
+        switch (family.Trim().ToLowerInvariant())
+        {
+            case "sans-serif":
+            case "system-ui":
+            case "ui-sans-serif":
+                mapped = GetDefaultRasterFontFamily(intent == SocialCardFontIntent.Mono ? SocialCardFontIntent.Body : intent);
+                return true;
+            case "serif":
+            case "ui-serif":
+                mapped = GetDefaultRasterSerifFontFamily();
+                return true;
+            case "monospace":
+            case "ui-monospace":
+                mapped = GetDefaultRasterFontFamily(SocialCardFontIntent.Mono);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsFontFamilyAvailable(string family)
+    {
+        if (string.IsNullOrWhiteSpace(family))
+            return false;
+
+        try
+        {
+            return AvailableMagickFontFamilies.Value.Contains(family);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static HashSet<string> CreateAvailableMagickFontFamilies()
+    {
+        var families = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            foreach (var family in MagickNET.FontFamilies)
+            {
+                if (!string.IsNullOrWhiteSpace(family))
+                    families.Add(family.Trim());
+            }
+        }
+        catch
+        {
+            // Ignore runtime font enumeration issues and fall back to platform defaults.
+        }
+
+        return families;
+    }
+
+    private static string GetDefaultRasterFontFamily(SocialCardFontIntent intent)
+    {
+        if (intent == SocialCardFontIntent.Mono)
+        {
+            if (OperatingSystem.IsWindows())
+                return "Consolas";
+            if (OperatingSystem.IsMacOS())
+                return "Menlo";
+            return "DejaVu Sans Mono";
+        }
+
+        if (OperatingSystem.IsWindows())
+            return "Segoe UI";
+        if (OperatingSystem.IsMacOS())
+            return "Helvetica Neue";
+        return "DejaVu Sans";
+    }
+
+    private static string GetDefaultRasterSerifFontFamily()
+    {
+        if (OperatingSystem.IsWindows())
+            return "Georgia";
+        if (OperatingSystem.IsMacOS())
+            return "Times New Roman";
+        return "DejaVu Serif";
     }
 
     private static int ResolveBadgeX(IReadOnlyDictionary<string, object?>? themeTokens, int safeLeft, int safeRight, int pillWidth)
@@ -839,6 +999,26 @@ internal static partial class WebSocialCardGenerator
             return "api";
         if (combined.Contains("doc", StringComparison.Ordinal))
             return "docs";
+        if (combined.Contains("example", StringComparison.Ordinal) ||
+            combined.Contains("sample", StringComparison.Ordinal))
+            return "examples";
+        if (combined.Contains("download", StringComparison.Ordinal) ||
+            combined.Contains("package", StringComparison.Ordinal) ||
+            combined.Contains("gallery", StringComparison.Ordinal))
+            return "downloads";
+        if (combined.Contains("release", StringComparison.Ordinal) ||
+            combined.Contains("changelog", StringComparison.Ordinal))
+            return "release";
+        if (combined.Contains("rss", StringComparison.Ordinal) ||
+            combined.Contains("atom", StringComparison.Ordinal) ||
+            combined.Contains("feed", StringComparison.Ordinal))
+            return "feed";
+        if (combined.Contains("benchmark", StringComparison.Ordinal) ||
+            combined.Contains("performance", StringComparison.Ordinal))
+            return "benchmark";
+        if (combined.Contains("qr", StringComparison.Ordinal) ||
+            combined.Contains("barcode", StringComparison.Ordinal))
+            return "code";
         if (combined.Contains("contact", StringComparison.Ordinal) ||
             combined.Contains("support", StringComparison.Ordinal))
             return "contact";
@@ -865,6 +1045,12 @@ internal static partial class WebSocialCardGenerator
             "api" => "reference",
             "blog" => "editorial",
             "contact" => "connect",
+            "examples" => "code",
+            "downloads" => "metrics",
+            "release" => "timeline",
+            "feed" => "feed",
+            "benchmark" => "metrics",
+            "code" => "code",
             _ => "product"
         };
     }
@@ -891,6 +1077,26 @@ internal static partial class WebSocialCardGenerator
             "news" => "blog",
             "article" => "blog",
             "marketing" => "blog",
+            "example" => "examples",
+            "examples" => "examples",
+            "sample" => "examples",
+            "samples" => "examples",
+            "download" => "downloads",
+            "downloads" => "downloads",
+            "gallery" => "downloads",
+            "release" => "release",
+            "releases" => "release",
+            "changelog" => "release",
+            "feed" => "feed",
+            "rss" => "feed",
+            "atom" => "feed",
+            "benchmark" => "benchmark",
+            "benchmarks" => "benchmark",
+            "performance" => "benchmark",
+            "qr" => "code",
+            "qrcode" => "code",
+            "barcode" => "code",
+            "code" => "code",
             "contact" => "contact",
             "contacts" => "contact",
             "support" => "contact",
@@ -923,6 +1129,16 @@ internal static partial class WebSocialCardGenerator
             "inline-image" => "inline-image",
             "connect" => "connect",
             "contact" => "connect",
+            "metrics" => "metrics",
+            "stats" => "metrics",
+            "statistics" => "metrics",
+            "timeline" => "timeline",
+            "release" => "timeline",
+            "feed" => "feed",
+            "stream" => "feed",
+            "code" => "code",
+            "examples" => "code",
+            "showcase" => "product",
             _ => null
         };
     }
@@ -998,6 +1214,12 @@ internal static partial class WebSocialCardGenerator
             "docs" => "DOCS",
             "blog" => "BLOG",
             "contact" => "CONTACT",
+            "examples" => "EXAMPLE",
+            "downloads" => "DOWNLOAD",
+            "release" => "RELEASE",
+            "feed" => "FEED",
+            "benchmark" => "BENCH",
+            "code" => "CODE",
             _ => "PAGE"
         };
     }
@@ -1010,6 +1232,12 @@ internal static partial class WebSocialCardGenerator
             "docs" => "/docs",
             "blog" => "/blog",
             "contact" => "/contact",
+            "examples" => "/examples",
+            "downloads" => "/downloads",
+            "release" => "/releases",
+            "feed" => "/feed",
+            "benchmark" => "/benchmarks",
+            "code" => "/examples",
             _ => "/"
         };
     }
@@ -1199,5 +1427,12 @@ internal static partial class WebSocialCardGenerator
         public string EyebrowFontFamily { get; }
         public string BadgeFontFamily { get; }
         public string FooterFontFamily { get; }
+    }
+
+    private enum SocialCardFontIntent
+    {
+        Display,
+        Body,
+        Mono
     }
 }

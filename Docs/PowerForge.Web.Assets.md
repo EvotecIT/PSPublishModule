@@ -161,6 +161,74 @@ This is useful for turning CDN links into local files.
 
 Supported `MatchType`: `contains` (default), `prefix`, `exact`, `regex`.
 
+Local checked-in asset example:
+```json
+{
+  "AssetPolicy": {
+    "Rewrites": [
+      {
+        "Match": "https://cdn.example.com/prism/",
+        "Replace": "/assets/prism/",
+        "MatchType": "prefix",
+        "Source": "./themes/site/assets/prism/prism-core.js",
+        "Destination": "/assets/prism/prism-core.js"
+      }
+    ]
+  }
+}
+```
+
+Remote self-host example:
+```json
+{
+  "AssetPolicy": {
+    "Rewrites": [
+      {
+        "Match": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
+        "Replace": "/assets/fonts/site-fonts.css",
+        "MatchType": "exact",
+        "SourceUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
+        "SourceUrlAllowedHosts": [ "fonts.googleapis.com", "fonts.gstatic.com" ],
+        "Destination": "/assets/fonts/site-fonts.css",
+        "DownloadDependencies": true,
+        "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+      }
+    ]
+  }
+}
+```
+
+Notes:
+- `SourceUrl` downloads the remote asset during `optimize`. Remote downloads must use `https://`.
+- `SourceUrlAllowedHosts` is required for remote downloads. Exact hosts, leading wildcards such as `*.example.com`, and explicit `"*"` for any public HTTPS host are supported.
+- Remote downloads reject loopback, private, and link-local IP literals even when `"*"` is configured.
+- `UserAgent` is normalized to a single printable ASCII header line before it is sent and is capped at 512 characters.
+- `DownloadDependencies:true` localizes `url(...)` references inside downloaded CSS (useful for font binaries).
+- This works well with structured `Head.Links`, so pages can keep canonical external URLs in source config while optimized output rewrites them to first-party assets.
+
+## Structured head links
+`site.json -> Head -> Links` supports the common `rel`/`href`/`type`/`as`/`sizes`/`crossorigin` fields plus:
+- `Attributes`: extra string attributes such as `media`, `as`, `fetchpriority`, `onload`, or `data-*`
+- `BooleanAttributes`: valueless attributes such as `disabled`
+
+Example:
+```json
+{
+  "Head": {
+    "Links": [
+      {
+        "Rel": "preload",
+        "Href": "/assets/fonts/site-fonts.css",
+        "Attributes": {
+          "as": "style",
+          "onload": "this.onload=null;this.rel='stylesheet'"
+        }
+      }
+    ]
+  }
+}
+```
+
 ## Best practices for 100/100/100
 - Keep CSS/JS route‑specific (use `routeBundles`).
 - Hash assets and serve them with immutable cache headers.

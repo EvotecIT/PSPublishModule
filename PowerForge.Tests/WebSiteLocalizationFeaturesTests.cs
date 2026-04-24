@@ -149,6 +149,40 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedPages_SupportLanguageAllowList_ForSplitDomainDeployments()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-language-allow-list-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-features-language-allow-list-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Language Allow List Test", "localization-features-language-allow-list-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec, languages: new[] { "en" });
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            var plHtmlPath = Path.Combine(result.OutputPath, "pl", "docs", "index.html");
+
+            Assert.True(File.Exists(enHtmlPath));
+            Assert.False(File.Exists(plHtmlPath));
+
+            var html = File.ReadAllText(enHtmlPath);
+            Assert.Contains("href=\"https://evotec.xyz/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.pl/pl/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"pl\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_LocalizedPages_RebaseInternalLinks_ForRootLanguageBuild()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-rebase-root-links-" + Guid.NewGuid().ToString("N"));
@@ -1218,13 +1252,13 @@ public class WebSiteLocalizationFeaturesTests
         }
     }
 
-    private static WebBuildResult BuildSite(string root, SiteSpec spec, string? language = null, bool languageAsRoot = false)
+    private static WebBuildResult BuildSite(string root, SiteSpec spec, string? language = null, bool languageAsRoot = false, string[]? languages = null)
     {
         var configPath = Path.Combine(root, "site.json");
         File.WriteAllText(configPath, "{}");
         var outPath = Path.Combine(root, "_site");
         var plan = WebSitePlanner.Plan(spec, configPath);
-        return WebSiteBuilder.Build(spec, plan, outPath, language: language, languageAsRoot: languageAsRoot);
+        return WebSiteBuilder.Build(spec, plan, outPath, language: language, languageAsRoot: languageAsRoot, languages: languages);
     }
 
     private static SiteSpec CreateLocalizedDocsSpec(string name, string themeName)

@@ -594,7 +594,7 @@ public static partial class WebAssetOptimizer
         return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     }
 
-    private static string InlineCriticalCss(string content, string criticalCss, Regex cssPattern)
+    private static string InlineCriticalCss(string content, string criticalCss, Regex cssPattern, string? cssStrategy)
     {
         var match = StylesheetLinkRegex.Match(content);
         if (!match.Success) return content;
@@ -602,8 +602,14 @@ public static partial class WebAssetOptimizer
         var href = match.Groups[1].Value;
         if (!cssPattern.IsMatch(href)) return content;
 
-        var asyncCss = $"<!-- critical-css -->\n<style>{criticalCss}</style>\n<link rel=\"preload\" href=\"{href}\" as=\"style\" onload=\"this.onload=null;this.rel='stylesheet'\">\n<noscript><link rel=\"stylesheet\" href=\"{href}\"></noscript>";
-        return content.Replace(match.Value, asyncCss);
+        var strategy = WebAssetCssStrategy.Normalize(cssStrategy);
+        var cssLink = strategy switch
+        {
+            "async" => $"<link rel=\"stylesheet\" href=\"{href}\" media=\"print\" onload=\"this.media='all'\">\n<noscript><link rel=\"stylesheet\" href=\"{href}\"></noscript>",
+            "preload" => $"<link rel=\"preload\" href=\"{href}\" as=\"style\" onload=\"this.onload=null;this.rel='stylesheet'\">\n<noscript><link rel=\"stylesheet\" href=\"{href}\"></noscript>",
+            _ => $"<link rel=\"stylesheet\" href=\"{href}\">"
+        };
+        return content.Replace(match.Value, $"<!-- critical-css -->\n<style>{criticalCss}</style>\n{cssLink}");
     }
 
     private static string LoadCriticalCss(string? path)

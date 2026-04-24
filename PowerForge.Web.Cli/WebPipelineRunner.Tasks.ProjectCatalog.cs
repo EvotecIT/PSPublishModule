@@ -37,6 +37,7 @@ internal static partial class WebPipelineRunner
         var sourcesRoot = ResolvePath(baseDir, GetString(step, "sourcesRoot") ?? GetString(step, "sources-root") ?? "./projects-sources");
         var contentRoot = ResolvePath(baseDir, GetString(step, "contentRoot") ?? GetString(step, "content-root") ?? "./content/projects");
         var publishPath = ResolvePath(baseDir, GetString(step, "publishPath") ?? GetString(step, "publish-path") ?? "./static/data/projects/catalog.json");
+        var redirectCsvPath = ResolvePath(baseDir, GetString(step, "redirectCsvPath") ?? GetString(step, "redirect-csv-path"));
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path") ?? "./Build/project-catalog-last-run.json");
         var curationCsvPath = ResolvePath(baseDir, GetString(step, "curationCsv") ?? GetString(step, "curation-csv") ?? "./data/projects/curation.csv");
         var statsPath = ResolvePath(baseDir, GetString(step, "statsPath") ?? GetString(step, "stats-path") ?? "./data/ecosystem/stats.json");
@@ -233,6 +234,10 @@ internal static partial class WebPipelineRunner
             File.Copy(catalogPath, publishPath, overwrite: true);
         }
 
+        var redirectRowsWritten = 0;
+        if (!string.IsNullOrWhiteSpace(redirectCsvPath))
+            redirectRowsWritten = WriteProjectExternalRedirectCsv(catalog.Projects, redirectCsvPath);
+
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
             var summaryDirectory = Path.GetDirectoryName(summaryPath);
@@ -243,6 +248,8 @@ internal static partial class WebPipelineRunner
                 generatedOn = DateTimeOffset.UtcNow.ToString("O"),
                 catalogPath = Path.GetFullPath(catalogPath),
                 publishPath = string.IsNullOrWhiteSpace(publishPath) ? null : Path.GetFullPath(publishPath),
+                redirectCsvPath = string.IsNullOrWhiteSpace(redirectCsvPath) ? null : Path.GetFullPath(redirectCsvPath),
+                redirectRowsWritten,
                 projectCount = catalog.Projects.Count,
                 discoveredManifests,
                 importedManifests,
@@ -273,7 +280,7 @@ internal static partial class WebPipelineRunner
         }
 
         stepResult.Success = true;
-        stepResult.Message = $"project-catalog ok: projects={catalog.Projects.Count}; manifests={importedManifests}/{discoveredManifests}; bootstrap={bootstrapCreatedProjects}; telemetry={telemetryMerged}; releases={releaseTelemetryMerged}; pages={pagesWritten}; sections={sectionsWritten}; staleSectionsDeleted={sectionsDeleted}";
+        stepResult.Message = $"project-catalog ok: projects={catalog.Projects.Count}; manifests={importedManifests}/{discoveredManifests}; bootstrap={bootstrapCreatedProjects}; telemetry={telemetryMerged}; releases={releaseTelemetryMerged}; pages={pagesWritten}; sections={sectionsWritten}; redirects={redirectRowsWritten}; staleSectionsDeleted={sectionsDeleted}";
     }
 
     private static string? FindProjectManifestPath(string projectSourcePath)
@@ -1558,9 +1565,13 @@ internal static partial class WebPipelineRunner
 
             if (contentMode.Equals("external", StringComparison.OrdinalIgnoreCase))
             {
-                var external = project.ExternalUrl;
-                if (string.IsNullOrWhiteSpace(external) && project.Links is not null && project.Links.TryGetValue("website", out var website))
-                    external = website;
+                var external = GetAbsoluteHttpUrlOrFallback(
+                    project.ExternalUrl,
+                    TryGetProjectDictionaryValue(project.Links, "website"));
+                var docsLink = GetProjectDocsLink(project);
+                var apiLink = GetProjectApiLink(project);
+                var examplesLink = GetProjectExamplesLink(project);
+                var changelogLink = GetAbsoluteHttpUrlOrFallback(TryGetProjectDictionaryValue(project.Links, "changelog"));
 
                 if (!string.IsNullOrWhiteSpace(external))
                 {
@@ -1573,6 +1584,17 @@ internal static partial class WebPipelineRunner
                     lines.Add(string.Empty);
                 }
                 lines.Add("This hub page exists for discovery, aliases, and navigation continuity.");
+                lines.Add(string.Empty);
+                if (!string.IsNullOrWhiteSpace(docsLink))
+                    lines.Add($"- Docs: [{docsLink}]({docsLink})");
+                if (!string.IsNullOrWhiteSpace(apiLink))
+                    lines.Add($"- API: [{apiLink}]({apiLink})");
+                if (!string.IsNullOrWhiteSpace(examplesLink))
+                    lines.Add($"- Examples: [{examplesLink}]({examplesLink})");
+                if (!string.IsNullOrWhiteSpace(changelogLink))
+                    lines.Add($"- Changelog: [{changelogLink}]({changelogLink})");
+                if (!string.IsNullOrWhiteSpace(external))
+                    lines.Add($"- Website: [{external}]({external})");
                 lines.Add(string.Empty);
             }
             else
@@ -1645,9 +1667,7 @@ internal static partial class WebPipelineRunner
                 var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
                 var status = NormalizeProjectStatus(project.Status, "active");
                 var hubPath = $"/projects/{slug}/";
-                var primaryLink = contentMode.Equals("external", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(project.ExternalUrl)
-                    ? $"[{project.ExternalUrl}]({project.ExternalUrl})"
-                    : $"[{hubPath}]({hubPath})";
+                var primaryLink = $"[{hubPath}]({hubPath})";
                 var source = string.IsNullOrWhiteSpace(project.GitHubRepo)
                     ? "-"
                     : $"[{project.GitHubRepo}](https://github.com/{project.GitHubRepo})";
@@ -1745,6 +1765,14 @@ internal static partial class WebPipelineRunner
                 if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     lines.Add($"meta.project_external_url: {YamlQuote(project.ExternalUrl)}");
                 AppendProjectFrontMatterExtensions(lines, project);
+                var externalCanonical = contentMode.Equals("external", StringComparison.OrdinalIgnoreCase)
+                    ? GetProjectExternalSectionCanonicalLink(project, section)
+                    : null;
+                if (!string.IsNullOrWhiteSpace(externalCanonical))
+                {
+                    lines.Add($"canonical: {YamlQuote(externalCanonical)}");
+                    lines.Add("robots: \"noindex,follow\"");
+                }
                 lines.Add("---");
                 lines.Add(string.Empty);
                 lines.Add(description);
@@ -1869,6 +1897,65 @@ internal static partial class WebPipelineRunner
         }
 
         return deleted;
+    }
+
+    private static int WriteProjectExternalRedirectCsv(IReadOnlyList<ProjectCatalogEntry> projects, string redirectCsvPath)
+    {
+        if (string.IsNullOrWhiteSpace(redirectCsvPath))
+            return 0;
+
+        var rows = new List<string>
+        {
+            "legacy_url,target_url,status,source_type,source_id,notes"
+        };
+
+        foreach (var project in projects)
+        {
+            var slug = NormalizeSlug(project.Slug);
+            if (string.IsNullOrWhiteSpace(slug))
+                continue;
+
+            var mode = NormalizeProjectMode(project.Mode, "hub-full");
+            var contentMode = NormalizeProjectContentMode(project.ContentMode, mode);
+            if (!contentMode.Equals("external", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            AppendProjectExternalRedirectRow(rows, slug, "docs", GetAbsoluteHttpUrlOrFallback(GetProjectDocsLink(project)));
+            AppendProjectExternalRedirectRow(rows, slug, "api", GetAbsoluteHttpUrlOrFallback(
+                TryGetProjectDictionaryValue(project.Links, "apiPowerShell"),
+                TryGetProjectDictionaryValue(project.Links, "apiDotNet")));
+            AppendProjectExternalRedirectRow(rows, slug, "examples", GetAbsoluteHttpUrlOrFallback(GetProjectExamplesLink(project)));
+            AppendProjectExternalRedirectRow(rows, slug, "changelog", GetAbsoluteHttpUrlOrFallback(TryGetProjectDictionaryValue(project.Links, "changelog")));
+        }
+
+        var directory = Path.GetDirectoryName(redirectCsvPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+        File.WriteAllText(redirectCsvPath, string.Join("\r\n", rows) + "\r\n");
+        return Math.Max(0, rows.Count - 1);
+    }
+
+    private static void AppendProjectExternalRedirectRow(List<string> rows, string slug, string section, string? targetUrl)
+    {
+        if (rows is null || string.IsNullOrWhiteSpace(slug) || string.IsNullOrWhiteSpace(section) || string.IsNullOrWhiteSpace(targetUrl))
+            return;
+
+        static string CsvEscape(string value)
+        {
+            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            return value;
+        }
+
+        var legacyUrl = $"/projects/{slug}/{section}/";
+        var notes = $"generated external project route for {slug}/{section}";
+        rows.Add(string.Join(",",
+            CsvEscape(legacyUrl),
+            CsvEscape(targetUrl),
+            "301",
+            "project-catalog",
+            CsvEscape(slug),
+            CsvEscape(notes)));
     }
 
     private static int MergeProjectTelemetry(
@@ -2537,6 +2624,38 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(value))
             return fallback;
         return value.ToLowerInvariant();
+    }
+
+    private static string? GetProjectExternalSectionCanonicalLink(ProjectCatalogEntry project, string section)
+    {
+        return section.ToLowerInvariant() switch
+        {
+            "docs" => GetAbsoluteHttpUrlOrFallback(GetProjectDocsLink(project)),
+            "api" => GetAbsoluteHttpUrlOrFallback(
+                TryGetProjectDictionaryValue(project.Links, "apiPowerShell"),
+                TryGetProjectDictionaryValue(project.Links, "apiDotNet")),
+            "examples" => GetAbsoluteHttpUrlOrFallback(GetProjectExamplesLink(project)),
+            _ => null
+        };
+    }
+
+    private static string? GetAbsoluteHttpUrlOrFallback(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            var normalized = NormalizeOptionalString(candidate);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri) &&
+                (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                 uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            {
+                return normalized;
+            }
+        }
+
+        return null;
     }
 
     private static string YamlQuote(string? value)

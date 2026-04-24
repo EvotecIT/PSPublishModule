@@ -65,10 +65,12 @@ internal static partial class WebPipelineRunner
         }
 
         AssetPolicySpec? policy = null;
+        string? cssStrategy = null;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
             var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
             policy = spec.AssetPolicy;
+            cssStrategy = spec.AssetRegistry?.CssStrategy;
         }
 
         if (cacheHeaders)
@@ -148,6 +150,7 @@ internal static partial class WebPipelineRunner
             SiteRoot = siteRoot,
             CriticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCss") ?? GetString(step, "critical-css")),
             CssLinkPattern = GetString(step, "cssPattern") ?? "(app|api-docs)\\.css",
+            CssStrategy = GetString(step, "cssStrategy") ?? GetString(step, "css-strategy") ?? cssStrategy ?? "blocking",
             MinifyHtml = minifyHtml,
             MinifyCss = minifyCss,
             MinifyJs = minifyJs,
@@ -193,4 +196,3 @@ internal static partial class WebPipelineRunner
         stepResult.Message = BuildOptimizeSummary(optimize);
     }
 }
-
