@@ -20,7 +20,7 @@ internal static class SocialCardMetricNormalizer
             .ToList();
     }
 
-    public static string Trim(string? value, int maxLength)
+    internal static string Trim(string? value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;

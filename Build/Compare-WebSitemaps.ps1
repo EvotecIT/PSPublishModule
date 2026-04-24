@@ -735,17 +735,17 @@ if ($DiscoverAmpHtml) {
             continue
         }
 
-        $legacyNormalized = Get-NormalizedUrl -Url $legacyUrl
+        $sourceNormalized = Get-NormalizedUrl -Url $legacyUrl
         $targetUrl = $null
         $matchKind = 'amphtml-review'
         $notes = 'AMP alternate discovered from legacy page. Review manually.'
 
-        if ($newLookup.ContainsKey($legacyNormalized)) {
-            $targetUrl = $newLookup[$legacyNormalized].Url
+        if ($newLookup.ContainsKey($sourceNormalized)) {
+            $targetUrl = $newLookup[$sourceNormalized].Url
             $matchKind = 'amphtml-to-canonical'
             $notes = 'AMP alternate discovered from legacy page and mapped to the canonical route.'
-        } elseif ($candidateBySource.ContainsKey($legacyNormalized)) {
-            $candidate = $candidateBySource[$legacyNormalized]
+        } elseif ($candidateBySource.ContainsKey($sourceNormalized)) {
+            $candidate = $candidateBySource[$sourceNormalized]
             $targetUrl = Get-SafeTargetUrl -Candidate $candidate
             if ($targetUrl) {
                 $matchKind = 'amphtml-to-' + $candidate.MatchKind

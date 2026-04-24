@@ -365,6 +365,12 @@ public partial class WebSiteAuditOptimizeBuildTests
                         From = "/legacy/?id=1",
                         To = "/new/",
                         Status = 302
+                    },
+                    new RedirectSpec
+                    {
+                        From = "/legacy?id=2",
+                        To = "/newer/",
+                        Status = 302
                     }
                 },
                 Collections = new[]
@@ -392,7 +398,9 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Contains("location ~ ^/docs/api", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("return 301 /api/$1$is_args$args;", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("if ($request_uri ~ \"^/legacy/\\?id=1$\") { return 302 /new/; }", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("if ($request_uri ~ \"^/legacy\\?id=2$\") { return 302 /newer/; }", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("\"^/legacy\\?id=1$\"", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"^/legacy/\\?id=2$\"", nginx, StringComparison.OrdinalIgnoreCase);
 
             var webConfig = XDocument.Load(Path.Combine(result.OutputPath, "web.config"));
             var actionUrls = webConfig

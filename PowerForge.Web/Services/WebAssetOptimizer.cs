@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -358,7 +359,9 @@ public static partial class WebAssetOptimizer
                 if (!File.Exists(source))
                     continue;
 
-                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                var destinationDirectory = Path.GetDirectoryName(dest);
+                if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                    Directory.CreateDirectory(destinationDirectory);
                 File.Copy(source, dest, overwrite: true);
                 continue;
             }
@@ -382,9 +385,17 @@ public static partial class WebAssetOptimizer
             return;
         }
 
+        if (!IsAllowedRewriteSourceUri(sourceUri, rewrite.SourceUrlAllowedHosts))
+        {
+            Trace.TraceWarning($"Asset rewrite sourceUrl host is not allowed for remote download: {sourceUri.Host}");
+            return;
+        }
+
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            var destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                Directory.CreateDirectory(destinationDirectory);
 
             if (destinationPath.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
             {
@@ -499,8 +510,9 @@ public static partial class WebAssetOptimizer
     private static string DownloadText(Uri uri, string? userAgent)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        if (!string.IsNullOrWhiteSpace(userAgent))
-            request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+        var safeUserAgent = NormalizeHeaderSingleLine(userAgent);
+        if (!string.IsNullOrWhiteSpace(safeUserAgent))
+            request.Headers.TryAddWithoutValidation("User-Agent", safeUserAgent);
 
         using var response = RewriteDownloadClient.Send(request);
         response.EnsureSuccessStatusCode();
@@ -512,8 +524,9 @@ public static partial class WebAssetOptimizer
     private static byte[] DownloadBytes(Uri uri, string? userAgent)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        if (!string.IsNullOrWhiteSpace(userAgent))
-            request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+        var safeUserAgent = NormalizeHeaderSingleLine(userAgent);
+        if (!string.IsNullOrWhiteSpace(safeUserAgent))
+            request.Headers.TryAddWithoutValidation("User-Agent", safeUserAgent);
 
         using var response = RewriteDownloadClient.Send(request);
         response.EnsureSuccessStatusCode();
@@ -521,6 +534,95 @@ public static partial class WebAssetOptimizer
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
         return memory.ToArray();
+    }
+
+    internal static bool IsAllowedRewriteSourceUriForTesting(Uri uri, string[]? allowedHosts = null)
+    {
+        return IsAllowedRewriteSourceUri(uri, allowedHosts);
+    }
+
+    internal static string NormalizeHeaderSingleLineForTesting(string? value)
+    {
+        return NormalizeHeaderSingleLine(value);
+    }
+
+    private static string NormalizeHeaderSingleLine(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var firstLine = value.Split(new[] { '\r', '\n' }, StringSplitOptions.None)[0];
+        return firstLine.Trim();
+    }
+
+    private static bool IsAllowedRewriteSourceUri(Uri uri, string[]? allowedHosts)
+    {
+        if (uri is null ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            IsUnsafeRemoteHost(uri.Host))
+        {
+            return false;
+        }
+
+        var configuredHosts = allowedHosts?
+            .Select(static host => host?.Trim().TrimEnd('.').ToLowerInvariant() ?? string.Empty)
+            .Where(static host => host.Length > 0)
+            .ToArray() ?? Array.Empty<string>();
+        if (configuredHosts.Length == 0)
+            return true;
+
+        var sourceHost = uri.Host.TrimEnd('.').ToLowerInvariant();
+        foreach (var allowedHost in configuredHosts)
+        {
+            if (string.Equals(sourceHost, allowedHost, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (allowedHost.StartsWith("*.", StringComparison.Ordinal) &&
+                sourceHost.EndsWith(allowedHost[1..], StringComparison.OrdinalIgnoreCase) &&
+                sourceHost.Length > allowedHost.Length - 1)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnsafeRemoteHost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return true;
+
+        var normalized = host.Trim().TrimEnd('.');
+        if (normalized.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return IPAddress.TryParse(normalized, out var address) && IsUnsafeRemoteAddress(address);
+    }
+
+    private static bool IsUnsafeRemoteAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address))
+            return true;
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var bytes = address.GetAddressBytes();
+            return bytes[0] == 10 ||
+                   (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                   (bytes[0] == 192 && bytes[1] == 168) ||
+                   (bytes[0] == 169 && bytes[1] == 254) ||
+                   bytes[0] == 0;
+        }
+
+        return address.IsIPv6LinkLocal ||
+               address.IsIPv6SiteLocal ||
+               address.IsIPv6Multicast ||
+               address.Equals(IPAddress.IPv6None) ||
+               address.Equals(IPAddress.IPv6Any);
     }
 
     private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)

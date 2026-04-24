@@ -822,6 +822,22 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void AssetRewriteDownloadHelpers_SanitizeUserAgentAndRejectUnsafeHosts()
+    {
+        Assert.Equal(
+            "PowerForgeBot/1.0",
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting(" PowerForgeBot/1.0\r\nX-Injected: nope "));
+        Assert.True(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "*.example.test" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("http://169.254.169.254/latest/meta-data/")));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "static.example.test" }));
+    }
+
+    [Fact]
     public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));

@@ -29,14 +29,9 @@ public static partial class WebSiteBuilder
             return null;
         }
 
-        if (social.GeneratedCardThemes.TryGetValue(themeKey.Trim(), out var direct))
+        var normalizedThemeKey = themeKey.Trim();
+        if (social.GeneratedCardThemes.TryGetValue(normalizedThemeKey, out var direct))
             return direct;
-
-        foreach (var pair in social.GeneratedCardThemes)
-        {
-            if (string.Equals(pair.Key, themeKey.Trim(), StringComparison.OrdinalIgnoreCase))
-                return pair.Value;
-        }
 
         return null;
     }

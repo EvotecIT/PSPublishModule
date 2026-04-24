@@ -54,6 +54,11 @@ public sealed class AssetRewriteSpec
     public string? Source { get; set; }
     /// <summary>Optional remote source URL to download into the site root.</summary>
     public string? SourceUrl { get; set; }
+    /// <summary>
+    /// Optional allow-list for SourceUrl hosts. Supports exact host names and a leading wildcard such as *.example.com.
+    /// Private, loopback, and link-local IP literals are always rejected.
+    /// </summary>
+    public string[] SourceUrlAllowedHosts { get; set; } = Array.Empty<string>();
     /// <summary>Optional destination path (relative to site root).</summary>
     public string? Destination { get; set; }
     /// <summary>When true and SourceUrl points to CSS, download url(...) dependencies and rewrite them to local files.</summary>
