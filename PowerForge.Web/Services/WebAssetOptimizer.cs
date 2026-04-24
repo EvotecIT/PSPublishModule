@@ -551,8 +551,18 @@ public static partial class WebAssetOptimizer
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        var firstLine = value.Split(new[] { '\r', '\n' }, StringSplitOptions.None)[0];
-        return firstLine.Trim();
+        var firstLine = value.Split(new[] { '\r', '\n' }, StringSplitOptions.None)[0].Trim();
+        var builder = new StringBuilder(Math.Min(firstLine.Length, 512));
+        foreach (var character in firstLine)
+        {
+            if (character is >= ' ' and <= '~')
+                builder.Append(character);
+
+            if (builder.Length >= 512)
+                break;
+        }
+
+        return builder.ToString().Trim();
     }
 
     private static bool IsAllowedRewriteSourceUri(Uri uri, string[]? allowedHosts)

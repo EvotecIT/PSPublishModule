@@ -108,7 +108,9 @@ function Import-LocalSitemapUrls {
         [string] $Path
     )
 
-    [xml] $xml = Get-Content -Path $Path -Raw
+    $content = [string] (Get-Content -Path $Path -Raw)
+    $content = $content.TrimStart([char] 0xFEFF)
+    [xml] $xml = $content
     if (-not ($xml.PSObject.Properties.Name -contains 'urlset') -or -not $xml.urlset -or -not $xml.urlset.url) {
         throw "Unsupported local sitemap document at $Path"
     }

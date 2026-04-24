@@ -693,6 +693,25 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void GetRemoteImageBytes_BoundsRemoteMediaCache()
+    {
+        WebSocialCardGenerator.ClearRemoteImageCache();
+
+        for (var index = 0; index < WebSocialCardGenerator.MaxRemoteImageCacheEntries + 2; index++)
+        {
+            var bytes = WebSocialCardGenerator.GetRemoteImageBytes(
+                $"https://cdn.example.test/logo-{index}.png",
+                allowRemoteMediaFetch: true,
+                source => Encoding.UTF8.GetBytes(source));
+
+            Assert.NotNull(bytes);
+        }
+
+        Assert.InRange(WebSocialCardGenerator.RemoteImageCacheCountForTesting(), 1, WebSocialCardGenerator.MaxRemoteImageCacheEntries);
+        WebSocialCardGenerator.ClearRemoteImageCache();
+    }
+
+    [Fact]
     public void ReadRemoteImageBytesForTesting_ReturnsNull_WhenPayloadExceedsLimit()
     {
         using var stream = new LimitOverflowStream(WebSocialCardGenerator.MaxRemoteImageBytes + 1);
@@ -700,6 +719,39 @@ public class WebSocialCardGeneratorTests
         var bytes = WebSocialCardGenerator.ReadRemoteImageBytesForTesting(stream);
 
         Assert.Null(bytes);
+    }
+
+    [Fact]
+    public void SanitizeSvgForTesting_StripsActiveContentAndExternalReferences()
+    {
+        const string svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" onload="alert(1)">
+          <script>alert(1)</script>
+          <image xlink:href="https://cdn.example.test/logo.png" />
+          <rect style="fill:red;background:url(https://cdn.example.test/x.png)" />
+          <text>EV</text>
+        </svg>
+        """;
+
+        var sanitized = WebSocialCardGenerator.SanitizeSvgForTesting(svg);
+
+        Assert.NotNull(sanitized);
+        Assert.DoesNotContain("<script", sanitized!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onload", sanitized!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://cdn.example.test", sanitized!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("url(", sanitized!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(">EV<", sanitized!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SanitizeSvgForTesting_RejectsDoctype()
+    {
+        var sanitized = WebSocialCardGenerator.SanitizeSvgForTesting("""
+        <!DOCTYPE svg [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+        <svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>
+        """);
+
+        Assert.Null(sanitized);
     }
 
     [Fact]

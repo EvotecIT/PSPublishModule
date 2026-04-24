@@ -827,6 +827,12 @@ public partial class WebSiteAuditOptimizeBuildTests
         Assert.Equal(
             "PowerForgeBot/1.0",
             WebAssetOptimizer.NormalizeHeaderSingleLineForTesting(" PowerForgeBot/1.0\r\nX-Injected: nope "));
+        Assert.Equal(
+            "PowerForgeBot/1.0Beta",
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting("Power\tForgeBot/1.0\0Betaé"));
+        Assert.Equal(
+            new string('A', 512),
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting(new string('A', 600)));
         Assert.True(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
             new Uri("https://cdn.example.test/assets/app.css"),
             new[] { "*.example.test" }));

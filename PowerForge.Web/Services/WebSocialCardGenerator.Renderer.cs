@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Threading;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using ImageMagick;
 using ImageMagick.Drawing;
 
@@ -11,8 +13,11 @@ namespace PowerForge.Web;
 
 internal static partial class WebSocialCardGenerator
 {
-    internal const string RendererVersion = "social-card-renderer-v8";
+    // Bump whenever raster-visible rendering or media sanitization changes.
+    internal const string RendererVersion = "social-card-renderer-v9";
     internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
+    internal const int MaxRemoteImageCacheEntries = 128;
+    internal const long MaxRemoteImageCacheBytes = 100L * 1024 * 1024;
 
     private static readonly HttpClient SocialImageHttpClient = new(new SocketsHttpHandler
     {
@@ -23,6 +28,7 @@ internal static partial class WebSocialCardGenerator
         Timeout = TimeSpan.FromSeconds(10)
     };
     private static readonly ConcurrentDictionary<string, Lazy<byte[]>> RemoteImageByteCache = new(StringComparer.Ordinal);
+    // Keys are limited to normalized title font, font size, and first glyph, so this stays tiny in normal builds.
     private static readonly ConcurrentDictionary<string, int> TitleGlyphInsetCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, int> CenteredTextOffsetCache = new(StringComparer.Ordinal);
 
@@ -1513,22 +1519,59 @@ internal static partial class WebSocialCardGenerator
             return null;
 
         var fetch = remoteFetcher ?? FetchRemoteImageBytes;
+        if (!RemoteImageByteCache.ContainsKey(source) && RemoteImageByteCache.Count >= MaxRemoteImageCacheEntries)
+            RemoteImageByteCache.Clear();
+
         var lazy = RemoteImageByteCache.GetOrAdd(
             source,
             key => new Lazy<byte[]>(
-                () => fetch(key) is { Length: > 0 } payload
-                    ? payload
-                    : throw new InvalidOperationException("Remote image fetch returned no data."),
+                () =>
+                {
+                    var payload = fetch(key);
+                    return payload is { Length: > 0 } && payload.Length <= MaxRemoteImageBytes
+                        ? payload
+                        : throw new InvalidOperationException("Remote image fetch returned no usable data.");
+                },
                 LazyThreadSafetyMode.ExecutionAndPublication));
         try
         {
-            return lazy.Value;
+            var payload = lazy.Value;
+            TrimRemoteImageCacheIfNeeded(source, payload);
+            return payload;
         }
         catch (Exception)
         {
             RemoteImageByteCache.TryRemove(new KeyValuePair<string, Lazy<byte[]>>(source, lazy));
             return null;
         }
+    }
+
+    internal static int RemoteImageCacheCountForTesting()
+    {
+        return RemoteImageByteCache.Count;
+    }
+
+    private static void TrimRemoteImageCacheIfNeeded(string source, byte[] payload)
+    {
+        if (RemoteImageByteCache.Count <= MaxRemoteImageCacheEntries)
+        {
+            long totalBytes = 0;
+            foreach (var entry in RemoteImageByteCache.Values)
+            {
+                if (!entry.IsValueCreated)
+                    continue;
+
+                totalBytes += entry.Value.Length;
+                if (totalBytes > MaxRemoteImageCacheBytes)
+                    break;
+            }
+
+            if (totalBytes <= MaxRemoteImageCacheBytes)
+                return;
+        }
+
+        RemoteImageByteCache.Clear();
+        RemoteImageByteCache[source] = new Lazy<byte[]>(() => payload, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     private static bool IsRemoteMediaSource(string source)
@@ -1610,7 +1653,7 @@ internal static partial class WebSocialCardGenerator
             {
                 var localPath = absoluteUri.LocalPath;
                 if (Path.GetExtension(localPath).Equals(".svg", StringComparison.OrdinalIgnoreCase))
-                    return CreateMagickImage(File.ReadAllBytes(localPath), localPath, widthHint, heightHint);
+                    return CreateMagickImage(SanitizeSvgBytes(File.ReadAllBytes(localPath)), localPath, widthHint, heightHint);
 
                 return new MagickImage(localPath);
             }
@@ -1618,7 +1661,7 @@ internal static partial class WebSocialCardGenerator
             if (File.Exists(source))
             {
                 if (Path.GetExtension(source).Equals(".svg", StringComparison.OrdinalIgnoreCase))
-                    return CreateMagickImage(File.ReadAllBytes(source), source, widthHint, heightHint);
+                    return CreateMagickImage(SanitizeSvgBytes(File.ReadAllBytes(source)), source, widthHint, heightHint);
 
                 return new MagickImage(source);
             }
@@ -1636,7 +1679,8 @@ internal static partial class WebSocialCardGenerator
         if (sourceHint.Contains("image/svg+xml", StringComparison.OrdinalIgnoreCase) ||
             sourceHint.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
         {
-            var image = new MagickImage(bytes, new MagickReadSettings
+            var safeBytes = SanitizeSvgBytes(bytes);
+            var image = new MagickImage(safeBytes, new MagickReadSettings
             {
                 Width = (uint)Math.Max(1, widthHint),
                 Height = (uint)Math.Max(1, heightHint),
@@ -1649,6 +1693,76 @@ internal static partial class WebSocialCardGenerator
         }
 
         return new MagickImage(bytes);
+    }
+
+    internal static string? SanitizeSvgForTesting(string svg)
+    {
+        var sanitized = SanitizeSvgBytes(Encoding.UTF8.GetBytes(svg));
+        return sanitized.Length == 0 ? null : Encoding.UTF8.GetString(sanitized);
+    }
+
+    private static byte[] SanitizeSvgBytes(byte[] bytes)
+    {
+        if (bytes.Length == 0)
+            return bytes;
+
+        try
+        {
+            var svg = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null
+            };
+
+            using var stringReader = new StringReader(svg);
+            using var xmlReader = XmlReader.Create(stringReader, settings);
+            var document = XDocument.Load(xmlReader, LoadOptions.PreserveWhitespace);
+            var root = document.Root;
+            if (root is null)
+                return Array.Empty<byte>();
+
+            foreach (var script in root
+                .DescendantsAndSelf()
+                .Where(static element => string.Equals(element.Name.LocalName, "script", StringComparison.OrdinalIgnoreCase))
+                .ToArray())
+                script.Remove();
+
+            foreach (var element in root.DescendantsAndSelf())
+            {
+                foreach (var attribute in element.Attributes().Where(IsUnsafeSvgAttribute).ToArray())
+                    attribute.Remove();
+            }
+
+            return Encoding.UTF8.GetBytes(document.ToString(SaveOptions.DisableFormatting));
+        }
+        catch (Exception)
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
+    private static bool IsUnsafeSvgAttribute(XAttribute attribute)
+    {
+        var localName = attribute.Name.LocalName;
+        if (localName.StartsWith("on", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var value = attribute.Value.Trim();
+        if (string.Equals(localName, "href", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(localName, "src", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ||
+                   value.StartsWith("data:image/svg+xml", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(localName, "style", StringComparison.OrdinalIgnoreCase) &&
+               (value.Contains("url(", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("expression(", StringComparison.OrdinalIgnoreCase));
     }
 
     // ── Types ──────────────────────────────────────────────────────────

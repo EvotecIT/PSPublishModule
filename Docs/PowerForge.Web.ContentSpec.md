@@ -1077,12 +1077,13 @@ Generated cards can also include a site/page logo and editorial inline media:
 - logo source precedence: `meta.social_card_logo` -> `meta.social.logo` -> named generated card theme `Logo` -> `Social.GeneratedCardLogo` -> `StructuredData.OrganizationLogo`
 - inline media source precedence: `meta.social_card_image` / `meta.social.card_image` / `meta.social_card_media` -> existing social image metadata -> first body image for editorial collections
 - editorial cards automatically switch to the `inline-image` layout when inline media resolves successfully, unless `meta.social_card_image_inline: false`
+- SVG logo/media files are sanitized before raster rendering; scripts, event handlers, external references, and XML doctypes are rejected. Remote media fetches are opt-in and cached with bounded size/entry limits for the current build process.
 
-Preset precedence for generated social cards:
+Generated social-card values are resolved in this order:
 1. per-page `meta.social_card_*` overrides
-2. `Social.GeneratedCard*ByCollection` for the page collection
-3. selected named generated card theme defaults
-4. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
+2. collection defaults from `Social.GeneratedCard*ByCollection`
+3. selected named generated-card theme defaults
+4. global `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant` / `Social.GeneratedCard*` site defaults
 5. built-in heuristics (for example: home -> `spotlight`, docs -> `shelf`, api -> `reference`, blog -> `editorial` or `inline-image`, contact -> `connect`)
 
 If `meta.social_image` is not set, editorial posts (for example `blog`/`news`/`changelog`) also try to use:

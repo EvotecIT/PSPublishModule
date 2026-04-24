@@ -202,7 +202,7 @@ Notes:
 - `SourceUrl` downloads the remote asset during `optimize`.
 - `SourceUrlAllowedHosts` is optional but recommended for remote downloads. Exact hosts and leading wildcards such as `*.example.com` are supported.
 - Remote downloads reject loopback, private, and link-local IP literals even when no allow-list is configured.
-- `UserAgent` is normalized to a single header line before it is sent.
+- `UserAgent` is normalized to a single printable ASCII header line before it is sent and is capped at 512 characters.
 - `DownloadDependencies:true` localizes `url(...)` references inside downloaded CSS (useful for font binaries).
 - This works well with structured `Head.Links`, so pages can keep canonical external URLs in source config while optimized output rewrites them to first-party assets.
 
