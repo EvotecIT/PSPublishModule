@@ -137,12 +137,18 @@ public static partial class WebLinkService
         {
             if (!Uri.TryCreate(host, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
                 throw new ArgumentException($"{parameterName} must be a valid host name or absolute http(s) URL.", parameterName);
+            if ((!string.IsNullOrWhiteSpace(uri.AbsolutePath) && uri.AbsolutePath != "/") ||
+                !string.IsNullOrWhiteSpace(uri.Query) ||
+                !string.IsNullOrWhiteSpace(uri.Fragment))
+            {
+                throw new ArgumentException($"{parameterName} must be a host name without a path.", parameterName);
+            }
+
             host = uri.Host.ToLowerInvariant();
         }
 
         if (host.Contains('/', StringComparison.Ordinal) ||
-            host.Contains('\\', StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(host))
+            host.Contains('\\', StringComparison.Ordinal))
         {
             throw new ArgumentException($"{parameterName} must be a host name without a path.", parameterName);
         }

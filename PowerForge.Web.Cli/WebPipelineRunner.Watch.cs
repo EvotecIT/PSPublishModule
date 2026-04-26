@@ -446,20 +446,20 @@ internal static partial class WebPipelineRunner
             var hasMessage = !string.IsNullOrWhiteSpace(message);
             if (!hasMessage && segments.Count > 0)
                 continue;
-            if (!hasMessage)
-                message = current.GetType().Name;
-            message ??= current.GetType().Name;
+            var resolvedMessage = hasMessage
+                ? message!
+                : current.GetType().Name;
 
             if (current is FileNotFoundException fileNotFound &&
                 !string.IsNullOrWhiteSpace(fileNotFound.FileName) &&
-                message.IndexOf(fileNotFound.FileName, StringComparison.OrdinalIgnoreCase) < 0)
+                resolvedMessage.IndexOf(fileNotFound.FileName, StringComparison.OrdinalIgnoreCase) < 0)
             {
-                message += $" [file: {fileNotFound.FileName}]";
+                resolvedMessage += $" [file: {fileNotFound.FileName}]";
             }
 
-            var segment = string.Equals(message, current.GetType().Name, StringComparison.Ordinal)
+            var segment = string.Equals(resolvedMessage, current.GetType().Name, StringComparison.Ordinal)
                 ? current.GetType().Name
-                : $"{current.GetType().Name}: {message}";
+                : $"{current.GetType().Name}: {resolvedMessage}";
             if (segments.Count == 0 || !segments[^1].Equals(segment, StringComparison.Ordinal))
                 segments.Add(segment);
 

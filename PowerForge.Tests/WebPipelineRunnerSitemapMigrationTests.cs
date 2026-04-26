@@ -140,6 +140,64 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_LinksCompareSitemaps_RejectsNestedLocalSitemapOutsideBaseDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-sitemaps-escape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "sitemaps"));
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            File.WriteAllText(Path.Combine(root, "sitemaps", "legacy-index.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <sitemap><loc>../outside.xml</loc></sitemap>
+                </sitemapindex>
+                """);
+            File.WriteAllText(Path.Combine(root, "outside.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://evotec.xyz/old-post/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "_site", "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://evotec.xyz/blog/old-post/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-compare-sitemaps",
+                      "legacySitemaps": ["./sitemaps/legacy-index.xml"],
+                      "newSitemap": "./_site/sitemap.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.Contains("escapes the sitemap directory", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

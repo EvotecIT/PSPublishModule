@@ -209,10 +209,28 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(value))
             return value;
         if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
-            return absolute.IsFile ? absolute.LocalPath : value;
+            return absolute.IsFile && !IsRemoteSitemapLocation(baseLocation)
+                ? EnsureNestedSitemapPathWithinBase(baseLocation, absolute.LocalPath)
+                : value;
         if (IsRemoteSitemapLocation(baseLocation) && Uri.TryCreate(new Uri(baseLocation), value, out var nestedRemote))
             return nestedRemote.AbsoluteUri;
-        return Path.GetFullPath(Path.Combine(baseLocation, value.Replace('/', Path.DirectorySeparatorChar)));
+
+        var nestedPath = Path.GetFullPath(Path.Combine(baseLocation, value.Replace('/', Path.DirectorySeparatorChar)));
+        return EnsureNestedSitemapPathWithinBase(baseLocation, nestedPath);
+    }
+
+    private static string EnsureNestedSitemapPathWithinBase(string baseLocation, string nestedPath)
+    {
+        var basePath = Path.GetFullPath(baseLocation);
+        var basePrefix = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullNestedPath = Path.GetFullPath(nestedPath);
+        if (!string.Equals(fullNestedPath, basePath, StringComparison.OrdinalIgnoreCase) &&
+            !fullNestedPath.StartsWith(basePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Nested sitemap location escapes the sitemap directory: {nestedPath}");
+        }
+
+        return fullNestedPath;
     }
 
     private static bool IsRemoteSitemapLocation(string value)

@@ -1638,6 +1638,38 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void GenerateLegacyAmpRedirects_RejectsDefaultHostWithPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-host-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                """);
+
+            var ex = Assert.Throws<ArgumentException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "https://example.test/path",
+                DefaultPolishHost = "pl.example.test"
+            }));
+
+            Assert.Contains("without a path", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void GenerateLegacyAmpRedirects_PreservesHostFromAbsoluteLegacyRows()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-absolute-" + Guid.NewGuid().ToString("N"));
