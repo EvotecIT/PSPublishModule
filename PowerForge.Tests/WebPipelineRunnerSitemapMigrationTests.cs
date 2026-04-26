@@ -146,6 +146,58 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
     }
 
     [Fact]
+    public void RunPipeline_LinksCompareSitemaps_RejectsOutOfRangeSitemapDepth()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-sitemaps-depth-range-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            File.WriteAllText(Path.Combine(root, "legacy-sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://evotec.xyz/old-post/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "_site", "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://evotec.xyz/blog/old-post/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-compare-sitemaps",
+                      "legacySitemaps": ["./legacy-sitemap.xml"],
+                      "newSitemap": "./_site/sitemap.xml",
+                      "maxSitemapDepth": 65
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.Contains("maxSitemapDepth", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("between 0 and 64", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_LinksCompareSitemaps_RejectsNestedLocalSitemapOutsideBaseDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-sitemaps-escape-" + Guid.NewGuid().ToString("N"));

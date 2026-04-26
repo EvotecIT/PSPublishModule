@@ -1273,6 +1273,7 @@ Notes:
 - `languageHosts` maps language codes to the host used for relative CSV rows. The map must include the `defaultLanguage` host (`en` by default).
 - `defaultEnglishHost` and `defaultPolishHost` remain supported as compatibility aliases for older pipelines, but reusable pipelines should prefer `languageHosts`.
 - Relative targets can be host-rooted for split-domain deployments. For example, a Polish target beginning with `/pl/` is rooted at the host supplied for `pl`.
+- Apache redirect export fails fast when a generated target contains characters that must be URL-encoded before use in a `RewriteRule` substitution. URL-encode non-ASCII characters, spaces, and other unsafe target characters before exporting Apache rules.
 
 #### links-compare-sitemaps
 Compares one or more legacy sitemaps with a newly generated sitemap and emits reusable redirect/review artifacts for static-site migrations.
@@ -1293,7 +1294,7 @@ Compares one or more legacy sitemaps with a newly generated sitemap and emits re
 Notes:
 - The task uses the native `WebSitemapMigrationAnalyzer`, so migration heuristics are available to the CLI, pipeline, and tests rather than only a project-local `.ps1`.
 - `legacySitemaps`/`newSitemap` accept local files or HTTP(S) URLs; XML is loaded with DTD processing disabled.
-- Remote sitemap fetches use `timeoutSeconds`, `maxSitemapDepth` (default `8`), a bounded redirect count, and a response-size cap.
+- Remote sitemap fetches use `timeoutSeconds`, `maxSitemapDepth` (default `8`, valid range `0`-`64`), a bounded redirect count, and a response-size cap.
 - Redirect CSV columns are `legacy_url,target_url,status,match_kind,notes`, matching the link-service import/export workflow.
 - Review CSV rows are for missing or ambiguous legacy URLs that should not be promoted automatically.
 

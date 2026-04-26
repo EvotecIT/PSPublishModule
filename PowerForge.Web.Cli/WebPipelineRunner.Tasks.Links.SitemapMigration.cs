@@ -15,6 +15,8 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private const int LinksCompareSitemapsMaxDepthLimit = 64;
+
     private static void ExecuteLinksCompareSitemaps(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var legacySitemapValues = GetStringOrArrayOfStrings(
@@ -45,6 +47,11 @@ internal static partial class WebPipelineRunner
         var maxSitemapDepth = GetInt(step, "maxSitemapDepth") ??
                               GetInt(step, "max-sitemap-depth") ??
                               8;
+        if (maxSitemapDepth is < 0 or > LinksCompareSitemapsMaxDepthLimit)
+        {
+            throw new InvalidOperationException(
+                $"links-compare-sitemaps maxSitemapDepth must be between 0 and {LinksCompareSitemapsMaxDepthLimit}.");
+        }
 
         using var sitemapHttpClient = CreateSitemapHttpClient(timeoutSeconds);
         var legacyUrls = new List<string>();
