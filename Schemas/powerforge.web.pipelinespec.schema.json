@@ -1903,6 +1903,10 @@
         "default-english-host": { "type": "string" },
         "defaultPolishHost": { "type": "string" },
         "default-polish-host": { "type": "string" },
+        "languageHosts": { "type": "object", "additionalProperties": { "type": "string" } },
+        "language-hosts": { "type": "object", "additionalProperties": { "type": "string" } },
+        "defaultLanguage": { "type": "string" },
+        "default-language": { "type": "string" },
         "summaryPath": { "type": "string" },
         "summary-path": { "type": "string" }
       },
