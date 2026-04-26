@@ -120,8 +120,10 @@ public sealed class WebPipelineRunnerLinksTests
                       "task": "links-generate-legacy-amp",
                       "sourceCsvPath": "./data/redirects/legacy.csv",
                       "outputCsvPath": "./data/redirects/legacy-amp.csv",
-                      "defaultEnglishHost": "evotec.xyz",
-                      "defaultPolishHost": "evotec.pl",
+                      "languageHosts": {
+                        "en": "evotec.xyz",
+                        "pl": "evotec.pl"
+                      },
                       "summaryPath": "./Build/legacy-amp-summary.json"
                     }
                   ]

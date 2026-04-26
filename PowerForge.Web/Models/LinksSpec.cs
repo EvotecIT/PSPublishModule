@@ -237,9 +237,13 @@ public sealed class WebLegacyAmpRedirectOptions
     public string OutputCsvPath { get; set; } = string.Empty;
     /// <summary>Default URL scheme used when generating absolute legacy AMP sources and targets.</summary>
     public string DefaultScheme { get; set; } = "https";
-    /// <summary>Default English/root host for relative legacy rows.</summary>
+    /// <summary>Default language used when a legacy row has no language value.</summary>
+    public string DefaultLanguage { get; set; } = "en";
+    /// <summary>Language code to host map used for relative legacy rows.</summary>
+    public Dictionary<string, string> LanguageHosts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Compatibility alias for LanguageHosts["en"]. Prefer LanguageHosts for reusable pipelines.</summary>
     public string DefaultEnglishHost { get; set; } = string.Empty;
-    /// <summary>Default Polish host for relative Polish legacy rows.</summary>
+    /// <summary>Compatibility alias for LanguageHosts["pl"]. Prefer LanguageHosts for reusable pipelines.</summary>
     public string DefaultPolishHost { get; set; } = string.Empty;
 }
 

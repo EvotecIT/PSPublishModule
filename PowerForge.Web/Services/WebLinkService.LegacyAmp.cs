@@ -20,8 +20,8 @@ public static partial class WebLinkService
             throw new FileNotFoundException("Legacy redirect source CSV not found.", sourcePath);
 
         var scheme = string.IsNullOrWhiteSpace(options.DefaultScheme) ? "https" : options.DefaultScheme.Trim().ToLowerInvariant();
-        var englishHost = NormalizeRequiredHost(options.DefaultEnglishHost, nameof(options.DefaultEnglishHost));
-        var polishHost = NormalizeRequiredHost(options.DefaultPolishHost, nameof(options.DefaultPolishHost));
+        var defaultLanguage = NormalizeLegacyAmpLanguage(options.DefaultLanguage, nameof(options.DefaultLanguage));
+        var languageHosts = BuildLegacyAmpLanguageHosts(options, defaultLanguage);
         var lines = File.ReadAllLines(sourcePath);
         var generated = new List<LegacyAmpRedirectRow>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -75,14 +75,14 @@ public static partial class WebLinkService
                     }
 
                     var language = ReadPart(parts, languageIndex);
-                    var host = ResolveLegacyAmpHost(legacyUrl, language, englishHost, polishHost);
+                    var host = ResolveLegacyAmpHost(legacyUrl, language, languageHosts, defaultLanguage);
                     if (string.IsNullOrWhiteSpace(host))
                     {
                         skippedCount++;
                         continue;
                     }
 
-                    var target = ResolveLegacyAmpTargetUrl(targetUrl, host, scheme, englishHost, polishHost);
+                    var target = ResolveLegacyAmpTargetUrl(targetUrl, host, scheme, languageHosts);
                     var status = 301;
                     if (statusIndex >= 0 && statusIndex < parts.Length && int.TryParse(parts[statusIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus))
                         status = parsedStatus;
@@ -156,6 +156,54 @@ public static partial class WebLinkService
         return host;
     }
 
+    private static IReadOnlyDictionary<string, string> BuildLegacyAmpLanguageHosts(
+        WebLegacyAmpRedirectOptions options,
+        string defaultLanguage)
+    {
+        var hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (options.LanguageHosts is not null)
+        {
+            foreach (var pair in options.LanguageHosts)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+                    continue;
+
+                var language = NormalizeLegacyAmpLanguage(pair.Key, $"LanguageHosts[{pair.Key}]");
+                hosts[language] = NormalizeRequiredHost(pair.Value, $"LanguageHosts[{language}]");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.DefaultEnglishHost) && !hosts.ContainsKey("en"))
+            hosts["en"] = NormalizeRequiredHost(options.DefaultEnglishHost, nameof(options.DefaultEnglishHost));
+        if (!string.IsNullOrWhiteSpace(options.DefaultPolishHost) && !hosts.ContainsKey("pl"))
+            hosts["pl"] = NormalizeRequiredHost(options.DefaultPolishHost, nameof(options.DefaultPolishHost));
+
+        if (!hosts.ContainsKey(defaultLanguage))
+        {
+            throw new ArgumentException(
+                $"LanguageHosts must include the default language '{defaultLanguage}' for relative legacy AMP redirect rows.",
+                nameof(options));
+        }
+
+        return hosts;
+    }
+
+    private static string NormalizeLegacyAmpLanguage(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException($"{parameterName} is required.", parameterName);
+
+        var language = value.Trim().Trim('/').ToLowerInvariant();
+        if (language.Length == 0 ||
+            language.Contains('/', StringComparison.Ordinal) ||
+            language.Contains('\\', StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"{parameterName} must be a language code such as 'en' or 'pl'.", parameterName);
+        }
+
+        return language;
+    }
+
     private static string? ResolveLegacyPathForAmp(string value)
     {
         var trimmed = value.Trim();
@@ -188,19 +236,30 @@ public static partial class WebLinkService
         return normalized.TrimEnd('/') + "/amp/";
     }
 
-    private static string ResolveLegacyAmpHost(string legacyUrl, string language, string englishHost, string polishHost)
+    private static string ResolveLegacyAmpHost(
+        string legacyUrl,
+        string language,
+        IReadOnlyDictionary<string, string> languageHosts,
+        string defaultLanguage)
     {
         if (Uri.TryCreate(legacyUrl.Trim(), UriKind.Absolute, out var uri) &&
             (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
              uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
             return uri.Host.ToLowerInvariant();
 
-        return language.Trim().Equals("pl", StringComparison.OrdinalIgnoreCase)
-            ? polishHost
-            : englishHost;
+        var languageKey = string.IsNullOrWhiteSpace(language)
+            ? defaultLanguage
+            : NormalizeLegacyAmpLanguage(language, "language");
+        return languageHosts.TryGetValue(languageKey, out var host)
+            ? host
+            : languageHosts[defaultLanguage];
     }
 
-    private static string ResolveLegacyAmpTargetUrl(string targetUrl, string host, string scheme, string englishHost, string polishHost)
+    private static string ResolveLegacyAmpTargetUrl(
+        string targetUrl,
+        string host,
+        string scheme,
+        IReadOnlyDictionary<string, string> languageHosts)
     {
         var trimmed = targetUrl.Trim();
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
@@ -210,12 +269,16 @@ public static partial class WebLinkService
 
         var path = NormalizeCanonicalLegacyPath(trimmed);
         // Legacy AMP redirects only strip the language prefix for the host that owns that language root.
-        if (host.Equals(polishHost, StringComparison.OrdinalIgnoreCase) &&
-            path.StartsWith("/pl/", StringComparison.OrdinalIgnoreCase))
-            path = "/" + path[4..];
-        else if (host.Equals(englishHost, StringComparison.OrdinalIgnoreCase) &&
-                 path.StartsWith("/en/", StringComparison.OrdinalIgnoreCase))
-            path = "/" + path[4..];
+        foreach (var pair in languageHosts)
+        {
+            if (!host.Equals(pair.Value, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var prefix = "/" + pair.Key.Trim('/') + "/";
+            if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                path = "/" + path[prefix.Length..];
+            break;
+        }
 
         return $"{scheme}://{host}{path}";
     }

@@ -1259,8 +1259,10 @@ Generates legacy WordPress AMP continuity redirects as a CSV consumed by link va
   "task": "links-generate-legacy-amp",
   "sourceCsvPath": "./data/redirects/legacy-wordpress-generated.csv",
   "outputCsvPath": "./data/redirects/legacy-amp-generated.csv",
-  "defaultEnglishHost": "evotec.xyz",
-  "defaultPolishHost": "evotec.pl",
+  "languageHosts": {
+    "en": "evotec.xyz",
+    "pl": "evotec.pl"
+  },
   "summaryPath": "./Build/generate-legacy-amp-redirects-last-run.json"
 }
 ```
@@ -1268,8 +1270,9 @@ Generates legacy WordPress AMP continuity redirects as a CSV consumed by link va
 Notes:
 - This preserves WordPress-era `/<slug>/amp/` URLs after static migration.
 - Query-style legacy URLs and rows already ending in `/amp/` are skipped.
-- `defaultEnglishHost` and `defaultPolishHost` are required for relative CSV rows; pass site-specific hosts explicitly so the reusable engine does not bake in deployment domains.
-- Polish relative targets can be host-rooted for split-domain deployments such as the host supplied in `defaultPolishHost`.
+- `languageHosts` maps language codes to the host used for relative CSV rows. The map must include the `defaultLanguage` host (`en` by default).
+- `defaultEnglishHost` and `defaultPolishHost` remain supported as compatibility aliases for older pipelines, but reusable pipelines should prefer `languageHosts`.
+- Relative targets can be host-rooted for split-domain deployments. For example, a Polish target beginning with `/pl/` is rooted at the host supplied for `pl`.
 
 #### links-compare-sitemaps
 Compares one or more legacy sitemaps with a newly generated sitemap and emits reusable redirect/review artifacts for static-site migrations.

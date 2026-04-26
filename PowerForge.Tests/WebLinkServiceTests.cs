@@ -624,6 +624,42 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ExportApache_RejectsUnsafeTargetSubstitutions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-unsafe-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Redirects = new[]
+                {
+                    new LinkRedirectRule
+                    {
+                        Id = "unsafe-target",
+                        SourcePath = "/old/",
+                        TargetUrl = "/new path/",
+                        Status = 301
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            }));
+
+            Assert.Contains("URL-encoded", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void ExportApache_EmitsGoneRulesForPrefixAndRegexWithoutTarget()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-gone-" + Guid.NewGuid().ToString("N"));
@@ -1629,7 +1665,7 @@ public sealed class WebLinkServiceTests
                 OutputCsvPath = outputPath
             }));
 
-            Assert.Contains("DefaultEnglishHost", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("default language", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1662,6 +1698,43 @@ public sealed class WebLinkServiceTests
             }));
 
             Assert.Contains("without a path", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_UsesLanguageHostMapForReusableSites()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-language-map-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /article-fr/,/fr/article-current/,301,fr
+                """);
+
+            var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                LanguageHosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["en"] = "example.test",
+                    ["fr"] = "fr.example.test"
+                }
+            });
+
+            Assert.Equal(1, result.GeneratedCount);
+            var csv = File.ReadAllText(outputPath);
+            Assert.Contains("\"https://fr.example.test/article-fr/amp/\",\"https://fr.example.test/article-current/\",\"301\"", csv, StringComparison.Ordinal);
         }
         finally
         {

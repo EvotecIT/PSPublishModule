@@ -1097,6 +1097,52 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_DoesNotTreatTwoDashProseAsFrontMatterDelimiter()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-two-dash-prose-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Operator Notes</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <p>-- title: Operator notes description: SQL examples layout: docs</p>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "content-frontmatter-leak");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_FlagsRenderedMarkdownLeakWhenEscapedHtmlAndMarkdownAreVisible()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-markdown-leak-" + Guid.NewGuid().ToString("N"));

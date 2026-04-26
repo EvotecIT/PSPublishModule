@@ -118,6 +118,8 @@ public static partial class WebLinkService
             return false;
 
         destination = NormalizeApacheDestination(destination, rule.SourceHost, languageRootHosts);
+        if (!IsSafeApacheRewriteSubstitution(destination))
+            throw new InvalidOperationException($"Apache redirect target contains characters that must be URL-encoded before export: {rule.Id ?? rule.SourcePath}");
 
         AppendHostCondition(lines, rule.SourceHost);
         AppendQueryCondition(lines, rule.SourceQuery);
@@ -131,6 +133,20 @@ public static partial class WebLinkService
         };
         lines.Add($"RewriteRule {pattern} {destination} [{string.Join(",", flags)}]");
         lines.Add(string.Empty);
+        return true;
+    }
+
+    private static bool IsSafeApacheRewriteSubstitution(string destination)
+    {
+        if (string.IsNullOrWhiteSpace(destination))
+            return false;
+
+        foreach (var c in destination)
+        {
+            if (char.IsWhiteSpace(c) || char.IsControl(c))
+                return false;
+        }
+
         return true;
     }
 

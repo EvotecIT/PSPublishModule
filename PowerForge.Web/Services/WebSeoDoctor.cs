@@ -27,7 +27,7 @@ public static class WebSeoDoctor
         @"(?:^|\s)(?:--\s*)?(?<key>title|description|slug|language|layout|translation_key|meta\.raw_html)\s*:",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex FrontMatterDelimiterPattern = new(
-        @"(?:^|\s)--{2,3}(?:\s|$)",
+        @"(?:^|\s)---(?:\s|$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex VisibleMarkdownLeakPattern = new(
         @"(?:^|[\s(])(?:!\[[^\]\r\n]*\]\([^)]+\)|\[[^\]\r\n]+\]\([^)]+\)|```)",

@@ -177,20 +177,17 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new InvalidOperationException("links-generate-legacy-amp requires outputCsvPath or out.");
 
-        var defaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host");
-        var defaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host");
-        if (string.IsNullOrWhiteSpace(defaultEnglishHost))
-            throw new InvalidOperationException("links-generate-legacy-amp requires defaultEnglishHost for relative legacy rows.");
-        if (string.IsNullOrWhiteSpace(defaultPolishHost))
-            throw new InvalidOperationException("links-generate-legacy-amp requires defaultPolishHost for relative Polish legacy rows.");
+        var languageHosts = BuildLegacyAmpLanguageHostMap(step);
 
         var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
         {
             SourceCsvPath = sourcePath,
             OutputCsvPath = outputPath,
             DefaultScheme = GetString(step, "defaultScheme") ?? GetString(step, "default-scheme") ?? "https",
-            DefaultEnglishHost = defaultEnglishHost,
-            DefaultPolishHost = defaultPolishHost
+            DefaultLanguage = GetString(step, "defaultLanguage") ?? GetString(step, "default-language") ?? "en",
+            LanguageHosts = languageHosts,
+            DefaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host") ?? string.Empty,
+            DefaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host") ?? string.Empty
         });
 
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
@@ -574,6 +571,26 @@ internal static partial class WebPipelineRunner
                     : property.Value.ToString();
                 if (!string.IsNullOrWhiteSpace(property.Name) && !string.IsNullOrWhiteSpace(value))
                     hosts[property.Name.Trim()] = value.Trim().Trim('/');
+            }
+        }
+
+        return hosts;
+    }
+
+    private static Dictionary<string, string> BuildLegacyAmpLanguageHostMap(JsonElement step)
+    {
+        var hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if ((step.TryGetProperty("languageHosts", out var hostsElement) ||
+             step.TryGetProperty("language-hosts", out hostsElement)) &&
+            hostsElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in hostsElement.EnumerateObject())
+            {
+                var value = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString()
+                    : property.Value.ToString();
+                if (!string.IsNullOrWhiteSpace(property.Name) && !string.IsNullOrWhiteSpace(value))
+                    hosts[property.Name.Trim()] = value.Trim();
             }
         }
 
