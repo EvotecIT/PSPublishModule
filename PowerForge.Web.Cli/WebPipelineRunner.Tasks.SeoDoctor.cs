@@ -10,6 +10,11 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private static readonly JsonSerializerOptions SeoDoctorIndentedJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private static void ExecuteSeoDoctor(
         JsonElement step,
         string baseDir,
@@ -362,7 +367,7 @@ internal static partial class WebPipelineRunner
         var directory = Path.GetDirectoryName(resolvedPath);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
-        File.WriteAllText(resolvedPath, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(resolvedPath, JsonSerializer.Serialize(payload, SeoDoctorIndentedJsonOptions));
     }
 
     private static void WriteSeoDoctorCsvFile(JsonElement step, string baseDir, string name, string altName, string csv)

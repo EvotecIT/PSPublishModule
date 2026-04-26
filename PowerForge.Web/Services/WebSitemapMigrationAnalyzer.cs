@@ -14,6 +14,12 @@ public static class WebSitemapMigrationAnalyzer
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SlugNonTokenRegex = new(@"[^a-z0-9/]+", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex BlogLikeTargetPathRegex = new(@"^/(blog|categories|tags)(/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex AuthorArchivePathRegex = NewMigrationRegex(@"^/author/[^/]+/?$");
+    private static readonly Regex HubScriptsDetailPathRegex = NewMigrationRegex(@"^/hub/scripts/(.+?)/?$");
+    private static readonly Regex PowerShellModulesDetailPathRegex = NewMigrationRegex(@"^/powershell-modules/(.+?)/?$");
+    private static readonly Regex NetProductsDetailPathRegex = NewMigrationRegex(@"^/net-products/(.+?)/?$");
+    private static readonly Regex OfferDetailPathRegex = NewMigrationRegex(@"^/offer/(.+?)/?$");
+    private static readonly Regex StartDetailPathRegex = NewMigrationRegex(@"^/start/(.+?)/?$");
 
     /// <summary>Compare legacy and new URLs and produce redirect/review candidates.</summary>
     public static WebSitemapMigrationResult Analyze(WebSitemapMigrationOptions options)
@@ -301,7 +307,7 @@ public static class WebSitemapMigrationAnalyzer
         (string[] Paths, string Kind, string Notes) special = legacyPath switch
         {
             "/docs" => (new[] { "/projects" }, "docs-to-projects", "Legacy docs hub mapped to the current projects landing page."),
-            _ when Regex.IsMatch(legacyPath, @"^/author/[^/]+/?$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase) => (new[] { "/blog" }, "author-to-blog", "Legacy author archive mapped to the current blog landing page."),
+            _ when AuthorArchivePathRegex.IsMatch(legacyPath) => (new[] { "/blog" }, "author-to-blog", "Legacy author archive mapped to the current blog landing page."),
             "/hub/scripts" => (new[] { "/scripts" }, "hub-scripts-root", "Legacy hub scripts landing page matched the current scripts page."),
             _ => (Array.Empty<string>(), string.Empty, string.Empty)
         };
@@ -312,11 +318,11 @@ public static class WebSitemapMigrationAnalyzer
             return;
         }
 
-        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, @"^/hub/scripts/(.+?)/?$", "hub-scripts-detail", "Legacy hub script detail mapped to the current root route.", match => new[] { "/" + match.Groups[1].Value });
-        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, @"^/powershell-modules/(.+?)/?$", "powershell-modules-detail", "Legacy PowerShell module page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value, "/projects/" + match.Groups[1].Value });
-        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, @"^/net-products/(.+?)/?$", "net-products-detail", "Legacy .NET product page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value, "/projects/" + match.Groups[1].Value });
-        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, @"^/offer/(.+?)/?$", "offer-detail", "Legacy offer page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value });
-        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, @"^/start/(.+?)/?$", "start-detail", "Legacy start section page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value });
+        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, HubScriptsDetailPathRegex, "hub-scripts-detail", "Legacy hub script detail mapped to the current root route.", match => new[] { "/" + match.Groups[1].Value });
+        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, PowerShellModulesDetailPathRegex, "powershell-modules-detail", "Legacy PowerShell module page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value, "/projects/" + match.Groups[1].Value });
+        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, NetProductsDetailPathRegex, "net-products-detail", "Legacy .NET product page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value, "/projects/" + match.Groups[1].Value });
+        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, OfferDetailPathRegex, "offer-detail", "Legacy offer page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value });
+        AddRegexSpecialCase(candidates, legacyUrl, scheme, legacyHost, legacyPath, newLookup, pathAliasLookup, newSiteRoot, StartDetailPathRegex, "start-detail", "Legacy start section page mapped to the current route.", match => new[] { "/" + match.Groups[1].Value });
     }
 
     private static void AddRegexSpecialCase(
@@ -328,7 +334,7 @@ public static class WebSitemapMigrationAnalyzer
         IReadOnlyDictionary<string, UrlEntry> newLookup,
         IReadOnlyDictionary<string, string> pathAliasLookup,
         string? newSiteRoot,
-        string pattern,
+        Regex pattern,
         string matchKind,
         string notes,
         Func<Match, IEnumerable<string>> candidatePaths)
@@ -336,10 +342,16 @@ public static class WebSitemapMigrationAnalyzer
         if (candidates.Count > 0)
             return;
 
-        var match = Regex.Match(legacyPath, pattern, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var match = pattern.Match(legacyPath);
         if (match.Success)
             AddCandidateIfFound(candidates, legacyUrl, scheme, legacyHost, candidatePaths(match), newLookup, pathAliasLookup, newSiteRoot, matchKind, notes);
     }
+
+    private static Regex NewMigrationRegex(string pattern)
+        => new(
+            pattern,
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(250));
 
     private static void AddDirectLookup(
         List<WebSitemapMigrationCandidate> candidates,
