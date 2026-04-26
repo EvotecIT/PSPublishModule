@@ -40,6 +40,7 @@ if ($null -ne $FetchTimeoutSec) {
         throw "FetchTimeoutSec must be greater than zero."
     }
 
+    Write-Warning "FetchTimeoutSec is deprecated; use TimeoutSec instead."
     $TimeoutSec = $FetchTimeoutSec.Value
 }
 
@@ -51,7 +52,7 @@ if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
 
 $legacyUrls = [System.Collections.Generic.List[string]]::new()
 foreach ($legacySitemapUrl in $LegacySitemapUrls) {
-    foreach ($legacyUrl in (Import-SitemapUrls -Url $legacySitemapUrl)) {
+    foreach ($legacyUrl in (Import-SitemapUrls -Url $legacySitemapUrl -TimeoutSec $TimeoutSec -MaxDepth $MaxSitemapDepth)) {
         $legacyUrls.Add($legacyUrl)
     }
 }
@@ -116,7 +117,7 @@ if ($DiscoverAmpHtml) {
     $ampSeen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $ampProbeSources = $legacyUnique | Where-Object { Test-AmpProbeCandidate -Url $_ }
     foreach ($legacyUrl in $ampProbeSources) {
-        $ampUrl = Get-AmpHtmlAlternateUrl -Url $legacyUrl
+        $ampUrl = Get-AmpHtmlAlternateUrl -Url $legacyUrl -TimeoutSec $TimeoutSec
         if ([string]::IsNullOrWhiteSpace($ampUrl)) {
             continue
         }

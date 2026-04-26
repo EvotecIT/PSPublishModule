@@ -20,11 +20,12 @@ public static partial class WebLinkService
             throw new FileNotFoundException("Legacy redirect source CSV not found.", sourcePath);
 
         var scheme = string.IsNullOrWhiteSpace(options.DefaultScheme) ? "https" : options.DefaultScheme.Trim().ToLowerInvariant();
-        var englishHost = string.IsNullOrWhiteSpace(options.DefaultEnglishHost) ? "evotec.xyz" : options.DefaultEnglishHost.Trim();
-        var polishHost = string.IsNullOrWhiteSpace(options.DefaultPolishHost) ? "evotec.pl" : options.DefaultPolishHost.Trim();
+        var englishHost = NormalizeRequiredHost(options.DefaultEnglishHost, nameof(options.DefaultEnglishHost));
+        var polishHost = NormalizeRequiredHost(options.DefaultPolishHost, nameof(options.DefaultPolishHost));
         var lines = File.ReadAllLines(sourcePath);
         var generated = new List<LegacyAmpRedirectRow>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var skippedCount = 0;
 
         if (lines.Length > 1)
         {
@@ -39,41 +40,65 @@ public static partial class WebLinkService
                 for (var i = 1; i < lines.Length; i++)
                 {
                     if (string.IsNullOrWhiteSpace(lines[i]))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var parts = SplitCsvLine(lines[i]);
                     if (parts.Length <= legacyIndex || parts.Length <= targetIndex)
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var legacyUrl = parts[legacyIndex].Trim();
                     var targetUrl = parts[targetIndex].Trim();
                     if (string.IsNullOrWhiteSpace(legacyUrl) || string.IsNullOrWhiteSpace(targetUrl))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var legacyPath = ResolveLegacyPathForAmp(legacyUrl);
                     if (string.IsNullOrWhiteSpace(legacyPath))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var ampPath = BuildAmpAliasPath(legacyPath);
                     if (string.IsNullOrWhiteSpace(ampPath))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var language = ReadPart(parts, languageIndex);
                     var host = ResolveLegacyAmpHost(legacyUrl, language, englishHost, polishHost);
                     if (string.IsNullOrWhiteSpace(host))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var target = ResolveLegacyAmpTargetUrl(targetUrl, host, scheme, englishHost, polishHost);
                     var status = 301;
                     if (statusIndex >= 0 && statusIndex < parts.Length && int.TryParse(parts[statusIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus))
                         status = parsedStatus;
                     if (status is < 300 or >= 400)
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     var ampLegacyUrl = $"{scheme}://{host}{ampPath}";
                     var key = $"{ampLegacyUrl}|{target}|{status}";
                     if (!seen.Add(key))
+                    {
+                        skippedCount++;
                         continue;
+                    }
 
                     generated.Add(new LegacyAmpRedirectRow(
                         ampLegacyUrl,
@@ -97,8 +122,32 @@ public static partial class WebLinkService
             OutputCsvPath = outputPath,
             SourceRowCount = Math.Max(0, lines.Length - 1),
             GeneratedCount = generated.Count,
-            SkippedCount = Math.Max(0, Math.Max(0, lines.Length - 1) - generated.Count)
+            SkippedCount = skippedCount
         };
+    }
+
+    private static string NormalizeRequiredHost(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException($"{parameterName} is required for relative legacy AMP redirect rows.", parameterName);
+
+        var host = value.Trim().TrimEnd('/').ToLowerInvariant();
+        if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Uri.TryCreate(host, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+                throw new ArgumentException($"{parameterName} must be a valid host name or absolute http(s) URL.", parameterName);
+            host = uri.Host.ToLowerInvariant();
+        }
+
+        if (host.Contains('/', StringComparison.Ordinal) ||
+            host.Contains('\\', StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(host))
+        {
+            throw new ArgumentException($"{parameterName} must be a host name without a path.", parameterName);
+        }
+
+        return host;
     }
 
     private static string? ResolveLegacyPathForAmp(string value)

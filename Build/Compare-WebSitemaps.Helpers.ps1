@@ -64,11 +64,15 @@ function Import-SitemapUrls {
     param(
         [Parameter(Mandatory)]
         [string] $Url,
+        [Parameter(Mandatory)]
+        [int] $TimeoutSec,
+        [Parameter(Mandatory)]
+        [int] $MaxDepth,
         [int] $Depth = 0
     )
 
-    if ($Depth -gt $MaxSitemapDepth) {
-        throw "Sitemap nesting exceeded MaxSitemapDepth ($MaxSitemapDepth) at $Url"
+    if ($Depth -gt $MaxDepth) {
+        throw "Sitemap nesting exceeded MaxDepth ($MaxDepth) at $Url"
     }
 
     $content = [string] (Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec $TimeoutSec).Content
@@ -78,7 +82,7 @@ function Import-SitemapUrls {
     if ($xml.PSObject.Properties.Name -contains 'sitemapindex' -and $xml.sitemapindex -and $xml.sitemapindex.sitemap) {
         $nested = foreach ($node in $xml.sitemapindex.sitemap) {
             if ($node.loc) {
-                Import-SitemapUrls -Url ([string] $node.loc) -Depth ($Depth + 1)
+                Import-SitemapUrls -Url ([string] $node.loc) -TimeoutSec $TimeoutSec -MaxDepth $MaxDepth -Depth ($Depth + 1)
             }
         }
         return $nested
@@ -365,7 +369,9 @@ function Test-AmpProbeCandidate {
 function Get-AmpHtmlAlternateUrl {
     param(
         [Parameter(Mandatory)]
-        [string] $Url
+        [string] $Url,
+        [Parameter(Mandatory)]
+        [int] $TimeoutSec
     )
 
     try {

@@ -1593,12 +1593,43 @@ public sealed class WebLinkServiceTests
 
             Assert.Equal(5, result.SourceRowCount);
             Assert.Equal(2, result.GeneratedCount);
+            Assert.Equal(3, result.SkippedCount);
             var csv = File.ReadAllText(outputPath);
             Assert.Contains("\"https://evotec.xyz/old-post/amp/\",\"https://evotec.xyz/new-post/\",\"301\"", csv, StringComparison.Ordinal);
             Assert.Contains("\"https://evotec.pl/oferta/uslugi-serwisowe/amp/\",\"https://evotec.pl/uslugi-serwisowe/\",\"301\"", csv, StringComparison.Ordinal);
             Assert.DoesNotContain("already/amp/amp", csv, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("?p=123", csv, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("should-not-emit", csv, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_RequiresDefaultHostsForRelativeRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-hosts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                """);
+
+            var ex = Assert.Throws<ArgumentException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath
+            }));
+
+            Assert.Contains("DefaultEnglishHost", ex.Message, StringComparison.Ordinal);
         }
         finally
         {

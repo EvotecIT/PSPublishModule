@@ -1387,11 +1387,12 @@ internal static partial class WebPipelineRunner
             result.Warnings.Length > 0 &&
             TryPreserveExistingReleaseHub(existingOutputContent, outPath))
         {
+            var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
             result = new WebReleaseHubResult
             {
                 OutputPath = outPath,
-                ReleaseCount = TryReadReleaseHubDocument(existingOutputContent)?.Releases.Count ?? 0,
-                AssetCount = TryReadReleaseHubDocument(existingOutputContent)?.Releases.Sum(static release => release.Assets.Count) ?? 0,
+                ReleaseCount = preservedDocument?.Releases.Count ?? 0,
+                AssetCount = preservedDocument?.Releases.Sum(static release => release.Assets.Count) ?? 0,
                 Source = result.Source,
                 Warnings = result.Warnings
                     .Concat(new[] { "Preserved existing release-hub output after warning-only empty refresh." })

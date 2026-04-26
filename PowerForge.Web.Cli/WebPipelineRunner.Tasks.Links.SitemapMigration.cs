@@ -40,11 +40,16 @@ internal static partial class WebPipelineRunner
                              GetInt(step, "timeoutSec") ??
                              GetInt(step, "timeout-sec") ??
                              30;
+        var maxSitemapDepth = GetInt(step, "maxSitemapDepth") ??
+                              GetInt(step, "max-sitemap-depth") ??
+                              8;
+
+        using var sitemapHttpClient = CreateSitemapHttpClient(timeoutSeconds);
         var legacyUrls = new List<string>();
         foreach (var legacySitemapValue in legacySitemapValues)
         {
             var location = ResolveSitemapInput(baseDir, legacySitemapValue);
-            legacyUrls.AddRange(ReadSitemapUrls(location, timeoutSeconds));
+            legacyUrls.AddRange(ReadSitemapUrls(location, sitemapHttpClient, maxSitemapDepth));
         }
 
         legacyUrls.AddRange(GetStringOrArrayOfStrings(
@@ -55,7 +60,7 @@ internal static partial class WebPipelineRunner
             "legacy-urls"));
 
         var newSitemapLocation = ResolveSitemapInput(baseDir, newSitemapValue);
-        var newUrls = ReadSitemapUrls(newSitemapLocation, timeoutSeconds);
+        var newUrls = ReadSitemapUrls(newSitemapLocation, sitemapHttpClient, maxSitemapDepth);
         var defaultSiteRoot = IsRemoteSitemapLocation(newSitemapLocation)
             ? null
             : Path.GetDirectoryName(newSitemapLocation);
@@ -117,21 +122,23 @@ internal static partial class WebPipelineRunner
     private static string ResolveSitemapInput(string baseDir, string value)
         => IsRemoteSitemapLocation(value) ? value.Trim() : ResolvePath(baseDir, value) ?? value.Trim();
 
-    private static string[] ReadSitemapUrls(string location, int timeoutSeconds)
+    private static string[] ReadSitemapUrls(string location, HttpClient httpClient, int maxDepth)
     {
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return ReadSitemapUrls(location, Math.Max(1, timeoutSeconds), visited)
+        return ReadSitemapUrls(location, httpClient, Math.Max(0, maxDepth), depth: 0, visited)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    private static IEnumerable<string> ReadSitemapUrls(string location, int timeoutSeconds, ISet<string> visited)
+    private static IEnumerable<string> ReadSitemapUrls(string location, HttpClient httpClient, int maxDepth, int depth, ISet<string> visited)
     {
         if (string.IsNullOrWhiteSpace(location) || !visited.Add(location))
             return Array.Empty<string>();
+        if (depth > maxDepth)
+            throw new InvalidOperationException($"Sitemap nesting exceeded maxSitemapDepth ({maxDepth}) at {location}.");
 
-        var document = LoadSitemapXml(location, timeoutSeconds);
+        var document = LoadSitemapXml(location, httpClient);
         var rootName = document.Root?.Name.LocalName;
         if (string.Equals(rootName, "urlset", StringComparison.OrdinalIgnoreCase))
         {
@@ -152,19 +159,19 @@ internal static partial class WebPipelineRunner
         foreach (var nested in document.Descendants().Where(static element => string.Equals(element.Name.LocalName, "loc", StringComparison.OrdinalIgnoreCase)))
         {
             var nestedLocation = ResolveNestedSitemapLocation(locationBase, nested.Value.Trim());
-            urls.AddRange(ReadSitemapUrls(nestedLocation, timeoutSeconds, visited));
+            urls.AddRange(ReadSitemapUrls(nestedLocation, httpClient, maxDepth, depth + 1, visited));
         }
 
         return urls;
     }
 
-    private static XDocument LoadSitemapXml(string location, int timeoutSeconds)
+    private static XDocument LoadSitemapXml(string location, HttpClient httpClient)
     {
-        using var reader = XmlReader.Create(OpenSitemapReader(location, timeoutSeconds), NewSafeSitemapXmlReaderSettings());
+        using var reader = XmlReader.Create(OpenSitemapReader(location, httpClient), NewSafeSitemapXmlReaderSettings());
         return XDocument.Load(reader);
     }
 
-    private static TextReader OpenSitemapReader(string location, int timeoutSeconds)
+    private static TextReader OpenSitemapReader(string location, HttpClient httpClient)
     {
         if (!IsRemoteSitemapLocation(location))
         {
@@ -173,9 +180,21 @@ internal static partial class WebPipelineRunner
             return File.OpenText(location);
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds)) };
-        var content = client.GetStringAsync(location).GetAwaiter().GetResult();
+        var content = httpClient.GetStringAsync(location).GetAwaiter().GetResult();
         return new StringReader(content);
+    }
+
+    private static HttpClient CreateSitemapHttpClient(int timeoutSeconds)
+    {
+        var handler = new HttpClientHandler
+        {
+            MaxAutomaticRedirections = 5
+        };
+        return new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds)),
+            MaxResponseContentBufferSize = 50L * 1024L * 1024L
+        };
     }
 
     private static XmlReaderSettings NewSafeSitemapXmlReaderSettings()

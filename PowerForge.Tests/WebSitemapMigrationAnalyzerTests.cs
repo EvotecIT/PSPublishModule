@@ -93,6 +93,22 @@ public sealed class WebSitemapMigrationAnalyzerTests
         Assert.Contains("Zazolc-Gesla", variants, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Analyze_IgnoresMalformedSitemapLocValues()
+    {
+        var result = WebSitemapMigrationAnalyzer.Analyze(new WebSitemapMigrationOptions
+        {
+            LegacyUrls = new[] { "not-a-url", "https://example.test/old/" },
+            NewUrls = new[] { "https://example.test/blog/old/", "http://[invalid" }
+        });
+
+        Assert.Equal(1, result.LegacyUrlCount);
+        Assert.Equal(1, result.NewUrlCount);
+        Assert.Contains(result.Redirects, row =>
+            row.LegacyUrl == "https://example.test/old/" &&
+            row.TargetUrl == "https://example.test/blog/old/");
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

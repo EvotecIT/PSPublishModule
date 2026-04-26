@@ -177,13 +177,20 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new InvalidOperationException("links-generate-legacy-amp requires outputCsvPath or out.");
 
+        var defaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host");
+        var defaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host");
+        if (string.IsNullOrWhiteSpace(defaultEnglishHost))
+            throw new InvalidOperationException("links-generate-legacy-amp requires defaultEnglishHost for relative legacy rows.");
+        if (string.IsNullOrWhiteSpace(defaultPolishHost))
+            throw new InvalidOperationException("links-generate-legacy-amp requires defaultPolishHost for relative Polish legacy rows.");
+
         var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
         {
             SourceCsvPath = sourcePath,
             OutputCsvPath = outputPath,
             DefaultScheme = GetString(step, "defaultScheme") ?? GetString(step, "default-scheme") ?? "https",
-            DefaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host") ?? "evotec.xyz",
-            DefaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host") ?? "evotec.pl"
+            DefaultEnglishHost = defaultEnglishHost,
+            DefaultPolishHost = defaultPolishHost
         });
 
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));

@@ -1268,7 +1268,8 @@ Generates legacy WordPress AMP continuity redirects as a CSV consumed by link va
 Notes:
 - This preserves WordPress-era `/<slug>/amp/` URLs after static migration.
 - Query-style legacy URLs and rows already ending in `/amp/` are skipped.
-- Polish relative targets can be host-rooted for split-domain deployments such as `evotec.pl`.
+- `defaultEnglishHost` and `defaultPolishHost` are required for relative CSV rows; pass site-specific hosts explicitly so the reusable engine does not bake in deployment domains.
+- Polish relative targets can be host-rooted for split-domain deployments such as the host supplied in `defaultPolishHost`.
 
 #### links-compare-sitemaps
 Compares one or more legacy sitemaps with a newly generated sitemap and emits reusable redirect/review artifacts for static-site migrations.
@@ -1289,6 +1290,7 @@ Compares one or more legacy sitemaps with a newly generated sitemap and emits re
 Notes:
 - The task uses the native `WebSitemapMigrationAnalyzer`, so migration heuristics are available to the CLI, pipeline, and tests rather than only a project-local `.ps1`.
 - `legacySitemaps`/`newSitemap` accept local files or HTTP(S) URLs; XML is loaded with DTD processing disabled.
+- Remote sitemap fetches use `timeoutSeconds`, `maxSitemapDepth` (default `8`), a bounded redirect count, and a response-size cap.
 - Redirect CSV columns are `legacy_url,target_url,status,match_kind,notes`, matching the link-service import/export workflow.
 - Review CSV rows are for missing or ambiguous legacy URLs that should not be promoted automatically.
 

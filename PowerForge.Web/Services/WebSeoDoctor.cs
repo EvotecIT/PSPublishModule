@@ -513,7 +513,7 @@ public static class WebSeoDoctor
             {
                 content = File.ReadAllText(file);
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 continue;
             }

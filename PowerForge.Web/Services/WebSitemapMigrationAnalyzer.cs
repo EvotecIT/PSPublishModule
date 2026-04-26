@@ -7,6 +7,11 @@ namespace PowerForge.Web;
 /// <summary>Reusable sitemap migration heuristics for legacy-site redirect planning.</summary>
 public static class WebSitemapMigrationAnalyzer
 {
+    private static readonly Regex SlugNumericSuffixRegex = new(@"-\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex SlugNumericSegmentRegex = new(@"-\d+(?=/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex SlugNonTokenRegex = new(@"[^a-z0-9/]+", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex BlogLikeTargetPathRegex = new(@"^/(blog|categories|tags)(/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     /// <summary>Compare legacy and new URLs and produce redirect/review candidates.</summary>
     public static WebSitemapMigrationResult Analyze(WebSitemapMigrationOptions options)
     {
@@ -89,7 +94,9 @@ public static class WebSitemapMigrationAnalyzer
     /// <summary>Normalize a URL for sitemap comparison by lowercasing origin/path and dropping query/fragment.</summary>
     public static string NormalizeUrl(string url)
     {
-        var uri = new Uri(url);
+        if (!TryCreateHttpUri(url, out var uri))
+            return string.Empty;
+
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
         if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
             path = path.TrimEnd('/');
@@ -106,7 +113,9 @@ public static class WebSitemapMigrationAnalyzer
     /// <summary>Return the lowercased URL path, without a trailing slash except for root.</summary>
     public static string GetUrlPath(string url)
     {
-        var uri = new Uri(url);
+        if (!TryCreateHttpUri(url, out var uri))
+            return string.Empty;
+
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
         return path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal)
             ? path.TrimEnd('/').ToLowerInvariant()
@@ -130,9 +139,9 @@ public static class WebSitemapMigrationAnalyzer
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
-            Add(Regex.Replace(current, @"-\d+$", string.Empty, RegexOptions.CultureInvariant));
-            Add(Regex.Replace(current, @"-\d+(?=/|$)", string.Empty, RegexOptions.CultureInvariant));
-            Add(Regex.Replace(current, @"[^a-z0-9/]+", "-", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim('-'));
+            Add(SlugNumericSuffixRegex.Replace(current, string.Empty));
+            Add(SlugNumericSegmentRegex.Replace(current, string.Empty));
+            Add(SlugNonTokenRegex.Replace(current, "-").Trim('-'));
             Add(RemoveDiacritics(current));
         }
 
@@ -145,7 +154,9 @@ public static class WebSitemapMigrationAnalyzer
         if (string.IsNullOrWhiteSpace(siteRoot) || !Directory.Exists(siteRoot))
             return false;
 
-        var uri = new Uri(url);
+        if (!TryCreateHttpUri(url, out var uri))
+            return false;
+
         var path = uri.AbsolutePath.Trim('/');
         var candidate = string.IsNullOrWhiteSpace(path)
             ? Path.Combine(siteRoot, "index.html")
@@ -171,7 +182,9 @@ public static class WebSitemapMigrationAnalyzer
         if (newLookup.TryGetValue(legacyNormalized, out var exactEntry))
             return Candidate(legacyUrl, exactEntry.Url, "exact", false, "Already present in the new sitemap.");
 
-        var legacyUri = new Uri(legacyUrl);
+        if (!TryCreateHttpUri(legacyUrl, out var legacyUri))
+            return Candidate(legacyUrl, string.Empty, "invalid-url", true, "Legacy URL is not a valid absolute HTTP(S) URL.");
+
         var legacyHost = legacyUri.Host.ToLowerInvariant();
         var legacyPath = GetUrlPath(legacyUrl);
         var candidates = new List<WebSitemapMigrationCandidate>();
@@ -406,12 +419,14 @@ public static class WebSitemapMigrationAnalyzer
         }
 
         var targetPath = GetUrlPath(candidate.TargetUrl);
-        return Regex.IsMatch(targetPath, @"^/(blog|categories|tags)(/|$)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return BlogLikeTargetPathRegex.IsMatch(targetPath);
     }
 
     private static string? GetSyntheticAmpLegacyUrl(string legacyUrl)
     {
-        var uri = new Uri(legacyUrl);
+        if (!TryCreateHttpUri(legacyUrl, out var uri))
+            return null;
+
         var path = GetUrlPath(legacyUrl);
         if (string.IsNullOrWhiteSpace(path) ||
             path.Equals("/", StringComparison.Ordinal) ||
@@ -453,14 +468,32 @@ public static class WebSitemapMigrationAnalyzer
         => (urls ?? Array.Empty<string>())
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value.Trim())
+            .Where(static value => TryCreateHttpUri(value, out _))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
     private static string GetUrlOrigin(string url)
     {
-        var uri = new Uri(url);
+        if (!TryCreateHttpUri(url, out var uri))
+            return string.Empty;
+
         return $"{uri.Scheme.ToLowerInvariant()}://{uri.Host.ToLowerInvariant()}";
+    }
+
+    private static bool TryCreateHttpUri(string? value, out Uri uri)
+    {
+        uri = null!;
+        if (string.IsNullOrWhiteSpace(value) ||
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var parsed) ||
+            (!parsed.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+             !parsed.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        uri = parsed;
+        return true;
     }
 
     private static string ToComparablePath(string value)

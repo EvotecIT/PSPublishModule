@@ -238,9 +238,9 @@ public sealed class WebLegacyAmpRedirectOptions
     /// <summary>Default URL scheme used when generating absolute legacy AMP sources and targets.</summary>
     public string DefaultScheme { get; set; } = "https";
     /// <summary>Default English/root host for relative legacy rows.</summary>
-    public string DefaultEnglishHost { get; set; } = "evotec.xyz";
+    public string DefaultEnglishHost { get; set; } = string.Empty;
     /// <summary>Default Polish host for relative Polish legacy rows.</summary>
-    public string DefaultPolishHost { get; set; } = "evotec.pl";
+    public string DefaultPolishHost { get; set; } = string.Empty;
 }
 
 /// <summary>Result for generated legacy WordPress AMP continuity redirects.</summary>
