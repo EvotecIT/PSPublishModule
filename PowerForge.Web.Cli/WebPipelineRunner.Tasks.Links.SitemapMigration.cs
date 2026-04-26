@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
 using PowerForge.Web;
@@ -180,9 +182,34 @@ internal static partial class WebPipelineRunner
             return File.OpenText(location);
         }
 
-        // Pipeline tasks are synchronous today; keep the async HTTP boundary contained here.
-        var content = httpClient.GetStringAsync(location).GetAwaiter().GetResult();
+        // Pipeline tasks are synchronous today; keep the async HTTP boundary contained here
+        // while still enforcing a task-level timeout around remote sitemap reads.
+        var content = GetSitemapString(location, httpClient);
         return new StringReader(content);
+    }
+
+    private static string GetSitemapString(string location, HttpClient httpClient)
+    {
+        var timeout = httpClient.Timeout == Timeout.InfiniteTimeSpan
+            ? TimeSpan.FromSeconds(30)
+            : httpClient.Timeout;
+
+        try
+        {
+            return httpClient
+                .GetStringAsync(location)
+                .WaitAsync(timeout)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (TimeoutException ex)
+        {
+            throw new TimeoutException($"Timed out fetching sitemap '{location}' after {timeout.TotalSeconds:0.##} seconds.", ex);
+        }
+        catch (TaskCanceledException ex)
+        {
+            throw new TimeoutException($"Timed out fetching sitemap '{location}' after {timeout.TotalSeconds:0.##} seconds.", ex);
+        }
     }
 
     private static HttpClient CreateSitemapHttpClient(int timeoutSeconds)
