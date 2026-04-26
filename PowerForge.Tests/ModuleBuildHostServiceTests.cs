@@ -31,7 +31,31 @@ public sealed class ModuleBuildHostServiceTests
     }
 
     [Fact]
-    public async Task ExecuteBuildAsync_UsesSharedSigningOverrideWrapper()
+    public async Task ExecuteBuildAsync_ForwardsSigningFlags()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            NoSign = true
+        });
+
+        Assert.NotNull(captured);
+        Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
+        Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("-NoSign", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_DoesNotForwardSigningFlags_WhenUnset()
     {
         PowerShellRunRequest? captured = null;
         var runner = new StubPowerShellRunner(request => {
@@ -47,10 +71,8 @@ public sealed class ModuleBuildHostServiceTests
         });
 
         Assert.NotNull(captured);
-        Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
-        Assert.Contains("function New-ConfigurationBuild", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("$params['SignModule'] = $false", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("-SignModule:$false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("-NoSign", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("-SignModule", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 

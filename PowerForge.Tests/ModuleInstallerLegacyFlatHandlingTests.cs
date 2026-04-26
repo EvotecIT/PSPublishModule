@@ -122,8 +122,54 @@ public sealed class ModuleInstallerLegacyFlatHandlingTests
             _ = installer.InstallFromStaging(staging, moduleName, "3.0.0", opts);
 
             Assert.False(File.Exists(Path.Combine(moduleRoot, $"{moduleName}.psd1")));
-            Assert.True(Directory.Exists(Path.Combine(moduleRoot, "_legacy_flat")));
-            Assert.NotEmpty(Directory.GetDirectories(Path.Combine(moduleRoot, "_legacy_flat")));
+            Assert.True(Directory.Exists(Path.Combine(moduleRoot, "3.0.0")));
+            var quarantineRoot = Path.Combine(moduleRoot, "_legacy_flat");
+            Assert.True(Directory.Exists(quarantineRoot));
+            var quarantine = Assert.Single(Directory.GetDirectories(quarantineRoot));
+            Assert.StartsWith("unknown_", Path.GetFileName(quarantine), StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(quarantine, $"{moduleName}.psd1")));
+            Assert.True(Directory.Exists(Path.Combine(quarantine, "Public")));
+        }
+        finally
+        {
+            try { temp.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void InstallFromStaging_ConvertQuarantinesFlatItems_WhenManifestCannotBeDecoded()
+    {
+        var temp = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var staging = Path.Combine(temp.FullName, "staging");
+            var roots = Path.Combine(temp.FullName, "roots");
+            Directory.CreateDirectory(staging);
+            Directory.CreateDirectory(roots);
+
+            const string moduleName = "Foo";
+            WriteMinimalModule(staging, moduleName, "3.0.0");
+
+            var moduleRoot = Path.Combine(roots, moduleName);
+            Directory.CreateDirectory(moduleRoot);
+            File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
+            File.WriteAllBytes(Path.Combine(moduleRoot, $"{moduleName}.psd1"), new byte[] { 0x80, 0x80, 0x80 });
+
+            var installer = new ModuleInstaller(new NullLogger());
+            var opts = new ModuleInstallerOptions(
+                destinationRoots: new[] { roots },
+                strategy: InstallationStrategy.Exact,
+                keepVersions: 1,
+                legacyFlatHandling: LegacyFlatModuleHandling.Convert,
+                preserveVersions: null);
+
+            _ = installer.InstallFromStaging(staging, moduleName, "3.0.0", opts);
+
+            var quarantineRoot = Path.Combine(moduleRoot, "_legacy_flat");
+            var quarantine = Assert.Single(Directory.GetDirectories(quarantineRoot));
+            Assert.StartsWith("unknown_", Path.GetFileName(quarantine), StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(quarantine, $"{moduleName}.psd1")));
+            Assert.True(Directory.Exists(Path.Combine(moduleRoot, "3.0.0")));
         }
         finally
         {

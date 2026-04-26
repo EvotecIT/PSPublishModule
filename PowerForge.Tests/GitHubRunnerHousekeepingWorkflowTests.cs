@@ -11,9 +11,15 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.True(File.Exists(workflowPath), $"Runner housekeeping workflow not found: {workflowPath}");
 
         var workflowYaml = File.ReadAllText(workflowPath);
+        var runsOnLine = File.ReadLines(workflowPath)
+            .Single(line => line.TrimStart().StartsWith("runs-on:", StringComparison.Ordinal));
+
         Assert.Contains("PowerForge GitHub Runner Housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-labels", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("fromJson(inputs['runner-labels'])", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("fromJson(", runsOnLine, StringComparison.Ordinal);
+        Assert.Contains("inputs.runner_labels_json != '' && inputs.runner_labels_json", runsOnLine, StringComparison.Ordinal);
+        Assert.Contains("inputs['runner-labels'] != '' && inputs['runner-labels']", runsOnLine, StringComparison.Ordinal);
+        Assert.Contains("'[\"self-hosted\",\"ubuntu\"]'", runsOnLine, StringComparison.Ordinal);
         Assert.Contains("./.powerforge/pspublishmodule/.github/actions/github-housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains(".powerforge/runner-housekeeping.json", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-min-free-gb", workflowYaml, StringComparison.Ordinal);
