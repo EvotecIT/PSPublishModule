@@ -223,10 +223,12 @@ internal static partial class WebPipelineRunner
     private static string EnsureNestedSitemapPathWithinBase(string baseLocation, string nestedPath)
     {
         var basePath = Path.GetFullPath(baseLocation);
-        var basePrefix = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullNestedPath = Path.GetFullPath(nestedPath);
-        if (!string.Equals(fullNestedPath, basePath, StringComparison.OrdinalIgnoreCase) &&
-            !fullNestedPath.StartsWith(basePrefix, StringComparison.OrdinalIgnoreCase))
+        var relative = Path.GetRelativePath(basePath, fullNestedPath);
+        if (Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Nested sitemap location escapes the sitemap directory: {nestedPath}");
         }

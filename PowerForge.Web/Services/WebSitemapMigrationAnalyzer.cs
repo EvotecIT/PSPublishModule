@@ -9,7 +9,9 @@ public static class WebSitemapMigrationAnalyzer
 {
     private static readonly Regex SlugNumericSuffixRegex = new(@"-\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex SlugNumericSegmentRegex = new(@"-\d+(?=/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex SlugLanguageSuffixRegex = new(@"-[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex SlugLanguageSuffixRegex = new(
+        @"-(en|pl|fr|de|es|pt|pt-br|it|nl|sv|no|da|fi|cs|sk|uk|ru|ja|ko|zh|zh-cn|zh-tw|tr|ro|hu|bg|hr|sl|lt|lv|et)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SlugNonTokenRegex = new(@"[^a-z0-9/]+", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex BlogLikeTargetPathRegex = new(@"^/(blog|categories|tags)(/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 

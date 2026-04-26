@@ -102,6 +102,14 @@ public sealed class WebSitemapMigrationAnalyzerTests
     }
 
     [Fact]
+    public void GetSlugVariants_DoesNotStripNonLanguageSuffixes()
+    {
+        var variants = WebSitemapMigrationAnalyzer.GetSlugVariants("article-fix");
+
+        Assert.DoesNotContain("article", variants, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Analyze_IgnoresMalformedSitemapLocValues()
     {
         var result = WebSitemapMigrationAnalyzer.Analyze(new WebSitemapMigrationOptions
