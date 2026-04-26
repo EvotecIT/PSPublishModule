@@ -250,9 +250,12 @@ public static partial class WebLinkService
         var languageKey = string.IsNullOrWhiteSpace(language)
             ? defaultLanguage
             : NormalizeLegacyAmpLanguage(language, "language");
-        return languageHosts.TryGetValue(languageKey, out var host)
-            ? host
-            : languageHosts[defaultLanguage];
+        if (languageHosts.TryGetValue(languageKey, out var host))
+            return host;
+        if (languageHosts.TryGetValue(defaultLanguage, out var defaultHost))
+            return defaultHost;
+
+        throw new InvalidOperationException($"Legacy AMP language host map is missing the default language '{defaultLanguage}'.");
     }
 
     private static string ResolveLegacyAmpTargetUrl(

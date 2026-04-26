@@ -228,7 +228,7 @@ function Get-SlugVariants {
             continue
         }
 
-        if ($current -match '^(.*?)-(pl|fr|de|es)$' -and -not [string]::IsNullOrWhiteSpace($Matches[1])) {
+        if ($current -match '^(.*?)-([a-z]{2,3}(?:-[a-z0-9]{2,8})?)$' -and -not [string]::IsNullOrWhiteSpace($Matches[1])) {
             $queue.Enqueue($Matches[1])
         }
         if ($current -match '^(.*?)-\d+$' -and -not [string]::IsNullOrWhiteSpace($Matches[1])) {

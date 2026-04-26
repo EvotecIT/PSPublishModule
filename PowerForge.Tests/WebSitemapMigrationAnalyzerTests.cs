@@ -94,6 +94,14 @@ public sealed class WebSitemapMigrationAnalyzerTests
     }
 
     [Fact]
+    public void GetSlugVariants_RemovesLanguageSuffixesGenerically()
+    {
+        var variants = WebSitemapMigrationAnalyzer.GetSlugVariants("module-pt-br");
+
+        Assert.Contains("module", variants, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Analyze_IgnoresMalformedSitemapLocValues()
     {
         var result = WebSitemapMigrationAnalyzer.Analyze(new WebSitemapMigrationOptions

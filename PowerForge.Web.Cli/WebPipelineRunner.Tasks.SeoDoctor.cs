@@ -476,7 +476,9 @@ internal static partial class WebPipelineRunner
 
     private static string Csv(object? value)
     {
-        var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        var text = value is bool flag
+            ? flag.ToString().ToLowerInvariant()
+            : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         return "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
 

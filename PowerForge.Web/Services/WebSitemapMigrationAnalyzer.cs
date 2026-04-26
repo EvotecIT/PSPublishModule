@@ -9,6 +9,7 @@ public static class WebSitemapMigrationAnalyzer
 {
     private static readonly Regex SlugNumericSuffixRegex = new(@"-\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex SlugNumericSegmentRegex = new(@"-\d+(?=/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex SlugLanguageSuffixRegex = new(@"-[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SlugNonTokenRegex = new(@"[^a-z0-9/]+", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex BlogLikeTargetPathRegex = new(@"^/(blog|categories|tags)(/|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
@@ -141,6 +142,7 @@ public static class WebSitemapMigrationAnalyzer
             var current = queue.Dequeue();
             Add(SlugNumericSuffixRegex.Replace(current, string.Empty));
             Add(SlugNumericSegmentRegex.Replace(current, string.Empty));
+            Add(SlugLanguageSuffixRegex.Replace(current, string.Empty));
             Add(SlugNonTokenRegex.Replace(current, "-").Trim('-'));
             Add(RemoveDiacritics(current));
         }

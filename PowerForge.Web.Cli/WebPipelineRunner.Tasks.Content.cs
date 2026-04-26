@@ -1449,6 +1449,7 @@ internal static partial class WebPipelineRunner
             return false;
 
         var existing = TryReadReleaseHubDocument(existingJson);
+        // The generator has already written outputPath; read it here to compare old vs newly generated release data.
         var generated = TryReadReleaseHubDocument(File.ReadAllText(outputPath));
         if (existing is null || generated is null)
             return false;
