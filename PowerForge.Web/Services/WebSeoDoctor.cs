@@ -28,7 +28,8 @@ public static class WebSeoDoctor
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex FrontMatterDelimiterPattern = new(
         @"(?:^|\s)---(?:\s|$)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
     private static readonly Regex VisibleMarkdownLeakPattern = new(
         @"(?:^|[\s(])(?:!\[[^\]\r\n]*\]\([^)]+\)|\[[^\]\r\n]+\]\([^)]+\)|```)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -936,7 +937,15 @@ public static class WebSeoDoctor
         var hasHighConfidenceFrontMatterTokens = frontMatterKeys.Any(static key =>
             key.Equals("translation_key", StringComparison.OrdinalIgnoreCase) ||
             key.Equals("meta.raw_html", StringComparison.OrdinalIgnoreCase));
-        var hasFrontMatterDelimiter = FrontMatterDelimiterPattern.IsMatch(bodyText);
+        bool hasFrontMatterDelimiter;
+        try
+        {
+            hasFrontMatterDelimiter = FrontMatterDelimiterPattern.IsMatch(bodyText);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            hasFrontMatterDelimiter = false;
+        }
         var looksLikeFrontMatterDump =
             hasHighConfidenceFrontMatterTokens ||
             (hasFrontMatterDelimiter && frontMatterKeys.Length >= 3) ||
