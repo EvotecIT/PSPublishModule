@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -394,7 +395,7 @@ internal static partial class WebPipelineRunner
 
             return Path.GetFileName(fullPath).Replace('\\', '/');
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or IOException or UnauthorizedAccessException or SecurityException)
         {
             return path.Replace('\\', '/');
         }

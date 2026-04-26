@@ -174,6 +174,11 @@ internal static partial class WebPipelineRunner
             case "legacy-amp-redirects":
                 ExecuteLinksGenerateLegacyAmp(step, baseDir, stepResult);
                 break;
+            case "links-compare-sitemaps":
+            case "link-compare-sitemaps":
+            case "sitemap-migration":
+                ExecuteLinksCompareSitemaps(step, baseDir, stepResult);
+                break;
             case "links-report-404":
             case "link-report-404":
             case "links-report":

@@ -3609,9 +3609,24 @@ public sealed class PowerForgeReleaseServiceTests
 
     private static void TryDelete(string path)
     {
-        if (Directory.Exists(path))
-            Directory.Delete(path, recursive: true);
-        else if (File.Exists(path))
-            File.Delete(path);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+                else if (File.Exists(path))
+                    File.Delete(path);
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(100);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                Thread.Sleep(100);
+            }
+        }
     }
 }

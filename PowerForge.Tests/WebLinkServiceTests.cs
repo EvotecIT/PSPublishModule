@@ -1580,6 +1580,7 @@ public sealed class WebLinkServiceTests
                 /oferta/uslugi-serwisowe/,/pl/uslugi-serwisowe/,301,pl
                 https://evotec.xyz/already/amp/,/already/,301,en
                 /?p=123,/query-target/,301,en
+                /bad-status/,/should-not-emit/,200,en
                 """);
 
             var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
@@ -1590,13 +1591,14 @@ public sealed class WebLinkServiceTests
                 DefaultPolishHost = "evotec.pl"
             });
 
-            Assert.Equal(4, result.SourceRowCount);
+            Assert.Equal(5, result.SourceRowCount);
             Assert.Equal(2, result.GeneratedCount);
             var csv = File.ReadAllText(outputPath);
             Assert.Contains("\"https://evotec.xyz/old-post/amp/\",\"https://evotec.xyz/new-post/\",\"301\"", csv, StringComparison.Ordinal);
             Assert.Contains("\"https://evotec.pl/oferta/uslugi-serwisowe/amp/\",\"https://evotec.pl/uslugi-serwisowe/\",\"301\"", csv, StringComparison.Ordinal);
             Assert.DoesNotContain("already/amp/amp", csv, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("?p=123", csv, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("should-not-emit", csv, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

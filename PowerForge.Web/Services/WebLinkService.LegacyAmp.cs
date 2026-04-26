@@ -67,6 +67,8 @@ public static partial class WebLinkService
                     var status = 301;
                     if (statusIndex >= 0 && statusIndex < parts.Length && int.TryParse(parts[statusIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus))
                         status = parsedStatus;
+                    if (status is < 300 or >= 400)
+                        continue;
 
                     var ampLegacyUrl = $"{scheme}://{host}{ampPath}";
                     var key = $"{ampLegacyUrl}|{target}|{status}";

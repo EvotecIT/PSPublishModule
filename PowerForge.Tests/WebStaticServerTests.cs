@@ -22,7 +22,7 @@ public class WebStaticServerTests
 
         try
         {
-            var busyPort = GetFreePort();
+            var busyPort = GetFreePortRange(20);
             blocker = new HttpListener();
             blocker.Prefixes.Add($"http://localhost:{busyPort}/");
             blocker.Start();
@@ -37,7 +37,7 @@ public class WebStaticServerTests
                     busyPort,
                     cts.Token,
                     message => logs.Enqueue(message),
-                    maxPortAttempts: 10);
+                    maxPortAttempts: 20);
             });
 
             var listeningLog = await WaitForLogAsync(
@@ -142,7 +142,7 @@ public class WebStaticServerTests
         {
             var logs = new ConcurrentQueue<string>();
             cts = new CancellationTokenSource();
-            var preferredPort = GetFreePort();
+            var preferredPort = GetFreePortRange(20);
             serverTask = Task.Run(() =>
             {
                 WebStaticServer.ServeWithPortFallback(
@@ -151,7 +151,7 @@ public class WebStaticServerTests
                     preferredPort,
                     cts.Token,
                     message => logs.Enqueue(message),
-                    maxPortAttempts: 10);
+                    maxPortAttempts: 20);
             });
 
             var listeningLog = await WaitForLogAsync(
@@ -204,6 +204,40 @@ public class WebStaticServerTests
         {
             listener.Stop();
         }
+    }
+
+    private static int GetFreePortRange(int count)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var start = GetFreePort();
+            if (start + count >= 65535)
+                continue;
+
+            var listeners = new List<TcpListener>();
+            try
+            {
+                for (var offset = 0; offset < count; offset++)
+                {
+                    var listener = new TcpListener(IPAddress.Loopback, start + offset);
+                    listener.Start();
+                    listeners.Add(listener);
+                }
+
+                return start;
+            }
+            catch (SocketException)
+            {
+                // Try another random OS-selected starting point.
+            }
+            finally
+            {
+                foreach (var listener in listeners)
+                    listener.Stop();
+            }
+        }
+
+        throw new InvalidOperationException("Could not find a free consecutive localhost port range for static server tests.");
     }
 
     private static int ExtractPortFromListeningLog(string listeningLog)

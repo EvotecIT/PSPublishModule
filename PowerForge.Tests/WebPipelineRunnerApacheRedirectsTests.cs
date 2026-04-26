@@ -116,6 +116,50 @@ public class WebPipelineRunnerApacheRedirectsTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApacheRedirects_PreservesAbsoluteSourceQueryConstraint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apache-redirects-query-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var redirectsDir = Path.Combine(root, "data", "redirects");
+            Directory.CreateDirectory(redirectsDir);
+            File.WriteAllText(Path.Combine(redirectsDir, "legacy.csv"),
+                """
+                legacy_url,target_url,status
+                https://example.test/docs/?v=1,/docs/current/,301
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apache-redirects",
+                      "sources": ["./data/redirects/legacy.csv"],
+                      "out": "./deploy/apache/wordpress-redirects.conf"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var config = File.ReadAllText(Path.Combine(root, "deploy", "apache", "wordpress-redirects.conf"));
+            Assert.Contains("RewriteCond %{HTTP_HOST} ^(.+\\.)?example\\.test$ [NC]", config, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{QUERY_STRING} ^v=1$", config, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^docs/?$ /docs/current/ [R=301,L,QSD]", config, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

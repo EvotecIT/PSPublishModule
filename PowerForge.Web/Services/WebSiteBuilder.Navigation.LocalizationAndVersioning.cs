@@ -118,9 +118,9 @@ public static partial class WebSiteBuilder
                             return ApplyLanguagePrefixToRoute(spec, fallbackBaseRoute, resolvedTargetLanguage);
                         }
 
-                        return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
+                        return ResolveFallbackDefaultLanguageRoute(spec, localization, resolvedTargetLanguage, fallback.OutputPath);
                     }
-                    return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, fallback.OutputPath);
+                    return ResolveFallbackDefaultLanguageRoute(spec, localization, resolvedTargetLanguage, fallback.OutputPath);
                 }
             }
         }
@@ -139,7 +139,7 @@ public static partial class WebSiteBuilder
                     CollectionSupportsFallbackLanguage(spec, localization, page.Collection, resolvedTargetLanguage))
                     return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
 
-                return ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, baseRoute);
+                return ResolveFallbackDefaultLanguageRoute(spec, localization, resolvedTargetLanguage, baseRoute);
             }
             return ApplyLanguagePrefixToRoute(spec, baseRoute, resolvedTargetLanguage);
         }
@@ -541,6 +541,30 @@ public static partial class WebSiteBuilder
         return string.IsNullOrWhiteSpace(baseUrl)
             ? publicRoute
             : ResolveAbsoluteUrl(baseUrl, publicRoute);
+    }
+
+    private static string ResolveFallbackDefaultLanguageRoute(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string targetLanguage,
+        string route)
+    {
+        var defaultRoute = ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, route);
+        if (IsAbsoluteHttpUrl(defaultRoute) || !TargetLanguageHasAbsoluteBaseUrl(localization, targetLanguage))
+            return defaultRoute;
+
+        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, localization.DefaultLanguage);
+        var defaultBaseUrl = ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage);
+        return string.IsNullOrWhiteSpace(defaultBaseUrl)
+            ? publicRoute
+            : ResolveAbsoluteUrl(defaultBaseUrl, publicRoute);
+    }
+
+    private static bool TargetLanguageHasAbsoluteBaseUrl(ResolvedLocalizationConfig localization, string targetLanguage)
+    {
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, targetLanguage);
+        return localization.ByCode.TryGetValue(effectiveLanguage, out var language) &&
+               !string.IsNullOrWhiteSpace(language.BaseUrl);
     }
 
     private static bool ShouldRenderLanguageAtRoot(ResolvedLocalizationConfig localization, string? languageCode)

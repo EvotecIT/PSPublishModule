@@ -256,6 +256,7 @@ internal sealed class StoreSubmissionService : IDisposable
             throw new InvalidOperationException("Store submission authentication settings are required.");
 
         var accessToken = ResolveCredential(authentication.AccessToken, authentication.AccessTokenEnvVar);
+        _ = NormalizeAuthorityHost(authentication.AuthorityHost);
         if (!string.IsNullOrWhiteSpace(accessToken))
             return;
 

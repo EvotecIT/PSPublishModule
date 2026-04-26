@@ -525,7 +525,11 @@ public static partial class WebAssetOptimizer
             var url = match.Groups["url"].Value;
             var decodedUrl = System.Web.HttpUtility.HtmlDecode(url);
             var replaced = ApplyRewriteRules(decodedUrl, rewrites);
-            return replaced == url ? match.Value : $"{match.Groups["attr"].Value}=\"{replaced}\"";
+            if (string.Equals(replaced, decodedUrl, StringComparison.Ordinal))
+                return match.Value;
+
+            var encoded = System.Web.HttpUtility.HtmlAttributeEncode(replaced) ?? string.Empty;
+            return $"{match.Groups["attr"].Value}=\"{encoded}\"";
         });
     }
 

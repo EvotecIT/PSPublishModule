@@ -1270,6 +1270,28 @@ Notes:
 - Query-style legacy URLs and rows already ending in `/amp/` are skipped.
 - Polish relative targets can be host-rooted for split-domain deployments such as `evotec.pl`.
 
+#### links-compare-sitemaps
+Compares one or more legacy sitemaps with a newly generated sitemap and emits reusable redirect/review artifacts for static-site migrations.
+
+```json
+{
+  "task": "links-compare-sitemaps",
+  "legacySitemaps": ["./data/migration/legacy-sitemap.xml"],
+  "newSitemap": "./_site/sitemap.xml",
+  "newSiteRoot": "./_site",
+  "out": "./Build/link-reports/sitemap-migration.json",
+  "redirectCsv": "./data/redirects/legacy-wordpress-generated.csv",
+  "reviewCsv": "./Build/link-reports/sitemap-migration-review.csv",
+  "includeSyntheticAmpRedirects": true
+}
+```
+
+Notes:
+- The task uses the native `WebSitemapMigrationAnalyzer`, so migration heuristics are available to the CLI, pipeline, and tests rather than only a project-local `.ps1`.
+- `legacySitemaps`/`newSitemap` accept local files or HTTP(S) URLs; XML is loaded with DTD processing disabled.
+- Redirect CSV columns are `legacy_url,target_url,status,match_kind,notes`, matching the link-service import/export workflow.
+- Review CSV rows are for missing or ambiguous legacy URLs that should not be promoted automatically.
+
 #### project-docs-sync
 Synchronizes project documentation, curated public examples, and optionally API artifacts from source repositories listed in your project catalog.
 

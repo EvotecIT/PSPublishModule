@@ -13,7 +13,9 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
         Assert.Contains("PowerForge GitHub Runner Housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-labels", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("fromJson(inputs['runner-labels'])", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("fromJson(inputs.runner_labels_json", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("inputs['runner-labels']", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("[\"self-hosted\",\"ubuntu\"]", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("./.powerforge/pspublishmodule/.github/actions/github-housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains(".powerforge/runner-housekeeping.json", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-min-free-gb", workflowYaml, StringComparison.Ordinal);

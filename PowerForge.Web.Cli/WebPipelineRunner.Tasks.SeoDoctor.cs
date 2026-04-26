@@ -381,7 +381,7 @@ internal static partial class WebPipelineRunner
     private static object BuildSeoDoctorBacklogSummary(WebSeoDoctorResult result)
         => new
         {
-            generatedAt = DateTime.Now.ToString("s"),
+            generatedAt = DateTimeOffset.UtcNow.ToString("O"),
             pageCount = result.PageCount,
             pagesMissingDescription = result.PagesMissingDescription,
             pagesWithShortDescription = result.PagesWithShortDescription,

@@ -533,8 +533,9 @@ public static class WebSeoDoctor
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(3)
                 .ToArray();
+            var lineStartOffsets = BuildLineStartOffsets(content);
             var lineNumbers = matches
-                .Select(match => CountLinesBefore(content, match.Index) + 1)
+                .Select(match => GetLineNumber(lineStartOffsets, match.Index))
                 .Distinct()
                 .Take(5)
                 .ToArray();
@@ -557,17 +558,32 @@ public static class WebSeoDoctor
         }
     }
 
-    private static int CountLinesBefore(string content, int index)
+    private static int[] BuildLineStartOffsets(string content)
     {
-        var count = 0;
-        var length = Math.Min(Math.Max(index, 0), content.Length);
-        for (var i = 0; i < length; i++)
+        if (string.IsNullOrEmpty(content))
+            return new[] { 0 };
+
+        var offsets = new List<int> { 0 };
+        for (var i = 0; i < content.Length; i++)
         {
             if (content[i] == '\n')
-                count++;
+                offsets.Add(i + 1);
         }
 
-        return count;
+        return offsets.ToArray();
+    }
+
+    private static int GetLineNumber(int[] lineStartOffsets, int index)
+    {
+        if (lineStartOffsets.Length == 0)
+            return 1;
+
+        var boundedIndex = Math.Max(index, 0);
+        var position = Array.BinarySearch(lineStartOffsets, boundedIndex);
+        if (position >= 0)
+            return position + 1;
+
+        return Math.Max(1, ~position);
     }
 
     private sealed class PageScan
@@ -914,6 +930,8 @@ public static class WebSeoDoctor
              bodyText.IndexOf("layout:", StringComparison.OrdinalIgnoreCase) >= 0 &&
              hasFrontMatterTokens);
 
+        // Keep this focused on escaped HTML plus link/image/code markers. Plain Markdown headings are common in
+        // generated API docs, so heading-only leaks need front matter delimiters or high-confidence keys above.
         var looksLikeMarkdownLeak = looksLikeEscapedHtmlBlock && VisibleMarkdownLeakPattern.IsMatch(bodyText);
         if (!looksLikeFrontMatterDump && !looksLikeMarkdownLeak)
             return;

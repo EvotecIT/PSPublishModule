@@ -31,7 +31,7 @@ public sealed class ModuleBuildHostServiceTests
     }
 
     [Fact]
-    public async Task ExecuteBuildAsync_UsesSharedSigningOverrideWrapper()
+    public async Task ExecuteBuildAsync_ForwardsScriptAndSigningArguments()
     {
         PowerShellRunRequest? captured = null;
         var runner = new StubPowerShellRunner(request => {
@@ -43,14 +43,15 @@ public sealed class ModuleBuildHostServiceTests
         var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
             RepositoryRoot = @"C:\repo",
             ScriptPath = @"C:\repo\Build\Build-Module.ps1",
-            ModulePath = @"C:\repo\Module\PSPublishModule.psd1"
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            NoSign = true
         });
 
         Assert.NotNull(captured);
         Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
-        Assert.Contains("function New-ConfigurationBuild", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("$params['SignModule'] = $false", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("-SignModule:$false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("-NoSign", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("function New-ConfigurationBuild", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 

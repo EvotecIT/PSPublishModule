@@ -648,9 +648,11 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(path))
             return string.Empty;
 
-        var exactPath = path == "/" ? "/" : path.TrimEnd('/');
-        var literal = exactPath + "?" + sourceQuery;
-        return "\"^" + Regex.Escape(literal) + "$\"";
+        if (path == "/")
+            return "\"^" + Regex.Escape("/?" + sourceQuery) + "$\"";
+
+        var exactPath = path.TrimEnd('/');
+        return "\"^" + Regex.Escape(exactPath) + "/?" + Regex.Escape("?" + sourceQuery) + "$\"";
     }
 
     private static int ResolveRedirectStatus(RedirectSpec redirect)

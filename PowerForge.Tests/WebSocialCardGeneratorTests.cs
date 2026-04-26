@@ -210,6 +210,8 @@ public class WebSocialCardGeneratorTests
             ThemeTokens = safeMarginTokens
         });
         Assert.NotNull(logoFrame);
+        // Spotlight layout centers the logo inside a dynamic right-side panel, so exact Y can move
+        // with tokenized spacing while still needing to stay away from the top safe margin.
         Assert.True(logoFrame!.Value.Y > 68, "Spotlight logo should sit within the branded right-side panel, not at the top safe margin.");
         Assert.True(logoFrame.Value.X > 800, "Spotlight logo should remain anchored on the right side of the card.");
     }

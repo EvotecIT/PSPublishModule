@@ -9,7 +9,6 @@ public sealed class ModuleInstaller
 {
     private readonly ILogger _logger;
     private static readonly char[] PathSeparators = { '/', '\\' };
-    private static readonly ModuleManifestMetadataReader ManifestMetadataReader = new();
 
     /// <summary>
     /// Creates a new installer.
@@ -172,8 +171,8 @@ public sealed class ModuleInstaller
         if (handling != LegacyFlatModuleHandling.Convert)
             return;
 
-        var metadata = TryReadManifestMetadata(flatManifest);
-        if (string.IsNullOrWhiteSpace(metadata?.ModuleVersion))
+        var legacyVersion = TryReadManifestVersion(flatManifest);
+        if (string.IsNullOrWhiteSpace(legacyVersion))
         {
             var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "unknown");
             _logger.Warn($"Legacy flat install detected but ModuleVersion could not be read. Quarantining to '{target}'.");
@@ -181,7 +180,7 @@ public sealed class ModuleInstaller
             return;
         }
 
-        var legacyVersion = metadata!.ModuleVersion.Trim();
+        legacyVersion = legacyVersion!.Trim();
         try { ValidatePathSegment(legacyVersion, nameof(legacyVersion)); }
         catch
         {
@@ -272,17 +271,21 @@ public sealed class ModuleInstaller
         return Version.TryParse(basePart, out _);
     }
 
-    private ModuleManifestMetadata? TryReadManifestMetadata(string manifestPath)
+    private string? TryReadManifestVersion(string manifestPath)
     {
         try
         {
-            return ManifestMetadataReader.Read(manifestPath);
+            var content = File.ReadAllText(manifestPath);
+            if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var explicitVersion))
+                return explicitVersion;
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Failed to read manifest metadata from '{manifestPath}': {ex.Message}");
+            _logger.Warn($"Failed to read ModuleVersion from legacy flat manifest '{manifestPath}': {ex.Message}");
             return null;
         }
+
+        return null;
     }
 
     private void TryMoveFile(string sourcePath, string destPath)
