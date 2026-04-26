@@ -527,7 +527,8 @@ public static partial class WebSiteBuilder
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         string? languageCode,
-        string route)
+        string route,
+        bool allowSiteBaseUrlFallback = false)
     {
         if (string.IsNullOrWhiteSpace(route) || IsAbsoluteHttpUrl(route))
             return route;
@@ -538,6 +539,9 @@ public static partial class WebSiteBuilder
                       !string.IsNullOrWhiteSpace(language.BaseUrl)
             ? language.BaseUrl
             : null;
+        if (string.IsNullOrWhiteSpace(baseUrl) && allowSiteBaseUrlFallback)
+            baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
+
         return string.IsNullOrWhiteSpace(baseUrl)
             ? publicRoute
             : ResolveAbsoluteUrl(baseUrl, publicRoute);
@@ -549,15 +553,12 @@ public static partial class WebSiteBuilder
         string targetLanguage,
         string route)
     {
-        var defaultRoute = ResolveAbsoluteLanguageRoute(spec, localization, localization.DefaultLanguage, route);
-        if (IsAbsoluteHttpUrl(defaultRoute) || !TargetLanguageHasAbsoluteBaseUrl(localization, targetLanguage))
-            return defaultRoute;
-
-        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, localization.DefaultLanguage);
-        var defaultBaseUrl = ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage);
-        return string.IsNullOrWhiteSpace(defaultBaseUrl)
-            ? publicRoute
-            : ResolveAbsoluteUrl(defaultBaseUrl, publicRoute);
+        return ResolveAbsoluteLanguageRoute(
+            spec,
+            localization,
+            localization.DefaultLanguage,
+            route,
+            allowSiteBaseUrlFallback: TargetLanguageHasAbsoluteBaseUrl(localization, targetLanguage));
     }
 
     private static bool TargetLanguageHasAbsoluteBaseUrl(ResolvedLocalizationConfig localization, string targetLanguage)

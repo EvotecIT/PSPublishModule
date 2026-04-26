@@ -617,7 +617,8 @@ public static partial class WebAssetOptimizer
         if (string.IsNullOrWhiteSpace(cssStrategy))
             return "blocking";
 
-        return cssStrategy.Trim().ToLowerInvariant() switch
+        var normalized = cssStrategy.Trim().ToLowerInvariant();
+        return normalized switch
         {
             "sync" => "blocking",
             "inline" => "blocking",
@@ -627,8 +628,14 @@ public static partial class WebAssetOptimizer
             "async" => "async",
             "async-print" => "async",
             "print" => "async",
-            _ => "blocking"
+            _ => WarnUnknownCssStrategy(cssStrategy)
         };
+    }
+
+    private static string WarnUnknownCssStrategy(string cssStrategy)
+    {
+        Trace.TraceWarning($"Unknown CssStrategy '{cssStrategy}', falling back to blocking.");
+        return "blocking";
     }
 
     private static string LoadCriticalCss(string? path)

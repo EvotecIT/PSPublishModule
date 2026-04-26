@@ -128,6 +128,8 @@ internal static partial class WebPipelineRunner
                 continue;
             }
 
+            // Keep the path and query separate: the RewriteRule matches the path while
+            // AppendApacheLegacyQueryCondition below preserves query-specific legacy rows.
             var path = source.PathOnly.Trim();
             if (string.IsNullOrWhiteSpace(path))
                 continue;
