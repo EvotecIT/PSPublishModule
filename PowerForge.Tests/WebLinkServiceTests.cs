@@ -1673,6 +1673,36 @@ public sealed class WebLinkServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("source_url,target_url,status,language", "legacy_url")]
+    [InlineData("legacy_url,destination,status,language", "target_url")]
+    public void GenerateLegacyAmpRedirects_ThrowsForMissingRequiredCsvHeaders(string header, string expectedColumn)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-headers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath, header + Environment.NewLine + "/old-post/,/new-post/,301,en");
+
+            var ex = Assert.Throws<InvalidOperationException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "example.test",
+                DefaultPolishHost = "pl.example.test"
+            }));
+
+            Assert.Contains(expectedColumn, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     [Fact]
     public void GenerateLegacyAmpRedirects_RejectsDefaultHostWithPath()
     {

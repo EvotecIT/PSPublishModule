@@ -237,14 +237,35 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(value))
             return value;
         if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+        {
+            if (IsRemoteSitemapLocation(baseLocation) && IsRemoteSitemapLocation(value))
+                EnsureNestedRemoteSitemapSameOrigin(baseLocation, value);
+
             return absolute.IsFile && !IsRemoteSitemapLocation(baseLocation)
                 ? EnsureNestedSitemapPathWithinBase(baseLocation, absolute.LocalPath)
                 : value;
+        }
         if (IsRemoteSitemapLocation(baseLocation) && Uri.TryCreate(new Uri(baseLocation), value, out var nestedRemote))
             return nestedRemote.AbsoluteUri;
 
         var nestedPath = Path.GetFullPath(Path.Combine(baseLocation, value.Replace('/', Path.DirectorySeparatorChar)));
         return EnsureNestedSitemapPathWithinBase(baseLocation, nestedPath);
+    }
+
+    private static void EnsureNestedRemoteSitemapSameOrigin(string baseLocation, string nestedLocation)
+    {
+        if (!Uri.TryCreate(baseLocation, UriKind.Absolute, out var baseUri) ||
+            !Uri.TryCreate(nestedLocation, UriKind.Absolute, out var nestedUri))
+        {
+            return;
+        }
+
+        if (!string.Equals(baseUri.Scheme, nestedUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(baseUri.Host, nestedUri.Host, StringComparison.OrdinalIgnoreCase) ||
+            baseUri.Port != nestedUri.Port)
+        {
+            throw new InvalidOperationException($"Nested sitemap URL crosses origins: {nestedLocation}");
+        }
     }
 
     private static string EnsureNestedSitemapPathWithinBase(string baseLocation, string nestedPath)

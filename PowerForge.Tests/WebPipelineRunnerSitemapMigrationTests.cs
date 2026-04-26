@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
@@ -196,6 +197,25 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    [Fact]
+    public void ResolveNestedSitemapLocation_RejectsRemoteCrossOriginSitemaps()
+    {
+        var method = typeof(WebPipelineRunner).GetMethod(
+            "ResolveNestedSitemapLocation",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(
+            null,
+            new object[]
+            {
+                "https://example.test/sitemap.xml",
+                "https://internal.example.test/sitemap.xml"
+            }));
+
+        var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
+        Assert.Contains("crosses origins", inner.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void TryDeleteDirectory(string path)

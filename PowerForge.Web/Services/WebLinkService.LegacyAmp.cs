@@ -35,78 +35,80 @@ public static partial class WebLinkService
             var statusIndex = FindHeader(header, "status", "redirect_type", "redirect type", "status_code", "status code");
             var languageIndex = FindHeader(header, "language", "lang");
 
-            if (legacyIndex >= 0 && targetIndex >= 0)
+            if (legacyIndex < 0)
+                throw new InvalidOperationException("Legacy AMP source CSV must contain a 'legacy_url' column.");
+            if (targetIndex < 0)
+                throw new InvalidOperationException("Legacy AMP source CSV must contain a 'target_url' column.");
+
+            for (var i = 1; i < lines.Length; i++)
             {
-                for (var i = 1; i < lines.Length; i++)
+                if (string.IsNullOrWhiteSpace(lines[i]))
                 {
-                    if (string.IsNullOrWhiteSpace(lines[i]))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var parts = SplitCsvLine(lines[i]);
-                    if (parts.Length <= legacyIndex || parts.Length <= targetIndex)
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var legacyUrl = parts[legacyIndex].Trim();
-                    var targetUrl = parts[targetIndex].Trim();
-                    if (string.IsNullOrWhiteSpace(legacyUrl) || string.IsNullOrWhiteSpace(targetUrl))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var legacyPath = ResolveLegacyPathForAmp(legacyUrl);
-                    if (string.IsNullOrWhiteSpace(legacyPath))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var ampPath = BuildAmpAliasPath(legacyPath);
-                    if (string.IsNullOrWhiteSpace(ampPath))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var language = ReadPart(parts, languageIndex);
-                    var host = ResolveLegacyAmpHost(legacyUrl, language, languageHosts, defaultLanguage);
-                    if (string.IsNullOrWhiteSpace(host))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var target = ResolveLegacyAmpTargetUrl(targetUrl, host, scheme, languageHosts);
-                    var status = 301;
-                    if (statusIndex >= 0 && statusIndex < parts.Length && int.TryParse(parts[statusIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus))
-                        status = parsedStatus;
-                    if (status is < 300 or >= 400)
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var ampLegacyUrl = $"{scheme}://{host}{ampPath}";
-                    var key = $"{ampLegacyUrl}|{target}|{status}";
-                    if (!seen.Add(key))
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    generated.Add(new LegacyAmpRedirectRow(
-                        ampLegacyUrl,
-                        target,
-                        status,
-                        "generated-legacy-amp",
-                        "Generated AMP continuity alias from the imported legacy WordPress redirect map."));
+                    skippedCount++;
+                    continue;
                 }
+
+                var parts = SplitCsvLine(lines[i]);
+                if (parts.Length <= legacyIndex || parts.Length <= targetIndex)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var legacyUrl = parts[legacyIndex].Trim();
+                var targetUrl = parts[targetIndex].Trim();
+                if (string.IsNullOrWhiteSpace(legacyUrl) || string.IsNullOrWhiteSpace(targetUrl))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var legacyPath = ResolveLegacyPathForAmp(legacyUrl);
+                if (string.IsNullOrWhiteSpace(legacyPath))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var ampPath = BuildAmpAliasPath(legacyPath);
+                if (string.IsNullOrWhiteSpace(ampPath))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var language = ReadPart(parts, languageIndex);
+                var host = ResolveLegacyAmpHost(legacyUrl, language, languageHosts, defaultLanguage);
+                if (string.IsNullOrWhiteSpace(host))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var target = ResolveLegacyAmpTargetUrl(targetUrl, host, scheme, languageHosts);
+                var status = 301;
+                if (statusIndex >= 0 && statusIndex < parts.Length && int.TryParse(parts[statusIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus))
+                    status = parsedStatus;
+                if (status is < 300 or >= 400)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var ampLegacyUrl = $"{scheme}://{host}{ampPath}";
+                var key = $"{ampLegacyUrl}|{target}|{status}";
+                if (!seen.Add(key))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                generated.Add(new LegacyAmpRedirectRow(
+                    ampLegacyUrl,
+                    target,
+                    status,
+                    "generated-legacy-amp",
+                    "Generated AMP continuity alias from the imported legacy WordPress redirect map."));
             }
         }
 
