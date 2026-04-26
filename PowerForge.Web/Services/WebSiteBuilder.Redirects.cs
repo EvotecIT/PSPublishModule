@@ -577,7 +577,7 @@ public static partial class WebSiteBuilder
         return trimmed.StartsWith("/", StringComparison.Ordinal) ? trimmed : "/" + trimmed.TrimStart('/');
     }
 
-    private static string NormalizeRedirectSourcePath(string? source)
+    private static string NormalizeRedirectSourcePath(string? source, bool ensureTrailingSlash = true)
     {
         if (string.IsNullOrWhiteSpace(source))
             return string.Empty;
@@ -604,7 +604,7 @@ public static partial class WebSiteBuilder
 
         if (!trimmed.StartsWith("/", StringComparison.Ordinal))
             trimmed = "/" + trimmed.TrimStart('/');
-        if (!trimmed.EndsWith("/", StringComparison.Ordinal))
+        if (ensureTrailingSlash && !trimmed.EndsWith("/", StringComparison.Ordinal))
             trimmed += "/";
         return trimmed;
     }
@@ -644,7 +644,7 @@ public static partial class WebSiteBuilder
 
     private static string BuildNginxRequestUriMatcher(string source, string sourceQuery)
     {
-        var path = NormalizeRedirectSourcePath(source);
+        var path = NormalizeRedirectSourcePath(source, ensureTrailingSlash: false);
         if (string.IsNullOrWhiteSpace(path))
             return string.Empty;
 

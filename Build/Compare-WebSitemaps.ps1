@@ -23,12 +23,25 @@ param(
     [ValidateRange(1, 300)]
     [int] $TimeoutSec = 30,
 
+    [Nullable[int]] $FetchTimeoutSec = $null,
+
+    [ValidateRange(0, 64)]
+    [int] $MaxSitemapDepth = 4,
+
     [switch] $PassThru
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+if ($null -ne $FetchTimeoutSec) {
+    if ($FetchTimeoutSec.Value -lt 1) {
+        throw "FetchTimeoutSec must be greater than zero."
+    }
+
+    $TimeoutSec = $FetchTimeoutSec.Value
+}
 
 $helperPath = Join-Path $PSScriptRoot 'Compare-WebSitemaps.Helpers.ps1'
 if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {

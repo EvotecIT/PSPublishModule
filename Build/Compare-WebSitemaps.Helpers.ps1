@@ -63,8 +63,13 @@ function ConvertTo-SafeXmlDocument {
 function Import-SitemapUrls {
     param(
         [Parameter(Mandatory)]
-        [string] $Url
+        [string] $Url,
+        [int] $Depth = 0
     )
+
+    if ($Depth -gt $MaxSitemapDepth) {
+        throw "Sitemap nesting exceeded MaxSitemapDepth ($MaxSitemapDepth) at $Url"
+    }
 
     $content = [string] (Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec $TimeoutSec).Content
     $content = $content.TrimStart([char] 0xFEFF)
@@ -73,7 +78,7 @@ function Import-SitemapUrls {
     if ($xml.PSObject.Properties.Name -contains 'sitemapindex' -and $xml.sitemapindex -and $xml.sitemapindex.sitemap) {
         $nested = foreach ($node in $xml.sitemapindex.sitemap) {
             if ($node.loc) {
-                Import-SitemapUrls -Url ([string] $node.loc)
+                Import-SitemapUrls -Url ([string] $node.loc) -Depth ($Depth + 1)
             }
         }
         return $nested
@@ -649,4 +654,3 @@ function Get-RedirectCandidate {
         Notes       = 'Multiple redirect candidates found. Review manually.'
     }
 }
-

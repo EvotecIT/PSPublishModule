@@ -532,8 +532,8 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(route) || IsAbsoluteHttpUrl(route))
             return route;
 
-        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, languageCode);
         var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, effectiveLanguage);
         var baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
         return string.IsNullOrWhiteSpace(baseUrl)
             ? publicRoute

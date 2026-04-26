@@ -188,6 +188,7 @@ Remote self-host example:
         "Replace": "/assets/fonts/site-fonts.css",
         "MatchType": "exact",
         "SourceUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
+        "SourceUrlAllowedHosts": [ "fonts.googleapis.com", "fonts.gstatic.com" ],
         "Destination": "/assets/fonts/site-fonts.css",
         "DownloadDependencies": true,
         "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
@@ -198,7 +199,10 @@ Remote self-host example:
 ```
 
 Notes:
-- `SourceUrl` downloads the remote asset during `optimize`.
+- `SourceUrl` downloads the remote asset during `optimize`. Remote downloads must use `https://`.
+- `SourceUrlAllowedHosts` is required for remote downloads. Exact hosts, leading wildcards such as `*.example.com`, and explicit `"*"` for any public HTTPS host are supported.
+- Remote downloads reject loopback, private, and link-local IP literals even when `"*"` is configured.
+- `UserAgent` is normalized to a single printable ASCII header line before it is sent and is capped at 512 characters.
 - `DownloadDependencies:true` localizes `url(...)` references inside downloaded CSS (useful for font binaries).
 - This works well with structured `Head.Links`, so pages can keep canonical external URLs in source config while optimized output rewrites them to first-party assets.
 

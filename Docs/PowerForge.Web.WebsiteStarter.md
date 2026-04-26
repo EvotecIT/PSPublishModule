@@ -25,7 +25,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
     - `preload` when critical CSS is solid and you want a softer non-blocking path
     - `async` only when the theme's critical CSS truly covers the first paint
   - prefer `Head.Links` for fonts/preconnects instead of hiding `@import` font loads inside inline theme CSS
-  - when a site needs first-party copies of remote fonts/CSS, prefer `AssetPolicy.Rewrites` with `SourceUrl` + `DownloadDependencies:true`
+  - when a site needs first-party copies of remote fonts/CSS, prefer `AssetPolicy.Rewrites` with HTTPS `SourceUrl`, `SourceUrlAllowedHosts`, and `DownloadDependencies:true`
 - Always keep escape hatches scoped:
   - baselines for legacy noise
   - do not blanket-ignore whole categories without a written reason

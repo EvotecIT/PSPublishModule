@@ -820,6 +820,85 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_AssetRewrites_PreservesEncodedUrlWhenNoRuleMatches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-rewrite-encoded-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                  <body><a href="/search?q=one&amp;page=2">Search</a></body>
+                </html>
+                """);
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Rewrites = new[]
+                    {
+                        new AssetRewriteSpec
+                        {
+                            Match = "/cdn/",
+                            Replace = "/assets/",
+                            MatchType = "prefix"
+                        }
+                    }
+                }
+            });
+
+            var html = File.ReadAllText(htmlPath);
+            Assert.Equal(0, result.UpdatedCount);
+            Assert.Contains("href=\"/search?q=one&amp;page=2\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("href=\"/search?q=one&page=2\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void AssetRewriteDownloadHelpers_SanitizeUserAgentAndRejectUnsafeHosts()
+    {
+        Assert.Equal(
+            "PowerForgeBot/1.0",
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting(" PowerForgeBot/1.0\r\nX-Injected: nope "));
+        Assert.Equal(
+            "PowerForgeBot/1.0Beta",
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting("Power\tForgeBot/1.0\0Betaé"));
+        Assert.Equal(
+            new string('A', 512),
+            WebAssetOptimizer.NormalizeHeaderSingleLineForTesting(new string('A', 600)));
+        Assert.True(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "*.example.test" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://example.test/assets/app.css"),
+            new[] { "*.example.test" }));
+        Assert.True(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "*" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css")));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("http://cdn.example.test/assets/app.css"),
+            new[] { "*" }));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("http://169.254.169.254/latest/meta-data/")));
+        Assert.False(WebAssetOptimizer.IsAllowedRewriteSourceUriForTesting(
+            new Uri("https://cdn.example.test/assets/app.css"),
+            new[] { "static.example.test" }));
+    }
+
+    [Fact]
     public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));

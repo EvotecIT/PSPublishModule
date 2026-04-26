@@ -53,7 +53,7 @@ public static partial class WebSiteBuilder
         var links = cssLinks.ToArray();
         if (links.Length == 0) return string.Empty;
 
-        var strategy = NormalizeCssStrategy(assets?.CssStrategy);
+        var strategy = WebAssetCssStrategy.Normalize(assets?.CssStrategy);
         if (strategy.Equals("async", StringComparison.OrdinalIgnoreCase))
             return string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink));
 
@@ -61,25 +61,6 @@ public static partial class WebSiteBuilder
             return string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink));
 
         return string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />"));
-    }
-
-    private static string NormalizeCssStrategy(string? cssStrategy)
-    {
-        if (string.IsNullOrWhiteSpace(cssStrategy))
-            return "blocking";
-
-        return cssStrategy.Trim().ToLowerInvariant() switch
-        {
-            "sync" => "blocking",
-            "inline" => "blocking",
-            "render-blocking" => "blocking",
-            "renderblocking" => "blocking",
-            "preload" => "preload",
-            "async" => "async",
-            "async-print" => "async",
-            "print" => "async",
-            _ => "blocking"
-        };
     }
 
     private static string RenderAsyncCssLink(string href)

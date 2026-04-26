@@ -602,7 +602,7 @@ public static partial class WebAssetOptimizer
         var href = match.Groups[1].Value;
         if (!cssPattern.IsMatch(href)) return content;
 
-        var strategy = NormalizeCssStrategy(cssStrategy);
+        var strategy = WebAssetCssStrategy.Normalize(cssStrategy);
         var cssLink = strategy switch
         {
             "async" => $"<link rel=\"stylesheet\" href=\"{href}\" media=\"print\" onload=\"this.media='all'\">\n<noscript><link rel=\"stylesheet\" href=\"{href}\"></noscript>",
@@ -610,32 +610,6 @@ public static partial class WebAssetOptimizer
             _ => $"<link rel=\"stylesheet\" href=\"{href}\">"
         };
         return content.Replace(match.Value, $"<!-- critical-css -->\n<style>{criticalCss}</style>\n{cssLink}");
-    }
-
-    private static string NormalizeCssStrategy(string? cssStrategy)
-    {
-        if (string.IsNullOrWhiteSpace(cssStrategy))
-            return "blocking";
-
-        var normalized = cssStrategy.Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "sync" => "blocking",
-            "inline" => "blocking",
-            "render-blocking" => "blocking",
-            "renderblocking" => "blocking",
-            "preload" => "preload",
-            "async" => "async",
-            "async-print" => "async",
-            "print" => "async",
-            _ => WarnUnknownCssStrategy(cssStrategy)
-        };
-    }
-
-    private static string WarnUnknownCssStrategy(string cssStrategy)
-    {
-        Trace.TraceWarning($"Unknown CssStrategy '{cssStrategy}', falling back to blocking.");
-        return "blocking";
     }
 
     private static string LoadCriticalCss(string? path)
