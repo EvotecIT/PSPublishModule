@@ -652,6 +652,7 @@ public static partial class WebSiteBuilder
             return "\"^" + Regex.Escape("/?" + sourceQuery) + "$\"";
 
         var exactPath = path.TrimEnd('/');
+        // Allow an optional trailing slash before the query: /path?v=1 and /path/?v=1 should both redirect.
         return "\"^" + Regex.Escape(exactPath) + "/?" + Regex.Escape("?" + sourceQuery) + "$\"";
     }
 

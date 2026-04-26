@@ -522,11 +522,27 @@ public static class WebSeoDoctor
                 continue;
             }
 
-            var matches = EmptyMarkdownImageAltPattern.Matches(content);
+            var relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
+            MatchCollection matches;
+            try
+            {
+                matches = EmptyMarkdownImageAltPattern.Matches(content);
+            }
+            catch (RegexMatchTimeoutException ex)
+            {
+                addIssue(
+                    "review",
+                    "source-image-alt",
+                    "/source/" + relativePath,
+                    $"Markdown source image-alt scan timed out: {ex.Message}",
+                    "source-image-alt-scan-timeout",
+                    relativePath);
+                continue;
+            }
+
             if (matches.Count == 0)
                 continue;
 
-            var relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
             var samples = matches
                 .Select(match => match.Groups["target"].Value.Trim())
                 .Where(static value => !string.IsNullOrWhiteSpace(value))

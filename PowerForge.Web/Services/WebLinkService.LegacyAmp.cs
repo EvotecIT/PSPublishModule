@@ -290,6 +290,7 @@ public static partial class WebLinkService
             normalized = "/" + normalized.TrimStart('/');
         if (normalized.Length > 1)
             normalized = normalized.TrimEnd('/');
+        // Legacy WordPress AMP aliases and redirect targets were slash-canonical.
         return normalized + "/";
     }
 
