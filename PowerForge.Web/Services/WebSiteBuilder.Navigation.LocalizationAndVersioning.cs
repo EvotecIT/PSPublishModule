@@ -527,21 +527,14 @@ public static partial class WebSiteBuilder
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         string? languageCode,
-        string route,
-        bool allowSiteBaseUrlFallback = false)
+        string route)
     {
         if (string.IsNullOrWhiteSpace(route) || IsAbsoluteHttpUrl(route))
             return route;
 
         var publicRoute = ResolvePublicRouteForLanguage(spec, localization, route, languageCode);
         var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
-        var baseUrl = localization.ByCode.TryGetValue(effectiveLanguage, out var language) &&
-                      !string.IsNullOrWhiteSpace(language.BaseUrl)
-            ? language.BaseUrl
-            : null;
-        if (string.IsNullOrWhiteSpace(baseUrl) && allowSiteBaseUrlFallback)
-            baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
-
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, effectiveLanguage);
         return string.IsNullOrWhiteSpace(baseUrl)
             ? publicRoute
             : ResolveAbsoluteUrl(baseUrl, publicRoute);
@@ -553,12 +546,14 @@ public static partial class WebSiteBuilder
         string targetLanguage,
         string route)
     {
+        if (!TargetLanguageHasAbsoluteBaseUrl(localization, targetLanguage))
+            return ResolvePublicRouteForLanguage(spec, localization, route, localization.DefaultLanguage);
+
         return ResolveAbsoluteLanguageRoute(
             spec,
             localization,
             localization.DefaultLanguage,
-            route,
-            allowSiteBaseUrlFallback: TargetLanguageHasAbsoluteBaseUrl(localization, targetLanguage));
+            route);
     }
 
     private static bool TargetLanguageHasAbsoluteBaseUrl(ResolvedLocalizationConfig localization, string targetLanguage)

@@ -128,9 +128,7 @@ internal static partial class WebPipelineRunner
                 continue;
             }
 
-            // Keep the path and query separate: the RewriteRule matches the path while
-            // AppendApacheLegacyQueryCondition below preserves query-specific legacy rows.
-            var path = source.PathOnly.Trim();
+            var path = source.RewriteRulePath.Trim();
             if (string.IsNullOrWhiteSpace(path))
                 continue;
             if (!path.StartsWith("/", StringComparison.Ordinal))
@@ -376,7 +374,7 @@ internal static partial class WebPipelineRunner
             return new ApacheLegacySource
             {
                 PathAndQuery = trimmed,
-                PathOnly = trimmed
+                RewriteRulePath = trimmed
             };
         }
 
@@ -391,7 +389,7 @@ internal static partial class WebPipelineRunner
         return new ApacheLegacySource
         {
             PathAndQuery = pathAndQuery,
-            PathOnly = path,
+            RewriteRulePath = path,
             SourceQuery = query.TrimStart('?'),
             HostPattern = hostPattern
         };
@@ -408,7 +406,8 @@ internal static partial class WebPipelineRunner
     private sealed class ApacheLegacySource
     {
         public string PathAndQuery { get; set; } = string.Empty;
-        public string PathOnly { get; set; } = string.Empty;
+        // RewriteRule cannot match the query string; SourceQuery is emitted as a RewriteCond.
+        public string RewriteRulePath { get; set; } = string.Empty;
         public string SourceQuery { get; set; } = string.Empty;
         public string HostPattern { get; set; } = string.Empty;
     }
