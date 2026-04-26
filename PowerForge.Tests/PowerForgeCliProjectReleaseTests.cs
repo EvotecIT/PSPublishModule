@@ -69,6 +69,10 @@ public sealed class PowerForgeCliProjectReleaseTests
                 throw new TimeoutException("PowerForge CLI project release plan test timed out.");
             }
 
+            var drainTask = Task.WhenAll(stdoutTask, stderrTask);
+            if (await Task.WhenAny(drainTask, Task.Delay(TimeSpan.FromSeconds(10))) != drainTask)
+                throw new TimeoutException("PowerForge CLI project release plan output drain timed out.");
+
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
 

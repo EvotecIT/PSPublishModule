@@ -3623,9 +3623,17 @@ public sealed class PowerForgeReleaseServiceTests
             {
                 Thread.Sleep(50);
             }
+            catch (IOException)
+            {
+                return;
+            }
             catch (UnauthorizedAccessException) when (attempt < 9)
             {
                 Thread.Sleep(50);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
             }
         }
     }

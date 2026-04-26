@@ -54,6 +54,28 @@ public sealed class ModuleBuildHostServiceTests
         Assert.True(result.Succeeded);
     }
 
+    [Fact]
+    public async Task ExecuteBuildAsync_DoesNotForwardSigningFlags_WhenUnset()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1"
+        });
+
+        Assert.NotNull(captured);
+        Assert.DoesNotContain("-NoSign", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("-SignModule", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly Func<PowerShellRunRequest, PowerShellRunResult> _execute;
