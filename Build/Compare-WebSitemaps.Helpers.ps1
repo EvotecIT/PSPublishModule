@@ -329,24 +329,6 @@ function Get-SafeTargetUrl {
     return [string] $Candidate.TargetUrl
 }
 
-function Get-SearchEquivalentUrl {
-    param(
-        [Parameter(Mandatory)]
-        [string] $Url
-    )
-
-    $uri = [System.Uri] $Url
-    $builder = [System.UriBuilder]::new($uri)
-    $path = $uri.AbsolutePath
-    if ($path.Length -gt 1 -and $path.EndsWith('/')) {
-        $path = $path.TrimEnd('/')
-    }
-    $builder.Path = $path
-    $builder.Query = ''
-    $builder.Fragment = ''
-    $builder.Uri.AbsoluteUri
-}
-
 function Test-AmpProbeCandidate {
     param(
         [Parameter(Mandatory)]
@@ -467,6 +449,8 @@ function Test-SyntheticAmpRedirectCandidate {
     }
 
     $targetPath = Get-UrlPath -Url $targetUrl
+    # Synthetic AMP redirects are generated only for canonical blog/taxonomy roots.
+    # Localized-prefix targets (for example /pl/blog/...) stay in review output.
     return $targetPath -match '^/(blog|categories|tags)(/|$)'
 }
 

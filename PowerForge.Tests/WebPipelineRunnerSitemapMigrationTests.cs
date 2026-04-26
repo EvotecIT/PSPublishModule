@@ -1,7 +1,11 @@
 using System;
 using System.IO;
-using System.Reflection;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -200,22 +204,146 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
     }
 
     [Fact]
-    public void ResolveNestedSitemapLocation_RejectsRemoteCrossOriginSitemaps()
+    public async Task RunPipeline_LinksCompareSitemaps_RejectsNestedRemoteCrossOriginSitemaps()
     {
-        var method = typeof(WebPipelineRunner).GetMethod(
-            "ResolveNestedSitemapLocation",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-sitemaps-remote-origin-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
 
-        var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(
-            null,
-            new object[]
+        try
+        {
+            var port = GetFreePort();
+            (listener, cts, serverTask) = StartSitemapIndexServer(port);
+
+            Directory.CreateDirectory(Path.Combine(root, "_site"));
+            File.WriteAllText(Path.Combine(root, "_site", "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://evotec.xyz/blog/old-post/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "links-compare-sitemaps",
+                      "legacySitemaps": ["http://localhost:{{port}}/legacy-index.xml"],
+                      "newSitemap": "./_site/sitemap.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.Contains("crosses origins", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static (HttpListener listener, CancellationTokenSource cts, Task serverTask) StartSitemapIndexServer(int port)
+    {
+        var listener = new HttpListener();
+        listener.Prefixes.Add($"http://localhost:{port}/");
+        listener.Start();
+        var cts = new CancellationTokenSource();
+        var serverTask = Task.Run(() =>
+        {
+            while (!cts.IsCancellationRequested)
             {
-                "https://example.test/sitemap.xml",
-                "https://internal.example.test/sitemap.xml"
-            }));
+                HttpListenerContext? context = null;
+                try
+                {
+                    context = listener.GetContext();
+                }
+                catch (HttpListenerException) when (cts.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException) when (cts.IsCancellationRequested)
+                {
+                    break;
+                }
 
-        var inner = Assert.IsType<InvalidOperationException>(ex.InnerException);
-        Assert.Contains("crosses origins", inner.Message, StringComparison.OrdinalIgnoreCase);
+                if (context is null)
+                    continue;
+
+                if (!string.Equals(context.Request.Url?.AbsolutePath, "/legacy-index.xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    WriteXml(context.Response, 404, "<error>not found</error>");
+                    continue;
+                }
+
+                WriteXml(
+                    context.Response,
+                    200,
+                    $$"""
+                    <?xml version="1.0" encoding="utf-8"?>
+                    <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                      <sitemap><loc>http://127.0.0.1:{{port}}/nested.xml</loc></sitemap>
+                    </sitemapindex>
+                    """);
+            }
+        }, cts.Token);
+
+        return (listener, cts, serverTask);
+    }
+
+    private static void WriteXml(HttpListenerResponse response, int statusCode, string xml)
+    {
+        response.StatusCode = statusCode;
+        response.ContentType = "application/xml";
+        var bytes = Encoding.UTF8.GetBytes(xml);
+        response.ContentLength64 = bytes.Length;
+        response.OutputStream.Write(bytes, 0, bytes.Length);
+        response.Close();
+    }
+
+    private static async Task StopServerAsync(HttpListener? listener, CancellationTokenSource? cts, Task? serverTask)
+    {
+        if (cts is not null)
+        {
+            try { cts.Cancel(); } catch { }
+        }
+
+        if (listener is not null)
+        {
+            try { listener.Stop(); } catch { }
+            try { listener.Close(); } catch { }
+        }
+
+        if (serverTask is not null)
+        {
+            try { await serverTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
+        }
+
+        cts?.Dispose();
+    }
+
+    private static int GetFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 
     private static void TryDeleteDirectory(string path)
