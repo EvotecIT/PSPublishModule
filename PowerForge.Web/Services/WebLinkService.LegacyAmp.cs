@@ -209,6 +209,7 @@ public static partial class WebLinkService
             return trimmed;
 
         var path = NormalizeCanonicalLegacyPath(trimmed);
+        // Legacy AMP redirects only strip the language prefix for the host that owns that language root.
         if (host.Equals(polishHost, StringComparison.OrdinalIgnoreCase) &&
             path.StartsWith("/pl/", StringComparison.OrdinalIgnoreCase))
             path = "/" + path[4..];

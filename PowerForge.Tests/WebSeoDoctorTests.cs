@@ -152,6 +152,60 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_SourceMarkdownEmptyAlt_ReportsLineStarts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-source-lines-" + Guid.NewGuid().ToString("N"));
+        var siteRoot = Path.Combine(root, "_site");
+        var contentRoot = Path.Combine(root, "content");
+        Directory.CreateDirectory(siteRoot);
+        Directory.CreateDirectory(contentRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>PowerForge SEO Doctor Source Lines</title>
+                  <meta name="description" content="This page exists to keep SEO doctor source line tests focused." />
+                </head>
+                <body><h1>Source lines</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(contentRoot, "lines.md"),
+                """
+                ![](/images/first.png)
+                Text between images.
+                ![](/images/third.png)
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = siteRoot,
+                ContentRoot = contentRoot,
+                CheckEmptyImageAlt = true,
+                CheckSourceMarkdownImageAlt = true,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false
+            });
+
+            var metric = Assert.Single(result.SourceMarkdownMetrics);
+            Assert.Equal("lines.md", metric.Path);
+            Assert.Equal(2, metric.EmptyMarkdownAltCount);
+            Assert.Equal("1; 3", metric.SampleLineNumbers);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_FocusKeyphrase_FlagsTitleAndBodyCoverage()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-focus-" + Guid.NewGuid().ToString("N"));

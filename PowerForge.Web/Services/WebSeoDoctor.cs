@@ -32,6 +32,10 @@ public static class WebSeoDoctor
     private static readonly Regex VisibleMarkdownLeakPattern = new(
         @"(?:^|[\s(])(?:!\[[^\]\r\n]*\]\([^)]+\)|\[[^\]\r\n]+\]\([^)]+\)|```)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex EmptyMarkdownImageAltPattern = new(
+        @"!\[\]\((?<target>[^)\r\n]+)\)",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
     private static readonly TimeSpan GlobMatchRegexTimeout = TimeSpan.FromMilliseconds(100);
     private const int MaxJsonLdPayloadLength = 1_000_000;
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
@@ -518,11 +522,7 @@ public static class WebSeoDoctor
                 continue;
             }
 
-            var matches = Regex.Matches(
-                content,
-                @"!\[\]\((?<target>[^)\r\n]+)\)",
-                RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(250));
+            var matches = EmptyMarkdownImageAltPattern.Matches(content);
             if (matches.Count == 0)
                 continue;
 
