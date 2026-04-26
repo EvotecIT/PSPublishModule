@@ -255,6 +255,8 @@ internal sealed class StoreSubmissionService : IDisposable
         if (authentication is null)
             throw new InvalidOperationException("Store submission authentication settings are required.");
 
+        ValidateAuthorityHost(authentication.AuthorityHost);
+
         var accessToken = ResolveCredential(authentication.AccessToken, authentication.AccessTokenEnvVar);
         _ = NormalizeAuthorityHost(authentication.AuthorityHost);
         if (!string.IsNullOrWhiteSpace(accessToken))
@@ -683,6 +685,16 @@ internal sealed class StoreSubmissionService : IDisposable
             : authorityHost.Trim();
         var uri = ValidateHttpsUrl(normalized, nameof(authorityHost));
         return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+    }
+
+    private static void ValidateAuthorityHost(string authorityHost)
+    {
+        // Blank authority host values intentionally use the same Microsoft Entra default as token resolution.
+        var normalized = string.IsNullOrWhiteSpace(authorityHost)
+            ? "https://login.microsoftonline.com"
+            : authorityHost.Trim();
+
+        ValidateHttpsUrl(normalized, nameof(authorityHost));
     }
 
     private static Uri ValidateHttpsUrl(string value, string parameterName)

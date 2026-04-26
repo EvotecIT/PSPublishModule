@@ -384,6 +384,7 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.NotNull(requiredModules);
             Assert.Single(requiredModules!);
             Assert.Contains(requiredModules, module => string.Equals(module.ModuleName, "LegacyOnly", StringComparison.OrdinalIgnoreCase));
+            // Inbox and externally-classified modules are filtered out of generated RequiredModules metadata.
             Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(requiredModules, module => string.Equals(module.ModuleName, "Az.Accounts", StringComparison.OrdinalIgnoreCase));
 

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -9,6 +10,7 @@ public sealed class ModuleInstaller
 {
     private readonly ILogger _logger;
     private static readonly char[] PathSeparators = { '/', '\\' };
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     /// <summary>
     /// Creates a new installer.
@@ -171,8 +173,8 @@ public sealed class ModuleInstaller
         if (handling != LegacyFlatModuleHandling.Convert)
             return;
 
-        var legacyVersion = TryReadManifestVersion(flatManifest);
-        if (string.IsNullOrWhiteSpace(legacyVersion))
+        if (!TryReadLegacyFlatManifestVersion(flatManifest, out var legacyVersion) ||
+            string.IsNullOrWhiteSpace(legacyVersion))
         {
             var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "unknown");
             _logger.Warn($"Legacy flat install detected but ModuleVersion could not be read. Quarantining to '{target}'.");
@@ -180,9 +182,9 @@ public sealed class ModuleInstaller
             return;
         }
 
-        legacyVersion = legacyVersion!.Trim();
+        legacyVersion = (legacyVersion ?? string.Empty).Trim();
         try { ValidatePathSegment(legacyVersion, nameof(legacyVersion)); }
-        catch
+        catch (ArgumentException)
         {
             var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "invalidversion");
             _logger.Warn($"Legacy flat install detected but ModuleVersion '{legacyVersion}' is not a safe folder name. Quarantining to '{target}'.");
@@ -271,21 +273,31 @@ public sealed class ModuleInstaller
         return Version.TryParse(basePart, out _);
     }
 
-    private string? TryReadManifestVersion(string manifestPath)
+    private bool TryReadLegacyFlatManifestVersion(string manifestPath, out string? version)
     {
+        version = null;
+
         try
         {
-            var content = File.ReadAllText(manifestPath);
-            if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var explicitVersion))
-                return explicitVersion;
+            var content = File.ReadAllText(manifestPath, StrictUtf8);
+            return ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out version) &&
+                   !string.IsNullOrWhiteSpace(version);
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            _logger.Warn($"Failed to read ModuleVersion from legacy flat manifest '{manifestPath}': {ex.Message}");
-            return null;
+            _logger.Verbose($"Failed to read legacy flat manifest '{manifestPath}': {ex.Message}");
+            return false;
         }
-
-        return null;
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.Verbose($"Failed to read legacy flat manifest '{manifestPath}': {ex.Message}");
+            return false;
+        }
+        catch (System.Text.DecoderFallbackException ex)
+        {
+            _logger.Verbose($"Failed to decode legacy flat manifest '{manifestPath}': {ex.Message}");
+            return false;
+        }
     }
 
     private void TryMoveFile(string sourcePath, string destPath)

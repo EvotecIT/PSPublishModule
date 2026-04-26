@@ -3609,7 +3609,7 @@ public sealed class PowerForgeReleaseServiceTests
 
     private static void TryDelete(string path)
     {
-        for (var attempt = 0; attempt < 5; attempt++)
+        for (var attempt = 0; attempt < 10; attempt++)
         {
             try
             {
@@ -3619,13 +3619,21 @@ public sealed class PowerForgeReleaseServiceTests
                     File.Delete(path);
                 return;
             }
-            catch (IOException) when (attempt < 4)
+            catch (IOException) when (attempt < 9)
             {
-                Thread.Sleep(100);
+                Thread.Sleep(50);
             }
-            catch (UnauthorizedAccessException) when (attempt < 4)
+            catch (IOException)
             {
-                Thread.Sleep(100);
+                return;
+            }
+            catch (UnauthorizedAccessException) when (attempt < 9)
+            {
+                Thread.Sleep(50);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
             }
         }
     }
