@@ -143,8 +143,14 @@ public static partial class WebLinkService
 
         foreach (var c in destination)
         {
-            if (char.IsWhiteSpace(c) || char.IsControl(c))
-                return false;
+            if (char.IsLetterOrDigit(c))
+                continue;
+
+            if (c is ':' or '/' or '?' or '#' or '[' or ']' or '@' or '!' or '$' or '&' or '\''
+                or '(' or ')' or '*' or '+' or ',' or ';' or '=' or '-' or '.' or '_' or '~' or '%')
+                continue;
+
+            return false;
         }
 
         return true;

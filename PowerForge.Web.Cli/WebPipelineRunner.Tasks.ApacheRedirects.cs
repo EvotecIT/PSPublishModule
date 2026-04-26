@@ -306,6 +306,7 @@ internal static partial class WebPipelineRunner
     {
         relativePath = string.Empty;
         var trimmed = legacy.Trim();
+        // Keep this conservative: CSV values are expected to be decoded route paths before Apache export.
         if (string.IsNullOrWhiteSpace(trimmed) ||
             trimmed.StartsWith("//", StringComparison.Ordinal) ||
             trimmed.Contains('\\', StringComparison.Ordinal) ||

@@ -180,6 +180,7 @@ internal static partial class WebPipelineRunner
             return File.OpenText(location);
         }
 
+        // Pipeline tasks are synchronous today; keep the async HTTP boundary contained here.
         var content = httpClient.GetStringAsync(location).GetAwaiter().GetResult();
         return new StringReader(content);
     }
