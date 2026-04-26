@@ -97,6 +97,57 @@ public sealed class WebPipelineRunnerLinksTests
     }
 
     [Fact]
+    public void RunPipeline_LinksGenerateLegacyAmp_WritesCsvAndSummary()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-legacy-amp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "data", "redirects"));
+            File.WriteAllText(Path.Combine(root, "data", "redirects", "legacy.csv"),
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-generate-legacy-amp",
+                      "sourceCsvPath": "./data/redirects/legacy.csv",
+                      "outputCsvPath": "./data/redirects/legacy-amp.csv",
+                      "languageHosts": {
+                        "en": "evotec.xyz",
+                        "pl": "evotec.pl"
+                      },
+                      "summaryPath": "./Build/legacy-amp-summary.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.Contains("links-generate-legacy-amp ok", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            var csv = File.ReadAllText(Path.Combine(root, "data", "redirects", "legacy-amp.csv"));
+            Assert.Contains("https://evotec.xyz/old-post/amp/", csv, StringComparison.Ordinal);
+
+            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "legacy-amp-summary.json")));
+            Assert.Equal(1, summary.RootElement.GetProperty("generatedCount").GetInt32());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_LinksValidate_FailsWhenConfigPathIsMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-missing-config-" + Guid.NewGuid().ToString("N"));

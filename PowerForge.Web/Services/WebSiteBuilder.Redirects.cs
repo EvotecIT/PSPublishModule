@@ -648,8 +648,12 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(path))
             return string.Empty;
 
-        var literal = path + "?" + sourceQuery;
-        return "\"^" + Regex.Escape(literal) + "$\"";
+        if (path == "/")
+            return "\"^" + Regex.Escape("/?" + sourceQuery) + "$\"";
+
+        var exactPath = path.TrimEnd('/');
+        // Allow an optional trailing slash before the query: /path?v=1 and /path/?v=1 should both redirect.
+        return "\"^" + Regex.Escape(exactPath) + "/?" + Regex.Escape("?" + sourceQuery) + "$\"";
     }
 
     private static int ResolveRedirectStatus(RedirectSpec redirect)

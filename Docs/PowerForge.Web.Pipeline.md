@@ -861,6 +861,9 @@ Runs editorial + technical SEO heuristics over generated HTML.
   "checkDescriptionLength": true,
   "checkH1": true,
   "checkImageAlt": true,
+  "checkEmptyImageAlt": false,
+  "checkSourceMarkdownImageAlt": false,
+  "contentRoot": "./content",
   "checkDuplicateTitles": true,
   "checkOrphanPages": true,
   "checkFocusKeyphrase": false,
@@ -868,7 +871,11 @@ Runs editorial + technical SEO heuristics over generated HTML.
   "baseline": "./.powerforge/seo-baseline.json",
   "baselineGenerate": true,
   "reportPath": "./_reports/seo-doctor.json",
-  "summaryPath": "./_reports/seo-doctor.md"
+  "summaryPath": "./_reports/seo-doctor.md",
+  "backlogSummaryPath": "./_reports/seo-backlog-summary.json",
+  "pageMetricsPath": "./_reports/seo-page-metrics.csv",
+  "issuesCsvPath": "./_reports/seo-issues.csv",
+  "sourceMarkdownPath": "./_reports/seo-source-empty-alt.csv"
 }
 ```
 Notes:
@@ -876,6 +883,8 @@ Notes:
   - title/meta-description length heuristics
   - missing/multiple visible `h1`
   - images missing `alt` attribute
+  - optional explicit empty `alt=""` review issues
+  - optional source Markdown `![](...)` empty-alt backlog scan
   - duplicate title intent across pages
   - orphan page candidates (zero inbound links from scanned pages)
   - optional focus-keyphrase checks via page meta tags
@@ -893,6 +902,7 @@ Notes:
   - `failOnNewIssues` (alias `failOnNew`)
   - `failOnWarnings`, `maxErrors`, `maxWarnings`
 - `reportPath` writes full JSON; `summaryPath` writes markdown summary.
+- Backlog artifact paths are optional: `backlogSummaryPath`, `pageMetricsPath`, `issuesCsvPath`, and `sourceMarkdownPath` emit site-maintenance reports without a site-local PowerShell scanner.
 - `scopeFromBuildUpdated` supports incremental runs in `--fast` mode when a preceding build step updated HTML files.
 
 #### dotnet-build
@@ -1240,6 +1250,53 @@ Notes:
 - Recommended workflow:
   - In CI: use `lockMode: verify` with a committed lock file.
   - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
+
+#### links-generate-legacy-amp
+Generates legacy WordPress AMP continuity redirects as a CSV consumed by link validation/export and Apache redirect generation.
+
+```json
+{
+  "task": "links-generate-legacy-amp",
+  "sourceCsvPath": "./data/redirects/legacy-wordpress-generated.csv",
+  "outputCsvPath": "./data/redirects/legacy-amp-generated.csv",
+  "languageHosts": {
+    "en": "evotec.xyz",
+    "pl": "evotec.pl"
+  },
+  "summaryPath": "./Build/generate-legacy-amp-redirects-last-run.json"
+}
+```
+
+Notes:
+- This preserves WordPress-era `/<slug>/amp/` URLs after static migration.
+- Query-style legacy URLs and rows already ending in `/amp/` are skipped.
+- `languageHosts` maps language codes to the host used for relative CSV rows. The map must include the `defaultLanguage` host (`en` by default).
+- `defaultEnglishHost` and `defaultPolishHost` remain supported as compatibility aliases for older pipelines, but reusable pipelines should prefer `languageHosts`.
+- Relative targets can be host-rooted for split-domain deployments. For example, a Polish target beginning with `/pl/` is rooted at the host supplied for `pl`.
+- Apache redirect export fails fast when a generated target contains characters that must be URL-encoded before use in a `RewriteRule` substitution. URL-encode non-ASCII characters, spaces, and other unsafe target characters before exporting Apache rules.
+
+#### links-compare-sitemaps
+Compares one or more legacy sitemaps with a newly generated sitemap and emits reusable redirect/review artifacts for static-site migrations.
+
+```json
+{
+  "task": "links-compare-sitemaps",
+  "legacySitemaps": ["./data/migration/legacy-sitemap.xml"],
+  "newSitemap": "./_site/sitemap.xml",
+  "newSiteRoot": "./_site",
+  "out": "./Build/link-reports/sitemap-migration.json",
+  "redirectCsv": "./data/redirects/legacy-wordpress-generated.csv",
+  "reviewCsv": "./Build/link-reports/sitemap-migration-review.csv",
+  "includeSyntheticAmpRedirects": true
+}
+```
+
+Notes:
+- The task uses the native `WebSitemapMigrationAnalyzer`, so migration heuristics are available to the CLI, pipeline, and tests rather than only a project-local `.ps1`.
+- `legacySitemaps`/`newSitemap` accept local files or HTTP(S) URLs; XML is loaded with DTD processing disabled.
+- Remote sitemap fetches use `timeoutSeconds`, `maxSitemapDepth` (default `8`, valid range `0`-`64`), a bounded redirect count, and a response-size cap.
+- Redirect CSV columns are `legacy_url,target_url,status,match_kind,notes`, matching the link-service import/export workflow.
+- Review CSV rows are for missing or ambiguous legacy URLs that should not be promoted automatically.
 
 #### project-docs-sync
 Synchronizes project documentation, curated public examples, and optionally API artifacts from source repositories listed in your project catalog.

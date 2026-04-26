@@ -464,9 +464,9 @@ public class WebSiteLocalizationFeaturesTests
             CreateSimpleTheme(root, "localization-root-fallback-theme", "docs");
 
             var spec = CreateLocalizedDocsSpec("Localization Root Fallback Build Test", "localization-root-fallback-theme");
+            spec.BaseUrl = "https://evotec.xyz";
             spec.Localization!.FallbackToDefaultLanguage = true;
             spec.Localization.MaterializeFallbackPages = true;
-            spec.Localization.Languages[0].BaseUrl = "https://evotec.xyz";
             spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
             spec.Localization.Languages[1].RenderAtRoot = true;
 
@@ -479,6 +479,7 @@ public class WebSiteLocalizationFeaturesTests
 
             var html = File.ReadAllText(plRootHtmlPath);
             Assert.Contains("Docs EN", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"en\" href=\"https://evotec.xyz/docs", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/docs", html, StringComparison.OrdinalIgnoreCase);
 
             var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");

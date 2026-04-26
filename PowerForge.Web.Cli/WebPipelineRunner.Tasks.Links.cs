@@ -154,6 +154,49 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"links-import-wordpress ok: imported={result.ImportedCount}; written={result.WrittenCount}; skippedDuplicates={result.SkippedDuplicateCount}";
     }
 
+    private static void ExecuteLinksGenerateLegacyAmp(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var sourcePath = ResolvePath(baseDir,
+            GetString(step, "source") ??
+            GetString(step, "sourceCsv") ??
+            GetString(step, "source-csv") ??
+            GetString(step, "sourceCsvPath") ??
+            GetString(step, "source-csv-path"));
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            throw new InvalidOperationException("links-generate-legacy-amp requires sourceCsvPath.");
+
+        var outputPath = ResolvePath(baseDir,
+            GetString(step, "out") ??
+            GetString(step, "output") ??
+            GetString(step, "outputPath") ??
+            GetString(step, "output-path") ??
+            GetString(step, "outputCsv") ??
+            GetString(step, "output-csv") ??
+            GetString(step, "outputCsvPath") ??
+            GetString(step, "output-csv-path"));
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new InvalidOperationException("links-generate-legacy-amp requires outputCsvPath or out.");
+
+        var languageHosts = BuildLegacyAmpLanguageHostMap(step);
+
+        var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+        {
+            SourceCsvPath = sourcePath,
+            OutputCsvPath = outputPath,
+            DefaultScheme = GetString(step, "defaultScheme") ?? GetString(step, "default-scheme") ?? "https",
+            DefaultLanguage = GetString(step, "defaultLanguage") ?? GetString(step, "default-language") ?? "en",
+            LanguageHosts = languageHosts,
+            DefaultEnglishHost = GetString(step, "defaultEnglishHost") ?? GetString(step, "default-english-host") ?? string.Empty,
+            DefaultPolishHost = GetString(step, "defaultPolishHost") ?? GetString(step, "default-polish-host") ?? string.Empty
+        });
+
+        var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        WriteLinksLegacyAmpSummary(summaryPath, result);
+
+        stepResult.Success = true;
+        stepResult.Message = $"links-generate-legacy-amp ok: generated={result.GeneratedCount}; sourceRows={result.SourceRowCount}; output={result.OutputCsvPath}";
+    }
+
     private static void ExecuteLinksReport404(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var loaded = LoadLinksSpec(step, baseDir);
@@ -534,6 +577,26 @@ internal static partial class WebPipelineRunner
         return hosts;
     }
 
+    private static Dictionary<string, string> BuildLegacyAmpLanguageHostMap(JsonElement step)
+    {
+        var hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if ((step.TryGetProperty("languageHosts", out var hostsElement) ||
+             step.TryGetProperty("language-hosts", out hostsElement)) &&
+            hostsElement.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in hostsElement.EnumerateObject())
+            {
+                var value = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString()
+                    : property.Value.ToString();
+                if (!string.IsNullOrWhiteSpace(property.Name) && !string.IsNullOrWhiteSpace(value))
+                    hosts[property.Name.Trim()] = value.Trim();
+            }
+        }
+
+        return hosts;
+    }
+
     private static void WriteLinksImportSummary(string? summaryPath, WebLinkShortlinkImportResult result)
     {
         if (string.IsNullOrWhiteSpace(summaryPath))
@@ -577,6 +640,18 @@ internal static partial class WebPipelineRunner
             Directory.CreateDirectory(summaryDirectory);
 
         File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLink404IgnoreResult));
+    }
+
+    private static void WriteLinksLegacyAmpSummary(string? summaryPath, WebLegacyAmpRedirectResult result)
+    {
+        if (string.IsNullOrWhiteSpace(summaryPath))
+            return;
+
+        var summaryDirectory = Path.GetDirectoryName(summaryPath);
+        if (!string.IsNullOrWhiteSpace(summaryDirectory))
+            Directory.CreateDirectory(summaryDirectory);
+
+        File.WriteAllText(summaryPath, JsonSerializer.Serialize(result, LinksSummaryJsonContext.WebLegacyAmpRedirectResult));
     }
 
     private static string[] GetStringOrArrayOfStrings(JsonElement step, params string[] names)

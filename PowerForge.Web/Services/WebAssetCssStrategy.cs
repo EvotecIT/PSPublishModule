@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PowerForge.Web;
 
 internal static class WebAssetCssStrategy
@@ -7,7 +9,8 @@ internal static class WebAssetCssStrategy
         if (string.IsNullOrWhiteSpace(cssStrategy))
             return "blocking";
 
-        return cssStrategy.Trim().ToLowerInvariant() switch
+        var original = cssStrategy.Trim();
+        return original.ToLowerInvariant() switch
         {
             "sync" => "blocking",
             "inline" => "blocking",
@@ -17,7 +20,13 @@ internal static class WebAssetCssStrategy
             "async" => "async",
             "async-print" => "async",
             "print" => "async",
-            _ => "blocking"
+            _ => WarnUnknown(original)
         };
+    }
+
+    private static string WarnUnknown(string cssStrategy)
+    {
+        Trace.TraceWarning($"Unknown CssStrategy '{cssStrategy}', falling back to blocking.");
+        return "blocking";
     }
 }

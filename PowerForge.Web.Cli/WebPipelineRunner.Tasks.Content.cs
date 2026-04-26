@@ -1340,6 +1340,9 @@ internal static partial class WebPipelineRunner
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
         if (string.IsNullOrWhiteSpace(outPath))
             throw new InvalidOperationException("release-hub requires out.");
+        var existingOutputContent = File.Exists(outPath)
+            ? File.ReadAllText(outPath)
+            : null;
 
         var sourceText = GetString(step, "source");
         var source = WebChangelogSource.Auto;
@@ -1380,6 +1383,27 @@ internal static partial class WebPipelineRunner
         options.AssetRules.AddRange(rules);
 
         var result = WebReleaseHubGenerator.Generate(options);
+        if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
+            result.Warnings.Length > 0 &&
+            TryPreserveExistingReleaseHub(existingOutputContent, outPath))
+        {
+            var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
+            result = new WebReleaseHubResult
+            {
+                OutputPath = outPath,
+                ReleaseCount = preservedDocument?.Releases.Count ?? 0,
+                AssetCount = preservedDocument?.Releases.Sum(static release => release.Assets.Count) ?? 0,
+                Source = result.Source,
+                Warnings = result.Warnings
+                    .Concat(new[] { "Preserved existing release-hub output after warning-only empty refresh." })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+            stepResult.Success = true;
+            stepResult.Message = $"Release hub fallback: preserved existing '{outPath}' after warning-only empty refresh.";
+            return;
+        }
+
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
         if (result.Warnings.Length > 0)
             note += $" ({result.Warnings.Length} warnings)";
@@ -1417,6 +1441,42 @@ internal static partial class WebPipelineRunner
         }
 
         return parsed;
+    }
+
+    private static bool TryPreserveExistingReleaseHub(string existingJson, string outputPath)
+    {
+        if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
+            return false;
+
+        var existing = TryReadReleaseHubDocument(existingJson);
+        // The generator has already written outputPath; read it here to compare old vs newly generated release data.
+        var generated = TryReadReleaseHubDocument(File.ReadAllText(outputPath));
+        if (existing is null || generated is null)
+            return false;
+
+        if (existing.Releases.Count <= 0 || generated.Releases.Count > 0)
+            return false;
+
+        File.WriteAllText(outputPath, existingJson);
+        return true;
+    }
+
+    private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<WebReleaseHubDocument>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static List<WebReleaseHubAssetRuleInput> ParseReleaseHubAssetRules(JsonElement step)

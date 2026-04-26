@@ -741,6 +741,50 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_AssetRewrite_DoesNotDecodeUnchangedEncodedAttributes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-rewrite-encoded-attrs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                  <body><a href="/search/?q=a&amp;sort=b">Search</a></body>
+                </html>
+                """);
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Rewrites = new[]
+                    {
+                        new AssetRewriteSpec
+                        {
+                            MatchType = "prefix",
+                            Match = "https://cdn.example.test/",
+                            Replace = "/assets/vendor/"
+                        }
+                    }
+                }
+            });
+
+            Assert.Equal(0, result.UpdatedCount);
+            Assert.Contains("href=\"/search/?q=a&amp;sort=b\"", File.ReadAllText(htmlPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_HashedAssetCount_TracksFilesNotAliasMapEntries()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-" + Guid.NewGuid().ToString("N"));

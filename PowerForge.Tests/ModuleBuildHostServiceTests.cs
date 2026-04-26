@@ -51,6 +51,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
         Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("-NoSign", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("function New-ConfigurationBuild", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 

@@ -115,8 +115,21 @@ internal static partial class WebPipelineRunner
             result is not null &&
             result.Warnings.Length > 0)
         {
+            if (TryPreserveEcosystemSources(
+                    existingOutputContent,
+                    outputPath,
+                    hasGitHub: !string.IsNullOrWhiteSpace(githubOrganization),
+                    hasNuGet: !string.IsNullOrWhiteSpace(nugetOwner),
+                    hasPowerShellGallery: !string.IsNullOrWhiteSpace(powerShellGalleryOwner) || !string.IsNullOrWhiteSpace(powerShellGalleryAuthor),
+                    out var preservedSources))
+            {
+                usedFallback = true;
+                fallbackReason = "existing-source-on-warning-empty";
+                stepResult.Message = $"ecosystem-stats fallback: preserved existing source data for {string.Join(", ", preservedSources)} in '{outputPath}'.";
+            }
+
             var generatedSnapshot = TryReadEcosystemStatsSnapshotFromFile(outputPath);
-            if (ShouldPreserveExistingStats(existingSnapshot, generatedSnapshot))
+            if (!usedFallback && ShouldPreserveExistingStats(existingSnapshot, generatedSnapshot))
             {
                 File.WriteAllText(outputPath, existingOutputContent);
                 usedFallback = true;
@@ -138,6 +151,11 @@ internal static partial class WebPipelineRunner
             if (!string.IsNullOrWhiteSpace(summaryDir))
                 Directory.CreateDirectory(summaryDir);
 
+            var finalDocument = File.Exists(outputPath)
+                ? TryReadEcosystemStatsDocument(File.ReadAllText(outputPath))
+                : null;
+            var finalSummary = finalDocument?.Summary ?? (finalDocument is null ? null : BuildSummaryFromDocument(finalDocument));
+
             var summary = new
             {
                 generatedOn = DateTimeOffset.UtcNow.ToString("O"),
@@ -145,10 +163,10 @@ internal static partial class WebPipelineRunner
                 publishPath = string.IsNullOrWhiteSpace(publishPath) ? null : Path.GetFullPath(publishPath),
                 status = usedFallback ? "fallback" : "updated",
                 reason = fallbackReason,
-                repositoryCount = result?.RepositoryCount,
-                nugetPackageCount = result?.NuGetPackageCount,
-                powerShellGalleryModuleCount = result?.PowerShellGalleryModuleCount,
-                warningCount = result?.Warnings?.Length ?? 0
+                repositoryCount = finalSummary?.RepositoryCount ?? result?.RepositoryCount,
+                nugetPackageCount = finalSummary?.NuGetPackageCount ?? result?.NuGetPackageCount,
+                powerShellGalleryModuleCount = finalSummary?.PowerShellGalleryModuleCount ?? result?.PowerShellGalleryModuleCount,
+                warningCount = finalDocument?.Warnings?.Count ?? result?.Warnings?.Length ?? 0
             };
             File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
         }
@@ -158,6 +176,8 @@ internal static partial class WebPipelineRunner
         {
             stepResult.Message = string.Equals(fallbackReason, "existing-on-warning-empty", StringComparison.Ordinal)
                 ? $"ecosystem-stats fallback: preserved existing '{outputPath}' because new data had warnings and empty totals."
+                : string.Equals(fallbackReason, "existing-source-on-warning-empty", StringComparison.Ordinal)
+                    ? stepResult.Message
                 : $"ecosystem-stats fallback: reused existing '{outputPath}'.";
             return;
         }
@@ -213,6 +233,136 @@ internal static partial class WebPipelineRunner
             return false;
 
         return existing.HasData && generated.IsEmpty;
+    }
+
+    private static bool TryPreserveEcosystemSources(
+        string existingJson,
+        string generatedPath,
+        bool hasGitHub,
+        bool hasNuGet,
+        bool hasPowerShellGallery,
+        out string[] preservedSources)
+    {
+        preservedSources = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(generatedPath))
+            return false;
+
+        var existing = TryReadEcosystemStatsDocument(existingJson);
+        var generated = TryReadEcosystemStatsDocument(File.ReadAllText(generatedPath));
+        if (existing is null || generated is null)
+            return false;
+
+        var preserved = new List<string>();
+
+        if (hasGitHub &&
+            HasSourceWarning(generated.Warnings, "GitHub") &&
+            HasGitHubData(existing) &&
+            !HasGitHubData(generated))
+        {
+            generated.GitHub = existing.GitHub;
+            preserved.Add("GitHub");
+        }
+
+        if (hasNuGet &&
+            HasSourceWarning(generated.Warnings, "NuGet") &&
+            HasNuGetData(existing) &&
+            !HasNuGetData(generated))
+        {
+            generated.NuGet = existing.NuGet;
+            preserved.Add("NuGet");
+        }
+
+        if (hasPowerShellGallery &&
+            HasSourceWarning(generated.Warnings, "PowerShell Gallery") &&
+            HasPowerShellGalleryData(existing) &&
+            !HasPowerShellGalleryData(generated))
+        {
+            generated.PowerShellGallery = existing.PowerShellGallery;
+            preserved.Add("PowerShell Gallery");
+        }
+
+        if (preserved.Count == 0)
+            return false;
+
+        generated.Warnings ??= new List<string>();
+        foreach (var source in preserved)
+            generated.Warnings.Add($"Preserved existing {source} stats after upstream fetch warnings returned empty data.");
+
+        generated.Warnings = generated.Warnings
+            .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        generated.Summary = BuildSummaryFromDocument(generated);
+        File.WriteAllText(generatedPath, JsonSerializer.Serialize(generated, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        }));
+
+        preservedSources = preserved.ToArray();
+        return true;
+    }
+
+    private static WebEcosystemStatsDocument? TryReadEcosystemStatsDocument(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<WebEcosystemStatsDocument>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool HasSourceWarning(IEnumerable<string>? warnings, string sourceName)
+    {
+        if (warnings is null)
+            return false;
+
+        return warnings.Any(warning => !string.IsNullOrWhiteSpace(warning) &&
+                                       warning.Contains(sourceName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasGitHubData(WebEcosystemStatsDocument document)
+    {
+        return document.GitHub is { } gitHub &&
+               (gitHub.RepositoryCount > 0 || gitHub.Repositories.Count > 0);
+    }
+
+    private static bool HasNuGetData(WebEcosystemStatsDocument document)
+    {
+        return document.NuGet is { } nuget &&
+               (nuget.PackageCount > 0 || nuget.Items.Count > 0 || nuget.TotalDownloads > 0);
+    }
+
+    private static bool HasPowerShellGalleryData(WebEcosystemStatsDocument document)
+    {
+        return document.PowerShellGallery is { } gallery &&
+               (gallery.ModuleCount > 0 || gallery.Modules.Count > 0 || gallery.TotalDownloads > 0);
+    }
+
+    private static WebEcosystemStatsSummary BuildSummaryFromDocument(WebEcosystemStatsDocument document)
+    {
+        var summary = new WebEcosystemStatsSummary
+        {
+            RepositoryCount = document.GitHub?.RepositoryCount ?? document.GitHub?.Repositories.Count ?? 0,
+            NuGetPackageCount = document.NuGet?.PackageCount ?? document.NuGet?.Items.Count ?? 0,
+            PowerShellGalleryModuleCount = document.PowerShellGallery?.ModuleCount ?? document.PowerShellGallery?.Modules.Count ?? 0,
+            GitHubStars = document.GitHub?.TotalStars ?? 0,
+            GitHubForks = document.GitHub?.TotalForks ?? 0,
+            NuGetDownloads = document.NuGet?.TotalDownloads ?? 0,
+            PowerShellGalleryDownloads = document.PowerShellGallery?.TotalDownloads ?? 0
+        };
+        summary.TotalDownloads = summary.NuGetDownloads + summary.PowerShellGalleryDownloads;
+        return summary;
     }
 
     private static int ReadInt32Property(JsonElement parent, string propertyName)

@@ -258,6 +258,7 @@ internal sealed class StoreSubmissionService : IDisposable
         ValidateAuthorityHost(authentication.AuthorityHost);
 
         var accessToken = ResolveCredential(authentication.AccessToken, authentication.AccessTokenEnvVar);
+        _ = NormalizeAuthorityHost(authentication.AuthorityHost);
         if (!string.IsNullOrWhiteSpace(accessToken))
             return;
 

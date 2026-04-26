@@ -583,7 +583,7 @@ public static class WebEcosystemStatsGenerator
 
     private static bool ShouldRetryGitHubWithoutAuthorization(HttpRequestMessage request, HttpResponseMessage response)
     {
-        if (response.StatusCode != HttpStatusCode.Forbidden)
+        if (response.StatusCode is not HttpStatusCode.Forbidden and not HttpStatusCode.Unauthorized)
             return false;
         if (request.Headers.Authorization is null)
             return false;

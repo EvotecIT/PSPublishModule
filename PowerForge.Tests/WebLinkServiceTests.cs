@@ -624,6 +624,42 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ExportApache_RejectsUnsafeTargetSubstitutions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-unsafe-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var dataSet = new WebLinkDataSet
+            {
+                Redirects = new[]
+                {
+                    new LinkRedirectRule
+                    {
+                        Id = "unsafe-target",
+                        SourcePath = "/old/",
+                        TargetUrl = "/new path/",
+                        Status = 301
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath
+            }));
+
+            Assert.Contains("URL-encoded", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void ExportApache_EmitsGoneRulesForPrefixAndRegexWithoutTarget()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-gone-" + Guid.NewGuid().ToString("N"));
@@ -1556,6 +1592,213 @@ public sealed class WebLinkServiceTests
 
             var redirect = Assert.Single(dataSet.Redirects);
             Assert.Equal("manual", redirect.Id);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_EmitsHostScopedAmpContinuityCsv()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                /oferta/uslugi-serwisowe/,/pl/uslugi-serwisowe/,301,pl
+                https://evotec.xyz/already/amp/,/already/,301,en
+                /?p=123,/query-target/,301,en
+                /bad-status/,/should-not-emit/,200,en
+                """);
+
+            var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "evotec.xyz",
+                DefaultPolishHost = "evotec.pl"
+            });
+
+            Assert.Equal(5, result.SourceRowCount);
+            Assert.Equal(2, result.GeneratedCount);
+            Assert.Equal(3, result.SkippedCount);
+            var csv = File.ReadAllText(outputPath);
+            Assert.Contains("\"https://evotec.xyz/old-post/amp/\",\"https://evotec.xyz/new-post/\",\"301\"", csv, StringComparison.Ordinal);
+            Assert.Contains("\"https://evotec.pl/oferta/uslugi-serwisowe/amp/\",\"https://evotec.pl/uslugi-serwisowe/\",\"301\"", csv, StringComparison.Ordinal);
+            Assert.DoesNotContain("already/amp/amp", csv, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("?p=123", csv, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("should-not-emit", csv, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_RequiresDefaultHostsForRelativeRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-hosts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                """);
+
+            var ex = Assert.Throws<ArgumentException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath
+            }));
+
+            Assert.Contains("default language", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("source_url,target_url,status,language", "legacy_url")]
+    [InlineData("legacy_url,destination,status,language", "target_url")]
+    public void GenerateLegacyAmpRedirects_ThrowsForMissingRequiredCsvHeaders(string header, string expectedColumn)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-headers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath, header + Environment.NewLine + "/old-post/,/new-post/,301,en");
+
+            var ex = Assert.Throws<InvalidOperationException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "example.test",
+                DefaultPolishHost = "pl.example.test"
+            }));
+
+            Assert.Contains(expectedColumn, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_RejectsDefaultHostWithPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-host-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /old-post/,/new-post/,301,en
+                """);
+
+            var ex = Assert.Throws<ArgumentException>(() => WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "https://example.test/path",
+                DefaultPolishHost = "pl.example.test"
+            }));
+
+            Assert.Contains("without a path", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_UsesLanguageHostMapForReusableSites()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-language-map-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                /article-fr/,/fr/article-current/,301,fr
+                """);
+
+            var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                LanguageHosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["en"] = "example.test",
+                    ["fr"] = "fr.example.test"
+                }
+            });
+
+            Assert.Equal(1, result.GeneratedCount);
+            var csv = File.ReadAllText(outputPath);
+            Assert.Contains("\"https://fr.example.test/article-fr/amp/\",\"https://fr.example.test/article-current/\",\"301\"", csv, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateLegacyAmpRedirects_PreservesHostFromAbsoluteLegacyRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-absolute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                https://archive.example.test/old-post/,/new-post/,301,en
+                """);
+
+            var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "example.test",
+                DefaultPolishHost = "pl.example.test"
+            });
+
+            Assert.Equal(1, result.GeneratedCount);
+            var csv = File.ReadAllText(outputPath);
+            Assert.Contains("\"https://archive.example.test/old-post/amp/\",\"https://archive.example.test/new-post/\",\"301\"", csv, StringComparison.Ordinal);
         }
         finally
         {

@@ -227,3 +227,37 @@ public sealed class LinkValidationResult
     /// <summary>True when no errors were found.</summary>
     public bool Success => ErrorCount == 0;
 }
+
+/// <summary>Options for generating legacy WordPress AMP continuity redirects.</summary>
+public sealed class WebLegacyAmpRedirectOptions
+{
+    /// <summary>Source legacy redirect CSV path.</summary>
+    public string SourceCsvPath { get; set; } = string.Empty;
+    /// <summary>Output CSV path for generated AMP redirects.</summary>
+    public string OutputCsvPath { get; set; } = string.Empty;
+    /// <summary>Default URL scheme used when generating absolute legacy AMP sources and targets.</summary>
+    public string DefaultScheme { get; set; } = "https";
+    /// <summary>Default language used when a legacy row has no language value.</summary>
+    public string DefaultLanguage { get; set; } = "en";
+    /// <summary>Language code to host map used for relative legacy rows.</summary>
+    public Dictionary<string, string> LanguageHosts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Compatibility alias for LanguageHosts["en"]. Prefer LanguageHosts for reusable pipelines.</summary>
+    public string DefaultEnglishHost { get; set; } = string.Empty;
+    /// <summary>Compatibility alias for LanguageHosts["pl"]. Prefer LanguageHosts for reusable pipelines.</summary>
+    public string DefaultPolishHost { get; set; } = string.Empty;
+}
+
+/// <summary>Result for generated legacy WordPress AMP continuity redirects.</summary>
+public sealed class WebLegacyAmpRedirectResult
+{
+    /// <summary>Resolved source legacy redirect CSV path.</summary>
+    public string SourceCsvPath { get; set; } = string.Empty;
+    /// <summary>Resolved output generated AMP redirect CSV path.</summary>
+    public string OutputCsvPath { get; set; } = string.Empty;
+    /// <summary>Number of source CSV rows considered.</summary>
+    public int SourceRowCount { get; set; }
+    /// <summary>Number of AMP redirects generated.</summary>
+    public int GeneratedCount { get; set; }
+    /// <summary>Number of skipped rows.</summary>
+    public int SkippedCount { get; set; }
+}

@@ -10,6 +10,11 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private static readonly JsonSerializerOptions SeoDoctorIndentedJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private static void ExecuteSeoDoctor(
         JsonElement step,
         string baseDir,
@@ -48,6 +53,7 @@ internal static partial class WebPipelineRunner
                                  ?? CliPatternHelper.SplitPatterns(
                                      GetString(step, "referenceSiteRoots") ??
                                      GetString(step, "reference-site-roots"));
+        var languageRootHosts = ResolveSeoDoctorLanguageRootHosts(step, baseDir);
 
         var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
         {
@@ -57,6 +63,7 @@ internal static partial class WebPipelineRunner
                 .Select(path => ResolvePath(baseDir, path))
                 .OfType<string>()
                 .ToArray(),
+            LanguageRootHosts = languageRootHosts,
             Include = CliPatternHelper.SplitPatterns(include),
             Exclude = CliPatternHelper.SplitPatterns(exclude),
             UseDefaultExcludes = useDefaultExclude,
@@ -67,6 +74,9 @@ internal static partial class WebPipelineRunner
             CheckDescriptionLength = GetBool(step, "checkDescriptionLength") ?? true,
             CheckH1 = GetBool(step, "checkH1") ?? GetBool(step, "checkHeading") ?? true,
             CheckImageAlt = GetBool(step, "checkImageAlt") ?? true,
+            CheckEmptyImageAlt = GetBool(step, "checkEmptyImageAlt") ?? GetBool(step, "check-empty-image-alt") ?? false,
+            CheckSourceMarkdownImageAlt = GetBool(step, "checkSourceMarkdownImageAlt") ?? GetBool(step, "check-source-markdown-image-alt") ?? false,
+            ContentRoot = ResolvePath(baseDir, GetString(step, "contentRoot") ?? GetString(step, "content-root")),
             CheckDuplicateTitles = GetBool(step, "checkDuplicateTitles") ?? true,
             CheckOrphanPages = GetBool(step, "checkOrphanPages") ?? true,
             CheckFocusKeyphrase = GetBool(step, "checkFocusKeyphrase") ?? false,
@@ -184,6 +194,8 @@ internal static partial class WebPipelineRunner
             result.ReportPath = resolvedReportPath;
         }
 
+        WriteSeoDoctorBacklogArtifacts(step, baseDir, CloneResultWith(issues, errors, warnings, result));
+
         var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
@@ -215,6 +227,86 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException(stepResult.Message);
     }
 
+    private static Dictionary<string, string> ResolveSeoDoctorLanguageRootHosts(JsonElement step, string baseDir)
+    {
+        var configPath = GetString(step, "config") ??
+                         GetString(step, "siteConfig") ??
+                         GetString(step, "site-config");
+        if (string.IsNullOrWhiteSpace(configPath))
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var resolvedConfigPath = ResolvePath(baseDir, configPath);
+        if (string.IsNullOrWhiteSpace(resolvedConfigPath) || !File.Exists(resolvedConfigPath))
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var (siteSpec, _) = WebSiteSpecLoader.LoadWithPath(resolvedConfigPath, WebCliJson.Options);
+        var hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (siteSpec.Links?.LanguageRootHosts is { Count: > 0 })
+        {
+            foreach (var pair in siteSpec.Links.LanguageRootHosts)
+            {
+                var host = NormalizeSeoDoctorHostKey(pair.Key);
+                var prefix = NormalizeSeoDoctorLanguagePrefix(pair.Value);
+                if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(prefix))
+                    continue;
+                hosts[host] = prefix;
+            }
+        }
+
+        if (siteSpec.Localization?.Enabled == true && siteSpec.Localization.Languages is { Length: > 0 })
+        {
+            foreach (var language in siteSpec.Localization.Languages)
+            {
+                if (language.Disabled ||
+                    language.Default ||
+                    !language.RenderAtRoot ||
+                    string.IsNullOrWhiteSpace(language.BaseUrl) ||
+                    !Uri.TryCreate(language.BaseUrl, UriKind.Absolute, out var baseUri))
+                {
+                    continue;
+                }
+
+                var host = NormalizeSeoDoctorHostKey(baseUri);
+                var prefix = NormalizeSeoDoctorLanguagePrefix(
+                    !string.IsNullOrWhiteSpace(language.Prefix)
+                        ? language.Prefix
+                        : language.Code);
+                if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(prefix))
+                    continue;
+                hosts.TryAdd(host, prefix);
+            }
+        }
+
+        return hosts;
+    }
+
+    private static string NormalizeSeoDoctorHostKey(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return string.Empty;
+
+        var trimmed = host.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return NormalizeSeoDoctorHostKey(uri);
+
+        return trimmed.TrimEnd('/').ToLowerInvariant();
+    }
+
+    private static string NormalizeSeoDoctorHostKey(Uri uri)
+    {
+        var host = uri.IdnHost.ToLowerInvariant();
+        return uri.IsDefaultPort ? host : host + ":" + uri.Port;
+    }
+
+    private static string NormalizeSeoDoctorLanguagePrefix(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            return string.Empty;
+
+        return prefix.Trim().Trim('/').Replace('\\', '/');
+    }
+
     private static WebSeoDoctorResult CloneResultWith(
         IReadOnlyList<WebSeoDoctorIssue> issues,
         IReadOnlyList<string> errors,
@@ -238,10 +330,161 @@ internal static partial class WebPipelineRunner
             BaselineIssueCount = source.BaselineIssueCount,
             ReportPath = source.ReportPath,
             SummaryPath = source.SummaryPath,
+            PagesMissingDescription = source.PagesMissingDescription,
+            PagesWithShortDescription = source.PagesWithShortDescription,
+            PagesWithLongDescription = source.PagesWithLongDescription,
+            PagesMissingH1 = source.PagesMissingH1,
+            PagesWithMultipleH1 = source.PagesWithMultipleH1,
+            PagesWithMissingAlt = source.PagesWithMissingAlt,
+            PagesWithEmptyAlt = source.PagesWithEmptyAlt,
+            TotalMissingAlt = source.TotalMissingAlt,
+            TotalEmptyAlt = source.TotalEmptyAlt,
+            SourceMarkdownFilesWithEmptyAlt = source.SourceMarkdownFilesWithEmptyAlt,
+            TotalSourceMarkdownEmptyAlt = source.TotalSourceMarkdownEmptyAlt,
             Issues = issues.ToArray(),
+            PageMetrics = source.PageMetrics,
+            SourceMarkdownMetrics = source.SourceMarkdownMetrics,
             Errors = errors.ToArray(),
             Warnings = warnings.ToArray()
         };
+    }
+
+    private static void WriteSeoDoctorBacklogArtifacts(JsonElement step, string baseDir, WebSeoDoctorResult result)
+    {
+        WriteSeoDoctorJsonFile(step, baseDir, "backlogSummaryPath", "backlog-summary-path", BuildSeoDoctorBacklogSummary(result));
+        WriteSeoDoctorCsvFile(step, baseDir, "pageMetricsPath", "page-metrics-path", BuildSeoDoctorPageMetricsCsv(result.PageMetrics));
+        WriteSeoDoctorCsvFile(step, baseDir, "issuesCsvPath", "issues-csv-path", BuildSeoDoctorIssuesCsv(result.Issues));
+        WriteSeoDoctorCsvFile(step, baseDir, "sourceMarkdownPath", "source-markdown-path", BuildSeoDoctorSourceMarkdownCsv(result.SourceMarkdownMetrics));
+    }
+
+    private static void WriteSeoDoctorJsonFile(JsonElement step, string baseDir, string name, string altName, object payload)
+    {
+        var path = GetString(step, name) ?? GetString(step, altName);
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var resolvedPath = ResolvePathWithinRoot(baseDir, path, path);
+        var directory = Path.GetDirectoryName(resolvedPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+        File.WriteAllText(resolvedPath, JsonSerializer.Serialize(payload, SeoDoctorIndentedJsonOptions));
+    }
+
+    private static void WriteSeoDoctorCsvFile(JsonElement step, string baseDir, string name, string altName, string csv)
+    {
+        var path = GetString(step, name) ?? GetString(step, altName);
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var resolvedPath = ResolvePathWithinRoot(baseDir, path, path);
+        var directory = Path.GetDirectoryName(resolvedPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+        File.WriteAllText(resolvedPath, csv);
+    }
+
+    private static object BuildSeoDoctorBacklogSummary(WebSeoDoctorResult result)
+        => new
+        {
+            generatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            pageCount = result.PageCount,
+            pagesMissingDescription = result.PagesMissingDescription,
+            pagesWithShortDescription = result.PagesWithShortDescription,
+            pagesWithLongDescription = result.PagesWithLongDescription,
+            pagesMissingH1 = result.PagesMissingH1,
+            pagesWithMultipleH1 = result.PagesWithMultipleH1,
+            pagesWithMissingAlt = result.PagesWithMissingAlt,
+            pagesWithEmptyAlt = result.PagesWithEmptyAlt,
+            totalMissingAlt = result.TotalMissingAlt,
+            totalEmptyAlt = result.TotalEmptyAlt,
+            sourceMarkdownFilesWithEmptyAlt = result.SourceMarkdownFilesWithEmptyAlt,
+            totalSourceMarkdownEmptyAlt = result.TotalSourceMarkdownEmptyAlt,
+            topEmptyAltPages = result.PageMetrics
+                .Where(static page => page.EmptyAltCount > 0)
+                .OrderByDescending(static page => page.EmptyAltCount)
+                .ThenBy(static page => page.Path, StringComparer.OrdinalIgnoreCase)
+                .Take(25)
+                .Select(static page => new { page.Path, page.EmptyAltCount, page.EmptyAltSamples })
+                .ToArray(),
+            topSourceEmptyAltFiles = result.SourceMarkdownMetrics
+                .OrderByDescending(static row => row.EmptyMarkdownAltCount)
+                .ThenBy(static row => row.Path, StringComparer.OrdinalIgnoreCase)
+                .Take(25)
+                .Select(static row => new { row.Path, row.EmptyMarkdownAltCount, row.SampleTargets, row.SampleLineNumbers })
+                .ToArray()
+        };
+
+    private static string BuildSeoDoctorPageMetricsCsv(IEnumerable<WebSeoDoctorPageMetric> rows)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Path,Title,TitleTagCount,DescriptionLength,MissingDescription,ShortDescription,LongDescription,H1Count,MissingH1,MultipleH1,ImageCount,MissingAltCount,EmptyAltCount,MissingAltSamples,EmptyAltSamples,NoIndex");
+        foreach (var row in rows)
+        {
+            builder.AppendLine(string.Join(",", new[]
+            {
+                Csv(row.Path),
+                Csv(row.Title),
+                Csv(row.TitleTagCount),
+                Csv(row.DescriptionLength),
+                Csv(row.MissingDescription),
+                Csv(row.ShortDescription),
+                Csv(row.LongDescription),
+                Csv(row.H1Count),
+                Csv(row.MissingH1),
+                Csv(row.MultipleH1),
+                Csv(row.ImageCount),
+                Csv(row.MissingAltCount),
+                Csv(row.EmptyAltCount),
+                Csv(row.MissingAltSamples),
+                Csv(row.EmptyAltSamples),
+                Csv(row.NoIndex)
+            }));
+        }
+        return builder.ToString();
+    }
+
+    private static string BuildSeoDoctorIssuesCsv(IEnumerable<WebSeoDoctorIssue> rows)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Severity,Category,Path,Detail,Code,Hint");
+        foreach (var row in rows)
+        {
+            builder.AppendLine(string.Join(",", new[]
+            {
+                Csv(row.Severity),
+                Csv(row.Category),
+                Csv(row.Path ?? string.Empty),
+                Csv(row.Message),
+                Csv(row.Code),
+                Csv(row.Hint)
+            }));
+        }
+        return builder.ToString();
+    }
+
+    private static string BuildSeoDoctorSourceMarkdownCsv(IEnumerable<WebSeoDoctorSourceMarkdownMetric> rows)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Path,EmptyMarkdownAltCount,SampleTargets,SampleLineNumbers");
+        foreach (var row in rows)
+        {
+            builder.AppendLine(string.Join(",", new[]
+            {
+                Csv(row.Path),
+                Csv(row.EmptyMarkdownAltCount),
+                Csv(row.SampleTargets),
+                Csv(row.SampleLineNumbers)
+            }));
+        }
+        return builder.ToString();
+    }
+
+    private static string Csv(object? value)
+    {
+        var text = value is bool flag
+            ? flag.ToString().ToLowerInvariant()
+            : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        return "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
 
     private static void AddGateIssue(List<WebSeoDoctorIssue> issues, List<string> errors, string message, string hint)

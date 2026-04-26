@@ -397,8 +397,8 @@ public partial class WebSiteAuditOptimizeBuildTests
             var nginx = File.ReadAllText(Path.Combine(result.OutputPath, "nginx.redirects.conf"));
             Assert.Contains("location ~ ^/docs/api", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("return 301 /api/$1$is_args$args;", nginx, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("if ($request_uri ~ \"^/legacy/\\?id=1$\") { return 302 /new/; }", nginx, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("if ($request_uri ~ \"^/legacy\\?id=2$\") { return 302 /newer/; }", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("if ($request_uri ~ \"^/legacy/?\\?id=1$\") { return 302 /new/; }", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("if ($request_uri ~ \"^/legacy/?\\?id=2$\") { return 302 /newer/; }", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("\"^/legacy\\?id=1$\"", nginx, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("\"^/legacy/\\?id=2$\"", nginx, StringComparison.OrdinalIgnoreCase);
 
@@ -408,6 +408,67 @@ public partial class WebSiteAuditOptimizeBuildTests
                 .Select(action => action.Attribute("url")?.Value ?? string.Empty)
                 .ToArray();
             Assert.Contains("/api/{R:1}", actionUrls, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_PreservesTrailingSlashForNginxQueryRedirectMatcher()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-nginx-query-redirect-slash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"), "---\ntitle: Home\n---\n\nHome");
+
+            var themeRoot = Path.Combine(root, "themes", "nginx-query-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<!doctype html><html><body>{{ content }}</body></html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "nginx-query-test",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Nginx Query Redirect Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "nginx-query-test",
+                ThemesRoot = "themes",
+                Redirects = new[]
+                {
+                    new RedirectSpec
+                    {
+                        From = "/docs/?v=1",
+                        To = "/docs/current/",
+                        Status = 301,
+                        MatchType = RedirectMatchType.Exact
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var result = WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), Path.Combine(root, "_site"));
+
+            var nginx = File.ReadAllText(Path.Combine(result.OutputPath, "nginx.redirects.conf"));
+            Assert.Contains("if ($request_uri ~ \"^/docs/?\\?v=1$\") { return 301 /docs/current/; }", nginx, StringComparison.Ordinal);
         }
         finally
         {

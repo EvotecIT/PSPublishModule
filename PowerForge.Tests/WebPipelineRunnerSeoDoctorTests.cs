@@ -59,7 +59,10 @@ public class WebPipelineRunnerSeoDoctorTests
                       "baseline": "./.powerforge/seo-baseline.json",
                       "baselineGenerate": true,
                       "reportPath": "./_reports/seo-doctor.json",
-                      "summaryPath": "./_reports/seo-doctor.md"
+                      "summaryPath": "./_reports/seo-doctor.md",
+                      "backlogSummaryPath": "./_reports/seo-backlog-summary.json",
+                      "pageMetricsPath": "./_reports/seo-page-metrics.csv",
+                      "issuesCsvPath": "./_reports/seo-issues.csv"
                     }
                   ]
                 }
@@ -72,6 +75,9 @@ public class WebPipelineRunnerSeoDoctorTests
             Assert.True(File.Exists(baselinePath));
             Assert.True(File.Exists(Path.Combine(root, "_reports", "seo-doctor.json")));
             Assert.True(File.Exists(Path.Combine(root, "_reports", "seo-doctor.md")));
+            Assert.True(File.Exists(Path.Combine(root, "_reports", "seo-backlog-summary.json")));
+            Assert.True(File.Exists(Path.Combine(root, "_reports", "seo-page-metrics.csv")));
+            Assert.True(File.Exists(Path.Combine(root, "_reports", "seo-issues.csv")));
 
             Directory.CreateDirectory(Path.Combine(siteRoot, "orphan"));
             File.WriteAllText(Path.Combine(siteRoot, "orphan", "index.html"),
@@ -440,6 +446,132 @@ public class WebPipelineRunnerSeoDoctorTests
                       "siteRoot": "./_site-xyz",
                       "referenceSiteRoots": ["./_site-pl"],
                       "include": "projects/**",
+                      "checkTitleLength": false,
+                      "checkDescriptionLength": false,
+                      "checkH1": false,
+                      "checkImageAlt": false,
+                      "checkDuplicateTitles": false,
+                      "checkOrphanPages": false,
+                      "checkStructuredData": false,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success, result.Steps.FirstOrDefault()?.Message);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_SeoDoctor_ConfigLanguageRootHosts_AllowsSingleTreeRootServedLanguageValidation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-seo-doctor-root-host-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "_site");
+            Directory.CreateDirectory(Path.Combine(siteRoot, "projects"));
+            Directory.CreateDirectory(Path.Combine(siteRoot, "pl", "projekty"));
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Evotec",
+                  "baseUrl": "https://evotec.xyz",
+                  "links": {
+                    "languageRootHosts": {
+                      "evotec.pl": "pl"
+                    }
+                  },
+                  "localization": {
+                    "enabled": true,
+                    "defaultLanguage": "en",
+                    "languages": [
+                      { "code": "en", "default": true, "baseUrl": "https://evotec.xyz", "renderAtRoot": true },
+                      { "code": "pl", "baseUrl": "https://evotec.pl", "renderAtRoot": true }
+                    ]
+                  }
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Home</title>
+                  <link rel="canonical" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/" />
+                </head>
+                <body><h1>Home</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(siteRoot, "pl", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Start</title>
+                  <link rel="canonical" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/" />
+                </head>
+                <body><h1>Start</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(siteRoot, "projects", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Projects</title>
+                  <link rel="canonical" href="https://evotec.xyz/projects" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projekty" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects" />
+                </head>
+                <body><h1>Projects</h1></body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(siteRoot, "pl", "projekty", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Projekty</title>
+                  <link rel="canonical" href="https://evotec.pl/projekty" />
+                  <link rel="alternate" hreflang="en" href="https://evotec.xyz/projects" />
+                  <link rel="alternate" hreflang="pl" href="https://evotec.pl/projekty" />
+                  <link rel="alternate" hreflang="x-default" href="https://evotec.xyz/projects" />
+                </head>
+                <body><h1>Projekty</h1></body>
+                </html>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "seo-doctor",
+                      "config": "./site.json",
+                      "siteRoot": "./_site",
                       "checkTitleLength": false,
                       "checkDescriptionLength": false,
                       "checkH1": false,
