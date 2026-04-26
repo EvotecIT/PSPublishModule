@@ -71,6 +71,8 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "link-reports", "sitemap-migration.json")));
             Assert.Equal(3, summary.RootElement.GetProperty("legacyUrlCount").GetInt32());
             Assert.Equal(2, summary.RootElement.GetProperty("newUrlCount").GetInt32());
+            // MissingLegacyCount tracks legacy URLs absent from the new sitemap before
+            // redirect heuristics map them, so it includes auto-redirect rows plus review rows.
             Assert.Equal(3, summary.RootElement.GetProperty("missingLegacyCount").GetInt32());
             Assert.Equal(1, summary.RootElement.GetProperty("reviewCount").GetInt32());
         }

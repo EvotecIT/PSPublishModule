@@ -157,10 +157,12 @@ public static class WebSitemapMigrationAnalyzer
         if (!TryCreateHttpUri(url, out var uri))
             return false;
 
+        var root = Path.GetFullPath(siteRoot);
+        var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var path = uri.AbsolutePath.Trim('/');
         var candidate = string.IsNullOrWhiteSpace(path)
-            ? Path.Combine(siteRoot, "index.html")
-            : Path.Combine(siteRoot, path.Replace('/', Path.DirectorySeparatorChar));
+            ? Path.Combine(root, "index.html")
+            : Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
 
         return new[]
             {
@@ -169,7 +171,13 @@ public static class WebSitemapMigrationAnalyzer
                 Path.Combine(candidate, "index.html")
             }
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Any(static filePath => File.Exists(filePath));
+            .Any(filePath =>
+            {
+                var fullPath = Path.GetFullPath(filePath);
+                return (string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase) ||
+                        fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) &&
+                       File.Exists(fullPath);
+            });
     }
 
     private static WebSitemapMigrationCandidate GetRedirectCandidate(

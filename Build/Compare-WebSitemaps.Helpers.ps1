@@ -107,7 +107,9 @@ function Import-LocalSitemapUrls {
         [string] $Path
     )
 
-    $xml = ConvertTo-SafeXmlDocument -Content (Get-Content -Path $Path -Raw) -Source $Path
+    $content = [string] (Get-Content -Path $Path -Raw)
+    $content = $content.TrimStart([char] 0xFEFF)
+    $xml = ConvertTo-SafeXmlDocument -Content $content -Source $Path
     if (-not ($xml.PSObject.Properties.Name -contains 'urlset') -or -not $xml.urlset -or -not $xml.urlset.url) {
         throw "Unsupported local sitemap document at $Path"
     }
@@ -133,6 +135,8 @@ function Test-GeneratedRouteExists {
         return $false
     }
 
+    $root = [System.IO.Path]::GetFullPath($SiteRoot)
+    $rootPrefix = $root.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
     $uri = [System.Uri] $Url
     $path = $uri.AbsolutePath.Trim('/')
     $candidate = if ([string]::IsNullOrWhiteSpace($path)) {
@@ -142,7 +146,10 @@ function Test-GeneratedRouteExists {
     }
 
     foreach ($filePath in @($candidate, ($candidate + '.html'), (Join-Path $candidate 'index.html')) | Select-Object -Unique) {
-        if (Test-Path -LiteralPath $filePath -PathType Leaf) {
+        $fullPath = [System.IO.Path]::GetFullPath($filePath)
+        if (($fullPath.Equals($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+             $fullPath.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) -and
+            (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
             return $true
         }
     }

@@ -109,6 +109,24 @@ public sealed class WebSitemapMigrationAnalyzerTests
             row.TargetUrl == "https://example.test/blog/old/");
     }
 
+    [Fact]
+    public void GeneratedRouteExists_DoesNotProbeOutsideSiteRoot()
+    {
+        var parent = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-migration-root-guard-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(parent, "site");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(parent, "secret.html"), "<!doctype html>");
+
+        try
+        {
+            Assert.False(WebSitemapMigrationAnalyzer.GeneratedRouteExists(root, "https://example.test/%2e%2e/secret/"));
+        }
+        finally
+        {
+            TryDeleteDirectory(parent);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

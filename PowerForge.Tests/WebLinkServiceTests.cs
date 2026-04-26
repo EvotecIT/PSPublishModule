@@ -1637,6 +1637,40 @@ public sealed class WebLinkServiceTests
         }
     }
 
+    [Fact]
+    public void GenerateLegacyAmpRedirects_PreservesHostFromAbsoluteLegacyRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-legacy-amp-absolute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sourcePath = Path.Combine(root, "legacy.csv");
+            var outputPath = Path.Combine(root, "legacy-amp.csv");
+            File.WriteAllText(sourcePath,
+                """
+                legacy_url,target_url,status,language
+                https://archive.example.test/old-post/,/new-post/,301,en
+                """);
+
+            var result = WebLinkService.GenerateLegacyAmpRedirects(new WebLegacyAmpRedirectOptions
+            {
+                SourceCsvPath = sourcePath,
+                OutputCsvPath = outputPath,
+                DefaultEnglishHost = "example.test",
+                DefaultPolishHost = "pl.example.test"
+            });
+
+            Assert.Equal(1, result.GeneratedCount);
+            var csv = File.ReadAllText(outputPath);
+            Assert.Contains("\"https://archive.example.test/old-post/amp/\",\"https://archive.example.test/new-post/\",\"301\"", csv, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
