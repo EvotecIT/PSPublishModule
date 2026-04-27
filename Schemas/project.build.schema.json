@@ -117,7 +117,7 @@
         "MSBuild",
         "Batch"
       ],
-      "description": "Controls how selected projects are packed. PerProject runs dotnet pack for each project. MSBuild/Batch requires OutputPath or StagingPath, generates a temporary MSBuild traversal project, and packs selected projects in one invocation; when no package output path is available it falls back to PerProject. The batch target runs Restore;Pack, so private feed credentials must be available to dotnet/MSBuild restore."
+      "description": "Controls how selected projects are packed. PerProject runs dotnet pack for each project. MSBuild/Batch requires OutputPath or StagingPath, generates a temporary MSBuild traversal project, and packs selected projects in one invocation; when no package output path is available it falls back to PerProject. The batch target runs Restore;Pack, requires private feed credentials to be available to dotnet/MSBuild restore, stops on the first project failure, and skips projects without a resolved version."
     },
     "PublishNuget": {
       "type": "boolean"
