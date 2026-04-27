@@ -97,6 +97,10 @@ internal sealed class ProjectBuildPreparationService
             config.GitHubAccessTokenEnvName,
             configDir);
 
+        var packStrategy = ProjectBuildSupportService.ParsePackStrategy(config.PackStrategy);
+        if (!ProjectBuildSupportService.IsKnownPackStrategy(config.PackStrategy))
+            _logger.Warn($"Unknown PackStrategy '{config.PackStrategy!.Trim()}'; using PerProject.");
+
         context.Spec = new DotNetRepositoryReleaseSpec
         {
             RootPath = context.RootPath,
@@ -113,6 +117,7 @@ internal sealed class ProjectBuildPreparationService
             Configuration = string.IsNullOrWhiteSpace(config.Configuration) ? "Release" : config.Configuration!,
             OutputPath = context.OutputPath,
             ReleaseZipOutputPath = context.ReleaseZipOutputPath,
+            PackStrategy = packStrategy,
             CertificateThumbprint = config.CertificateThumbprint,
             CertificateStore = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore),
             TimeStampServer = config.TimeStampServer,

@@ -12,11 +12,64 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+
     private sealed class DotNetPackResult
     {
         public bool Success { get; set; }
         public string? ErrorMessage { get; set; }
+        public TimeSpan Duration { get; set; }
         public List<string> Packages { get; } = new();
+    }
+
+    internal static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+        {
+            var hours = (int)duration.TotalHours;
+            var minutes = duration.TotalMinutes - (hours * 60);
+            return $"{hours}h {minutes:0.0}m";
+        }
+
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.TotalMinutes:0.0}m";
+
+        if (duration.TotalSeconds >= 1)
+            return $"{duration.TotalSeconds:0.0}s";
+
+        return $"{duration.TotalMilliseconds:0}ms";
+    }
+
+    internal static string FormatBytes(long bytes)
+    {
+        const double kb = 1024d;
+        const double mb = kb * 1024d;
+        const double gb = mb * 1024d;
+
+        if (bytes >= gb)
+            return $"{bytes / gb:0.##} GB";
+
+        if (bytes >= mb)
+            return $"{bytes / mb:0.##} MB";
+
+        if (bytes >= kb)
+            return $"{bytes / kb:0.##} KB";
+
+        return $"{bytes} B";
+    }
+
+    private static void TryDeleteDirectory(string path, ILogger? logger = null)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            if (logger?.IsVerbose == true)
+                logger.Verbose($"Failed to delete temporary directory '{path}': {ex.Message}");
+        }
     }
 
 #if NET472

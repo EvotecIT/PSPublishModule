@@ -89,6 +89,7 @@ public sealed class ProjectBuildPreparationServiceTests
                 GitHubAccessTokenEnvName = gitHubEnv,
                 CertificateStore = "LocalMachine",
                 Configuration = "Debug",
+                PackStrategy = "MSBuild",
                 PublishNuget = true,
                 PublishGitHub = true
             };
@@ -107,6 +108,7 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.Equal("secret-from-file", context.Spec.VersionSourceCredential.Secret);
             Assert.Equal(CertificateStoreLocation.LocalMachine, context.Spec.CertificateStore);
             Assert.Equal("Debug", context.Spec.Configuration);
+            Assert.Equal(DotNetRepositoryPackStrategy.MSBuild, context.Spec.PackStrategy);
         }
         finally
         {
@@ -114,6 +116,42 @@ public sealed class ProjectBuildPreparationServiceTests
             Environment.SetEnvironmentVariable(gitHubEnv, null);
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    [Theory]
+    [InlineData(null, DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("   ", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("PerProject", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("perproject", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("MSBuild", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("msbuild", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("Batch", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("Other", DotNetRepositoryPackStrategy.PerProject)]
+    public void ParsePackStrategy_maps_known_values(string? value, DotNetRepositoryPackStrategy expected)
+    {
+        Assert.Equal(expected, ProjectBuildSupportService.ParsePackStrategy(value));
+    }
+
+    [Fact]
+    public void Prepare_warns_when_pack_strategy_is_unknown()
+    {
+        var logger = new BufferedLogger();
+        var service = new ProjectBuildPreparationService(logger);
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                PackStrategy = "MSBuild2"
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.Equal(DotNetRepositoryPackStrategy.PerProject, context.Spec.PackStrategy);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == "warn" &&
+            entry.Message.Contains("Unknown PackStrategy 'MSBuild2'", StringComparison.Ordinal));
     }
 
     [Fact]

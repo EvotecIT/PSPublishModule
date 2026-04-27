@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -187,5 +189,132 @@ public sealed class DotNetRepositoryReleaseServiceTests
             stdOut: "Your package was pushed.");
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
+    }
+
+    [Fact]
+    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            var traversalPath = Path.Combine(root.FullName, "pack.proj");
+            var outputPath = Path.Combine(root.FullName, "packages;with%value=2$build@local");
+            var project = new DotNetRepositoryProjectResult
+            {
+                ProjectName = "Sample.Package",
+                CsprojPath = csprojPath,
+                PackageId = "Sample.Package",
+                IsPackable = true
+            };
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release"
+            };
+
+            DotNetRepositoryReleaseService.WritePackTraversalProject(
+                traversalPath,
+                new[] { project },
+                spec,
+                outputPath);
+
+            var document = XDocument.Load(traversalPath);
+            var packProject = Assert.Single(document.Descendants("PackProject"));
+            Assert.Equal(Path.GetFullPath(csprojPath), packProject.Attribute("Include")?.Value);
+
+            var msbuild = Assert.Single(document.Descendants("MSBuild"));
+            Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
+            Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
+            Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
+            Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
+            Assert.Equal(
+                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")}",
+                msbuild.Attribute("Properties")?.Value);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(5_400_000, "1h 30.0m")]
+    [InlineData(65_000, "1.1m")]
+    [InlineData(1_500, "1.5s")]
+    [InlineData(12, "12ms")]
+    public void FormatDuration_returns_human_readable_output(int milliseconds, string expected)
+    {
+        var formatted = DotNetRepositoryReleaseService.FormatDuration(TimeSpan.FromMilliseconds(milliseconds));
+
+        Assert.Equal(expected, formatted);
+    }
+
+    [Theory]
+    [InlineData(1023, "1023 B")]
+    [InlineData(1024, "1 KB")]
+    [InlineData(1048576, "1 MB")]
+    [InlineData(1073741824, "1 GB")]
+    public void FormatBytes_returns_human_readable_output(long bytes, string expected)
+    {
+        Assert.Equal(expected, DotNetRepositoryReleaseService.FormatBytes(bytes));
+    }
+
+    [Fact]
+    public void SummarizeProcessOutputLines_includes_first_last_and_diagnostic_lines()
+    {
+        var lines = Enumerable.Range(1, 80)
+            .Select(i => i == 31 ? "Project.csproj : error NU1301: Unable to load service index" : $"line {i}")
+            .ToArray();
+
+        var summary = DotNetRepositoryReleaseService.SummarizeProcessOutputLines(string.Join(Environment.NewLine, lines));
+
+        Assert.Contains("line 1", summary);
+        Assert.Contains("... omitted 30 line(s); diagnostic lines from that range are shown below when detected ...", summary);
+        Assert.Contains("diagnostic lines:", summary);
+        Assert.Contains("Project.csproj : error NU1301: Unable to load service index", summary);
+        Assert.Contains("last 40 line(s):", summary);
+        Assert.Contains("line 80", summary);
+    }
+
+    [Fact]
+    public void SummarizeProcessOutputLines_returns_short_output_verbatim()
+    {
+        var output = string.Join(Environment.NewLine, new[] { "first", "second", "third" });
+
+        Assert.Equal(output, DotNetRepositoryReleaseService.SummarizeProcessOutputLines(output));
+    }
+
+    [Fact]
+    public void PackageSnapshot_DetectsNewAndChangedPackages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var existing = Path.Combine(root.FullName, "Sample.Package.1.0.0.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            File.WriteAllText(existing, "old");
+            File.WriteAllText(symbols, "symbols");
+
+            var snapshot = DotNetRepositoryReleaseService.SnapshotPackages(root.FullName);
+
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+
+            File.WriteAllText(existing, "changed package");
+            var created = Path.Combine(root.FullName, "Sample.Package.1.0.1.nupkg");
+            File.WriteAllText(created, "new");
+
+            Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+            Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, created));
+
+            File.Delete(existing);
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+            Assert.DoesNotContain(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 }
