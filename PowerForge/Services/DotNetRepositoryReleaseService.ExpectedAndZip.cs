@@ -80,9 +80,13 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryProjectResult project,
         string configuration,
         string zipPath,
-        out string error)
+        out string error,
+        out int fileCount,
+        out long inputBytes)
     {
         error = string.Empty;
+        fileCount = 0;
+        inputBytes = 0;
         var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
         var cfg = string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration.Trim();
         var releasePath = Path.Combine(csprojDir, "bin", cfg);
@@ -122,6 +126,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 var entry = archive.CreateEntry(rel, System.IO.Compression.CompressionLevel.Optimal);
                 using var entryStream = entry.Open();
                 using var fileStream = File.OpenRead(file);
+                fileCount++;
+                inputBytes += fileStream.Length;
                 fileStream.CopyTo(entryStream);
             }
 

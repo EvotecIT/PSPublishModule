@@ -266,6 +266,7 @@ Example configuration
   "PlanOutputPath": "Artefacts/ProjectBuild/project.build.plan.json",
   "UpdateVersions": true,
   "Build": true,
+  "PackStrategy": "MSBuild",
   "PublishNuget": true,
   "PublishGitHub": true,
   "CreateReleaseZip": true,
@@ -305,6 +306,7 @@ Versioning
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
 - Version source resolution can use `NugetSource` (v3 index URL or local folder) with optional credentials.
+- `PackStrategy`: optional packing strategy. `PerProject` runs the legacy `dotnet pack` loop. `MSBuild` (alias `Batch`) generates a temporary traversal project and packs selected projects in one parallel MSBuild invocation, which is usually faster for multi-project repositories with shared project references.
 
 Staging and outputs
 - `StagingPath`: root directory for pipeline outputs (recommended).

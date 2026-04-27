@@ -51,7 +51,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return VersionPatternStepper.Step(expectedVersion!, current);
     }
 
-    private static DotNetPackResult PackProject(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec)
+    private static DotNetPackResult PackProject(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec, ILogger logger)
     {
         var result = new DotNetPackResult();
 
@@ -67,7 +67,8 @@ public sealed partial class DotNetRepositoryReleaseService
             Directory.CreateDirectory(outputPath);
         }
 
-        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, out var stdErr, out var stdOut);
+        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, out var stdErr, out var stdOut, out var duration);
+        result.Duration = duration;
         if (exitCode != 0)
         {
             result.ErrorMessage = $"dotnet pack failed for {project.ProjectName} (exit {exitCode}). {stdErr}".Trim();
@@ -87,6 +88,91 @@ public sealed partial class DotNetRepositoryReleaseService
         return result;
     }
 
+    private static DotNetPackResult PackProjectsWithMsBuild(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger logger)
+    {
+        var result = new DotNetPackResult();
+        if (projects is null || projects.Count == 0)
+        {
+            result.Success = true;
+            return result;
+        }
+
+        if (string.IsNullOrWhiteSpace(spec.OutputPath))
+        {
+            result.ErrorMessage = "MSBuild batch pack requires OutputPath.";
+            return result;
+        }
+
+        var outputPath = Path.IsPathRooted(spec.OutputPath!)
+            ? spec.OutputPath!
+            : Path.GetFullPath(Path.Combine(spec.RootPath, spec.OutputPath!));
+        Directory.CreateDirectory(outputPath);
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "project-build", $"pack-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        var traversalPath = Path.Combine(tempRoot, "pack.proj");
+        try
+        {
+            WritePackTraversalProject(traversalPath, projects, spec, outputPath);
+
+            var exitCode = RunDotnetMsBuildPack(
+                traversalPath,
+                tempRoot,
+                projects.Count,
+                logger,
+                out var stdErr,
+                out var stdOut,
+                out var duration);
+            result.Duration = duration;
+
+            if (exitCode != 0)
+            {
+                result.ErrorMessage = $"dotnet msbuild batch pack failed (exit {exitCode}). {stdErr}".Trim();
+                return result;
+            }
+
+            var pkgs = Directory.EnumerateFiles(outputPath, "*.nupkg", SearchOption.AllDirectories)
+                .Where(p => !p.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            result.Packages.AddRange(pkgs);
+            result.Success = true;
+            return result;
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    private static void WritePackTraversalProject(
+        string traversalPath,
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec,
+        string outputPath)
+    {
+        XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
+        var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var properties = $"Configuration={configuration};PackageOutputPath={outputPath}";
+
+        var document = new XDocument(
+            new XElement(ns + "Project",
+                new XElement(ns + "ItemGroup",
+                    projects.Select(project => new XElement(ns + "PackProject",
+                        new XAttribute("Include", Path.GetFullPath(project.CsprojPath))))),
+                new XElement(ns + "Target",
+                    new XAttribute("Name", "PackSelected"),
+                    new XElement(ns + "MSBuild",
+                        new XAttribute("Projects", "@(PackProject)"),
+                        new XAttribute("Targets", "Restore;Pack"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("Properties", properties)))));
+
+        document.Save(traversalPath);
+    }
+
     private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotNetRepositoryProjectResult project, string version)
     {
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
@@ -101,10 +187,20 @@ public sealed partial class DotNetRepositoryReleaseService
         return Path.Combine(outputPath, $"{packageId}.{version}.nupkg");
     }
 
-    private static int RunDotnetPack(string csproj, string workingDirectory, string configuration, string? outputPath, out string stdErr, out string stdOut)
+    private static int RunDotnetPack(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string? outputPath,
+        string projectName,
+        ILogger logger,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
     {
         stdErr = string.Empty;
         stdOut = string.Empty;
+        duration = TimeSpan.Zero;
 
         var psi = new ProcessStartInfo
         {
@@ -139,9 +235,96 @@ public sealed partial class DotNetRepositoryReleaseService
 
         using var p = Process.Start(psi);
         if (p is null) return 1;
-        stdOut = p.StandardOutput.ReadToEnd();
-        stdErr = p.StandardError.ReadToEnd();
-        p.WaitForExit();
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        var stopwatch = Stopwatch.StartNew();
+        var nextProgress = TimeSpan.FromSeconds(15);
+
+        while (!p.WaitForExit(1000))
+        {
+            if (stopwatch.Elapsed < nextProgress)
+                continue;
+
+            logger.Info($"{projectName}: dotnet pack still running ({FormatDuration(stopwatch.Elapsed)} elapsed).");
+            nextProgress += TimeSpan.FromSeconds(15);
+        }
+
+        stdOut = stdoutTask.GetAwaiter().GetResult();
+        stdErr = stderrTask.GetAwaiter().GetResult();
+        stopwatch.Stop();
+        duration = stopwatch.Elapsed;
+
+        LogProcessOutput(logger, projectName, "dotnet pack", stdOut, stdErr);
+        return p.ExitCode;
+    }
+
+    private static int RunDotnetMsBuildPack(
+        string traversalProject,
+        string workingDirectory,
+        int projectCount,
+        ILogger logger,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
+    {
+        stdErr = string.Empty;
+        stdOut = string.Empty;
+        duration = TimeSpan.Zero;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory
+        };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(new[]
+        {
+            "msbuild",
+            traversalProject,
+            "/t:PackSelected",
+            "/m",
+            "/nr:false",
+            "/v:m"
+        });
+#else
+        psi.ArgumentList.Add("msbuild");
+        psi.ArgumentList.Add(traversalProject);
+        psi.ArgumentList.Add("/t:PackSelected");
+        psi.ArgumentList.Add("/m");
+        psi.ArgumentList.Add("/nr:false");
+        psi.ArgumentList.Add("/v:m");
+#endif
+
+        using var p = Process.Start(psi);
+        if (p is null) return 1;
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        var stopwatch = Stopwatch.StartNew();
+        var nextProgress = TimeSpan.FromSeconds(15);
+
+        while (!p.WaitForExit(1000))
+        {
+            if (stopwatch.Elapsed < nextProgress)
+                continue;
+
+            logger.Info($"MSBuild batch pack still running ({projectCount} project(s), {FormatDuration(stopwatch.Elapsed)} elapsed).");
+            nextProgress += TimeSpan.FromSeconds(15);
+        }
+
+        stdOut = stdoutTask.GetAwaiter().GetResult();
+        stdErr = stderrTask.GetAwaiter().GetResult();
+        stopwatch.Stop();
+        duration = stopwatch.Elapsed;
+
+        LogProcessOutput(logger, "MSBuild batch", "dotnet msbuild pack", stdOut, stdErr);
         return p.ExitCode;
     }
 
@@ -218,11 +401,24 @@ public sealed partial class DotNetRepositoryReleaseService
             };
             return false;
         }
-        var stdOut = p.StandardOutput.ReadToEnd();
-        var stdErr = p.StandardError.ReadToEnd();
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
         p.WaitForExit();
+        var stdOut = stdoutTask.GetAwaiter().GetResult();
+        var stdErr = stderrTask.GetAwaiter().GetResult();
         result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
         return result.Outcome != PackagePushOutcome.Failed;
+    }
+
+    private static void LogProcessOutput(ILogger logger, string projectName, string operation, string stdOut, string stdErr)
+    {
+        if (!logger.IsVerbose)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(stdOut))
+            logger.Verbose($"{projectName}: {operation} stdout:{Environment.NewLine}{stdOut.TrimEnd()}");
+        if (!string.IsNullOrWhiteSpace(stdErr))
+            logger.Verbose($"{projectName}: {operation} stderr:{Environment.NewLine}{stdErr.TrimEnd()}");
     }
 
     private static bool LooksLikeSkippedDuplicate(string text)

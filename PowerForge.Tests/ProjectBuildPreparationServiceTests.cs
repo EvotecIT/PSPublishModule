@@ -89,6 +89,7 @@ public sealed class ProjectBuildPreparationServiceTests
                 GitHubAccessTokenEnvName = gitHubEnv,
                 CertificateStore = "LocalMachine",
                 Configuration = "Debug",
+                PackStrategy = "MSBuild",
                 PublishNuget = true,
                 PublishGitHub = true
             };
@@ -107,6 +108,7 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.Equal("secret-from-file", context.Spec.VersionSourceCredential.Secret);
             Assert.Equal(CertificateStoreLocation.LocalMachine, context.Spec.CertificateStore);
             Assert.Equal("Debug", context.Spec.Configuration);
+            Assert.Equal(DotNetRepositoryPackStrategy.MSBuild, context.Spec.PackStrategy);
         }
         finally
         {

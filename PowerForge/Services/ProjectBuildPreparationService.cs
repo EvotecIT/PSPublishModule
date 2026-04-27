@@ -113,6 +113,7 @@ internal sealed class ProjectBuildPreparationService
             Configuration = string.IsNullOrWhiteSpace(config.Configuration) ? "Release" : config.Configuration!,
             OutputPath = context.OutputPath,
             ReleaseZipOutputPath = context.ReleaseZipOutputPath,
+            PackStrategy = ProjectBuildSupportService.ParsePackStrategy(config.PackStrategy),
             CertificateThumbprint = config.CertificateThumbprint,
             CertificateStore = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore),
             TimeStampServer = config.TimeStampServer,

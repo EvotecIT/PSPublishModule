@@ -266,6 +266,42 @@ public sealed partial class DotNetRepositoryReleaseService
 
             if (spec.Pack)
             {
+                DotNetPackResult? batchPackResult = null;
+                var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
+                if (batchPackRequested)
+                {
+                    var batchCandidates = packable
+                        .Where(project =>
+                            string.IsNullOrWhiteSpace(project.ErrorMessage) &&
+                            !string.IsNullOrWhiteSpace(project.NewVersion))
+                        .ToArray();
+
+                    if (string.IsNullOrWhiteSpace(spec.OutputPath))
+                    {
+                        _logger.Warn("MSBuild pack strategy requires OutputPath/StagingPath; falling back to per-project dotnet pack.");
+                    }
+                    else if (batchCandidates.Length > 0)
+                    {
+                        _logger.Info($"Packing {batchCandidates.Length} project(s) with MSBuild batch strategy...");
+                        batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger);
+                        if (!batchPackResult.Success)
+                        {
+                            var batchError = batchPackResult.ErrorMessage ?? "MSBuild batch pack failed.";
+                            foreach (var project in batchCandidates)
+                                project.ErrorMessage = batchError;
+
+                            result.Success = false;
+                            _logger.Warn(batchError);
+                            if (spec.PublishFailFast)
+                                return result;
+                        }
+                        else
+                        {
+                            _logger.Success($"MSBuild batch pack produced {batchPackResult.Packages.Count} package(s) in {FormatDuration(batchPackResult.Duration)}.");
+                        }
+                    }
+                }
+
                 foreach (var project in packable)
                 {
                     if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
@@ -290,8 +326,12 @@ public sealed partial class DotNetRepositoryReleaseService
                         continue;
                     }
 
-                    _logger.Info($"Packing {project.ProjectName}...");
-                    var packResult = PackProject(project, spec);
+                    if (batchPackResult is not null)
+                        _logger.Info($"Collecting {project.ProjectName} package(s) from MSBuild batch...");
+                    else
+                        _logger.Info($"Packing {project.ProjectName}...");
+
+                    var packResult = batchPackResult ?? PackProject(project, spec, _logger);
                     if (!packResult.Success)
                     {
                         project.ErrorMessage = packResult.ErrorMessage;
@@ -315,11 +355,16 @@ public sealed partial class DotNetRepositoryReleaseService
                         project.Packages.Add(pkg);
 
                     var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
-                    if (ignored.Length > 0)
+                    if (ignored.Length > 0 && batchPackResult is null)
                         _logger.Verbose($"{project.ProjectName}: ignored {ignored.Length} package(s) from other versions.");
 
                     if (filtered.Count > 0)
-                        _logger.Success($"{project.ProjectName}: packed {filtered.Count} package(s).");
+                    {
+                        var packTiming = batchPackResult is null
+                            ? $" in {FormatDuration(packResult.Duration)}"
+                            : " from MSBuild batch";
+                        _logger.Success($"{project.ProjectName}: packed {filtered.Count} package(s){packTiming}.");
+                    }
 
                     if (signingSha256 is not null)
                     {
@@ -334,8 +379,10 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
 
                         _logger.Info($"Signing {project.ProjectName} package(s)...");
+                        var signingWatch = Stopwatch.StartNew();
                         if (!SignPackages(project.Packages, spec, signingSha256, out var signError))
                         {
+                            signingWatch.Stop();
                             project.ErrorMessage = signError;
                             _logger.Warn($"{project.ProjectName}: {signError}");
                             result.Success = false;
@@ -344,7 +391,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
                         else
                         {
-                            _logger.Success($"{project.ProjectName}: signed {project.Packages.Count} package(s).");
+                            signingWatch.Stop();
+                            _logger.Success($"{project.ProjectName}: signed {project.Packages.Count} package(s) in {FormatDuration(signingWatch.Elapsed)}.");
                         }
                     }
 
@@ -354,8 +402,11 @@ public sealed partial class DotNetRepositoryReleaseService
                         project.ReleaseZipPath = zipPath;
                         if (!spec.WhatIf)
                         {
-                            if (!TryCreateReleaseZip(project, spec.Configuration, zipPath, out var zipError))
+                            _logger.Info($"Creating {project.ProjectName} release zip...");
+                            var zipWatch = Stopwatch.StartNew();
+                            if (!TryCreateReleaseZip(project, spec.Configuration, zipPath, out var zipError, out var zippedFiles, out var zippedBytes))
                             {
+                                zipWatch.Stop();
                                 project.ErrorMessage = zipError;
                                 _logger.Warn($"{project.ProjectName}: {zipError}");
                                 result.Success = false;
@@ -364,7 +415,9 @@ public sealed partial class DotNetRepositoryReleaseService
                             }
                             else
                             {
-                                _logger.Success($"{project.ProjectName}: release zip created.");
+                                zipWatch.Stop();
+                                var zipSize = File.Exists(zipPath) ? new FileInfo(zipPath).Length : 0;
+                                _logger.Success($"{project.ProjectName}: release zip created in {FormatDuration(zipWatch.Elapsed)} ({zippedFiles} file(s), {FormatBytes(zippedBytes)} input, {FormatBytes(zipSize)} zip).");
                             }
                         }
                     }

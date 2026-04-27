@@ -114,6 +114,21 @@ internal sealed class ProjectBuildSupportService
     }
 
     /// <summary>
+    /// Maps a pack strategy string to the core strategy enum.
+    /// </summary>
+    public static DotNetRepositoryPackStrategy ParsePackStrategy(string? strategy)
+    {
+        if (string.IsNullOrWhiteSpace(strategy))
+            return DotNetRepositoryPackStrategy.PerProject;
+
+        var trimmedStrategy = strategy!.Trim();
+        return string.Equals(trimmedStrategy, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmedStrategy, "Batch", StringComparison.OrdinalIgnoreCase)
+            ? DotNetRepositoryPackStrategy.MSBuild
+            : DotNetRepositoryPackStrategy.PerProject;
+    }
+
+    /// <summary>
     /// Converts loosely typed bound parameter values to a boolean.
     /// </summary>
     public static bool IsTrue(object? value)

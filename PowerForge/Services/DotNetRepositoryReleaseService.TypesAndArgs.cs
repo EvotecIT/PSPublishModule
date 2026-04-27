@@ -16,7 +16,50 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         public bool Success { get; set; }
         public string? ErrorMessage { get; set; }
+        public TimeSpan Duration { get; set; }
         public List<string> Packages { get; } = new();
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.TotalMinutes:0.0}m";
+
+        if (duration.TotalSeconds >= 1)
+            return $"{duration.TotalSeconds:0.0}s";
+
+        return $"{duration.TotalMilliseconds:0}ms";
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const double kb = 1024d;
+        const double mb = kb * 1024d;
+        const double gb = mb * 1024d;
+
+        if (bytes >= gb)
+            return $"{bytes / gb:0.##} GB";
+
+        if (bytes >= mb)
+            return $"{bytes / mb:0.##} MB";
+
+        if (bytes >= kb)
+            return $"{bytes / kb:0.##} KB";
+
+        return $"{bytes} B";
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
     }
 
 #if NET472

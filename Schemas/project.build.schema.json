@@ -110,6 +110,15 @@
     "Build": {
       "type": "boolean"
     },
+    "PackStrategy": {
+      "type": "string",
+      "enum": [
+        "PerProject",
+        "MSBuild",
+        "Batch"
+      ],
+      "description": "Controls how selected projects are packed. PerProject runs dotnet pack for each project. MSBuild/Batch generates a temporary MSBuild traversal project and packs selected projects in one invocation."
+    },
     "PublishNuget": {
       "type": "boolean"
     },
