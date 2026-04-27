@@ -271,11 +271,19 @@ public sealed class DotNetRepositoryReleaseServiceTests
         var summary = DotNetRepositoryReleaseService.SummarizeProcessOutputLines(string.Join(Environment.NewLine, lines));
 
         Assert.Contains("line 1", summary);
-        Assert.Contains("... omitted 30 line(s) ...", summary);
+        Assert.Contains("... omitted 30 line(s); diagnostic lines from that range are shown below when detected ...", summary);
         Assert.Contains("diagnostic lines:", summary);
         Assert.Contains("Project.csproj : error NU1301: Unable to load service index", summary);
         Assert.Contains("last 40 line(s):", summary);
         Assert.Contains("line 80", summary);
+    }
+
+    [Fact]
+    public void SummarizeProcessOutputLines_returns_short_output_verbatim()
+    {
+        var output = string.Join(Environment.NewLine, new[] { "first", "second", "third" });
+
+        Assert.Equal(output, DotNetRepositoryReleaseService.SummarizeProcessOutputLines(output));
     }
 
     [Fact]

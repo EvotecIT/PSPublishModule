@@ -301,7 +301,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger);
                         if (!batchPackResult.Success)
                         {
-                            var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; see batch output for per-project details.)";
+                            var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; enable verbose logging to see per-project MSBuild output.)";
                             foreach (var project in batchCandidates)
                                 project.ErrorMessage = batchError;
 

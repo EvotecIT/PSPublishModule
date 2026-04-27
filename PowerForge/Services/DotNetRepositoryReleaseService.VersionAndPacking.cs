@@ -436,7 +436,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         var summary = new List<string>();
         summary.AddRange(lines.Take(firstLines));
-        summary.Add($"... omitted {middle.Length} line(s) ...");
+        summary.Add($"... omitted {middle.Length} line(s); diagnostic lines from that range are shown below when detected ...");
         if (diagnostics.Length > 0)
         {
             summary.Add("diagnostic lines:");
@@ -453,7 +453,8 @@ public sealed partial class DotNetRepositoryReleaseService
         return line.Contains(": error", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("error", StringComparison.OrdinalIgnoreCase) ||
                line.Contains("exception", StringComparison.OrdinalIgnoreCase) ||
-               line.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("failed", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains(": failed", StringComparison.OrdinalIgnoreCase) ||
                line.Contains("unable to", StringComparison.OrdinalIgnoreCase) ||
                line.Contains("not found", StringComparison.OrdinalIgnoreCase);
     }
