@@ -238,12 +238,26 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void FormatDuration_UsesHoursForLongRuns()
+    [Theory]
+    [InlineData(5_400_000, "1h 30.0m")]
+    [InlineData(65_000, "1.1m")]
+    [InlineData(1_500, "1.5s")]
+    [InlineData(12, "12ms")]
+    public void FormatDuration_returns_human_readable_output(int milliseconds, string expected)
     {
-        var formatted = DotNetRepositoryReleaseService.FormatDuration(TimeSpan.FromMinutes(90));
+        var formatted = DotNetRepositoryReleaseService.FormatDuration(TimeSpan.FromMilliseconds(milliseconds));
 
-        Assert.Equal("1h 30.0m", formatted);
+        Assert.Equal(expected, formatted);
+    }
+
+    [Theory]
+    [InlineData(1023, "1023 B")]
+    [InlineData(1024, "1 KB")]
+    [InlineData(1048576, "1 MB")]
+    [InlineData(1073741824, "1 GB")]
+    public void FormatBytes_returns_human_readable_output(long bytes, string expected)
+    {
+        Assert.Equal(expected, DotNetRepositoryReleaseService.FormatBytes(bytes));
     }
 
     [Fact]
@@ -267,6 +281,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
             Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
             Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, created));
+
+            File.Delete(existing);
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
             Assert.DoesNotContain(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
         }
         finally

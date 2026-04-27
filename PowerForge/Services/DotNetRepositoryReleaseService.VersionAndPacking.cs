@@ -456,6 +456,9 @@ public sealed partial class DotNetRepositoryReleaseService
         string path)
     {
         var info = new FileInfo(path);
+        if (!info.Exists)
+            return false;
+
         if (!existingPackages.TryGetValue(path, out var existing))
             return true;
 

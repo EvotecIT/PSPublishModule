@@ -118,6 +118,19 @@ public sealed class ProjectBuildPreparationServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(null, DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("   ", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("MSBuild", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("msbuild", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("Batch", DotNetRepositoryPackStrategy.MSBuild)]
+    [InlineData("Other", DotNetRepositoryPackStrategy.PerProject)]
+    public void ParsePackStrategy_maps_known_values(string? value, DotNetRepositoryPackStrategy expected)
+    {
+        Assert.Equal(expected, ProjectBuildSupportService.ParsePackStrategy(value));
+    }
+
     [Fact]
     public void Prepare_can_resolve_to_no_work_when_all_actions_are_disabled()
     {

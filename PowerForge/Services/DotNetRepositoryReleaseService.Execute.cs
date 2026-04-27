@@ -267,6 +267,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (spec.Pack)
             {
                 DotNetPackResult? batchPackResult = null;
+                HashSet<DotNetRepositoryProjectResult>? batchCandidateSet = null;
                 var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
                 if (batchPackRequested)
                 {
@@ -275,6 +276,7 @@ public sealed partial class DotNetRepositoryReleaseService
                             string.IsNullOrWhiteSpace(project.ErrorMessage) &&
                             !string.IsNullOrWhiteSpace(project.NewVersion))
                         .ToArray();
+                    batchCandidateSet = new HashSet<DotNetRepositoryProjectResult>(batchCandidates);
 
                     if (string.IsNullOrWhiteSpace(spec.OutputPath))
                     {
@@ -326,12 +328,14 @@ public sealed partial class DotNetRepositoryReleaseService
                         continue;
                     }
 
-                    if (batchPackResult is not null)
+                    var useBatchPackResult = batchPackResult is not null && batchCandidateSet?.Contains(project) == true;
+
+                    if (useBatchPackResult)
                         _logger.Info($"Collecting {project.ProjectName} package(s) from MSBuild batch...");
                     else
                         _logger.Info($"Packing {project.ProjectName}...");
 
-                    var packResult = batchPackResult ?? PackProject(project, spec, _logger);
+                    var packResult = useBatchPackResult ? batchPackResult! : PackProject(project, spec, _logger);
                     if (!packResult.Success)
                     {
                         project.ErrorMessage = packResult.ErrorMessage;

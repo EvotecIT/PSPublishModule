@@ -38,7 +38,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return $"{duration.TotalMilliseconds:0}ms";
     }
 
-    private static string FormatBytes(long bytes)
+    internal static string FormatBytes(long bytes)
     {
         const double kb = 1024d;
         const double mb = kb * 1024d;
