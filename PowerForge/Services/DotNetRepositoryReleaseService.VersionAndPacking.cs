@@ -173,6 +173,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         // Restore is intentional so project references and package assets resolve inside the batch.
                         new XAttribute("Targets", "Restore;Pack"),
                         new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", properties)))));
 
         document.Save(traversalPath);
@@ -438,7 +439,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
         var stopwatch = Stopwatch.StartNew();
-        var nextProgress = TimeSpan.FromSeconds(15);
+        var nextProgress = HeartbeatInterval;
 
         while (!p.WaitForExit(1000))
         {
@@ -446,7 +447,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 continue;
 
             logger.Info(heartbeatMessage(stopwatch.Elapsed));
-            nextProgress += TimeSpan.FromSeconds(15);
+            nextProgress += HeartbeatInterval;
         }
 
         // On .NET Framework, WaitForExit(int) returning true does not guarantee async

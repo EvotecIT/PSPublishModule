@@ -228,6 +228,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
             Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
             Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
+            Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
             Assert.Equal(
                 $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")}",
                 msbuild.Attribute("Properties")?.Value);

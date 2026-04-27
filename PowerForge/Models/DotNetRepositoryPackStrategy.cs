@@ -8,6 +8,9 @@ public enum DotNetRepositoryPackStrategy
     /// <summary>Run <c>dotnet pack</c> once per selected project.</summary>
     PerProject,
 
-    /// <summary>Generate a temporary MSBuild traversal project and pack selected projects in one invocation.</summary>
+    /// <summary>
+    /// Generate a temporary MSBuild traversal project and pack selected projects in one invocation.
+    /// Also accepted from configuration as the string alias <c>Batch</c>.
+    /// </summary>
     MSBuild
 }

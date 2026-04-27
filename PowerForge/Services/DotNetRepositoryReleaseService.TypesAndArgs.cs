@@ -12,6 +12,8 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+
     private sealed class DotNetPackResult
     {
         public bool Success { get; set; }

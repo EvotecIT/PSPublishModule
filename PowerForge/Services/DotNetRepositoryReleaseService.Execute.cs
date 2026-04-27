@@ -276,7 +276,18 @@ public sealed partial class DotNetRepositoryReleaseService
                             string.IsNullOrWhiteSpace(project.ErrorMessage) &&
                             !string.IsNullOrWhiteSpace(project.NewVersion))
                         .ToArray();
+                    var missingVersionCandidates = packable
+                        .Where(project =>
+                            string.IsNullOrWhiteSpace(project.ErrorMessage) &&
+                            string.IsNullOrWhiteSpace(project.NewVersion))
+                        .ToArray();
                     batchCandidateSet = new HashSet<DotNetRepositoryProjectResult>(batchCandidates);
+
+                    if (missingVersionCandidates.Length > 0)
+                    {
+                        var names = string.Join(", ", missingVersionCandidates.Select(project => project.ProjectName));
+                        _logger.Warn($"MSBuild batch pack excluded {missingVersionCandidates.Length} project(s) without a resolved version; they will be skipped during pack: {names}");
+                    }
 
                     if (string.IsNullOrWhiteSpace(spec.OutputPath))
                     {
@@ -344,6 +355,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         continue;
                     }
 
+                    // A successful batch result contains all produced packages; narrow it to this project/version.
                     var filtered = FilterPackages(packResult.Packages, project.PackageId, project.NewVersion!);
                     if (filtered.Count == 0)
                     {
