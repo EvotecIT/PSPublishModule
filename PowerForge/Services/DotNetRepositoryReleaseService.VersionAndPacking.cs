@@ -67,6 +67,9 @@ public sealed partial class DotNetRepositoryReleaseService
             Directory.CreateDirectory(outputPath);
         }
 
+        var packageRoot = outputPath ?? Path.Combine(csprojDir, "bin", configuration);
+        var existingPackages = SnapshotPackages(packageRoot);
+
         var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, out var stdErr, out var stdOut, out var duration);
         result.Duration = duration;
         if (exitCode != 0)
@@ -75,11 +78,11 @@ public sealed partial class DotNetRepositoryReleaseService
             return result;
         }
 
-        var packageRoot = outputPath ?? Path.Combine(csprojDir, "bin", configuration);
         if (Directory.Exists(packageRoot))
         {
             var pkgs = Directory.EnumerateFiles(packageRoot, "*.nupkg", SearchOption.AllDirectories)
                 .Where(p => !p.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+                .Where(p => WasPackageCreatedOrChanged(existingPackages, p))
                 .ToArray();
             result.Packages.AddRange(pkgs);
         }
@@ -94,7 +97,7 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger logger)
     {
         var result = new DotNetPackResult();
-        if (projects is null || projects.Count == 0)
+        if (projects.Count == 0)
         {
             result.Success = true;
             return result;
@@ -110,6 +113,7 @@ public sealed partial class DotNetRepositoryReleaseService
             ? spec.OutputPath!
             : Path.GetFullPath(Path.Combine(spec.RootPath, spec.OutputPath!));
         Directory.CreateDirectory(outputPath);
+        var existingPackages = SnapshotPackages(outputPath);
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "project-build", $"pack-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
@@ -136,6 +140,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             var pkgs = Directory.EnumerateFiles(outputPath, "*.nupkg", SearchOption.AllDirectories)
                 .Where(p => !p.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+                .Where(p => WasPackageCreatedOrChanged(existingPackages, p))
                 .ToArray();
             result.Packages.AddRange(pkgs);
             result.Success = true;
@@ -147,7 +152,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static void WritePackTraversalProject(
+    internal static void WritePackTraversalProject(
         string traversalPath,
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
@@ -155,7 +160,7 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
-        var properties = $"Configuration={configuration};PackageOutputPath={outputPath}";
+        var properties = $"Configuration={EscapeMsBuildPropertyValue(configuration)};PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}";
 
         var document = new XDocument(
             new XElement(ns + "Project",
@@ -166,6 +171,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("Name", "PackSelected"),
                     new XElement(ns + "MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
+                        // Restore is intentional so project references and package assets resolve inside the batch.
                         new XAttribute("Targets", "Restore;Pack"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("Properties", properties)))));
@@ -233,30 +239,15 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 #endif
 
-        using var p = Process.Start(psi);
-        if (p is null) return 1;
-
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        var stopwatch = Stopwatch.StartNew();
-        var nextProgress = TimeSpan.FromSeconds(15);
-
-        while (!p.WaitForExit(1000))
-        {
-            if (stopwatch.Elapsed < nextProgress)
-                continue;
-
-            logger.Info($"{projectName}: dotnet pack still running ({FormatDuration(stopwatch.Elapsed)} elapsed).");
-            nextProgress += TimeSpan.FromSeconds(15);
-        }
-
-        stdOut = stdoutTask.GetAwaiter().GetResult();
-        stdErr = stderrTask.GetAwaiter().GetResult();
-        stopwatch.Stop();
-        duration = stopwatch.Elapsed;
-
+        var exitCode = RunProcessWithHeartbeat(
+            psi,
+            logger,
+            elapsed => $"{projectName}: dotnet pack still running ({FormatDuration(elapsed)} elapsed).",
+            out stdErr,
+            out stdOut,
+            out duration);
         LogProcessOutput(logger, projectName, "dotnet pack", stdOut, stdErr);
-        return p.ExitCode;
+        return exitCode;
     }
 
     private static int RunDotnetMsBuildPack(
@@ -302,30 +293,15 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add("/v:m");
 #endif
 
-        using var p = Process.Start(psi);
-        if (p is null) return 1;
-
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        var stopwatch = Stopwatch.StartNew();
-        var nextProgress = TimeSpan.FromSeconds(15);
-
-        while (!p.WaitForExit(1000))
-        {
-            if (stopwatch.Elapsed < nextProgress)
-                continue;
-
-            logger.Info($"MSBuild batch pack still running ({projectCount} project(s), {FormatDuration(stopwatch.Elapsed)} elapsed).");
-            nextProgress += TimeSpan.FromSeconds(15);
-        }
-
-        stdOut = stdoutTask.GetAwaiter().GetResult();
-        stdErr = stderrTask.GetAwaiter().GetResult();
-        stopwatch.Stop();
-        duration = stopwatch.Elapsed;
-
+        var exitCode = RunProcessWithHeartbeat(
+            psi,
+            logger,
+            elapsed => $"MSBuild batch pack still running ({projectCount} project(s), {FormatDuration(elapsed)} elapsed).",
+            out stdErr,
+            out stdOut,
+            out duration);
         LogProcessOutput(logger, "MSBuild batch", "dotnet msbuild pack", stdOut, stdErr);
-        return p.ExitCode;
+        return exitCode;
     }
 
     internal static PackagePushResult ClassifyNuGetPushOutcome(int exitCode, bool skipDuplicate, string stdErr, string stdOut)
@@ -420,6 +396,74 @@ public sealed partial class DotNetRepositoryReleaseService
         if (!string.IsNullOrWhiteSpace(stdErr))
             logger.Verbose($"{projectName}: {operation} stderr:{Environment.NewLine}{stdErr.TrimEnd()}");
     }
+
+    private static int RunProcessWithHeartbeat(
+        ProcessStartInfo psi,
+        ILogger logger,
+        Func<TimeSpan, string> heartbeatMessage,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
+    {
+        stdErr = string.Empty;
+        stdOut = string.Empty;
+        duration = TimeSpan.Zero;
+
+        using var p = Process.Start(psi);
+        if (p is null) return 1;
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        var stopwatch = Stopwatch.StartNew();
+        var nextProgress = TimeSpan.FromSeconds(15);
+
+        while (!p.WaitForExit(1000))
+        {
+            if (stopwatch.Elapsed < nextProgress)
+                continue;
+
+            logger.Info(heartbeatMessage(stopwatch.Elapsed));
+            nextProgress += TimeSpan.FromSeconds(15);
+        }
+
+        stdOut = stdoutTask.GetAwaiter().GetResult();
+        stdErr = stderrTask.GetAwaiter().GetResult();
+        stopwatch.Stop();
+        duration = stopwatch.Elapsed;
+        return p.ExitCode;
+    }
+
+    private static Dictionary<string, (DateTime LastWriteUtc, long Length)> SnapshotPackages(string packageRoot)
+    {
+        var snapshot = new Dictionary<string, (DateTime LastWriteUtc, long Length)>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(packageRoot))
+            return snapshot;
+
+        foreach (var path in Directory.EnumerateFiles(packageRoot, "*.nupkg", SearchOption.AllDirectories))
+        {
+            if (path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var info = new FileInfo(path);
+            snapshot[path] = (info.LastWriteTimeUtc, info.Length);
+        }
+
+        return snapshot;
+    }
+
+    private static bool WasPackageCreatedOrChanged(
+        IReadOnlyDictionary<string, (DateTime LastWriteUtc, long Length)> existingPackages,
+        string path)
+    {
+        var info = new FileInfo(path);
+        if (!existingPackages.TryGetValue(path, out var existing))
+            return true;
+
+        return existing.LastWriteUtc != info.LastWriteTimeUtc || existing.Length != info.Length;
+    }
+
+    private static string EscapeMsBuildPropertyValue(string value)
+        => value.Replace("%", "%25").Replace(";", "%3B");
 
     private static bool LooksLikeSkippedDuplicate(string text)
     {

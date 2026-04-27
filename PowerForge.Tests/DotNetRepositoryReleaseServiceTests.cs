@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -187,5 +189,53 @@ public sealed class DotNetRepositoryReleaseServiceTests
             stdOut: "Your package was pushed.");
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
+    }
+
+    [Fact]
+    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            var traversalPath = Path.Combine(root.FullName, "pack.proj");
+            var outputPath = Path.Combine(root.FullName, "packages;with%value");
+            var project = new DotNetRepositoryProjectResult
+            {
+                ProjectName = "Sample.Package",
+                CsprojPath = csprojPath,
+                PackageId = "Sample.Package",
+                IsPackable = true
+            };
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release"
+            };
+
+            DotNetRepositoryReleaseService.WritePackTraversalProject(
+                traversalPath,
+                new[] { project },
+                spec,
+                outputPath);
+
+            var document = XDocument.Load(traversalPath);
+            XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
+            var packProject = Assert.Single(document.Descendants(ns + "PackProject"));
+            Assert.Equal(Path.GetFullPath(csprojPath), packProject.Attribute("Include")?.Value);
+
+            var msbuild = Assert.Single(document.Descendants(ns + "MSBuild"));
+            Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
+            Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
+            Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
+            Assert.Equal(
+                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B")}",
+                msbuild.Attribute("Properties")?.Value);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 }
