@@ -74,7 +74,7 @@ public sealed partial class DotNetRepositoryReleaseService
         result.Duration = duration;
         if (exitCode != 0)
         {
-            result.ErrorMessage = $"dotnet pack failed for {project.ProjectName} (exit {exitCode}). {stdErr}".Trim();
+            result.ErrorMessage = $"dotnet pack failed for {project.ProjectName} (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
             return result;
         }
 
@@ -134,7 +134,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             if (exitCode != 0)
             {
-                result.ErrorMessage = $"dotnet msbuild batch pack failed (exit {exitCode}). {stdErr}".Trim();
+                result.ErrorMessage = $"dotnet msbuild batch pack failed (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
                 return result;
             }
 
@@ -397,6 +397,23 @@ public sealed partial class DotNetRepositoryReleaseService
             logger.Verbose($"{projectName}: {operation} stderr:{Environment.NewLine}{stdErr.TrimEnd()}");
     }
 
+    private static string SummarizeProcessFailureOutput(string stdErr, string stdOut)
+    {
+        var text = !string.IsNullOrWhiteSpace(stdErr) ? stdErr : stdOut;
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var lines = text.Replace("\r\n", "\n").Split('\n')
+            .Select(line => line.TrimEnd())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+        if (lines.Length == 0)
+            return string.Empty;
+
+        const int maxLines = 40;
+        return string.Join(Environment.NewLine, lines.Skip(Math.Max(0, lines.Length - maxLines)));
+    }
+
     private static int RunProcessWithHeartbeat(
         ProcessStartInfo psi,
         ILogger logger,
@@ -426,6 +443,7 @@ public sealed partial class DotNetRepositoryReleaseService
             nextProgress += TimeSpan.FromSeconds(15);
         }
 
+        // Ensures redirected stream callbacks flush before reading async tasks.
         p.WaitForExit();
         stdOut = stdoutTask.GetAwaiter().GetResult();
         stdErr = stderrTask.GetAwaiter().GetResult();
