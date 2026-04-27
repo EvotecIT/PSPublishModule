@@ -306,7 +306,7 @@ Versioning
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
 - Version source resolution can use `NugetSource` (v3 index URL or local folder) with optional credentials.
-- `PackStrategy`: optional packing strategy. `PerProject` runs the legacy `dotnet pack` loop. `MSBuild` (alias `Batch`) requires `OutputPath` or `StagingPath`, generates a temporary traversal project, and packs selected projects in one parallel MSBuild invocation. If no package output path is available, it logs a warning and falls back to `PerProject`. The batch target runs `Restore;Pack`, so private feed credentials must already be available to `dotnet`/MSBuild restore. Batch mode stops on the first project failure and reports projects without a resolved version as failed skipped projects.
+- `PackStrategy`: optional packing strategy. `PerProject` runs the legacy `dotnet pack` loop. `MSBuild` (alias `Batch`) requires `OutputPath` or `StagingPath`, generates a temporary traversal project, and packs selected projects in one parallel MSBuild invocation. If no package output path is available, it logs a warning and falls back to `PerProject`. The batch target runs `Restore;Pack`, so private feed credentials must already be available to `dotnet`/MSBuild restore. Batch mode stops on the first project failure and treats the whole failed batch as failed, so already-produced packages from that batch are not signed or published. Projects without a resolved version are reported as failed skipped projects.
 
 Staging and outputs
 - `StagingPath`: root directory for pipeline outputs (recommended).

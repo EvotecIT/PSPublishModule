@@ -129,6 +129,20 @@ internal sealed class ProjectBuildSupportService
     }
 
     /// <summary>
+    /// Returns true when the provided pack strategy string maps to a supported value.
+    /// </summary>
+    public static bool IsKnownPackStrategy(string? strategy)
+    {
+        var trimmedStrategy = strategy?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedStrategy))
+            return true;
+
+        return string.Equals(trimmedStrategy, "PerProject", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmedStrategy, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmedStrategy, "Batch", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Converts loosely typed bound parameter values to a boolean.
     /// </summary>
     public static bool IsTrue(object? value)

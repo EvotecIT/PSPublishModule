@@ -162,6 +162,8 @@ public sealed partial class DotNetRepositoryReleaseService
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var properties = $"Configuration={EscapeMsBuildPropertyValue(configuration)};PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}";
 
+        // Keep this a classic MSBuild project: it only fans out to concrete SDK projects
+        // and does not require Microsoft.Build.Traversal to be installed.
         var document = new XDocument(
             new XElement("Project",
                 new XElement("ItemGroup",
@@ -449,7 +451,6 @@ public sealed partial class DotNetRepositoryReleaseService
     private static bool IsDiagnosticOutputLine(string line)
     {
         return line.Contains(": error", StringComparison.OrdinalIgnoreCase) ||
-               line.Contains(" error ", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("error", StringComparison.OrdinalIgnoreCase) ||
                line.Contains("exception", StringComparison.OrdinalIgnoreCase) ||
                line.Contains("failed", StringComparison.OrdinalIgnoreCase) ||

@@ -98,7 +98,7 @@ internal sealed class ProjectBuildPreparationService
             configDir);
 
         var packStrategy = ProjectBuildSupportService.ParsePackStrategy(config.PackStrategy);
-        if (!IsKnownPackStrategy(config.PackStrategy))
+        if (!ProjectBuildSupportService.IsKnownPackStrategy(config.PackStrategy))
             _logger.Warn($"Unknown PackStrategy '{config.PackStrategy!.Trim()}'; using PerProject.");
 
         context.Spec = new DotNetRepositoryReleaseSpec
@@ -132,16 +132,5 @@ internal sealed class ProjectBuildPreparationService
         };
 
         return context;
-    }
-
-    private static bool IsKnownPackStrategy(string? strategy)
-    {
-        var trimmedStrategy = strategy?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmedStrategy))
-            return true;
-
-        return string.Equals(trimmedStrategy, "PerProject", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(trimmedStrategy, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(trimmedStrategy, "Batch", StringComparison.OrdinalIgnoreCase);
     }
 }
