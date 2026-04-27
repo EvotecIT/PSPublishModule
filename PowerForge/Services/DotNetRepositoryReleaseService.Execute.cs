@@ -287,6 +287,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         var names = string.Join(", ", missingVersionCandidates.Select(project => project.ProjectName));
                         _logger.Warn($"MSBuild batch pack excluded {missingVersionCandidates.Length} project(s) without a resolved version; they will be skipped during pack: {names}");
+                        foreach (var project in missingVersionCandidates)
+                            project.ErrorMessage = "No resolved version; skipping pack.";
                     }
 
                     if (string.IsNullOrWhiteSpace(spec.OutputPath))
