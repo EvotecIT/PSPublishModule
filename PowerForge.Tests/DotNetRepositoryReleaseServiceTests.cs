@@ -262,6 +262,23 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void SummarizeProcessOutputLines_includes_first_last_and_diagnostic_lines()
+    {
+        var lines = Enumerable.Range(1, 80)
+            .Select(i => i == 31 ? "Project.csproj : error NU1301: Unable to load service index" : $"line {i}")
+            .ToArray();
+
+        var summary = DotNetRepositoryReleaseService.SummarizeProcessOutputLines(string.Join(Environment.NewLine, lines));
+
+        Assert.Contains("line 1", summary);
+        Assert.Contains("... omitted 30 line(s) ...", summary);
+        Assert.Contains("diagnostic lines:", summary);
+        Assert.Contains("Project.csproj : error NU1301: Unable to load service index", summary);
+        Assert.Contains("last 40 line(s):", summary);
+        Assert.Contains("line 80", summary);
+    }
+
+    [Fact]
     public void PackageSnapshot_DetectsNewAndChangedPackages()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

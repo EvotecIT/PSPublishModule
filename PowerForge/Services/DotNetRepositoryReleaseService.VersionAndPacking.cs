@@ -412,14 +412,49 @@ public sealed partial class DotNetRepositoryReleaseService
             : string.Join(Environment.NewLine, sections);
     }
 
-    private static string SummarizeProcessOutputLines(string text)
+    internal static string SummarizeProcessOutputLines(string text)
     {
         var lines = text.Replace("\r\n", "\n").Split('\n')
             .Select(line => line.TrimEnd())
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .ToArray();
-        const int maxLines = 40;
-        return string.Join(Environment.NewLine, lines.Skip(Math.Max(0, lines.Length - maxLines)));
+
+        const int firstLines = 10;
+        const int lastLines = 40;
+        const int maxDiagnosticLines = 20;
+        if (lines.Length <= firstLines + lastLines)
+            return string.Join(Environment.NewLine, lines);
+
+        var middle = lines.Skip(firstLines).Take(lines.Length - firstLines - lastLines).ToArray();
+        var diagnostics = middle
+            .Where(IsDiagnosticOutputLine)
+            .Distinct(StringComparer.Ordinal)
+            .Take(maxDiagnosticLines)
+            .ToArray();
+
+        var summary = new List<string>();
+        summary.AddRange(lines.Take(firstLines));
+        summary.Add($"... omitted {middle.Length} line(s) ...");
+        if (diagnostics.Length > 0)
+        {
+            summary.Add("diagnostic lines:");
+            summary.AddRange(diagnostics);
+        }
+
+        summary.Add($"last {lastLines} line(s):");
+        summary.AddRange(lines.Skip(lines.Length - lastLines));
+        return string.Join(Environment.NewLine, summary);
+    }
+
+    private static bool IsDiagnosticOutputLine(string line)
+    {
+        return line.Contains(": error", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains(" error ", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("error", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains("exception", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains("unable to", StringComparison.OrdinalIgnoreCase) ||
+               line.Contains("not found", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int RunProcessWithHeartbeat(

@@ -134,6 +134,27 @@ public sealed class ProjectBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_warns_when_pack_strategy_is_unknown()
+    {
+        var logger = new BufferedLogger();
+        var service = new ProjectBuildPreparationService(logger);
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                PackStrategy = "MSBuild2"
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.Equal(DotNetRepositoryPackStrategy.PerProject, context.Spec.PackStrategy);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == "warn" &&
+            entry.Message.Contains("Unknown PackStrategy 'MSBuild2'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Prepare_can_resolve_to_no_work_when_all_actions_are_disabled()
     {
         var service = new ProjectBuildPreparationService();
