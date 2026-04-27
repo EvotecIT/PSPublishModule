@@ -121,7 +121,7 @@ internal sealed class ProjectBuildSupportService
         if (string.IsNullOrWhiteSpace(strategy))
             return DotNetRepositoryPackStrategy.PerProject;
 
-        var trimmedStrategy = strategy!.Trim();
+        var trimmedStrategy = (strategy ?? string.Empty).Trim();
         return string.Equals(trimmedStrategy, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(trimmedStrategy, "Batch", StringComparison.OrdinalIgnoreCase)
             ? DotNetRepositoryPackStrategy.MSBuild

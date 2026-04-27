@@ -22,6 +22,13 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static string FormatDuration(TimeSpan duration)
     {
+        if (duration.TotalHours >= 1)
+        {
+            var hours = (int)duration.TotalHours;
+            var minutes = duration.TotalMinutes - (hours * 60);
+            return $"{hours}h {minutes:0.0}m";
+        }
+
         if (duration.TotalMinutes >= 1)
             return $"{duration.TotalMinutes:0.0}m";
 

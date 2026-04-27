@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
 
@@ -237,5 +238,17 @@ public sealed class DotNetRepositoryReleaseServiceTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void FormatDuration_UsesHoursForLongRuns()
+    {
+        var method = typeof(DotNetRepositoryReleaseService).GetMethod(
+            "FormatDuration",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        var formatted = Assert.IsType<string>(method!.Invoke(null, new object[] { TimeSpan.FromMinutes(90) }));
+
+        Assert.Equal("1h 30.0m", formatted);
     }
 }
