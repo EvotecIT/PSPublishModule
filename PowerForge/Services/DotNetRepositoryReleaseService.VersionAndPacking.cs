@@ -443,7 +443,8 @@ public sealed partial class DotNetRepositoryReleaseService
             nextProgress += TimeSpan.FromSeconds(15);
         }
 
-        // Ensures redirected stream callbacks flush before reading async tasks.
+        // On .NET Framework, WaitForExit(int) returning true does not guarantee async
+        // output callbacks have completed; the no-arg overload does.
         p.WaitForExit();
         stdOut = stdoutTask.GetAwaiter().GetResult();
         stdErr = stderrTask.GetAwaiter().GetResult();
