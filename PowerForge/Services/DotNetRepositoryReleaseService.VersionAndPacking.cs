@@ -158,18 +158,17 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         string outputPath)
     {
-        XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var properties = $"Configuration={EscapeMsBuildPropertyValue(configuration)};PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}";
 
         var document = new XDocument(
-            new XElement(ns + "Project",
-                new XElement(ns + "ItemGroup",
-                    projects.Select(project => new XElement(ns + "PackProject",
+            new XElement("Project",
+                new XElement("ItemGroup",
+                    projects.Select(project => new XElement("PackProject",
                         new XAttribute("Include", Path.GetFullPath(project.CsprojPath))))),
-                new XElement(ns + "Target",
+                new XElement("Target",
                     new XAttribute("Name", "PackSelected"),
-                    new XElement(ns + "MSBuild",
+                    new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
                         // Restore is intentional so project references and package assets resolve inside the batch.
                         new XAttribute("Targets", "Restore;Pack"),
@@ -426,6 +425,7 @@ public sealed partial class DotNetRepositoryReleaseService
             nextProgress += TimeSpan.FromSeconds(15);
         }
 
+        p.WaitForExit();
         stdOut = stdoutTask.GetAwaiter().GetResult();
         stdErr = stderrTask.GetAwaiter().GetResult();
         stopwatch.Stop();
@@ -433,7 +433,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return p.ExitCode;
     }
 
-    private static Dictionary<string, (DateTime LastWriteUtc, long Length)> SnapshotPackages(string packageRoot)
+    internal static Dictionary<string, (DateTime LastWriteUtc, long Length)> SnapshotPackages(string packageRoot)
     {
         var snapshot = new Dictionary<string, (DateTime LastWriteUtc, long Length)>(StringComparer.OrdinalIgnoreCase);
         if (!Directory.Exists(packageRoot))
@@ -451,7 +451,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return snapshot;
     }
 
-    private static bool WasPackageCreatedOrChanged(
+    internal static bool WasPackageCreatedOrChanged(
         IReadOnlyDictionary<string, (DateTime LastWriteUtc, long Length)> existingPackages,
         string path)
     {

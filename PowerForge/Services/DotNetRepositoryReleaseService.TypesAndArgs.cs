@@ -20,7 +20,7 @@ public sealed partial class DotNetRepositoryReleaseService
         public List<string> Packages { get; } = new();
     }
 
-    private static string FormatDuration(TimeSpan duration)
+    internal static string FormatDuration(TimeSpan duration)
     {
         if (duration.TotalHours >= 1)
         {

@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
 
@@ -222,11 +221,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 outputPath);
 
             var document = XDocument.Load(traversalPath);
-            XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
-            var packProject = Assert.Single(document.Descendants(ns + "PackProject"));
+            var packProject = Assert.Single(document.Descendants("PackProject"));
             Assert.Equal(Path.GetFullPath(csprojPath), packProject.Attribute("Include")?.Value);
 
-            var msbuild = Assert.Single(document.Descendants(ns + "MSBuild"));
+            var msbuild = Assert.Single(document.Descendants("MSBuild"));
             Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
             Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
             Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
@@ -243,12 +241,37 @@ public sealed class DotNetRepositoryReleaseServiceTests
     [Fact]
     public void FormatDuration_UsesHoursForLongRuns()
     {
-        var method = typeof(DotNetRepositoryReleaseService).GetMethod(
-            "FormatDuration",
-            BindingFlags.Static | BindingFlags.NonPublic);
-
-        var formatted = Assert.IsType<string>(method!.Invoke(null, new object[] { TimeSpan.FromMinutes(90) }));
+        var formatted = DotNetRepositoryReleaseService.FormatDuration(TimeSpan.FromMinutes(90));
 
         Assert.Equal("1h 30.0m", formatted);
+    }
+
+    [Fact]
+    public void PackageSnapshot_DetectsNewAndChangedPackages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var existing = Path.Combine(root.FullName, "Sample.Package.1.0.0.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            File.WriteAllText(existing, "old");
+            File.WriteAllText(symbols, "symbols");
+
+            var snapshot = DotNetRepositoryReleaseService.SnapshotPackages(root.FullName);
+
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+
+            File.WriteAllText(existing, "changed package");
+            var created = Path.Combine(root.FullName, "Sample.Package.1.0.1.nupkg");
+            File.WriteAllText(created, "new");
+
+            Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+            Assert.True(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, created));
+            Assert.DoesNotContain(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 }
