@@ -336,7 +336,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         _logger.Info($"Packing {project.ProjectName}...");
 
                     var packResult = useBatchPackResult ? batchPackResult! : PackProject(project, spec, _logger);
-                    if (!packResult.Success)
+                    if (!useBatchPackResult && !packResult.Success)
                     {
                         project.ErrorMessage = packResult.ErrorMessage;
                         _logger.Warn($"{project.ProjectName}: pack failed. {packResult.ErrorMessage}");

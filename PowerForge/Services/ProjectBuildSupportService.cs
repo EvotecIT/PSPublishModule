@@ -118,13 +118,10 @@ internal sealed class ProjectBuildSupportService
     /// </summary>
     public static DotNetRepositoryPackStrategy ParsePackStrategy(string? strategy)
     {
-        if (strategy is null)
+        var trimmedStrategy = strategy?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedStrategy))
             return DotNetRepositoryPackStrategy.PerProject;
 
-        if (string.IsNullOrWhiteSpace(strategy))
-            return DotNetRepositoryPackStrategy.PerProject;
-
-        var trimmedStrategy = strategy.Trim();
         return string.Equals(trimmedStrategy, "MSBuild", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(trimmedStrategy, "Batch", StringComparison.OrdinalIgnoreCase)
             ? DotNetRepositoryPackStrategy.MSBuild

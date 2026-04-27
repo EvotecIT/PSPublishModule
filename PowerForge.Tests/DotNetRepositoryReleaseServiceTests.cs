@@ -200,7 +200,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
             var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
             var traversalPath = Path.Combine(root.FullName, "pack.proj");
-            var outputPath = Path.Combine(root.FullName, "packages;with%value");
+            var outputPath = Path.Combine(root.FullName, "packages;with%value=2");
             var project = new DotNetRepositoryProjectResult
             {
                 ProjectName = "Sample.Package",
@@ -229,7 +229,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Equal("Restore;Pack", msbuild.Attribute("Targets")?.Value);
             Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
             Assert.Equal(
-                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B")}",
+                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D")}",
                 msbuild.Attribute("Properties")?.Value);
         }
         finally

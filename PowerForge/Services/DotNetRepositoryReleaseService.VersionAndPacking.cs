@@ -148,7 +148,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
         finally
         {
-            TryDeleteDirectory(tempRoot);
+            TryDeleteDirectory(tempRoot, logger);
         }
     }
 
@@ -378,6 +378,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
+        // Ensures redirected output streams are fully flushed before reading them on .NET Framework.
         p.WaitForExit();
         var stdOut = stdoutTask.GetAwaiter().GetResult();
         var stdErr = stderrTask.GetAwaiter().GetResult();
@@ -466,7 +467,7 @@ public sealed partial class DotNetRepositoryReleaseService
     }
 
     private static string EscapeMsBuildPropertyValue(string value)
-        => value.Replace("%", "%25").Replace(";", "%3B");
+        => value.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D");
 
     private static bool LooksLikeSkippedDuplicate(string text)
     {

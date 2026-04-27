@@ -56,16 +56,17 @@ public sealed partial class DotNetRepositoryReleaseService
         return $"{bytes} B";
     }
 
-    private static void TryDeleteDirectory(string path)
+    private static void TryDeleteDirectory(string path, ILogger? logger = null)
     {
         try
         {
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort cleanup only.
+            if (logger?.IsVerbose == true)
+                logger.Verbose($"Failed to delete temporary directory '{path}': {ex.Message}");
         }
     }
 
