@@ -105,6 +105,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         if (string.IsNullOrWhiteSpace(spec.OutputPath))
         {
+            result.Success = false;
             result.ErrorMessage = "MSBuild batch pack requires OutputPath.";
             return result;
         }

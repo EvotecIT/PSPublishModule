@@ -299,7 +299,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger);
                         if (!batchPackResult.Success)
                         {
-                            var batchError = batchPackResult.ErrorMessage ?? "MSBuild batch pack failed.";
+                            var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; see batch output for per-project details.)";
                             foreach (var project in batchCandidates)
                                 project.ErrorMessage = batchError;
 
@@ -371,6 +371,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         project.Packages.Add(pkg);
 
                     var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
+                    // In batch mode, ignored packages are normally packages for other batched projects.
                     if (ignored.Length > 0 && batchPackResult is null)
                         _logger.Verbose($"{project.ProjectName}: ignored {ignored.Length} package(s) from other versions.");
 
