@@ -122,6 +122,8 @@ public sealed class ProjectBuildPreparationServiceTests
     [InlineData(null, DotNetRepositoryPackStrategy.PerProject)]
     [InlineData("", DotNetRepositoryPackStrategy.PerProject)]
     [InlineData("   ", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("PerProject", DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData("perproject", DotNetRepositoryPackStrategy.PerProject)]
     [InlineData("MSBuild", DotNetRepositoryPackStrategy.MSBuild)]
     [InlineData("msbuild", DotNetRepositoryPackStrategy.MSBuild)]
     [InlineData("Batch", DotNetRepositoryPackStrategy.MSBuild)]

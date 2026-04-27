@@ -281,7 +281,7 @@ public sealed partial class DotNetRepositoryReleaseService
             "/t:PackSelected",
             "/m",
             "/nr:false",
-            "/v:m"
+            logger.IsVerbose ? "/v:n" : "/v:m"
         });
 #else
         psi.ArgumentList.Add("msbuild");
@@ -289,7 +289,7 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add("/t:PackSelected");
         psi.ArgumentList.Add("/m");
         psi.ArgumentList.Add("/nr:false");
-        psi.ArgumentList.Add("/v:m");
+        psi.ArgumentList.Add(logger.IsVerbose ? "/v:n" : "/v:m");
 #endif
 
         var exitCode = RunProcessWithHeartbeat(
@@ -376,9 +376,9 @@ public sealed partial class DotNetRepositoryReleaseService
             };
             return false;
         }
+        // Start both stream reads before waiting to avoid pipe-buffer deadlocks.
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
-        // Ensures redirected output streams are fully flushed before reading them on .NET Framework.
         p.WaitForExit();
         var stdOut = stdoutTask.GetAwaiter().GetResult();
         var stdErr = stderrTask.GetAwaiter().GetResult();
@@ -399,17 +399,23 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static string SummarizeProcessFailureOutput(string stdErr, string stdOut)
     {
-        var text = !string.IsNullOrWhiteSpace(stdErr) ? stdErr : stdOut;
-        if (string.IsNullOrWhiteSpace(text))
-            return string.Empty;
+        var sections = new List<string>();
+        if (!string.IsNullOrWhiteSpace(stdErr))
+            sections.Add("stderr:" + Environment.NewLine + SummarizeProcessOutputLines(stdErr));
+        if (!string.IsNullOrWhiteSpace(stdOut))
+            sections.Add("stdout:" + Environment.NewLine + SummarizeProcessOutputLines(stdOut));
 
+        return sections.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, sections);
+    }
+
+    private static string SummarizeProcessOutputLines(string text)
+    {
         var lines = text.Replace("\r\n", "\n").Split('\n')
             .Select(line => line.TrimEnd())
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .ToArray();
-        if (lines.Length == 0)
-            return string.Empty;
-
         const int maxLines = 40;
         return string.Join(Environment.NewLine, lines.Skip(Math.Max(0, lines.Length - maxLines)));
     }
@@ -486,7 +492,11 @@ public sealed partial class DotNetRepositoryReleaseService
     }
 
     private static string EscapeMsBuildPropertyValue(string value)
-        => value.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D");
+        => value.Replace("%", "%25")
+            .Replace(";", "%3B")
+            .Replace("=", "%3D")
+            .Replace("$", "%24")
+            .Replace("@", "%40");
 
     private static bool LooksLikeSkippedDuplicate(string text)
     {
