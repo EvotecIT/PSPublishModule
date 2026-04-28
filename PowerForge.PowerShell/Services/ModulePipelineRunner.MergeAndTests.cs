@@ -15,26 +15,18 @@ public sealed partial class ModulePipelineRunner
         if (plan is null || buildResult is null) return MergeExecutionResult.None;
         if (!plan.MergeModule && !plan.MergeMissing) return MergeExecutionResult.None;
 
+        var scriptFiles = ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information);
+        var conditionalExportDependencies = ResolveConditionalExportDependencies(
+            plan,
+            scriptFiles,
+            buildResult.Exports);
         var mergeInfo = ModuleMergeComposer.BuildSources(
             buildResult.StagingPath,
             plan.ModuleName,
             plan.Information,
             buildResult.Exports,
-            fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths);
-        var conditionalExportDependencies = ResolveConditionalExportDependencies(
-            plan,
-            mergeInfo.ScriptFiles,
-            buildResult.Exports);
-        if (conditionalExportDependencies.Count > 0 && mergeInfo.HasScripts)
-        {
-            mergeInfo = ModuleMergeComposer.BuildSources(
-                buildResult.StagingPath,
-                plan.ModuleName,
-                plan.Information,
-                buildResult.Exports,
-                fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
-                conditionalFunctionDependencies: conditionalExportDependencies);
-        }
+            fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
+            conditionalFunctionDependencies: conditionalExportDependencies);
 
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
@@ -366,7 +358,7 @@ public sealed partial class ModulePipelineRunner
                 ? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
                 : ResolveConditionalExportDependencies(
                     plan,
-                    GetConditionalExportScriptPaths(plan, buildResult.StagingPath),
+                    ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
                     exports);
 
             ModuleBootstrapperGenerator.Generate(
@@ -416,47 +408,6 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         }
-    }
-
-    private static string[] GetConditionalExportScriptPaths(ModulePipelinePlan plan, string stagingPath)
-    {
-        if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
-            return Array.Empty<string>();
-
-        var directories = new List<string> { "Classes", "Enums", "Private", "Public" };
-        if (plan.Information?.IncludePS1 is { Length: > 0 })
-        {
-            foreach (var include in plan.Information.IncludePS1)
-            {
-                if (string.IsNullOrWhiteSpace(include))
-                    continue;
-                if (directories.Any(existing => string.Equals(existing, include, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                directories.Add(include.Trim());
-            }
-        }
-
-        var scripts = new List<string>();
-        foreach (var directory in directories)
-        {
-            var fullPath = Path.Combine(stagingPath, directory);
-            if (!Directory.Exists(fullPath))
-                continue;
-
-            try
-            {
-                scripts.AddRange(Directory.EnumerateFiles(fullPath, "*.ps1", SearchOption.AllDirectories));
-            }
-            catch
-            {
-                // Best effort only.
-            }
-        }
-
-        return scripts
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static script => script, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
 }

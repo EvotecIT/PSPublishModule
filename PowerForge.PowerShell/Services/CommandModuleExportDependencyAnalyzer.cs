@@ -248,6 +248,8 @@ internal static class CommandModuleExportDependencyAnalyzer
 
         try
         {
+            // Best-effort fallback: Get-Command reflects the build host, so explicit command names
+            // and stable naming heuristics are preferred when available.
             using var ps = PowerShell.Create();
             ps.AddCommand("Get-Command")
                 .AddParameter("Name", commandName)
@@ -298,6 +300,18 @@ internal static class CommandModuleExportDependencyAnalyzer
              text.IndexOf("Import-Module ActiveDirectory", StringComparison.OrdinalIgnoreCase) >= 0 ||
              text.IndexOf("PsProvider ActiveDirectory", StringComparison.OrdinalIgnoreCase) >= 0 ||
              text.IndexOf("PSProvider ActiveDirectory", StringComparison.OrdinalIgnoreCase) >= 0))
+        {
+            return true;
+        }
+
+        if (string.Equals(moduleName, "DnsServer", StringComparison.OrdinalIgnoreCase) &&
+            text.IndexOf("Import-Module DnsServer", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
+
+        if (string.Equals(moduleName, "DhcpServer", StringComparison.OrdinalIgnoreCase) &&
+            text.IndexOf("Import-Module DhcpServer", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return true;
         }

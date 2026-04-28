@@ -79,6 +79,36 @@ public class CommandModuleExportDependencyAnalyzerTests
         Assert.Equal(new[] { "Get-OptionalCommand" }, contoso);
     }
 
+    [Theory]
+    [InlineData("ActiveDirectory", "function Get-NeedsOptional { [Microsoft.ActiveDirectory.Management.ADUser]$User }")]
+    [InlineData("DnsServer", "function Get-NeedsOptional { Import-Module DnsServer }")]
+    [InlineData("DhcpServer", "function Get-NeedsOptional { Import-Module DhcpServer }")]
+    public void Analyze_InferModuleOnlyDependency_FromTextPattern(string moduleName, string functionText)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publicDir = Directory.CreateDirectory(Path.Combine(root, "Public"));
+            var scriptPath = Path.Combine(publicDir.FullName, "Get-NeedsOptional.ps1");
+            File.WriteAllText(scriptPath, functionText);
+
+            var dependencies = CommandModuleExportDependencyAnalyzer.Analyze(
+                new[] { scriptPath },
+                new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [moduleName] = Array.Empty<string>()
+                },
+                new[] { "Get-NeedsOptional" });
+
+            Assert.True(dependencies.TryGetValue(moduleName, out var optional));
+            Assert.Equal(new[] { "Get-NeedsOptional" }, optional);
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
