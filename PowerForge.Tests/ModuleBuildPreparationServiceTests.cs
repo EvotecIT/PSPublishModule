@@ -356,7 +356,8 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Equal(moduleRoot.FullName, prepared.ProjectRoot);
             Assert.False(prepared.UseLegacy);
             Assert.Null(prepared.BasePathForScaffold);
-            Assert.Equal(configPath, prepared.ConfigLabel);
+            Assert.Equal("json", prepared.ConfigLabel);
+            Assert.Equal(configPath, prepared.ConfigFilePath);
             Assert.Equal(Path.Combine(root.FullName, "Build", "Artifacts", "Module", "Staging"), prepared.PipelineSpec.Build.StagingPath);
             Assert.Equal(Path.Combine(root.FullName, "TierBridge.PowerShell", "TierBridge.PowerShell.csproj"), prepared.PipelineSpec.Build.CsprojPath);
             Assert.Equal(Path.Combine(configDir.FullName, ".powerforge", "module-baseline.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);

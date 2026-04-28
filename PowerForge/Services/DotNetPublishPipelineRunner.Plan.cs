@@ -8,6 +8,8 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private const int DefaultCommandHookTimeoutSeconds = 600;
+
     private const string DefaultMsiPrepareStagingPathTemplate =
         "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/payload";
 
@@ -770,7 +772,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ModuleIncludes = CloneBundleModuleIncludes(b.ModuleIncludes),
                 GeneratedScripts = CloneBundleGeneratedScripts(b.GeneratedScripts),
                 Scripts = CloneBundleScripts(b.Scripts),
-                PostProcess = b.PostProcess
+                PostProcess = CloneBundlePostProcessOptions(b.PostProcess)
             })
             .ToArray();
     }
@@ -1149,7 +1151,6 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string[] NormalizeArguments(IEnumerable<string>? values)
     {
         return (values ?? Array.Empty<string>())
-            .Where(v => v is not null)
             .Select(v => v ?? string.Empty)
             .ToArray();
     }
@@ -1184,7 +1185,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Arguments = NormalizeArguments(hook.Arguments),
                 WorkingDirectory = string.IsNullOrWhiteSpace(hook.WorkingDirectory) ? null : hook.WorkingDirectory!.Trim(),
                 Environment = CloneDictionary(hook.Environment),
-                TimeoutSeconds = Math.Max(1, hook.TimeoutSeconds),
+                TimeoutSeconds = hook.TimeoutSeconds <= 0
+                    ? DefaultCommandHookTimeoutSeconds
+                    : Math.Max(1, hook.TimeoutSeconds),
                 Required = hook.Required,
                 Targets = NormalizeStrings(hook.Targets),
                 Runtimes = NormalizeStrings(hook.Runtimes),
@@ -1229,7 +1232,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 HookArguments = hook.Arguments,
                 HookWorkingDirectory = hook.WorkingDirectory,
                 HookEnvironment = hook.Environment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                HookTimeoutSeconds = Math.Max(1, hook.TimeoutSeconds),
+                HookTimeoutSeconds = hook.TimeoutSeconds <= 0
+                    ? DefaultCommandHookTimeoutSeconds
+                    : Math.Max(1, hook.TimeoutSeconds),
                 HookRequired = hook.Required,
                 TargetName = targetName,
                 Framework = framework,

@@ -9,7 +9,7 @@ public sealed class PowerForgePluginCatalogServiceTests
     [Fact]
     public void ExampleCatalog_deserializes_to_plugin_catalog_spec()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootLocator.Find();
         var examplePath = Path.Combine(repoRoot, "Module", "Examples", "PluginCatalog", "powerforge.plugins.json");
 
         Assert.True(File.Exists(examplePath), $"Plugin catalog example not found: {examplePath}");
@@ -478,17 +478,4 @@ public sealed class Two : IPluginContract {}
             File.Delete(path);
     }
 
-    private static string FindRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
-        {
-            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
-            if (File.Exists(marker))
-                return current.FullName;
-            current = current.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Unable to locate repository root for plugin catalog tests.");
-    }
 }

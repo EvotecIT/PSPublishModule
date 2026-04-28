@@ -122,7 +122,8 @@ internal sealed class ModuleBuildPreparationService
             UseLegacy = false,
             PipelineSpec = spec,
             JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath) : null,
-            ConfigLabel = configFullPath
+            ConfigLabel = "json",
+            ConfigFilePath = configFullPath
         };
     }
 

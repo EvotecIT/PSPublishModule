@@ -9,4 +9,5 @@ internal sealed class ModuleBuildPreparedContext
     public ModulePipelineSpec PipelineSpec { get; set; } = new();
     public string? JsonOutputPath { get; set; }
     public string ConfigLabel { get; set; } = "cmdlet";
+    public string? ConfigFilePath { get; set; }
 }

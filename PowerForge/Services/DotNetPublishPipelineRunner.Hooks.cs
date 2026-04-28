@@ -82,7 +82,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string ResolveHookCommandPath(string projectRoot, string command)
     {
-        var raw = (command ?? string.Empty).Trim().Trim('"');
+        var raw = TrimMatchingQuotes((command ?? string.Empty).Trim());
         if (string.IsNullOrWhiteSpace(raw))
             return raw;
         if (Path.IsPathRooted(raw))
@@ -92,7 +92,15 @@ public sealed partial class DotNetPublishPipelineRunner
         return raw;
     }
 
-    private static (int ExitCode, string StdOut, string StdErr, string Executable) RunHookProcess(
+    private static string TrimMatchingQuotes(string value)
+    {
+        if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
+            return value.Substring(1, value.Length - 2);
+
+        return value;
+    }
+
+    private (int ExitCode, string StdOut, string StdErr, string Executable) RunHookProcess(
         string fileName,
         string workingDirectory,
         IReadOnlyList<string> args,
@@ -128,9 +136,30 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (!process.WaitForExit(timeoutMs))
         {
-            try { process.Kill(); } catch { /* best effort */ }
-            var stdout = stdoutTask.GetAwaiter().GetResult();
-            var stderr = stderrTask.GetAwaiter().GetResult();
+            try
+            {
+#if NET472
+                process.Kill();
+#else
+                process.Kill(entireProcessTree: true);
+#endif
+            }
+            catch (Exception ex)
+            {
+                _logger.Verbose($"Hook timeout kill failed for '{fileName}': {ex.Message}");
+            }
+
+            try
+            {
+                Task.WhenAll(stdoutTask, stderrTask).Wait(TimeSpan.FromSeconds(5));
+            }
+            catch
+            {
+                // Best effort after timeout; return whatever stream data completed.
+            }
+
+            var stdout = TryGetCompletedOutput(stdoutTask);
+            var stderr = TryGetCompletedOutput(stderrTask);
             return (-1, stdout, stderr, fileName);
         }
 
@@ -139,5 +168,12 @@ public sealed partial class DotNetPublishPipelineRunner
             stdoutTask.GetAwaiter().GetResult(),
             stderrTask.GetAwaiter().GetResult(),
             fileName);
+    }
+
+    private static string TryGetCompletedOutput(Task<string> task)
+    {
+        return task.IsCompleted && !task.IsFaulted && !task.IsCanceled
+            ? task.GetAwaiter().GetResult()
+            : string.Empty;
     }
 }

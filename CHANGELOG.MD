@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## Unreleased
+- DotNet publish CLI overrides (`--target`, `--runtime`, `--framework`, `--style`) are applied before profile resolution so profile-filtered plan/export output matches the executed run.
+
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32

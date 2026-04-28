@@ -13,7 +13,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
     [Fact]
     public void ExamplePackageBundleMsi_DeserializesPackageLayoutPrimitives()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootLocator.Find();
         var examplePath = Path.Combine(repoRoot, "Module", "Examples", "DotNetPublish", "Example.PackageBundleMsi.json");
 
         Assert.True(File.Exists(examplePath), $"Example file not found: {examplePath}");
@@ -211,6 +211,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         {
             var bundleRoot = Directory.CreateDirectory(Path.Combine(root, "bundle")).FullName;
             File.WriteAllText(Path.Combine(bundleRoot, "App.exe"), "app");
+            File.WriteAllText(Path.Combine(bundleRoot, "RootLibrary.dll"), "dll");
             File.WriteAllText(Path.Combine(bundleRoot, "README.md"), "readme");
 
             var scripts = Directory.CreateDirectory(Path.Combine(bundleRoot, "Scripts")).FullName;
@@ -227,8 +228,9 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                 bundleRoot,
                 new[] { "**/*.ps1", "**/*.psm1", "**/*.psd1", "**/*.dll", "App.exe" });
 
-            Assert.Equal(5, targets.Length);
+            Assert.Equal(6, targets.Length);
             Assert.Contains(targets, path => path.EndsWith("App.exe", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("RootLibrary.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("Install-TierBridgeService.ps1", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psm1", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psd1", StringComparison.OrdinalIgnoreCase));
@@ -734,20 +736,6 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
-    }
-
-    private static string FindRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
-        {
-            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
-            if (File.Exists(marker))
-                return current.FullName;
-            current = current.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Unable to locate repository root for dotnet publish bundle tests.");
     }
 
     private static void TryDelete(string path)

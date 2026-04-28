@@ -1,8 +1,5 @@
 # PowerForge Reusable Build Coverage: TestimoX and TierBridge
 
-Date: 2026-04-28
-Branch/worktree: `codex/catalog-reuse` in `C:\Support\GitHub\PSPublishModule-codex-catalog-reuse`
-
 This note maps the PowerShell-heavy build/deploy/catalog logic in TestimoX and TierBridge to the reusable capabilities already present in PSPublishModule/PowerForge, then proposes the smallest engine changes needed to make future repo scripts thin wrappers.
 
 ## Consumer Inventory

@@ -90,6 +90,74 @@ public sealed class DotNetPublishPipelineRunnerHookTests
     }
 
     [Fact]
+    public void Plan_CommandHooksUseContextSpecificKeysAndDefaultTimeout()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var worker = CreateProject(root, "Worker/Worker.csproj");
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions
+                {
+                    ProjectRoot = root,
+                    Restore = false,
+                    Build = false,
+                    Runtimes = new[] { "win-x64" }
+                },
+                Targets = new[]
+                {
+                    new DotNetPublishTarget
+                    {
+                        Name = "App",
+                        ProjectPath = app,
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Styles = new[] { DotNetPublishStyle.PortableCompat }
+                        }
+                    },
+                    new DotNetPublishTarget
+                    {
+                        Name = "Worker",
+                        ProjectPath = worker,
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net10.0",
+                            Runtimes = new[] { "win-x64" },
+                            Styles = new[] { DotNetPublishStyle.PortableCompat }
+                        }
+                    }
+                },
+                Hooks = new[]
+                {
+                    new DotNetPublishCommandHook
+                    {
+                        Id = "catalog",
+                        Phase = DotNetPublishCommandHookPhase.BeforeTargetPublish,
+                        Command = "dotnet"
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var hookSteps = plan.Steps
+                .Where(step => step.Kind == DotNetPublishStepKind.CommandHook)
+                .ToArray();
+
+            Assert.Equal(2, hookSteps.Length);
+            Assert.Equal(2, hookSteps.Select(step => step.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.All(hookSteps, step => Assert.Equal(600, step.HookTimeoutSeconds));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void RunCommandHook_ExpandsArgumentsWorkingDirectoryAndEnvironment()
     {
         var root = CreateTempRoot();

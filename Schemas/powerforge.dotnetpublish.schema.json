@@ -366,7 +366,11 @@
         "HarvestPath": { "type": ["string", "null"] },
         "HarvestDirectoryRefId": { "type": ["string", "null"] },
         "HarvestComponentGroupId": { "type": ["string", "null"] },
-        "HarvestExcludePatterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "HarvestExcludePatterns": {
+          "type": "array",
+          "description": "Relative wildcard or basename patterns excluded from WiX harvest. Bare basenames match anywhere under the staged payload.",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "Versioning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiVersionOptions" }, { "type": "null" }] },
         "MsBuildProperties": {
           "type": ["object", "null"],
@@ -426,7 +430,10 @@
         "SourcePath": { "type": "string", "minLength": 1 },
         "DestinationPath": { "type": "string", "minLength": 1 },
         "Required": { "type": "boolean" },
-        "ClearDestination": { "type": "boolean" }
+        "ClearDestination": {
+          "type": "boolean",
+          "description": "When false, an existing destination is preserved by failing the copy instead of replacing it."
+        }
       },
       "required": ["SourcePath", "DestinationPath"]
     },
@@ -438,7 +445,10 @@
         "SourcePath": { "type": "string", "minLength": 1 },
         "DestinationPath": { "type": ["string", "null"] },
         "Required": { "type": "boolean" },
-        "ClearDestination": { "type": "boolean" }
+        "ClearDestination": {
+          "type": "boolean",
+          "description": "When false, an existing module destination is preserved by failing the copy instead of replacing it."
+        }
       },
       "required": ["ModuleName", "SourcePath"]
     },
@@ -446,14 +456,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "TemplatePath": { "type": ["string", "null"] },
+        "TemplatePath": {
+          "type": ["string", "null"],
+          "description": "Template file path resolved under ProjectRoot. Path tokens use single braces, for example {output}."
+        },
         "Template": { "type": ["string", "null"] },
         "OutputPath": { "type": "string", "minLength": 1 },
         "Tokens": {
           "type": ["object", "null"],
+          "description": "Template token values. Values are expanded with single-brace bundle tokens before being exposed to double-brace placeholders in the generated script body.",
           "additionalProperties": { "type": "string" }
         },
-        "Overwrite": { "type": "boolean" },
+        "Overwrite": {
+          "type": "boolean",
+          "description": "When false, an existing generated script is an error rather than a silent skip."
+        },
         "SignProfile": { "type": ["string", "null"] },
         "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
         "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] }
@@ -471,7 +488,11 @@
         "Path": { "type": "string", "minLength": 1 },
         "Arguments": { "type": "array", "items": { "type": "string" } },
         "WorkingDirectory": { "type": ["string", "null"] },
-        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum bundle script runtime in seconds. Defaults to 600 when omitted."
+        },
         "PreferPwsh": { "type": "boolean" },
         "Required": { "type": "boolean" }
       },
@@ -578,7 +599,11 @@
           "type": ["object", "null"],
           "additionalProperties": { "type": "string" }
         },
-        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum hook runtime in seconds. Defaults to 600 when omitted."
+        },
         "Required": { "type": "boolean" },
         "Targets": {
           "type": "array",

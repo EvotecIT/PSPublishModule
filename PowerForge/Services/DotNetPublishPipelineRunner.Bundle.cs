@@ -253,9 +253,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (module is null) continue;
 
-            var moduleTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in tokens)
-                moduleTokens[token.Key] = token.Value ?? string.Empty;
+            var moduleTokens = tokens.ToDictionary(
+                token => token.Key,
+                token => token.Value,
+                StringComparer.OrdinalIgnoreCase);
             moduleTokens["moduleName"] = module.ModuleName;
             var source = ResolvePath(plan.ProjectRoot, ApplyTemplate(module.SourcePath, moduleTokens));
             var destination = ResolvePath(outputDir, ApplyTemplate(module.DestinationPath, moduleTokens));
@@ -285,15 +286,17 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(script.TemplatePath))
             {
                 var templatePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(script.TemplatePath!, tokens));
+                EnsurePathWithinRoot(plan.ProjectRoot, templatePath, $"Bundle '{bundle.Id}' generated script template path");
                 if (!File.Exists(templatePath))
                     throw new FileNotFoundException($"Generated script template not found for bundle '{bundle.Id}': {templatePath}", templatePath);
                 templateName = templatePath;
                 template = File.ReadAllText(templatePath, Encoding.UTF8);
             }
 
-            var renderTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in tokens)
-                renderTokens[token.Key] = token.Value ?? string.Empty;
+            var renderTokens = tokens.ToDictionary(
+                token => token.Key,
+                token => token.Value,
+                StringComparer.OrdinalIgnoreCase);
             foreach (var token in script.Tokens ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
                 renderTokens[token.Key] = ApplyTemplate(token.Value ?? string.Empty, tokens);
 

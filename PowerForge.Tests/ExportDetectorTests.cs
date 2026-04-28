@@ -39,7 +39,7 @@ public sealed class ExportDetectorTests
     [Fact]
     public void GeneratedModuleFiles_export_PSPublishModule_plugin_and_bundle_cmdlets()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootLocator.Find();
         var manifestPath = Path.Combine(repoRoot, "Module", "PSPublishModule.psd1");
         var bootstrapperPath = Path.Combine(repoRoot, "Module", "PSPublishModule.psm1");
 
@@ -89,17 +89,4 @@ function Install-Example {
     {
     }
 
-    private static string FindRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
-        {
-            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
-            if (File.Exists(marker))
-                return current.FullName;
-            current = current.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Unable to locate repository root for export detector tests.");
-    }
 }

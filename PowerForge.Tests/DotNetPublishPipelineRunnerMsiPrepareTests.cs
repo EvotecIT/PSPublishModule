@@ -294,6 +294,9 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
             File.WriteAllText(Path.Combine(outputDir, "Install-Service.ps1"), "install");
             Directory.CreateDirectory(Path.Combine(outputDir, "data"));
             File.WriteAllText(Path.Combine(outputDir, "data", "settings.json"), "{ }");
+            Directory.CreateDirectory(Path.Combine(outputDir, "data", "deep"));
+            File.WriteAllText(Path.Combine(outputDir, "data", "deep", "symbols.pdb"), "symbols");
+            File.WriteAllText(Path.Combine(outputDir, "data", "deep", "createdump.exe"), "diag");
 
             var stagingPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "payload");
             var manifestPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "prepare.manifest.json");
@@ -325,7 +328,7 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
                     new DotNetPublishInstallerPlan
                     {
                         Id = "svc.msi",
-                        HarvestExcludePatterns = new[] { "Svc.exe", "**/Install-Service.ps1" }
+                        HarvestExcludePatterns = new[] { "Svc.exe", "**/Install-Service.ps1", "**/*.pdb", "createdump.exe" }
                     }
                 }
             };
@@ -352,6 +355,8 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
             var wxs = File.ReadAllText(result!.HarvestPath!);
             Assert.DoesNotContain("Svc.exe", wxs, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Install-Service.ps1", wxs, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("symbols.pdb", wxs, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("createdump.exe", wxs, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("settings.json", wxs, StringComparison.OrdinalIgnoreCase);
         }
         finally

@@ -52,6 +52,8 @@ Invoke-DotNetPublish `
   -ExitCode
 ```
 
+CLI overrides are applied before profile resolution. When a profile is active, `-Target`, `-Runtimes`, `-Frameworks`, and `-Styles` constrain the active profile and matching targets so the exported/plan view reflects the same inputs the runner executes.
+
 ## DSL Flow (When You Want Scripted Composition)
 
 ```powershell
@@ -126,6 +128,8 @@ Depending on config, the run can emit:
 - `CopyItems[]` copies non-publish files or directories such as README files, static scripts, licenses, or product data into the bundle.
 - `ModuleIncludes[]` copies built PowerShell module artefacts into the bundle, defaulting to `Modules/{moduleName}` so apps can ship their companion module without scraping user-profile installs.
 - `GeneratedScripts[]` renders inline or file-based script templates into the bundle. Template values use `{{TokenName}}`; token values can use bundle tokens such as `{output}`, `{rid}`, `{framework}`, and `{moduleName}` for module includes.
+- Bundle paths and token values use single braces such as `{output}`. Generated script template bodies use double braces such as `{{ModuleName}}`; `GeneratedScripts[].Tokens` bridges the two by resolving single-brace values first and then making them available to the double-brace template renderer.
+- `GeneratedScripts[].Overwrite=false` means "fail if the target file already exists", not "skip if present". `CopyItems[].ClearDestination=false` and `ModuleIncludes[].ClearDestination=false` likewise preserve existing destinations by failing on copy conflicts.
 - `Scripts[]` let you run repo-specific finishing steps after the copy phase, for example exporting plugins, writing launchers, or producing metadata files.
 - `PostProcess.ArchiveDirectories[]` can zip bundle subdirectories after composition, which is useful for plugin packs or other nested payloads that should ship as archives.
 - `PostProcess.DeletePatterns[]` removes files or folders from the composed bundle using wildcard patterns such as `**/*.pdb` or `**/createdump.exe`.
@@ -151,6 +155,7 @@ Depending on config, the run can emit:
 - Supported phases are `BeforeRestore`, `BeforeBuild`, `BeforeTargetPublish`, `AfterTargetPublish`, `BeforeBundle`, and `AfterBundle`.
 - Hooks support target/runtime/framework/style filters, arguments, working directory, environment variables, timeout, and required/optional failure policy.
 - Hook arguments and environment values support tokens such as `{projectRoot}`, `{configuration}`, `{target}`, `{rid}`, `{framework}`, `{style}`, `{bundle}`, `{phase}`, and `{hook}`.
+- Hook timeout defaults to 600 seconds when omitted; set `TimeoutSeconds` lower for quick local validation hooks or higher for intentionally long-running packaging steps.
 - Use `BeforeBuild` or `BeforeTargetPublish` for generated-source/catalog refreshes, and `BeforeBundle` or `AfterBundle` for product-specific package finishing that should stay repo-owned.
 
 ## MSI From Bundle
@@ -158,6 +163,7 @@ Depending on config, the run can emit:
 - Use `PrepareFromBundleId` on an installer when WiX harvesting should run against the composed portable bundle instead of the raw `PrepareFromTarget` publish folder.
 - This is the right pattern for desktop apps that need sidecars, plugins, helper scripts, or metadata to be present in the installer payload.
 - Keep `PrepareFromTarget` set as well; it remains the source combination that installer filters validate against.
+- `HarvestExcludePatterns[]` accepts relative wildcard paths such as `**/*.pdb` and basename globs such as `createdump.exe`; basename globs apply anywhere under the harvested payload.
 
 ## Microsoft Store / MSIX Packaging
 
