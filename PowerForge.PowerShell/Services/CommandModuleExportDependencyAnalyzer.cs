@@ -50,6 +50,7 @@ internal static class CommandModuleExportDependencyAnalyzer
             }
 
             var conditionalFunctions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var dependencyMemo = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var command in configuredCommands)
             {
@@ -62,7 +63,7 @@ internal static class CommandModuleExportDependencyAnalyzer
                 if (!functions.TryGetValue(functionName, out var function))
                     continue;
 
-                if (DependsOnModule(function, functions, directModuleHits, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                if (DependsOnModule(function, functions, directModuleHits, new HashSet<string>(StringComparer.OrdinalIgnoreCase), dependencyMemo))
                     conditionalFunctions.Add(functionName);
             }
 
@@ -207,6 +208,7 @@ internal static class CommandModuleExportDependencyAnalyzer
             if (localFunctionNames.Contains(command))
                 continue;
 
+            // Explicit command lists are authoritative; naming heuristics only fill in module-only declarations.
             if (configuredCommands.Count == 0 && CommandLooksLikeModuleCommand(moduleName, command))
                 return true;
 
@@ -228,23 +230,37 @@ internal static class CommandModuleExportDependencyAnalyzer
         FunctionDependencyInfo function,
         IReadOnlyDictionary<string, FunctionDependencyInfo> functions,
         IReadOnlyDictionary<string, bool> directModuleHits,
-        HashSet<string> visited)
+        HashSet<string> visited,
+        Dictionary<string, bool> memo)
     {
+        if (memo.TryGetValue(function.Name, out var cached))
+            return cached;
+
         if (!visited.Add(function.Name))
             return false;
 
+        var depends = false;
         if (directModuleHits.TryGetValue(function.Name, out var direct) && direct)
-            return true;
-
-        foreach (var localCall in function.LocalCalls)
         {
-            if (!functions.TryGetValue(localCall, out var dependency))
-                continue;
-            if (DependsOnModule(dependency, functions, directModuleHits, visited))
-                return true;
+            depends = true;
+        }
+        else
+        {
+            foreach (var localCall in function.LocalCalls)
+            {
+                if (!functions.TryGetValue(localCall, out var dependency))
+                    continue;
+                if (DependsOnModule(dependency, functions, directModuleHits, visited, memo))
+                {
+                    depends = true;
+                    break;
+                }
+            }
         }
 
-        return false;
+        visited.Remove(function.Name);
+        memo[function.Name] = depends;
+        return depends;
     }
 
     private static string? ResolveCommandSource(string commandName, Dictionary<string, string?> cache, ILogger? logger)
@@ -295,6 +311,7 @@ internal static class CommandModuleExportDependencyAnalyzer
             return false;
 
         var noun = commandName.Substring(dash + 1);
+        // ActiveDirectory uses AD-prefixed nouns (Get-ADUser), while DNS/DHCP commands use longer module-name prefixes.
         if (string.Equals(moduleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase))
             return noun.StartsWith("AD", StringComparison.OrdinalIgnoreCase);
         if (string.Equals(moduleName, "DnsServer", StringComparison.OrdinalIgnoreCase))
@@ -310,6 +327,8 @@ internal static class CommandModuleExportDependencyAnalyzer
         if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(text))
             return false;
 
+        // These module-only text checks intentionally cover the historical simple forms.
+        // AST command analysis handles ordinary command calls; this catches type/provider/import hints.
         if (string.Equals(moduleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase) &&
             (text.IndexOf("Microsoft.ActiveDirectory.Management", StringComparison.OrdinalIgnoreCase) >= 0 ||
              text.IndexOf("Import-Module ActiveDirectory", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -357,6 +376,7 @@ internal static class CommandModuleExportDependencyAnalyzer
         internal string Name { get; }
         internal string[] CommandNames { get; }
         internal string Text { get; }
+        // Resolved after all files are parsed, because local calls can point to functions in later files.
         internal string[] LocalCalls { get; set; }
     }
 }
