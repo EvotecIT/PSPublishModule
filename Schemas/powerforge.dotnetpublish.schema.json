@@ -42,6 +42,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/DotNetPublishBenchmarkGate" }
     },
+    "Hooks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishCommandHook" }
+    },
     "Outputs": { "$ref": "#/$defs/DotNetPublishOutputs" }
   },
   "required": ["Targets"],
@@ -85,6 +89,10 @@
     "DotNetPublishBenchmarkMetricAggregation": {
       "type": "string",
       "enum": ["First", "Last", "Min", "Max", "Average"]
+    },
+    "DotNetPublishCommandHookPhase": {
+      "type": "string",
+      "enum": ["BeforeRestore", "BeforeBuild", "BeforeTargetPublish", "AfterTargetPublish", "BeforeBundle", "AfterBundle"]
     },
     "DotNetPublishBaselineMode": {
       "type": "string",
@@ -410,6 +418,51 @@
       },
       "required": ["Target"]
     },
+    "DotNetPublishBundleCopyItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": "string", "minLength": 1 },
+        "Required": { "type": "boolean" },
+        "ClearDestination": { "type": "boolean" }
+      },
+      "required": ["SourcePath", "DestinationPath"]
+    },
+    "DotNetPublishBundleModuleInclude": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ModuleName": { "type": "string", "minLength": 1 },
+        "SourcePath": { "type": "string", "minLength": 1 },
+        "DestinationPath": { "type": ["string", "null"] },
+        "Required": { "type": "boolean" },
+        "ClearDestination": { "type": "boolean" }
+      },
+      "required": ["ModuleName", "SourcePath"]
+    },
+    "DotNetPublishBundleGeneratedScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TemplatePath": { "type": ["string", "null"] },
+        "Template": { "type": ["string", "null"] },
+        "OutputPath": { "type": "string", "minLength": 1 },
+        "Tokens": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "Overwrite": { "type": "boolean" },
+        "SignProfile": { "type": ["string", "null"] },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
+        "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] }
+      },
+      "required": ["OutputPath"],
+      "anyOf": [
+        { "required": ["TemplatePath"] },
+        { "required": ["Template"] }
+      ]
+    },
     "DotNetPublishBundleScript": {
       "type": "object",
       "additionalProperties": false,
@@ -472,6 +525,7 @@
         "Frameworks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
         "OutputPath": { "type": ["string", "null"] },
+        "PrimarySubdirectory": { "type": ["string", "null"] },
         "ClearOutput": { "type": "boolean" },
         "Zip": { "type": "boolean" },
         "ZipPath": { "type": ["string", "null"] },
@@ -480,6 +534,18 @@
           "type": "array",
           "items": { "$ref": "#/$defs/DotNetPublishBundleInclude" }
         },
+        "CopyItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleCopyItem" }
+        },
+        "ModuleIncludes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleModuleInclude" }
+        },
+        "GeneratedScripts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishBundleGeneratedScript" }
+        },
         "Scripts": {
           "type": "array",
           "items": { "$ref": "#/$defs/DotNetPublishBundleScript" }
@@ -487,6 +553,43 @@
         "PostProcess": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishBundlePostProcessOptions" }, { "type": "null" }] }
       },
       "required": ["Id", "PrepareFromTarget"]
+    },
+    "DotNetPublishCommandHook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Phase": { "$ref": "#/$defs/DotNetPublishCommandHookPhase" },
+        "Command": { "type": "string", "minLength": 1 },
+        "Arguments": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "WorkingDirectory": { "type": ["string", "null"] },
+        "Environment": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "Required": { "type": "boolean" },
+        "Targets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Runtimes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Frameworks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Styles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DotNetPublishStyle" }
+        }
+      },
+      "required": ["Id", "Phase", "Command"]
     },
     "DotNetPublishProfile": {
       "type": "object",

@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using System.Text;
+using PSPublishModule;
 
 namespace PowerForge.Tests;
 
@@ -22,6 +23,35 @@ public sealed class ExportDetectorTests
 
         Assert.Contains("gex", aliases);
         Assert.Contains("Get-ExampleAlias", aliases);
+    }
+
+    [Fact]
+    public void DetectBinaryCmdlets_finds_PSPublishModule_plugin_and_bundle_cmdlets()
+    {
+        var path = typeof(InvokePowerForgePluginExportCommand).Assembly.Location;
+        var cmdlets = BinaryExportDetector.DetectBinaryCmdlets(new[] { path });
+
+        Assert.Contains("Invoke-PowerForgeBundlePostProcess", cmdlets);
+        Assert.Contains("Invoke-PowerForgePluginExport", cmdlets);
+        Assert.Contains("Invoke-PowerForgePluginPack", cmdlets);
+    }
+
+    [Fact]
+    public void GeneratedModuleFiles_export_PSPublishModule_plugin_and_bundle_cmdlets()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestPath = Path.Combine(repoRoot, "Module", "PSPublishModule.psd1");
+        var bootstrapperPath = Path.Combine(repoRoot, "Module", "PSPublishModule.psm1");
+
+        var exports = ModuleManifestExportReader.ReadExports(manifestPath);
+        var bootstrapper = File.ReadAllText(bootstrapperPath);
+
+        Assert.Contains("Invoke-PowerForgeBundlePostProcess", exports.Cmdlets);
+        Assert.Contains("Invoke-PowerForgePluginExport", exports.Cmdlets);
+        Assert.Contains("Invoke-PowerForgePluginPack", exports.Cmdlets);
+        Assert.Contains("Invoke-PowerForgeBundlePostProcess", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgePluginExport", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgePluginPack", bootstrapper, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -57,5 +87,19 @@ function Install-Example {
     [Alias("gex", "Get-ExampleAlias")]
     private sealed class GetExampleCommand : PSCmdlet
     {
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
+            if (File.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root for export detector tests.");
     }
 }

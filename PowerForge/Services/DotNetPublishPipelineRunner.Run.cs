@@ -42,6 +42,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     switch (step.Kind)
                     {
+                        case DotNetPublishStepKind.CommandHook:
+                            RunCommandHook(plan, step);
+                            break;
                         case DotNetPublishStepKind.Restore:
                             Restore(plan, step.Runtime);
                             break;

@@ -7,6 +7,36 @@ namespace PowerForge.Tests;
 public sealed class PowerForgePluginCatalogServiceTests
 {
     [Fact]
+    public void ExampleCatalog_deserializes_to_plugin_catalog_spec()
+    {
+        var repoRoot = FindRepoRoot();
+        var examplePath = Path.Combine(repoRoot, "Module", "Examples", "PluginCatalog", "powerforge.plugins.json");
+
+        Assert.True(File.Exists(examplePath), $"Plugin catalog example not found: {examplePath}");
+
+        var spec = JsonSerializer.Deserialize<PowerForgePluginCatalogSpec>(
+            File.ReadAllText(examplePath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(spec);
+        Assert.Equal("Release", spec.Configuration);
+        Assert.Equal("../../..", spec.ProjectRoot);
+        Assert.Collection(
+            spec.Catalog,
+            first =>
+            {
+                Assert.Equal("sample-public-plugin", first.Id);
+                Assert.Contains("public", first.Groups);
+                Assert.Equal("plugin.manifest.json", first.Manifest?.FileName);
+            },
+            second =>
+            {
+                Assert.Equal("sample-private-plugin", second.Id);
+                Assert.False(second.Manifest?.Enabled);
+            });
+    }
+
+    [Fact]
     public void PlanFolderExport_SelectsGroupsAndResolvesPreferredFramework()
     {
         var root = CreateSandbox();
@@ -446,5 +476,19 @@ public sealed class Two : IPluginContract {}
             Directory.Delete(path, recursive: true);
         else if (File.Exists(path))
             File.Delete(path);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
+            if (File.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root for plugin catalog tests.");
     }
 }

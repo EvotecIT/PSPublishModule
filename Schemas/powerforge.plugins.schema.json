@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.plugins.schema.json",
+  "title": "PowerForge Plugin CatalogSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "ProjectRoot": { "type": ["string", "null"] },
+    "Configuration": { "type": "string", "default": "Release" },
+    "Catalog": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PowerForgePluginCatalogEntry" }
+    }
+  },
+  "required": ["Catalog"],
+  "$defs": {
+    "PowerForgePluginCatalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "ProjectPath": { "type": "string", "minLength": 1 },
+        "Groups": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Framework": { "type": ["string", "null"] },
+        "PackageId": { "type": ["string", "null"] },
+        "AssemblyName": { "type": ["string", "null"] },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        },
+        "Manifest": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgePluginManifestOptions" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["Id", "ProjectPath"]
+    },
+    "PowerForgePluginManifestOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "IncludeStandardProperties": { "type": "boolean", "default": true },
+        "FileName": { "type": "string", "default": "plugin.manifest.json" },
+        "EntryAssembly": { "type": ["string", "null"] },
+        "EntryType": { "type": ["string", "null"] },
+        "EntryTypeMatchBaseType": { "type": ["string", "null"] },
+        "Properties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  }
+}

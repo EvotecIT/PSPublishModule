@@ -2,12 +2,36 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class DotNetPublishPipelineRunnerBundleTests
 {
+    [Fact]
+    public void ExamplePackageBundleMsi_DeserializesPackageLayoutPrimitives()
+    {
+        var repoRoot = FindRepoRoot();
+        var examplePath = Path.Combine(repoRoot, "Module", "Examples", "DotNetPublish", "Example.PackageBundleMsi.json");
+
+        Assert.True(File.Exists(examplePath), $"Example file not found: {examplePath}");
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new JsonStringEnumConverter());
+        var spec = JsonSerializer.Deserialize<DotNetPublishSpec>(File.ReadAllText(examplePath), options);
+
+        Assert.NotNull(spec);
+        var bundle = Assert.Single(spec.Bundles);
+        Assert.Equal("package", bundle.Id);
+        Assert.Equal("Service", bundle.PrimarySubdirectory);
+        Assert.Single(bundle.CopyItems);
+        Assert.Single(bundle.ModuleIncludes);
+        Assert.Single(bundle.GeneratedScripts);
+        Assert.Equal("package", Assert.Single(spec.Installers).PrepareFromBundleId);
+    }
+
     [Fact]
     public void Plan_BindsInstallerPrepareFromBundleId_ToMsiPrepareStep()
     {
@@ -40,6 +64,81 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
             var msiPrepare = Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.MsiPrepare);
             Assert.Equal("portable", msiPrepare.BundleId);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_NormalizesBundlePackageLayoutPrimitives()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.Profile = "release";
+            spec.Profiles = new[]
+            {
+                new DotNetPublishProfile
+                {
+                    Name = "release",
+                    Default = true,
+                    Targets = new[] { "app" }
+                }
+            };
+            spec.Bundles = new[]
+            {
+                new DotNetPublishBundle
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    PrimarySubdirectory = " Service ",
+                    CopyItems = new[]
+                    {
+                        new DotNetPublishBundleCopyItem
+                        {
+                            SourcePath = " Build/README.md ",
+                            DestinationPath = " README.md "
+                        }
+                    },
+                    ModuleIncludes = new[]
+                    {
+                        new DotNetPublishBundleModuleInclude
+                        {
+                            ModuleName = " PowerTierBridge ",
+                            SourcePath = " Artifacts/Modules/{moduleName} "
+                        }
+                    },
+                    GeneratedScripts = new[]
+                    {
+                        new DotNetPublishBundleGeneratedScript
+                        {
+                            Template = "{{CommandName}}",
+                            OutputPath = " Scripts/Install-Service.ps1 ",
+                            Tokens = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["CommandName"] = "Install-TierBridgeService"
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var bundle = Assert.Single(plan.Bundles);
+
+            Assert.Equal("Build/README.md", bundle.CopyItems[0].SourcePath);
+            Assert.Equal("README.md", bundle.CopyItems[0].DestinationPath);
+            Assert.Equal("Service", bundle.PrimarySubdirectory);
+            Assert.Equal("PowerTierBridge", bundle.ModuleIncludes[0].ModuleName);
+            Assert.Equal("Artifacts/Modules/{moduleName}", bundle.ModuleIncludes[0].SourcePath);
+            Assert.Equal("Modules/{moduleName}", bundle.ModuleIncludes[0].DestinationPath);
+            Assert.Equal("Scripts/Install-Service.ps1", bundle.GeneratedScripts[0].OutputPath);
+            Assert.Equal("Install-TierBridgeService", bundle.GeneratedScripts[0].Tokens["CommandName"]);
         }
         finally
         {
@@ -151,6 +250,176 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.Contains("\"bundleId\": \"portable\"", metadata, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"primaryExecutable\": \"App.exe\"", metadata, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"bundleName\": \"portable\"", metadata, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildBundle_CopiesPackageItemsModulesAndGeneratedScripts()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "App.exe"), "app");
+
+            var readmePath = Path.Combine(root, "Build", "README.package.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(readmePath)!);
+            File.WriteAllText(readmePath, "# Package");
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Modules", "PowerTierBridge")).FullName;
+            File.WriteAllText(Path.Combine(moduleRoot, "PowerTierBridge.psd1"), "@{}");
+            File.WriteAllText(Path.Combine(moduleRoot, "PowerTierBridge.psm1"), "");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Bundles = new[]
+                {
+                    new DotNetPublishBundlePlan
+                    {
+                        Id = "package",
+                        PrepareFromTarget = "app",
+                        PrimarySubdirectory = "Service",
+                        CopyItems = new[]
+                        {
+                            new DotNetPublishBundleCopyItemPlan
+                            {
+                                SourcePath = "Build/README.package.md",
+                                DestinationPath = "README.md"
+                            }
+                        },
+                        ModuleIncludes = new[]
+                        {
+                            new DotNetPublishBundleModuleIncludePlan
+                            {
+                                ModuleName = "PowerTierBridge",
+                                SourcePath = "Artifacts/Modules/{moduleName}",
+                                DestinationPath = "Modules/{moduleName}"
+                            }
+                        },
+                        GeneratedScripts = new[]
+                        {
+                            new DotNetPublishBundleGeneratedScriptPlan
+                            {
+                                Template = "Import-Module \"$PSScriptRoot\\Modules\\{{ModuleName}}\\{{ModuleName}}.psd1\" -Force\r\n{{CommandName}}\r\n",
+                                OutputPath = "Install-Service.ps1",
+                                Tokens = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    ["ModuleName"] = "PowerTierBridge",
+                                    ["CommandName"] = "Install-TierBridgeService"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    OutputDir = publishDir,
+                    PublishDir = publishDir
+                }
+            };
+
+            var outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
+            var step = new DotNetPublishStep
+            {
+                Key = "bundle:package:app:net10.0:win-x64:PortableCompat",
+                Kind = DotNetPublishStepKind.Bundle,
+                BundleId = "package",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.PortableCompat,
+                BundleOutputPath = outputDir
+            };
+
+            var result = InvokeBuildBundle(plan, artefacts, step);
+
+            Assert.NotNull(result);
+            Assert.True(File.Exists(Path.Combine(outputDir, "Service", "App.exe")));
+            Assert.False(File.Exists(Path.Combine(outputDir, "App.exe")));
+            Assert.True(File.Exists(Path.Combine(outputDir, "README.md")));
+            Assert.True(File.Exists(Path.Combine(outputDir, "Modules", "PowerTierBridge", "PowerTierBridge.psd1")));
+
+            var generatedScript = Path.Combine(outputDir, "Install-Service.ps1");
+            Assert.True(File.Exists(generatedScript));
+            var script = File.ReadAllText(generatedScript);
+            Assert.Contains("PowerTierBridge.psd1", script, StringComparison.Ordinal);
+            Assert.Contains("Install-TierBridgeService", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_PublishesBundleIncludesBeforeBundleStep()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var cli = CreateProject(root, "Cli/Cli.csproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.Targets = new[]
+            {
+                spec.Targets[0],
+                new DotNetPublishTarget
+                {
+                    Name = "cli",
+                    ProjectPath = cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        Styles = new[] { DotNetPublishStyle.AotSpeed },
+                        UseStaging = false
+                    }
+                }
+            };
+            spec.Bundles = new[]
+            {
+                new DotNetPublishBundle
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    Includes = new[]
+                    {
+                        new DotNetPublishBundleInclude
+                        {
+                            Target = "cli",
+                            Style = DotNetPublishStyle.AotSpeed,
+                            Subdirectory = "CLI"
+                        }
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var keys = plan.Steps.Select(step => step.Key).ToArray();
+
+            var cliPublish = Array.FindIndex(keys, key => key.StartsWith("publish:cli:", StringComparison.OrdinalIgnoreCase));
+            var appPublish = Array.FindIndex(keys, key => key.StartsWith("publish:app:", StringComparison.OrdinalIgnoreCase));
+            var bundle = Array.FindIndex(keys, key => key.StartsWith("bundle:package:", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(cliPublish >= 0);
+            Assert.True(appPublish >= 0);
+            Assert.True(bundle > appPublish);
+            Assert.True(bundle > cliPublish);
         }
         finally
         {
@@ -370,6 +639,20 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
+            if (File.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root for dotnet publish bundle tests.");
     }
 
     private static void TryDelete(string path)

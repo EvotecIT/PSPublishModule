@@ -94,8 +94,8 @@ internal static partial class Program
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
                     if (!string.IsNullOrWhiteSpace(overrideProfile))
                         spec.Profile = overrideProfile.Trim();
+                    ApplyDotNetPublishSpecOverrides(spec, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     var plan = runner.Plan(spec, specPath);
-                    ApplyDotNetPublishPlanOverrides(plan, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
 
                     if (validateOnly)

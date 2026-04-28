@@ -233,6 +233,9 @@ public sealed class DotNetPublishBundlePlan
     /// <summary>Optional resolved bundle output path template.</summary>
     public string? OutputPath { get; set; }
 
+    /// <summary>Optional bundle subdirectory for the primary source target.</summary>
+    public string? PrimarySubdirectory { get; set; }
+
     /// <summary>When true, clears the bundle output directory before composition.</summary>
     public bool ClearOutput { get; set; } = true;
 
@@ -247,6 +250,15 @@ public sealed class DotNetPublishBundlePlan
 
     /// <summary>Additional published target includes.</summary>
     public DotNetPublishBundleIncludePlan[] Includes { get; set; } = Array.Empty<DotNetPublishBundleIncludePlan>();
+
+    /// <summary>Additional file or directory copy items.</summary>
+    public DotNetPublishBundleCopyItemPlan[] CopyItems { get; set; } = Array.Empty<DotNetPublishBundleCopyItemPlan>();
+
+    /// <summary>PowerShell module payloads copied into the bundle.</summary>
+    public DotNetPublishBundleModuleIncludePlan[] ModuleIncludes { get; set; } = Array.Empty<DotNetPublishBundleModuleIncludePlan>();
+
+    /// <summary>Scripts generated from templates into the bundle.</summary>
+    public DotNetPublishBundleGeneratedScriptPlan[] GeneratedScripts { get; set; } = Array.Empty<DotNetPublishBundleGeneratedScriptPlan>();
 
     /// <summary>Bundle post-copy scripts.</summary>
     public DotNetPublishBundleScriptPlan[] Scripts { get; set; } = Array.Empty<DotNetPublishBundleScriptPlan>();
@@ -277,6 +289,69 @@ public sealed class DotNetPublishBundleIncludePlan
 
     /// <summary>When true, missing include artefacts fail the bundle step.</summary>
     public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// Resolved file or directory copy item for a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleCopyItemPlan
+{
+    /// <summary>Source file or directory path template.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>Destination path template under the bundle output root.</summary>
+    public string DestinationPath { get; set; } = string.Empty;
+
+    /// <summary>When true, missing sources fail the bundle step.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>When true, clears an existing destination before copy.</summary>
+    public bool ClearDestination { get; set; } = true;
+}
+
+/// <summary>
+/// Resolved PowerShell module payload include for a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleModuleIncludePlan
+{
+    /// <summary>Logical module name.</summary>
+    public string ModuleName { get; set; } = string.Empty;
+
+    /// <summary>Source module directory path template.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>Destination path template under the bundle output root.</summary>
+    public string DestinationPath { get; set; } = string.Empty;
+
+    /// <summary>When true, missing sources fail the bundle step.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>When true, clears an existing destination before copy.</summary>
+    public bool ClearDestination { get; set; } = true;
+}
+
+/// <summary>
+/// Resolved template-generated script for a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleGeneratedScriptPlan
+{
+    /// <summary>Optional template file path template.</summary>
+    public string? TemplatePath { get; set; }
+
+    /// <summary>Optional inline template content.</summary>
+    public string? Template { get; set; }
+
+    /// <summary>Output path template under the bundle output root.</summary>
+    public string OutputPath { get; set; } = string.Empty;
+
+    /// <summary>Template token values.</summary>
+    public Dictionary<string, string> Tokens { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>When true, replaces an existing output file.</summary>
+    public bool Overwrite { get; set; } = true;
+
+    /// <summary>Optional signing options for the generated script.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
 }
 
 /// <summary>
@@ -436,4 +511,28 @@ public sealed class DotNetPublishStep
 
     /// <summary>Optional resolved Store package output path for Store build steps.</summary>
     public string? StorePackageOutputPath { get; set; }
+
+    /// <summary>Optional command hook identifier.</summary>
+    public string? HookId { get; set; }
+
+    /// <summary>Optional command hook phase.</summary>
+    public DotNetPublishCommandHookPhase? HookPhase { get; set; }
+
+    /// <summary>Optional command hook executable or script.</summary>
+    public string? HookCommand { get; set; }
+
+    /// <summary>Optional command hook arguments.</summary>
+    public string[] HookArguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional command hook working directory.</summary>
+    public string? HookWorkingDirectory { get; set; }
+
+    /// <summary>Optional command hook environment variables.</summary>
+    public Dictionary<string, string> HookEnvironment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Optional command hook timeout in seconds.</summary>
+    public int HookTimeoutSeconds { get; set; } = 600;
+
+    /// <summary>When true, command hook failures fail the publish run.</summary>
+    public bool HookRequired { get; set; } = true;
 }

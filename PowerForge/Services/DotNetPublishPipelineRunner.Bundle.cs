@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 
 namespace PowerForge;
 
@@ -59,7 +60,12 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         Directory.CreateDirectory(outputDir);
-        DirectoryCopy(sourceArtefact.OutputDir, outputDir);
+        var primaryDestination = string.IsNullOrWhiteSpace(bundle.PrimarySubdirectory)
+            ? outputDir
+            : ResolvePath(outputDir, bundle.PrimarySubdirectory!);
+        EnsurePathWithinRoot(outputDir, primaryDestination, $"Bundle '{bundleId}' primary destination");
+        Directory.CreateDirectory(primaryDestination);
+        DirectoryCopy(sourceArtefact.OutputDir, primaryDestination);
 
         foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
         {
@@ -106,6 +112,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["projectRoot"] = plan.ProjectRoot,
             ["output"] = outputDir,
             ["sourceOutput"] = sourceArtefact.OutputDir,
+            ["primaryOutput"] = primaryDestination,
             ["zip"] = step.BundleZipPath ?? string.Empty
         };
 
@@ -115,6 +122,9 @@ public sealed partial class DotNetPublishPipelineRunner
         tokens["keepDocs"] = (sourceTargetPlan?.Publish?.KeepDocs ?? false).ToString();
         tokens["signEnabled"] = (sourceTargetPlan?.Publish?.Sign?.Enabled ?? false).ToString();
 
+        CopyBundleItems(plan, bundle, outputDir, tokens);
+        CopyBundleModules(plan, bundle, outputDir, tokens);
+        GenerateBundleScripts(plan, bundle, outputDir, tokens);
         RunBundleScripts(plan, bundle, tokens);
         if (bundle.PostProcess is not null)
         {
@@ -211,6 +221,132 @@ public sealed partial class DotNetPublishPipelineRunner
                 _logger.Warn($"Bundle script failed but is optional: {scriptPath}");
             }
         }
+    }
+
+    private void CopyBundleItems(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var item in bundle.CopyItems ?? Array.Empty<DotNetPublishBundleCopyItemPlan>())
+        {
+            if (item is null) continue;
+
+            var source = ResolvePath(plan.ProjectRoot, ApplyTemplate(item.SourcePath, tokens));
+            var destination = ResolvePath(outputDir, ApplyTemplate(item.DestinationPath, tokens));
+            EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' copy destination");
+
+            CopyBundlePath(source, destination, item.Required, item.ClearDestination, $"Bundle '{bundle.Id}' copy item");
+        }
+    }
+
+    private void CopyBundleModules(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var module in bundle.ModuleIncludes ?? Array.Empty<DotNetPublishBundleModuleIncludePlan>())
+        {
+            if (module is null) continue;
+
+            var moduleTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in tokens)
+                moduleTokens[token.Key] = token.Value ?? string.Empty;
+            moduleTokens["moduleName"] = module.ModuleName;
+            var source = ResolvePath(plan.ProjectRoot, ApplyTemplate(module.SourcePath, moduleTokens));
+            var destination = ResolvePath(outputDir, ApplyTemplate(module.DestinationPath, moduleTokens));
+            EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' module include destination");
+
+            CopyBundlePath(source, destination, module.Required, module.ClearDestination, $"Bundle '{bundle.Id}' module include '{module.ModuleName}'");
+        }
+    }
+
+    private void GenerateBundleScripts(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var script in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScriptPlan>())
+        {
+            if (script is null) continue;
+
+            var outputPath = ResolvePath(outputDir, ApplyTemplate(script.OutputPath, tokens));
+            EnsurePathWithinRoot(outputDir, outputPath, $"Bundle '{bundle.Id}' generated script output path");
+            if (File.Exists(outputPath) && !script.Overwrite)
+                throw new IOException($"Generated script already exists and Overwrite=false: {outputPath}");
+
+            var templateName = script.TemplatePath ?? script.OutputPath;
+            var template = script.Template;
+            if (!string.IsNullOrWhiteSpace(script.TemplatePath))
+            {
+                var templatePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(script.TemplatePath!, tokens));
+                if (!File.Exists(templatePath))
+                    throw new FileNotFoundException($"Generated script template not found for bundle '{bundle.Id}': {templatePath}", templatePath);
+                templateName = templatePath;
+                template = File.ReadAllText(templatePath, Encoding.UTF8);
+            }
+
+            var renderTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in tokens)
+                renderTokens[token.Key] = token.Value ?? string.Empty;
+            foreach (var token in script.Tokens ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+                renderTokens[token.Key] = ApplyTemplate(token.Value ?? string.Empty, tokens);
+
+            var rendered = ScriptTemplateRenderer.Render(templateName ?? "bundle generated script", template ?? string.Empty, renderTokens);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, rendered, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            _logger.Info($"Generated bundle script -> {FrameworkCompatibility.GetRelativePath(outputDir, outputPath)} ({bundle.Id})");
+            if (script.Sign is not null && script.Sign.Enabled)
+                _ = TrySignFiles(new[] { outputPath }, outputDir, script.Sign, scope: $"bundle '{bundle.Id}' generated scripts");
+        }
+    }
+
+    private void CopyBundlePath(
+        string source,
+        string destination,
+        bool required,
+        bool clearDestination,
+        string description)
+    {
+        source = Path.GetFullPath(source);
+        destination = Path.GetFullPath(destination);
+
+        if (Directory.Exists(source))
+        {
+            if (clearDestination && Directory.Exists(destination))
+                Directory.Delete(destination, recursive: true);
+            else if (clearDestination && File.Exists(destination))
+                File.Delete(destination);
+
+            DirectoryCopy(source, destination);
+            return;
+        }
+
+        if (File.Exists(source))
+        {
+            if (clearDestination && Directory.Exists(destination))
+                Directory.Delete(destination, recursive: true);
+
+            var destinationFile = destination;
+            if (Directory.Exists(destinationFile))
+                destinationFile = Path.Combine(destinationFile, Path.GetFileName(source));
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+            if (clearDestination && File.Exists(destinationFile))
+                File.Delete(destinationFile);
+            File.Copy(source, destinationFile, overwrite: clearDestination);
+            return;
+        }
+
+        var message = $"{description} source not found: {source}";
+        if (required)
+            throw new FileNotFoundException(message, source);
+
+        _logger.Warn(message);
     }
 
     private string? CreateBundleZip(
