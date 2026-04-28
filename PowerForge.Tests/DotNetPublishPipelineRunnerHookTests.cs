@@ -273,6 +273,44 @@ public sealed class DotNetPublishPipelineRunnerHookTests
         }
     }
 
+    [Fact]
+    public void RunCommandHook_ReportsTimeoutExplicitly()
+    {
+        if (!CommandExists("pwsh"))
+            return;
+
+        var root = CreateTempRoot();
+        try
+        {
+            var step = new DotNetPublishStep
+            {
+                Key = "hook:BeforeBuild:slow",
+                Kind = DotNetPublishStepKind.CommandHook,
+                HookId = "slow",
+                HookPhase = DotNetPublishCommandHookPhase.BeforeBuild,
+                HookCommand = "pwsh",
+                HookArguments = new[] { "-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 10" },
+                HookTimeoutSeconds = 1,
+                HookRequired = true
+            };
+
+            var ex = Assert.ThrowsAny<Exception>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
+                    new DotNetPublishPlan
+                    {
+                        ProjectRoot = root,
+                        Configuration = "Release"
+                    },
+                    step));
+
+            Assert.Contains("timed out after 1 seconds", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static string CreateProject(string root, string relativePath)
     {
         var fullPath = Path.Combine(root, relativePath);

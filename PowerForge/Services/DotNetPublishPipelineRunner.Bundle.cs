@@ -511,6 +511,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool BundleSignPatternMatches(string relativePath, string pattern)
     {
+        // Match full relative paths, bare basename globs, and rootless **/ globs used by bundle configs.
         if (WildcardMatch(relativePath, pattern))
             return true;
 

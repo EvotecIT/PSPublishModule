@@ -491,6 +491,7 @@ internal static partial class Program
             foreach (var target in targets)
             {
                 if (target.Publish is null) continue;
+                // Singular Framework is kept for compatibility; Frameworks drives matrix expansion.
                 target.Publish.Framework = frameworks[0];
                 target.Publish.Frameworks = frameworks;
             }

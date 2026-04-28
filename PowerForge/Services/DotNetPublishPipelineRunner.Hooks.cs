@@ -60,7 +60,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var stderrTail = TailLines(result.StdErr, maxLines: 40, maxChars: 4000);
         var stdoutTail = TailLines(result.StdOut, maxLines: 40, maxChars: 4000);
-        var message = ExtractLastNonEmptyLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
+        var message = result.TimedOut
+            ? $"Hook '{step.HookId}' timed out after {Math.Max(1, step.HookTimeoutSeconds)} seconds."
+            : ExtractLastNonEmptyLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
         if (string.IsNullOrWhiteSpace(message))
             message = $"Hook '{step.HookId}' failed with exit code {result.ExitCode}.";
 
@@ -100,7 +102,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return value;
     }
 
-    private (int ExitCode, string StdOut, string StdErr, string Executable) RunHookProcess(
+    private (int ExitCode, string StdOut, string StdErr, string Executable, bool TimedOut) RunHookProcess(
         string fileName,
         string workingDirectory,
         IReadOnlyList<string> args,
@@ -161,14 +163,15 @@ public sealed partial class DotNetPublishPipelineRunner
 
             var stdout = TryGetCompletedOutput(stdoutTask);
             var stderr = TryGetCompletedOutput(stderrTask);
-            return (-1, stdout, stderr, fileName);
+            return (-1, stdout, stderr, fileName, TimedOut: true);
         }
 
         return (
             process.ExitCode,
             stdoutTask.GetAwaiter().GetResult(),
             stderrTask.GetAwaiter().GetResult(),
-            fileName);
+            fileName,
+            TimedOut: false);
     }
 
     private static string TryGetCompletedOutput(Task<string> task)

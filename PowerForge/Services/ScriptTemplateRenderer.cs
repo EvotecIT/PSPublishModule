@@ -40,7 +40,14 @@ internal static class ScriptTemplateRenderer
                 $"Template '{name}' references missing token(s): {string.Join(", ", missing)}.");
         }
 
-        text = TokenRegex.Replace(text, match => map[match.Groups[1].Value]);
+        text = TokenRegex.Replace(text, match =>
+        {
+            var token = match.Groups[1].Value;
+            if (!map.TryGetValue(token, out var value))
+                throw new InvalidOperationException($"Template '{name}' references missing token(s): {token}.");
+
+            return value;
+        });
 
         return text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
     }
