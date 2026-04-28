@@ -345,7 +345,7 @@ public sealed partial class ModulePipelineRunner
                     var cfg = commandSeg.Configuration ?? new CommandConfiguration();
                     var commandModuleName = cfg.ModuleName?.Trim();
                     var commandNames = cfg.CommandName ?? Array.Empty<string>();
-                    if (string.IsNullOrWhiteSpace(commandModuleName) || commandNames.Length == 0)
+                    if (string.IsNullOrWhiteSpace(commandModuleName))
                         break;
 
                     var commandKey = commandModuleName!;
@@ -718,7 +718,6 @@ public sealed partial class ModulePipelineRunner
                 .Select(c => c.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (cmds.Length == 0) continue;
             commandDeps[kvp.Key] = cmds;
         }
 

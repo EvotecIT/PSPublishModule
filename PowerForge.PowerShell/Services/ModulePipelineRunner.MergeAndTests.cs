@@ -15,12 +15,20 @@ public sealed partial class ModulePipelineRunner
         if (plan is null || buildResult is null) return MergeExecutionResult.None;
         if (!plan.MergeModule && !plan.MergeMissing) return MergeExecutionResult.None;
 
+        var scriptFiles = ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information);
+        var conditionalExportDependencies = ResolveConditionalExportDependencies(
+            plan,
+            scriptFiles,
+            buildResult.Exports);
         var mergeInfo = ModuleMergeComposer.BuildSources(
             buildResult.StagingPath,
             plan.ModuleName,
             plan.Information,
             buildResult.Exports,
-            fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths);
+            fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
+            conditionalFunctionDependencies: conditionalExportDependencies,
+            scriptFiles: scriptFiles);
+
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             return new MergeExecutionResult(
@@ -341,12 +349,26 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         string moduleName,
         IReadOnlyList<string>? exportAssemblies,
-        bool handleRuntimes)
+        bool handleRuntimes,
+        ModulePipelinePlan? plan = null)
     {
         try
         {
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
-            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies, handleRuntimes);
+            var conditionalExportDependencies = plan is null
+                ? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                : ResolveConditionalExportDependencies(
+                    plan,
+                    ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+                    exports);
+
+            ModuleBootstrapperGenerator.Generate(
+                buildResult.StagingPath,
+                moduleName,
+                exports,
+                exportAssemblies,
+                handleRuntimes,
+                conditionalExportDependencies);
         }
         catch (Exception ex)
         {
@@ -357,5 +379,46 @@ public sealed partial class ModulePipelineRunner
 
     private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
         => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, stagingPath, moduleName, scriptPaths);
+
+    private IReadOnlyDictionary<string, string[]> ResolveConditionalExportDependencies(
+        ModulePipelinePlan plan,
+        IEnumerable<string> scriptFiles,
+        ExportSet exports)
+    {
+        if (plan.CommandModuleDependencies.Count == 0)
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var dependencies = CommandModuleExportDependencyAnalyzer.Analyze(
+                scriptFiles,
+                plan.CommandModuleDependencies,
+                exports.Functions,
+                _logger);
+
+            if (dependencies.Count > 0)
+            {
+                foreach (var dependency in dependencies.OrderBy(static kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+                    _logger.Info($"Conditional exports: module '{dependency.Key}' gates {dependency.Value.Length} command(s).");
+            }
+
+            if (_logger.IsVerbose)
+            {
+                foreach (var moduleName in plan.CommandModuleDependencies.Keys.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (!dependencies.ContainsKey(moduleName))
+                        _logger.Verbose($"Conditional exports: module '{moduleName}' gates 0 command(s).");
+                }
+            }
+
+            return dependencies;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Conditional export dependency analysis failed. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
 
 }

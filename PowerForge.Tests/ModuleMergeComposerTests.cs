@@ -112,6 +112,46 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_EmitsConditionalExportFilter_WhenCommandDependenciesAreProvided()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Public"));
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-NeedsOptional.ps1"),
+                "function Get-NeedsOptional { [Alias('gno')] param() 'optional' }");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-Always.ps1"),
+                "function Get-Always { 'always' }");
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                "Demo$Module",
+                information: new InformationConfiguration { FunctionsToExportFolder = "Public", AliasesToExportFolder = "Public" },
+                exports: new ExportSet(new[] { "Get-Always", "Get-NeedsOptional" }, Array.Empty<string>(), new[] { "gno" }),
+                fixRelativePaths: false,
+                conditionalFunctionDependencies: new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Contoso.Optional"] = new[] { "Get-NeedsOptional" }
+                });
+
+            Assert.Contains("$PowerForgeCommandModuleDependencies = @", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("'Contoso.Optional' = @('Get-NeedsOptional')", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("[Demo`$Module] Optional dependency module", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("Optional dependency module", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("$PowerForgeAllAliases = $null", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("$PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("$PowerForgeAllAliases | Where-Object { $_.Definition -eq $PowerForgeFunction }", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void PrependFunctions_PrependsFunctionsBeforeExistingContent()
     {
         var merged = ModuleMergeComposer.PrependFunctions(

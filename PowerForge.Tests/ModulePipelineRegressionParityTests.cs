@@ -331,6 +331,47 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
+    public void Plan_KeepsModuleOnlyCommandDependencies()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationCommandSegment
+                    {
+                        Configuration = new CommandConfiguration
+                        {
+                            ModuleName = "ActiveDirectory"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.True(plan.CommandModuleDependencies.TryGetValue("ActiveDirectory", out var activeDirectoryDeps));
+            Assert.Empty(activeDirectoryDeps);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+    [Fact]
     public void ValidateMissingFunctions_InfersLikelyModule_FromCommandModuleDependencies()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
