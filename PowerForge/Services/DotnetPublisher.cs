@@ -84,12 +84,13 @@ public sealed class DotnetPublisher
         if (requestedFrameworks.Count == 0)
             throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
 
+        var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
+
         foreach (var tfm in requestedFrameworks)
         {
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
-            var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
 
             var psi = new ProcessStartInfo
             {
@@ -120,6 +121,7 @@ public sealed class DotnetPublisher
                 args.Add("-p:UseArtifactsOutput=true");
                 args.Add($"-p:ArtifactsPath={artifacts}");
                 // Centralized artifacts output can make parallel project-reference builds race on generated files.
+                // Serializing MSBuild trades speed for deterministic module binary publishes.
                 args.Add(maxCpuCountArgument);
                 args.Add("--output");
                 args.Add(publishDir);
@@ -144,6 +146,7 @@ public sealed class DotnetPublisher
                 psi.ArgumentList.Add("-p:UseArtifactsOutput=true");
                 psi.ArgumentList.Add($"-p:ArtifactsPath={artifacts}");
                 // Centralized artifacts output can make parallel project-reference builds race on generated files.
+                // Serializing MSBuild trades speed for deterministic module binary publishes.
                 psi.ArgumentList.Add(maxCpuCountArgument);
                 psi.ArgumentList.Add("--output");
                 psi.ArgumentList.Add(publishDir);
