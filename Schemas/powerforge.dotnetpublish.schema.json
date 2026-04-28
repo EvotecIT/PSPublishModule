@@ -601,8 +601,8 @@
         },
         "TimeoutSeconds": {
           "type": "integer",
-          "minimum": 1,
-          "description": "Maximum hook runtime in seconds. Defaults to 600 when omitted."
+          "minimum": 0,
+          "description": "Maximum hook runtime in seconds. Defaults to 600 when omitted or set to 0."
         },
         "Required": { "type": "boolean" },
         "Targets": {

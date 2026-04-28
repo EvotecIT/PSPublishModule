@@ -155,7 +155,8 @@ Depending on config, the run can emit:
 - Supported phases are `BeforeRestore`, `BeforeBuild`, `BeforeTargetPublish`, `AfterTargetPublish`, `BeforeBundle`, and `AfterBundle`.
 - Hooks support target/runtime/framework/style filters, arguments, working directory, environment variables, timeout, and required/optional failure policy.
 - Hook arguments and environment values support tokens such as `{projectRoot}`, `{configuration}`, `{target}`, `{rid}`, `{framework}`, `{style}`, `{bundle}`, `{phase}`, and `{hook}`.
-- Hook timeout defaults to 600 seconds when omitted; set `TimeoutSeconds` lower for quick local validation hooks or higher for intentionally long-running packaging steps.
+- Hook timeout defaults to 600 seconds when omitted or set to `0`; set `TimeoutSeconds` lower for quick local validation hooks or higher for intentionally long-running packaging steps.
+- `BeforeBundle` and `AfterBundle` hooks run once per generated bundle step. A bundle that matches multiple target/runtime/framework/style combinations will invoke matching bundle hooks once for each produced bundle artifact.
 - Use `BeforeBuild` or `BeforeTargetPublish` for generated-source/catalog refreshes, and `BeforeBundle` or `AfterBundle` for product-specific package finishing that should stay repo-owned.
 
 ## MSI From Bundle

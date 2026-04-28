@@ -461,6 +461,7 @@ internal static partial class Program
         var runtimes = NormalizeCliStringSet(overrideRids);
         if (runtimes.Length > 0)
         {
+            // Profile overrides constrain the selected matrix; target overrides drive publish expansion.
             if (activeProfile is not null)
                 activeProfile.Runtimes = runtimes;
 
@@ -474,6 +475,7 @@ internal static partial class Program
         var frameworks = NormalizeCliStringSet(overrideFrameworks);
         if (frameworks.Length > 0)
         {
+            // Keep both layers aligned so plan/export output matches the executed publish run.
             if (activeProfile is not null)
                 activeProfile.Frameworks = frameworks;
 
@@ -490,6 +492,7 @@ internal static partial class Program
             .ToArray();
         if (styles.Length > 0)
         {
+            // Profile style narrows selection; target styles are what the planner expands into steps.
             if (activeProfile is not null)
                 activeProfile.Style = styles.Length == 1 ? styles[0] : null;
 

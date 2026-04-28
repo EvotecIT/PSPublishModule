@@ -160,6 +160,9 @@ public sealed class DotNetPublishPipelineRunnerHookTests
     [Fact]
     public void RunCommandHook_ExpandsArgumentsWorkingDirectoryAndEnvironment()
     {
+        if (!CommandExists("pwsh"))
+            return;
+
         var root = CreateTempRoot();
         try
         {
@@ -237,5 +240,29 @@ public sealed class DotNetPublishPipelineRunnerHookTests
         {
             // best effort
         }
+    }
+
+    private static bool CommandExists(string command)
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var extensions = OperatingSystem.IsWindows()
+            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT")
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            : new[] { string.Empty };
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var extension in extensions)
+            {
+                var candidate = Path.Combine(directory, command + extension);
+                if (File.Exists(candidate))
+                    return true;
+            }
+        }
+
+        return false;
     }
 }
