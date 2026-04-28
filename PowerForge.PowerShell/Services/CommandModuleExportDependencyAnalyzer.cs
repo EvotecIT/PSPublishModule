@@ -26,7 +26,7 @@ internal static class CommandModuleExportDependencyAnalyzer
         if (exported.Count == 0)
             return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
-        var functions = ParseFunctions(scriptFiles);
+        var functions = ParseFunctions(scriptFiles, logger);
         var commandSourceCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
@@ -99,7 +99,7 @@ internal static class CommandModuleExportDependencyAnalyzer
         return configured;
     }
 
-    private static Dictionary<string, FunctionDependencyInfo> ParseFunctions(IEnumerable<string> scriptFiles)
+    private static Dictionary<string, FunctionDependencyInfo> ParseFunctions(IEnumerable<string> scriptFiles, ILogger? logger)
     {
         var functions = new Dictionary<string, FunctionDependencyInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -114,7 +114,11 @@ internal static class CommandModuleExportDependencyAnalyzer
                 ParseError[] errors;
                 var ast = Parser.ParseFile(file, out tokens, out errors);
                 if (errors is { Length: > 0 })
+                {
+                    if (logger?.IsVerbose == true)
+                        logger.Verbose($"Conditional export dependency analyzer skipped '{file}' because PowerShell parsing returned {errors.Length} error(s).");
                     continue;
+                }
 
                 var functionAsts = ast.FindAll(
                         static node => node is FunctionDefinitionAst,
@@ -136,9 +140,11 @@ internal static class CommandModuleExportDependencyAnalyzer
                         functionAst.Extent.Text);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // Best effort; parse errors should not make packaging fail.
+                if (logger?.IsVerbose == true)
+                    logger.Verbose($"Conditional export dependency analyzer could not parse '{file}': {ex.Message}");
             }
         }
 

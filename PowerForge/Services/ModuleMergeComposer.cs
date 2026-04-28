@@ -30,11 +30,14 @@ internal static class ModuleMergeComposer
         InformationConfiguration? information,
         ExportSet exports,
         bool fixRelativePaths,
-        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
+        IReadOnlyList<string>? scriptFiles = null)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
-        var ordered = ResolveScriptFiles(root, information);
+        var ordered = scriptFiles is null
+            ? ResolveScriptFiles(root, information)
+            : NormalizeScriptFiles(scriptFiles);
 
         var merged = ordered.Length > 0
             ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
@@ -141,13 +144,16 @@ internal static class ModuleMergeComposer
             }
         }
 
-        return files
+        return NormalizeScriptFiles(files);
+    }
+
+    private static string[] NormalizeScriptFiles(IEnumerable<string> files)
+        => files
             .Where(static file => !string.IsNullOrWhiteSpace(file))
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
 
     private static string[] ResolveMergeDirectories(InformationConfiguration? information)
     {

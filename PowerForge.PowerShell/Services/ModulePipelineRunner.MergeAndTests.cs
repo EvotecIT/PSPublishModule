@@ -26,7 +26,8 @@ public sealed partial class ModulePipelineRunner
             plan.Information,
             buildResult.Exports,
             fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
-            conditionalFunctionDependencies: conditionalExportDependencies);
+            conditionalFunctionDependencies: conditionalExportDependencies,
+            scriptFiles: scriptFiles);
 
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
