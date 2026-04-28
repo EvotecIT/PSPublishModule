@@ -118,6 +118,7 @@ public sealed class DotnetPublisher
             {
                 args.Add("-p:UseArtifactsOutput=true");
                 args.Add($"-p:ArtifactsPath={artifacts}");
+                args.Add("/m:1");
                 args.Add("--output");
                 args.Add(publishDir);
             }
@@ -140,6 +141,7 @@ public sealed class DotnetPublisher
             {
                 psi.ArgumentList.Add("-p:UseArtifactsOutput=true");
                 psi.ArgumentList.Add($"-p:ArtifactsPath={artifacts}");
+                psi.ArgumentList.Add("/m:1");
                 psi.ArgumentList.Add("--output");
                 psi.ArgumentList.Add(publishDir);
             }
