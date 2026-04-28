@@ -796,6 +796,9 @@ public sealed class DotNetPublishBenchmarkMetric
 /// </summary>
 public sealed class DotNetPublishCommandHook
 {
+    /// <summary>Default command hook timeout in seconds.</summary>
+    public const int DefaultTimeoutSeconds = 600;
+
     /// <summary>Stable hook identifier used in plan step keys.</summary>
     public string Id { get; set; } = string.Empty;
 
@@ -815,7 +818,7 @@ public sealed class DotNetPublishCommandHook
     public Dictionary<string, string>? Environment { get; set; }
 
     /// <summary>Maximum command execution time in seconds. Default: 600.</summary>
-    public int TimeoutSeconds { get; set; } = 600;
+    public int TimeoutSeconds { get; set; } = DefaultTimeoutSeconds;
 
     /// <summary>When true, a non-zero exit code fails the publish run. Default: true.</summary>
     public bool Required { get; set; } = true;

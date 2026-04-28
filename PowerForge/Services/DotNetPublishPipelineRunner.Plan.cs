@@ -8,7 +8,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private const int DefaultCommandHookTimeoutSeconds = 600;
+    private const int DefaultCommandHookTimeoutSeconds = DotNetPublishCommandHook.DefaultTimeoutSeconds;
 
     private const string DefaultMsiPrepareStagingPathTemplate =
         "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/payload";

@@ -534,7 +534,7 @@ public sealed class DotNetPublishStep
     public Dictionary<string, string> HookEnvironment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Optional command hook timeout in seconds.</summary>
-    public int HookTimeoutSeconds { get; set; } = 600;
+    public int HookTimeoutSeconds { get; set; } = DotNetPublishCommandHook.DefaultTimeoutSeconds;
 
     /// <summary>When true, command hook failures fail the publish run.</summary>
     public bool HookRequired { get; set; } = true;

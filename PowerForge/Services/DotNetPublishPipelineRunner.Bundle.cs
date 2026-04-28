@@ -301,7 +301,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 renderTokens[token.Key] = ApplyTemplate(token.Value ?? string.Empty, tokens);
 
             var rendered = ScriptTemplateRenderer.Render(templateName ?? "bundle generated script", template ?? string.Empty, renderTokens);
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            var outputDirectory = Path.GetDirectoryName(outputPath)
+                ?? throw new InvalidOperationException($"Cannot determine parent directory for generated script output: {outputPath}");
+            Directory.CreateDirectory(outputDirectory);
             File.WriteAllText(outputPath, rendered, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             _logger.Info($"Generated bundle script -> {FrameworkCompatibility.GetRelativePath(outputDir, outputPath)} ({bundle.Id})");
