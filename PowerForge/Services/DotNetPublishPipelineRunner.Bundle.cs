@@ -337,14 +337,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (File.Exists(source))
         {
-            if (clearDestination && Directory.Exists(destination))
-                Directory.Delete(destination, recursive: true);
-
-            var destinationFile = destination;
-            if (Directory.Exists(destinationFile))
-                destinationFile = Path.Combine(destinationFile, Path.GetFileName(source));
+            var destinationWasDirectory = Directory.Exists(destination);
+            var destinationFile = destinationWasDirectory
+                ? Path.Combine(destination, Path.GetFileName(source))
+                : destination;
 
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+            if (clearDestination && destinationWasDirectory)
+            {
+                Directory.Delete(destination, recursive: true);
+                Directory.CreateDirectory(destination);
+            }
             if (clearDestination && File.Exists(destinationFile))
                 File.Delete(destinationFile);
             if (!clearDestination && File.Exists(destinationFile))

@@ -89,6 +89,53 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
     }
 
     [Fact]
+    public void BuildBundle_CopyItemFileIntoExistingDirectoryKeepsFileNameWhenClearing()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "App.exe"), "app");
+
+            var sourcePath = Path.Combine(root, "Build", "tool.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+            File.WriteAllText(sourcePath, "tool");
+
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Bundles", "package")).FullName;
+            var existingDirectory = Directory.CreateDirectory(Path.Combine(outputDir, "Lib")).FullName;
+            File.WriteAllText(Path.Combine(existingDirectory, "old.txt"), "old");
+
+            var plan = CreatePlan(
+                root,
+                new DotNetPublishBundlePlan
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    ClearOutput = false,
+                    CopyItems = new[]
+                    {
+                        new DotNetPublishBundleCopyItemPlan
+                        {
+                            SourcePath = "Build/tool.dll",
+                            DestinationPath = "Lib",
+                            ClearDestination = true
+                        }
+                    }
+                });
+
+            BuildBundle(plan, publishDir, outputDir);
+
+            Assert.True(Directory.Exists(Path.Combine(outputDir, "Lib")));
+            Assert.True(File.Exists(Path.Combine(outputDir, "Lib", "tool.dll")));
+            Assert.False(File.Exists(Path.Combine(outputDir, "Lib", "old.txt")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildBundle_GeneratedScriptTokenValuesAreNotRenderedRecursively()
     {
         var root = CreateTempRoot();
@@ -168,6 +215,34 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
 
             var ex = Assert.Throws<IOException>(() => BuildBundle(plan, publishDir, outputDir));
             Assert.Contains("ClearDestination=false", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void FindBundleSignTargets_MatchesFolderGlobAtRootAndNestedPaths()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var rootModule = Path.Combine(root, "Modules", "Root.dll");
+            var nestedModule = Path.Combine(root, "Lib", "Modules", "Nested.dll");
+            var other = Path.Combine(root, "Lib", "Other", "Other.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(rootModule)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(nestedModule)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+            File.WriteAllText(rootModule, "root");
+            File.WriteAllText(nestedModule, "nested");
+            File.WriteAllText(other, "other");
+
+            var targets = DotNetPublishPipelineRunner.FindBundleSignTargets(root, new[] { "**/Modules/*.dll" });
+
+            Assert.Contains(rootModule, targets);
+            Assert.Contains(nestedModule, targets);
+            Assert.DoesNotContain(other, targets);
         }
         finally
         {

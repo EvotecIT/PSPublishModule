@@ -166,6 +166,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return (-1, stdout, stderr, fileName, TimedOut: true);
         }
 
+        process.WaitForExit();
         return (
             process.ExitCode,
             stdoutTask.GetAwaiter().GetResult(),
