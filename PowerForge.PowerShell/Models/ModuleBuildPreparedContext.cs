@@ -8,4 +8,5 @@ internal sealed class ModuleBuildPreparedContext
     public bool UseLegacy { get; set; }
     public ModulePipelineSpec PipelineSpec { get; set; } = new();
     public string? JsonOutputPath { get; set; }
+    public string ConfigLabel { get; set; } = "cmdlet";
 }

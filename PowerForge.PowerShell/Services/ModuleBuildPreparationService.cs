@@ -18,6 +18,9 @@ internal sealed class ModuleBuildPreparationService
         if (request.ResolvePath is null)
             throw new ArgumentException("ResolvePath is required.", nameof(request));
 
+        if (string.Equals(request.ParameterSetName, "Config", StringComparison.Ordinal))
+            return PrepareFromConfig(request);
+
         var moduleName = string.Equals(request.ParameterSetName, "Configuration", StringComparison.Ordinal)
             ? LegacySegmentAdapter.ResolveModuleNameFromLegacyConfiguration(request.Configuration)
             : request.ModuleName;
@@ -84,7 +87,42 @@ internal sealed class ModuleBuildPreparationService
             BasePathForScaffold = basePathForScaffold,
             UseLegacy = useLegacy,
             PipelineSpec = spec,
-            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, projectRoot) : null
+            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, projectRoot) : null,
+            ConfigLabel = useLegacy ? "dsl" : "cmdlet"
+        };
+    }
+
+    private ModuleBuildPreparedContext PrepareFromConfig(ModuleBuildPreparationRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ConfigPath))
+            throw new PSArgumentException("ConfigPath is required.");
+
+        var configFullPath = request.ResolvePath!(request.ConfigPath!);
+        if (!File.Exists(configFullPath))
+            throw new FileNotFoundException($"Module build config file not found: {configFullPath}", configFullPath);
+
+        var spec = ReadPipelineSpecJson(configFullPath);
+        ResolvePipelineSpecPaths(spec, configFullPath);
+
+        if (spec.Build is null)
+            throw new InvalidOperationException("Module build config requires a Build section.");
+        if (string.IsNullOrWhiteSpace(spec.Build.Name))
+            throw new InvalidOperationException("Module build config requires Build.Name.");
+        if (string.IsNullOrWhiteSpace(spec.Build.SourcePath))
+            throw new InvalidOperationException("Module build config requires Build.SourcePath.");
+
+        if (string.IsNullOrWhiteSpace(spec.Build.Version))
+            spec.Build.Version = ResolveBaseVersion(spec.Build.SourcePath, spec.Build.Name);
+
+        return new ModuleBuildPreparedContext
+        {
+            ModuleName = spec.Build.Name,
+            ProjectRoot = spec.Build.SourcePath,
+            BasePathForScaffold = null,
+            UseLegacy = false,
+            PipelineSpec = spec,
+            JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(request, spec.Build.SourcePath) : null,
+            ConfigLabel = configFullPath
         };
     }
 
@@ -109,6 +147,36 @@ internal sealed class ModuleBuildPreparationService
 
         var json = JsonSerializer.Serialize(spec, opts) + Environment.NewLine;
         File.WriteAllText(jsonFullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    public ModulePipelineSpec ReadPipelineSpecJson(string jsonFullPath)
+    {
+        if (string.IsNullOrWhiteSpace(jsonFullPath)) throw new ArgumentException("Json path is required.", nameof(jsonFullPath));
+
+        try
+        {
+            var json = File.ReadAllText(jsonFullPath);
+            var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            return spec ?? throw new InvalidOperationException("Parsed config is null.");
+        }
+        catch (Exception ex) when (ex is not FileNotFoundException)
+        {
+            throw new InvalidOperationException($"Failed to parse module build config '{jsonFullPath}'. {ex.Message}", ex);
+        }
+    }
+
+    public void ResolvePipelineSpecPaths(ModulePipelineSpec spec, string configFullPath)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (spec.Build is null) return;
+
+        var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+
+        spec.Build.SourcePath = ResolveConfigPath(baseDir, spec.Build.SourcePath);
+        spec.Build.StagingPath = ResolveConfigPathNullable(baseDir, spec.Build.StagingPath);
+        spec.Build.CsprojPath = ResolveConfigPathNullable(baseDir, spec.Build.CsprojPath);
+        if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
+            spec.Diagnostics.BaselinePath = ResolveConfigPath(baseDir, spec.Diagnostics.BaselinePath!);
     }
 
     private static string ResolveBaseVersion(string projectRoot, string moduleName, IReadOnlyList<IConfigurationSegment>? segments)
@@ -190,6 +258,30 @@ internal sealed class ModuleBuildPreparationService
             return request.ResolvePath!(request.JsonPath!);
 
         return Path.Combine(projectRoot, "powerforge.json");
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var opts = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        opts.Converters.Add(new JsonStringEnumConverter());
+        opts.Converters.Add(new ConfigurationSegmentJsonConverter());
+        return opts;
+    }
+
+    private static string ResolveConfigPath(string baseDir, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDir, path));
+    }
+
+    private static string? ResolveConfigPathNullable(string baseDir, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return ResolveConfigPath(baseDir, path);
     }
 
     private static void PrepareSpecForJsonExport(ModulePipelineSpec spec, string jsonFullPath)
