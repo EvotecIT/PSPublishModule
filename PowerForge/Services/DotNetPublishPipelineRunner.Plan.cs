@@ -1485,7 +1485,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ModuleIncludes = moduleIncludePlans.ToArray(),
                 GeneratedScripts = generatedScriptPlans.ToArray(),
                 Scripts = scriptPlans.ToArray(),
-                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess)
+                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess, signingProfiles)
             });
         }
 
@@ -2215,7 +2215,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static DotNetPublishBundlePostProcessOptions? NormalizeBundlePostProcess(
         string bundleId,
-        DotNetPublishBundlePostProcessOptions? options)
+        DotNetPublishBundlePostProcessOptions? options,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
     {
         var clone = CloneBundlePostProcessOptions(options);
         if (clone is null)
@@ -2237,6 +2238,15 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
 
         clone.DeletePatterns = NormalizeStrings(clone.DeletePatterns);
+        clone.SignPatterns = NormalizeStrings(clone.SignPatterns);
+        clone.Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+            signingProfiles,
+            clone.SignProfile,
+            clone.Sign,
+            clone.SignOverrides,
+            $"Bundle '{bundleId}' post-process signing");
+        clone.SignProfile = null;
+        clone.SignOverrides = null;
 
         if (clone.Metadata is not null)
         {
@@ -2344,6 +2354,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 })
                 .ToArray(),
             DeletePatterns = NormalizeStrings(options.DeletePatterns),
+            SignPatterns = NormalizeStrings(options.SignPatterns),
+            SignProfile = options.SignProfile,
+            Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(options.Sign),
+            SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(options.SignOverrides),
             Metadata = options.Metadata is null
                 ? null
                 : new DotNetPublishBundleMetadataOptions

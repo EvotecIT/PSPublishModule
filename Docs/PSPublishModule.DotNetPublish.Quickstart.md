@@ -129,6 +129,7 @@ Depending on config, the run can emit:
 - `Scripts[]` let you run repo-specific finishing steps after the copy phase, for example exporting plugins, writing launchers, or producing metadata files.
 - `PostProcess.ArchiveDirectories[]` can zip bundle subdirectories after composition, which is useful for plugin packs or other nested payloads that should ship as archives.
 - `PostProcess.DeletePatterns[]` removes files or folders from the composed bundle using wildcard patterns such as `**/*.pdb` or `**/createdump.exe`.
+- `PostProcess.SignProfile` / `PostProcess.Sign` signs files in the composed bundle before zip creation. Use `PostProcess.SignPatterns[]` for scripts and other bundle payloads, for example `**/*.exe`, `**/*.dll`, `**/*.ps1`, `**/*.psm1`, and `**/*.psd1`.
 - `PostProcess.Metadata` writes a JSON manifest from standard bundle properties plus templated custom values.
 - The same reusable post-process contract is also available outside the full publish pipeline through `powerforge dotnet bundle-postprocess` and `Invoke-PowerForgeBundlePostProcess`.
 - Standalone bundle post-process is useful when a repo keeps a thin PowerShell wrapper for product-specific launcher/readme generation but wants archive/delete/metadata mechanics to stay in PowerForge.

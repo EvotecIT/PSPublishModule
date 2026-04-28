@@ -147,6 +147,101 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
     }
 
     [Fact]
+    public void Plan_ResolvesBundlePostProcessSigningProfile()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.SigningProfiles = new System.Collections.Generic.Dictionary<string, DotNetPublishSignOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["evotec"] = new DotNetPublishSignOptions
+                {
+                    Enabled = true,
+                    IncludeDlls = true,
+                    Thumbprint = "ABC123",
+                    TimestampUrl = "http://timestamp.example"
+                }
+            };
+            spec.Bundles = new[]
+            {
+                new DotNetPublishBundle
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    PostProcess = new DotNetPublishBundlePostProcessOptions
+                    {
+                        SignProfile = " evotec ",
+                        SignPatterns = new[] { " **/*.ps1 ", "**/*.dll" },
+                        SignOverrides = new DotNetPublishSignPatch
+                        {
+                            Description = "TierBridge Package"
+                        }
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var postProcess = Assert.Single(plan.Bundles).PostProcess;
+
+            Assert.NotNull(postProcess);
+            Assert.Equal(new[] { "**/*.ps1", "**/*.dll" }, postProcess!.SignPatterns);
+            Assert.NotNull(postProcess.Sign);
+            Assert.True(postProcess.Sign!.Enabled);
+            Assert.True(postProcess.Sign.IncludeDlls);
+            Assert.Equal("ABC123", postProcess.Sign.Thumbprint);
+            Assert.Equal("http://timestamp.example", postProcess.Sign.TimestampUrl);
+            Assert.Equal("TierBridge Package", postProcess.Sign.Description);
+            Assert.Null(postProcess.SignProfile);
+            Assert.Null(postProcess.SignOverrides);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void FindBundleSignTargets_MatchesNestedFilesAndExactPaths()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var bundleRoot = Directory.CreateDirectory(Path.Combine(root, "bundle")).FullName;
+            File.WriteAllText(Path.Combine(bundleRoot, "App.exe"), "app");
+            File.WriteAllText(Path.Combine(bundleRoot, "README.md"), "readme");
+
+            var scripts = Directory.CreateDirectory(Path.Combine(bundleRoot, "Scripts")).FullName;
+            File.WriteAllText(Path.Combine(scripts, "Install-TierBridgeService.ps1"), "script");
+
+            var module = Directory.CreateDirectory(Path.Combine(bundleRoot, "Modules", "PowerTierBridge")).FullName;
+            File.WriteAllText(Path.Combine(module, "PowerTierBridge.psm1"), "module");
+            File.WriteAllText(Path.Combine(module, "PowerTierBridge.psd1"), "manifest");
+
+            var lib = Directory.CreateDirectory(Path.Combine(module, "Lib", "Core")).FullName;
+            File.WriteAllText(Path.Combine(lib, "TierBridge.PowerShell.dll"), "dll");
+
+            var targets = DotNetPublishPipelineRunner.FindBundleSignTargets(
+                bundleRoot,
+                new[] { "**/*.ps1", "**/*.psm1", "**/*.psd1", "**/*.dll", "App.exe" });
+
+            Assert.Equal(5, targets.Length);
+            Assert.Contains(targets, path => path.EndsWith("App.exe", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("Install-TierBridgeService.ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psm1", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psd1", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("TierBridge.PowerShell.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(targets, path => path.EndsWith("README.md", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildBundle_AppliesPostProcessArchiveDeleteAndMetadata()
     {
         var root = CreateTempRoot();

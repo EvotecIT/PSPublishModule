@@ -556,6 +556,21 @@ public sealed class DotNetPublishBundlePostProcessOptions
     public string[] DeletePatterns { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional wildcard patterns for files to sign relative to bundle root.
+    /// When omitted and signing is enabled, bundle signing targets executables plus DLLs when <see cref="DotNetPublishSignOptions.IncludeDlls"/> is true.
+    /// </summary>
+    public string[] SignPatterns { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional named signing profile reference used when <see cref="Sign"/> is not set.</summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>Optional signing options applied to bundle files matched by <see cref="SignPatterns"/>.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>Optional partial overrides applied on top of <see cref="SignProfile"/>.</summary>
+    public DotNetPublishSignPatch? SignOverrides { get; set; }
+
+    /// <summary>
     /// Optional metadata manifest emitted into the bundle after post-processing.
     /// </summary>
     public DotNetPublishBundleMetadataOptions? Metadata { get; set; }

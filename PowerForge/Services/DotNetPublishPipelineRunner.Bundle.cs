@@ -143,6 +143,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 SourceOutputPath = sourceArtefact.OutputDir,
                 PostProcess = bundle.PostProcess
             });
+
+            SignBundlePostProcessFiles(plan, bundle, outputDir);
         }
 
         string? zipPath = null;
@@ -420,5 +422,92 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.TrimEnd());
             if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.TrimEnd());
         }
+    }
+
+    private void SignBundlePostProcessFiles(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir)
+    {
+        var sign = bundle.PostProcess?.Sign;
+        if (sign is null || !sign.Enabled)
+            return;
+
+        var patterns = NormalizeBundleSignPatterns(bundle.PostProcess?.SignPatterns, sign);
+        var targets = FindBundleSignTargets(outputDir, patterns);
+        var signed = TrySignFiles(
+            targets,
+            outputDir,
+            sign,
+            scope: $"bundle '{bundle.Id}' files");
+
+        _logger.Info($"Bundle sign completed for '{bundle.Id}' -> {signed.Length}/{targets.Length} signed.");
+    }
+
+    internal static string[] NormalizeBundleSignPatterns(
+        IReadOnlyList<string>? patterns,
+        DotNetPublishSignOptions sign)
+    {
+        var normalized = (patterns ?? Array.Empty<string>())
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(pattern => pattern.Trim().Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Length > 0)
+            return normalized;
+
+        var defaults = new List<string> { "**/*.exe" };
+        if (sign.IncludeDlls)
+            defaults.Add("**/*.dll");
+        return defaults.ToArray();
+    }
+
+    internal static string[] FindBundleSignTargets(string bundleRoot, IReadOnlyList<string>? patterns)
+    {
+        var root = Path.GetFullPath(bundleRoot);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Bundle root was not found: {root}");
+
+        var matches = new List<string>();
+        foreach (var pattern in patterns ?? Array.Empty<string>())
+        {
+            var normalizedPattern = (pattern ?? string.Empty)
+                .Trim()
+                .Replace('\\', '/');
+            if (normalizedPattern.Length == 0)
+                continue;
+
+            var exactPath = ResolvePath(root, normalizedPattern);
+            if (File.Exists(exactPath))
+            {
+                EnsurePathWithinRoot(root, exactPath, "Bundle signing target");
+                matches.Add(exactPath);
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = GetRelativePath(root, file).Replace('\\', '/');
+                if (BundleSignPatternMatches(relative, normalizedPattern))
+                    matches.Add(Path.GetFullPath(file));
+            }
+        }
+
+        return matches
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool BundleSignPatternMatches(string relativePath, string pattern)
+    {
+        if (WildcardMatch(relativePath, pattern))
+            return true;
+
+        if (pattern.StartsWith("**/", StringComparison.Ordinal))
+            return WildcardMatch(relativePath, pattern.Substring("**/".Length));
+
+        return false;
     }
 }
