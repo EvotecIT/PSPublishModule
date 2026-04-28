@@ -158,6 +158,65 @@ public sealed class DotNetPublishPipelineRunnerHookTests
     }
 
     [Fact]
+    public void Plan_ThrowsWhenCommandHookIdsAreDuplicated()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateSpec(root, app);
+            spec.Hooks = new[]
+            {
+                new DotNetPublishCommandHook
+                {
+                    Id = "catalog",
+                    Phase = DotNetPublishCommandHookPhase.BeforeBuild,
+                    Command = "dotnet"
+                },
+                new DotNetPublishCommandHook
+                {
+                    Id = " catalog ",
+                    Phase = DotNetPublishCommandHookPhase.AfterTargetPublish,
+                    Command = "dotnet"
+                }
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+            Assert.Contains("Duplicate hook ID", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ThrowsWhenCommandHookCommandIsMissing()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateSpec(root, app);
+            spec.Hooks = new[]
+            {
+                new DotNetPublishCommandHook
+                {
+                    Id = "catalog",
+                    Phase = DotNetPublishCommandHookPhase.BeforeBuild
+                }
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+            Assert.Contains("Hooks['catalog'].Command", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void RunCommandHook_ExpandsArgumentsWorkingDirectoryAndEnvironment()
     {
         if (!CommandExists("pwsh"))
@@ -220,6 +279,34 @@ public sealed class DotNetPublishPipelineRunnerHookTests
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
         return fullPath;
+    }
+
+    private static DotNetPublishSpec CreateSpec(string root, string projectPath)
+    {
+        return new DotNetPublishSpec
+        {
+            DotNet = new DotNetPublishDotNetOptions
+            {
+                ProjectRoot = root,
+                Restore = false,
+                Build = false,
+                Runtimes = new[] { "win-x64" }
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTarget
+                {
+                    Name = "App",
+                    ProjectPath = projectPath,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        Styles = new[] { DotNetPublishStyle.PortableCompat }
+                    }
+                }
+            }
+        };
     }
 
     private static string CreateTempRoot()

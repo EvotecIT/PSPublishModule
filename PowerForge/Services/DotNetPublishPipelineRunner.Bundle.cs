@@ -326,6 +326,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Directory.Delete(destination, recursive: true);
             else if (clearDestination && File.Exists(destination))
                 File.Delete(destination);
+            else if (!clearDestination && (Directory.Exists(destination) || File.Exists(destination)))
+                throw new IOException($"{description}: destination already exists and ClearDestination=false: {destination}");
 
             DirectoryCopy(source, destination);
             return;
@@ -343,6 +345,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             if (clearDestination && File.Exists(destinationFile))
                 File.Delete(destinationFile);
+            if (!clearDestination && File.Exists(destinationFile))
+                throw new IOException($"{description}: destination already exists and ClearDestination=false: {destinationFile}");
             File.Copy(source, destinationFile, overwrite: clearDestination);
             return;
         }
@@ -506,6 +510,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool BundleSignPatternMatches(string relativePath, string pattern)
     {
         if (WildcardMatch(relativePath, pattern))
+            return true;
+
+        var fileName = Path.GetFileName(relativePath);
+        if (WildcardMatch(fileName, pattern))
             return true;
 
         if (pattern.StartsWith("**/", StringComparison.Ordinal))

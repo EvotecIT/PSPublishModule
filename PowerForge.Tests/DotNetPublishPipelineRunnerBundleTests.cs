@@ -223,18 +223,20 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             var lib = Directory.CreateDirectory(Path.Combine(module, "Lib", "Core")).FullName;
             File.WriteAllText(Path.Combine(lib, "TierBridge.PowerShell.dll"), "dll");
+            File.WriteAllText(Path.Combine(lib, "createdump.exe"), "diag");
 
             var targets = DotNetPublishPipelineRunner.FindBundleSignTargets(
                 bundleRoot,
-                new[] { "**/*.ps1", "**/*.psm1", "**/*.psd1", "**/*.dll", "App.exe" });
+                new[] { "**/*.ps1", "**/*.psm1", "**/*.psd1", "**/*.dll", "App.exe", "createdump.exe" });
 
-            Assert.Equal(6, targets.Length);
+            Assert.Equal(7, targets.Length);
             Assert.Contains(targets, path => path.EndsWith("App.exe", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("RootLibrary.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("Install-TierBridgeService.ps1", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psm1", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("PowerTierBridge.psd1", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(targets, path => path.EndsWith("TierBridge.PowerShell.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(targets, path => path.EndsWith("createdump.exe", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(targets, path => path.EndsWith("README.md", StringComparison.OrdinalIgnoreCase));
         }
         finally

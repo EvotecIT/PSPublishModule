@@ -79,7 +79,100 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
                     }
                 });
 
-            Assert.Throws<IOException>(() => BuildBundle(plan, publishDir, outputDir));
+            var ex = Assert.Throws<IOException>(() => BuildBundle(plan, publishDir, outputDir));
+            Assert.Contains("ClearDestination=false", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildBundle_ModuleIncludeThrowsWhenDestinationExistsAndClearDestinationDisabled()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "App.exe"), "app");
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Modules", "PowerTierBridge")).FullName;
+            File.WriteAllText(Path.Combine(moduleRoot, "PowerTierBridge.psd1"), "@{}");
+
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Bundles", "package")).FullName;
+            var existingModule = Directory.CreateDirectory(Path.Combine(outputDir, "Modules", "PowerTierBridge")).FullName;
+            File.WriteAllText(Path.Combine(existingModule, "PowerTierBridge.psd1"), "@{ Existing = $true }");
+
+            var plan = CreatePlan(
+                root,
+                new DotNetPublishBundlePlan
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    ClearOutput = false,
+                    ModuleIncludes = new[]
+                    {
+                        new DotNetPublishBundleModuleIncludePlan
+                        {
+                            ModuleName = "PowerTierBridge",
+                            SourcePath = "Artifacts/Modules/{moduleName}",
+                            DestinationPath = "Modules/{moduleName}",
+                            ClearDestination = false
+                        }
+                    }
+                });
+
+            var ex = Assert.Throws<IOException>(() => BuildBundle(plan, publishDir, outputDir));
+            Assert.Contains("ClearDestination=false", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_ThrowsWhenBundleIncludeTargetsFormCycle()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var worker = CreateProject(root, "Worker/Worker.csproj");
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions
+                {
+                    ProjectRoot = root,
+                    Restore = false,
+                    Build = false,
+                    Runtimes = new[] { "win-x64" }
+                },
+                Targets = new[]
+                {
+                    CreateTarget("App", app),
+                    CreateTarget("Worker", worker)
+                },
+                Bundles = new[]
+                {
+                    new DotNetPublishBundle
+                    {
+                        Id = "app-package",
+                        PrepareFromTarget = "App",
+                        Includes = new[] { new DotNetPublishBundleInclude { Target = "Worker" } }
+                    },
+                    new DotNetPublishBundle
+                    {
+                        Id = "worker-package",
+                        PrepareFromTarget = "Worker",
+                        Includes = new[] { new DotNetPublishBundleInclude { Target = "App" } }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+            Assert.Contains("dependency cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -135,6 +228,29 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string CreateProject(string root, string relativePath)
+    {
+        var fullPath = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        return fullPath;
+    }
+
+    private static DotNetPublishTarget CreateTarget(string name, string projectPath)
+    {
+        return new DotNetPublishTarget
+        {
+            Name = name,
+            ProjectPath = projectPath,
+            Publish = new DotNetPublishPublishOptions
+            {
+                Framework = "net10.0",
+                Runtimes = new[] { "win-x64" },
+                Styles = new[] { DotNetPublishStyle.PortableCompat }
+            }
+        };
     }
 
     private static void TryDelete(string path)

@@ -1175,7 +1175,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!ids.Add(id))
                 throw new ArgumentException($"Duplicate hook ID detected: {id}");
             if (string.IsNullOrWhiteSpace(hook.Command))
-                throw new ArgumentException($"Hook '{id}' requires Command.");
+                throw new ArgumentException($"Hooks['{id}'].Command is required.");
 
             result.Add(new DotNetPublishCommandHook
             {
@@ -1232,9 +1232,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HookArguments = hook.Arguments,
                 HookWorkingDirectory = hook.WorkingDirectory,
                 HookEnvironment = hook.Environment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                HookTimeoutSeconds = hook.TimeoutSeconds <= 0
-                    ? DefaultCommandHookTimeoutSeconds
-                    : Math.Max(1, hook.TimeoutSeconds),
+                HookTimeoutSeconds = hook.TimeoutSeconds,
                 HookRequired = hook.Required,
                 TargetName = targetName,
                 Framework = framework,
