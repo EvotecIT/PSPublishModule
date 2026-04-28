@@ -11,7 +11,8 @@ internal static class CommandModuleExportDependencyAnalyzer
     internal static IReadOnlyDictionary<string, string[]> Analyze(
         IEnumerable<string> scriptFiles,
         IReadOnlyDictionary<string, string[]>? commandModuleDependencies,
-        IReadOnlyList<string>? exportedFunctions)
+        IReadOnlyList<string>? exportedFunctions,
+        ILogger? logger = null)
     {
         var configured = NormalizeConfiguredDependencies(commandModuleDependencies);
         if (configured.Count == 0)
@@ -44,7 +45,8 @@ internal static class CommandModuleExportDependencyAnalyzer
                     moduleName,
                     configuredCommandSet,
                     localFunctionNames,
-                    commandSourceCache);
+                    commandSourceCache,
+                    logger);
             }
 
             var conditionalFunctions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -188,7 +190,8 @@ internal static class CommandModuleExportDependencyAnalyzer
         string moduleName,
         HashSet<string> configuredCommands,
         HashSet<string> localFunctionNames,
-        Dictionary<string, string?> commandSourceCache)
+        Dictionary<string, string?> commandSourceCache,
+        ILogger? logger)
     {
         foreach (var command in function.CommandNames)
         {
@@ -201,7 +204,7 @@ internal static class CommandModuleExportDependencyAnalyzer
             if (configuredCommands.Count == 0 && CommandLooksLikeModuleCommand(moduleName, command))
                 return true;
 
-            var source = ResolveCommandSource(command, commandSourceCache);
+            var source = ResolveCommandSource(command, commandSourceCache, logger);
             if (!string.IsNullOrWhiteSpace(source) &&
                 string.Equals(source, moduleName, StringComparison.OrdinalIgnoreCase))
             {
@@ -238,7 +241,7 @@ internal static class CommandModuleExportDependencyAnalyzer
         return false;
     }
 
-    private static string? ResolveCommandSource(string commandName, Dictionary<string, string?> cache)
+    private static string? ResolveCommandSource(string commandName, Dictionary<string, string?> cache, ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(commandName))
             return null;
@@ -260,6 +263,12 @@ internal static class CommandModuleExportDependencyAnalyzer
             var result = ps.Invoke();
             var command = result.Count > 0 ? result[0].BaseObject as CommandInfo : null;
             var source = command?.Source;
+            if (logger?.IsVerbose == true)
+            {
+                var sourceLabel = string.IsNullOrWhiteSpace(source) ? "<unresolved>" : source;
+                logger.Verbose($"Conditional export dependency analyzer used Get-Command fallback for '{commandName}' -> '{sourceLabel}'.");
+            }
+
             cache[commandName] = source;
             return source;
         }

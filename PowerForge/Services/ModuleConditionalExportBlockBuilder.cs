@@ -105,6 +105,7 @@ internal static class ModuleConditionalExportBlockBuilder
         builder.AppendLine("        Import-Module -Name $PowerForgeDependencyModule -ErrorAction Stop -Verbose:$false");
         builder.AppendLine("    } catch {");
         builder.AppendLine("        $PowerForgeDependencyCommands = @($PowerForgeCommandModuleDependencies[$PowerForgeDependencyModule])");
+        builder.AppendLine("        $PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)");
         builder.Append("        Write-Warning (\"[")
             .Append(EscapePsDoubleQuoted(moduleLabel))
             .AppendLine("] Optional dependency module '{0}' is not available. Commands not exported: {1}\" -f $PowerForgeDependencyModule, ($PowerForgeDependencyCommands -join ', '))");
@@ -112,7 +113,7 @@ internal static class ModuleConditionalExportBlockBuilder
         builder.AppendLine("            if ($PowerForgeFunction -and $PowerForgeFunction -notin $PowerForgeFunctionsToRemove) {");
         builder.AppendLine("                $PowerForgeFunctionsToRemove.Add($PowerForgeFunction)");
         builder.AppendLine("            }");
-        builder.AppendLine("            Get-Alias -ErrorAction SilentlyContinue | Where-Object { $_.Definition -eq $PowerForgeFunction } | ForEach-Object {");
+        builder.AppendLine("            $PowerForgeAllAliases | Where-Object { $_.Definition -eq $PowerForgeFunction } | ForEach-Object {");
         builder.AppendLine("                if ($_.Name -and $_.Name -notin $PowerForgeAliasesToRemove) {");
         builder.AppendLine("                    $PowerForgeAliasesToRemove.Add($_.Name)");
         builder.AppendLine("                }");

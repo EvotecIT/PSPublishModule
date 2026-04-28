@@ -392,7 +392,8 @@ public sealed partial class ModulePipelineRunner
             var dependencies = CommandModuleExportDependencyAnalyzer.Analyze(
                 scriptFiles,
                 plan.CommandModuleDependencies,
-                exports.Functions);
+                exports.Functions,
+                _logger);
 
             if (dependencies.Count > 0)
             {
