@@ -89,6 +89,7 @@ public sealed class DotnetPublisher
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+            var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
 
             var psi = new ProcessStartInfo
             {
@@ -118,7 +119,8 @@ public sealed class DotnetPublisher
             {
                 args.Add("-p:UseArtifactsOutput=true");
                 args.Add($"-p:ArtifactsPath={artifacts}");
-                args.Add("/m:1");
+                // Centralized artifacts output can make parallel project-reference builds race on generated files.
+                args.Add(maxCpuCountArgument);
                 args.Add("--output");
                 args.Add(publishDir);
             }
@@ -141,7 +143,8 @@ public sealed class DotnetPublisher
             {
                 psi.ArgumentList.Add("-p:UseArtifactsOutput=true");
                 psi.ArgumentList.Add($"-p:ArtifactsPath={artifacts}");
-                psi.ArgumentList.Add("/m:1");
+                // Centralized artifacts output can make parallel project-reference builds race on generated files.
+                psi.ArgumentList.Add(maxCpuCountArgument);
                 psi.ArgumentList.Add("--output");
                 psi.ArgumentList.Add(publishDir);
             }
