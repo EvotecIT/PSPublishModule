@@ -34,6 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(step.ManifestPath))
             throw new InvalidOperationException($"Step '{step.Key}' is missing manifest path.");
 
+        var installerPlan = ResolveInstallerPlan(plan, installerId);
         var sourceBundleId = ResolveInstallerSourceBundleId(plan, installerId, step.BundleId);
         var sourceArtefact = ResolveInstallerSourceArtefact(
             artefacts,
@@ -103,7 +104,11 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(Path.GetDirectoryName(resolvedHarvestPath)!);
             File.WriteAllText(
                 resolvedHarvestPath,
-                BuildWixHarvestFragment(stagingPath, resolvedHarvestDirectoryRefId, resolvedHarvestComponentGroupId),
+                BuildWixHarvestFragment(
+                    stagingPath,
+                    resolvedHarvestDirectoryRefId,
+                    resolvedHarvestComponentGroupId,
+                    installerPlan?.HarvestExcludePatterns),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             _logger.Info($"MSI prepare harvest -> {resolvedHarvestPath}");
@@ -138,6 +143,12 @@ public sealed partial class DotNetPublishPipelineRunner
         _logger.Info($"MSI prepare manifest -> {manifestPath}");
 
         return result;
+    }
+
+    private static DotNetPublishInstallerPlan? ResolveInstallerPlan(DotNetPublishPlan plan, string installerId)
+    {
+        return (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+            .FirstOrDefault(entry => string.Equals(entry.Id, installerId, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? ResolveInstallerSourceBundleId(
@@ -178,9 +189,12 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static string BuildWixHarvestFragment(
         string stagingPath,
         string directoryRefId,
-        string componentGroupId)
+        string componentGroupId,
+        IEnumerable<string>? excludePatterns = null)
     {
+        var normalizedExcludes = NormalizeHarvestExcludePatterns(excludePatterns);
         var files = Directory.EnumerateFiles(stagingPath, "*", SearchOption.AllDirectories)
+            .Where(file => !ShouldExcludeHarvestFile(stagingPath, file, normalizedExcludes))
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -266,6 +280,38 @@ public sealed partial class DotNetPublishPipelineRunner
         sb.AppendLine("  </Fragment>");
         sb.AppendLine("</Wix>");
         return sb.ToString();
+    }
+
+    private static string[] NormalizeHarvestExcludePatterns(IEnumerable<string>? patterns)
+    {
+        return (patterns ?? Array.Empty<string>())
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(pattern => pattern.Trim().Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool ShouldExcludeHarvestFile(string stagingPath, string file, IReadOnlyList<string> excludePatterns)
+    {
+        if (excludePatterns is null || excludePatterns.Count == 0)
+            return false;
+
+        var relative = GetRelativePathCompat(stagingPath, file).Replace('\\', '/');
+        var fileName = Path.GetFileName(relative);
+        foreach (var pattern in excludePatterns)
+        {
+            var rootlessGlobstar = pattern.StartsWith("**/", StringComparison.Ordinal)
+                ? pattern.Substring(3)
+                : null;
+            if (WildcardMatch(relative, pattern)
+                || WildcardMatch(fileName, pattern)
+                || (rootlessGlobstar is not null && WildcardMatch(relative, rootlessGlobstar)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string BuildHarvestId(string prefix, string value)

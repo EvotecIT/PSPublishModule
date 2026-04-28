@@ -283,6 +283,83 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
         }
     }
 
+    [Fact]
+    public void PrepareMsiPackage_ExcludesConfiguredHarvestPatterns()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputDir = Directory.CreateDirectory(Path.Combine(root, "publish", "svc")).FullName;
+            File.WriteAllText(Path.Combine(outputDir, "Svc.exe"), "dummy");
+            File.WriteAllText(Path.Combine(outputDir, "Install-Service.ps1"), "install");
+            Directory.CreateDirectory(Path.Combine(outputDir, "data"));
+            File.WriteAllText(Path.Combine(outputDir, "data", "settings.json"), "{ }");
+
+            var stagingPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "payload");
+            var manifestPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "prepare.manifest.json");
+            var harvestPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "harvest.wxs");
+
+            var step = new DotNetPublishStep
+            {
+                Key = "msi.prepare:svc.msi:svc:net10.0:win-x64:Portable",
+                Kind = DotNetPublishStepKind.MsiPrepare,
+                Title = "MSI prepare",
+                InstallerId = "svc.msi",
+                TargetName = "svc",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                StagingPath = stagingPath,
+                ManifestPath = manifestPath,
+                HarvestPath = harvestPath,
+                HarvestDirectoryRefId = "INSTALLFOLDER",
+                HarvestComponentGroupId = "Harvest_svc_msi"
+            };
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                AllowOutputOutsideProjectRoot = false,
+                Installers = new[]
+                {
+                    new DotNetPublishInstallerPlan
+                    {
+                        Id = "svc.msi",
+                        HarvestExcludePatterns = new[] { "Svc.exe", "**/Install-Service.ps1" }
+                    }
+                }
+            };
+
+            var artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Target = "svc",
+                    Framework = "net10.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.Portable,
+                    OutputDir = outputDir
+                }
+            };
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("PrepareMsiPackage", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            var result = method!.Invoke(runner, new object[] { plan, artefacts, step }) as DotNetPublishMsiPrepareResult;
+            Assert.NotNull(result);
+
+            var wxs = File.ReadAllText(result!.HarvestPath!);
+            Assert.DoesNotContain("Svc.exe", wxs, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Install-Service.ps1", wxs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("settings.json", wxs, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static DotNetPublishSpec CreateBaseSpec(string root, string projectPath)
     {
         return new DotNetPublishSpec

@@ -200,6 +200,12 @@ public sealed class DotNetPublishInstaller
     public string? HarvestComponentGroupId { get; set; }
 
     /// <summary>
+    /// Optional wildcard patterns excluded from generated WiX harvest output.
+    /// Patterns match paths relative to the MSI staging root using forward slashes.
+    /// </summary>
+    public string[] HarvestExcludePatterns { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Optional MSI versioning policy used by <c>msi.build</c>.
     /// </summary>
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }

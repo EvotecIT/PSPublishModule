@@ -152,6 +152,9 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Optional WiX component group ID template.</summary>
     public string? HarvestComponentGroupId { get; set; }
 
+    /// <summary>Optional wildcard patterns excluded from generated WiX harvest output.</summary>
+    public string[] HarvestExcludePatterns { get; set; } = Array.Empty<string>();
+
     /// <summary>Optional MSI version policy used by build steps.</summary>
     public DotNetPublishMsiVersionOptions? Versioning { get; set; }
 

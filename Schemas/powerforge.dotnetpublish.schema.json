@@ -366,6 +366,7 @@
         "HarvestPath": { "type": ["string", "null"] },
         "HarvestDirectoryRefId": { "type": ["string", "null"] },
         "HarvestComponentGroupId": { "type": ["string", "null"] },
+        "HarvestExcludePatterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "Versioning": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiVersionOptions" }, { "type": "null" }] },
         "MsBuildProperties": {
           "type": ["object", "null"],

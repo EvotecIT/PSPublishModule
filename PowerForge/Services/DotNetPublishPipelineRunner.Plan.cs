@@ -712,6 +712,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestPath = i.HarvestPath,
                 HarvestDirectoryRefId = i.HarvestDirectoryRefId,
                 HarvestComponentGroupId = i.HarvestComponentGroupId,
+                HarvestExcludePatterns = NormalizeStrings(i.HarvestExcludePatterns),
                 Versioning = CloneMsiVersionOptions(i.Versioning),
                 MsBuildProperties = CloneDictionary(i.MsBuildProperties),
                 SignProfile = i.SignProfile,
@@ -1577,6 +1578,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestPath = installer.HarvestPath,
                 HarvestDirectoryRefId = installer.HarvestDirectoryRefId,
                 HarvestComponentGroupId = installer.HarvestComponentGroupId,
+                HarvestExcludePatterns = NormalizeStrings(installer.HarvestExcludePatterns),
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
                 MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
                 Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
