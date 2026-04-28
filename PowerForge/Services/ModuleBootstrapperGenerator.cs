@@ -15,7 +15,8 @@ internal static class ModuleBootstrapperGenerator
         string moduleName,
         ExportSet exports,
         IReadOnlyList<string>? exportAssemblies,
-        bool handleRuntimes)
+        bool handleRuntimes,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
@@ -50,7 +51,8 @@ internal static class ModuleBootstrapperGenerator
             exports,
             includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
-            handleRuntimes: handleRuntimes);
+            handleRuntimes: handleRuntimes,
+            conditionalFunctionDependencies: conditionalFunctionDependencies);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -207,7 +209,8 @@ internal static class ModuleBootstrapperGenerator
         ExportSet exports,
         bool includeBinaryLoader,
         bool includeScriptLoader,
-        bool handleRuntimes)
+        bool handleRuntimes,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
     {
         var binaryLoaderBlock = includeBinaryLoader
             ? RenderModuleBootstrapperTemplate(
@@ -233,9 +236,10 @@ internal static class ModuleBootstrapperGenerator
             ["ModuleName"] = moduleName,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
-            ["FunctionsToExport"] = FormatPsStringList(exports.Functions),
-            ["CmdletsToExport"] = FormatPsStringList(exports.Cmdlets),
-            ["AliasesToExport"] = FormatPsStringList(exports.Aliases)
+            ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+                exports,
+                conditionalFunctionDependencies,
+                moduleName).TrimEnd()
         };
 
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Bootstrapper.Template.ps1");
@@ -289,24 +293,4 @@ internal static class ModuleBootstrapperGenerator
         return ScriptTemplateRenderer.Render("ModuleBootstrapper." + templateName, template, tokens);
     }
 
-    private static string FormatPsStringList(IReadOnlyList<string>? values)
-    {
-        var list = (values ?? Array.Empty<string>())
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (list.Length == 0) return "@()";
-
-        var sb = new StringBuilder();
-        sb.Append("@(");
-        for (var i = 0; i < list.Length; i++)
-        {
-            if (i > 0) sb.Append(", ");
-            sb.Append('\'').Append(EscapePsSingleQuoted(list[i])).Append('\'');
-        }
-        sb.Append(')');
-        return sb.ToString();
-    }
 }

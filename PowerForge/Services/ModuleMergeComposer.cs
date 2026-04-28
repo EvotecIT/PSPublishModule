@@ -29,7 +29,8 @@ internal static class ModuleMergeComposer
         string moduleName,
         InformationConfiguration? information,
         ExportSet exports,
-        bool fixRelativePaths)
+        bool fixRelativePaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
@@ -62,7 +63,7 @@ internal static class ModuleMergeComposer
             .ToArray();
 
         var merged = ordered.Length > 0
-            ? BuildMergedScriptContent(ordered, exports, fixRelativePaths)
+            ? BuildMergedScriptContent(ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
@@ -105,7 +106,7 @@ internal static class ModuleMergeComposer
             builder.Append(script.TrimEnd());
         }
 
-        var exportBlock = BuildExportBlock(ModuleManifestExportReader.ReadExports(manifestPath)).TrimEnd();
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(ModuleManifestExportReader.ReadExports(manifestPath)).TrimEnd();
         if (!string.IsNullOrWhiteSpace(exportBlock))
         {
             if (builder.Length > 0)
@@ -159,7 +160,12 @@ internal static class ModuleMergeComposer
         return ordered.ToArray();
     }
 
-    private static string BuildMergedScriptContent(IReadOnlyList<string> files, ExportSet exports, bool fixRelativePaths)
+    private static string BuildMergedScriptContent(
+        IReadOnlyList<string> files,
+        ExportSet exports,
+        bool fixRelativePaths,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
+        string moduleName)
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -220,7 +226,10 @@ internal static class ModuleMergeComposer
         header.Append(body.ToString().TrimEnd());
 
         var merged = header.ToString().TrimEnd();
-        var exportBlock = BuildExportBlock(exports);
+        var exportBlock = ModuleConditionalExportBlockBuilder.BuildExportBlock(
+            exports,
+            conditionalFunctionDependencies,
+            moduleName);
         if (!string.IsNullOrWhiteSpace(exportBlock))
         {
             if (!string.IsNullOrWhiteSpace(merged))
@@ -230,44 +239,6 @@ internal static class ModuleMergeComposer
 
         return merged;
     }
-
-    private static string BuildExportBlock(ExportSet exports)
-    {
-        var builder = new StringBuilder(256);
-        builder.AppendLine("$FunctionsToExport = " + FormatPsStringList(exports.Functions));
-        builder.AppendLine("$CmdletsToExport = " + FormatPsStringList(exports.Cmdlets));
-        builder.AppendLine("$AliasesToExport = " + FormatPsStringList(exports.Aliases));
-        builder.AppendLine("Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport");
-        return builder.ToString();
-    }
-
-    private static string FormatPsStringList(IReadOnlyList<string>? values)
-    {
-        var list = (values ?? System.Array.Empty<string>())
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (list.Length == 0)
-            return "@()";
-
-        var builder = new StringBuilder();
-        builder.Append("@(");
-        for (var i = 0; i < list.Length; i++)
-        {
-            if (i > 0)
-                builder.Append(", ");
-
-            builder.Append('\'').Append(EscapePsSingleQuoted(list[i])).Append('\'');
-        }
-
-        builder.Append(')');
-        return builder.ToString();
-    }
-
-    private static string EscapePsSingleQuoted(string value)
-        => value?.Replace("'", "''") ?? string.Empty;
 
     private static string NormalizeMergedRelativePathReferences(string line)
     {

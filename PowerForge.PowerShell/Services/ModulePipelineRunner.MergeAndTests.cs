@@ -21,6 +21,21 @@ public sealed partial class ModulePipelineRunner
             plan.Information,
             buildResult.Exports,
             fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths);
+        var conditionalExportDependencies = ResolveConditionalExportDependencies(
+            plan,
+            mergeInfo.ScriptFiles,
+            buildResult.Exports);
+        if (conditionalExportDependencies.Count > 0 && mergeInfo.HasScripts)
+        {
+            mergeInfo = ModuleMergeComposer.BuildSources(
+                buildResult.StagingPath,
+                plan.ModuleName,
+                plan.Information,
+                buildResult.Exports,
+                fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
+                conditionalFunctionDependencies: conditionalExportDependencies);
+        }
+
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             return new MergeExecutionResult(
@@ -341,12 +356,26 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         string moduleName,
         IReadOnlyList<string>? exportAssemblies,
-        bool handleRuntimes)
+        bool handleRuntimes,
+        ModulePipelinePlan? plan = null)
     {
         try
         {
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
-            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies, handleRuntimes);
+            var conditionalExportDependencies = plan is null
+                ? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+                : ResolveConditionalExportDependencies(
+                    plan,
+                    GetConditionalExportScriptPaths(plan, buildResult.StagingPath),
+                    exports);
+
+            ModuleBootstrapperGenerator.Generate(
+                buildResult.StagingPath,
+                moduleName,
+                exports,
+                exportAssemblies,
+                handleRuntimes,
+                conditionalExportDependencies);
         }
         catch (Exception ex)
         {
@@ -357,5 +386,77 @@ public sealed partial class ModulePipelineRunner
 
     private void SyncMergedPsm1WithGeneratedScripts(string manifestPath, string stagingPath, string moduleName, IEnumerable<string> scriptPaths)
         => ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifestPath, stagingPath, moduleName, scriptPaths);
+
+    private IReadOnlyDictionary<string, string[]> ResolveConditionalExportDependencies(
+        ModulePipelinePlan plan,
+        IEnumerable<string> scriptFiles,
+        ExportSet exports)
+    {
+        if (plan.CommandModuleDependencies.Count == 0)
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var dependencies = CommandModuleExportDependencyAnalyzer.Analyze(
+                scriptFiles,
+                plan.CommandModuleDependencies,
+                exports.Functions);
+
+            if (dependencies.Count > 0)
+            {
+                foreach (var dependency in dependencies.OrderBy(static kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+                    _logger.Info($"Conditional exports: module '{dependency.Key}' gates {dependency.Value.Length} command(s).");
+            }
+
+            return dependencies;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Conditional export dependency analysis failed. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string[] GetConditionalExportScriptPaths(ModulePipelinePlan plan, string stagingPath)
+    {
+        if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
+            return Array.Empty<string>();
+
+        var directories = new List<string> { "Classes", "Enums", "Private", "Public" };
+        if (plan.Information?.IncludePS1 is { Length: > 0 })
+        {
+            foreach (var include in plan.Information.IncludePS1)
+            {
+                if (string.IsNullOrWhiteSpace(include))
+                    continue;
+                if (directories.Any(existing => string.Equals(existing, include, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                directories.Add(include.Trim());
+            }
+        }
+
+        var scripts = new List<string>();
+        foreach (var directory in directories)
+        {
+            var fullPath = Path.Combine(stagingPath, directory);
+            if (!Directory.Exists(fullPath))
+                continue;
+
+            try
+            {
+                scripts.AddRange(Directory.EnumerateFiles(fullPath, "*.ps1", SearchOption.AllDirectories));
+            }
+            catch
+            {
+                // Best effort only.
+            }
+        }
+
+        return scripts
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static script => script, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
 }

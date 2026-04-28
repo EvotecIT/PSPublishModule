@@ -3,7 +3,4 @@
 
 {{BinaryLoaderBlock}}
 {{ScriptLoaderBlock}}
-$FunctionsToExport = {{FunctionsToExport}}
-$CmdletsToExport = {{CmdletsToExport}}
-$AliasesToExport = {{AliasesToExport}}
-Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport
+{{ExportBlock}}

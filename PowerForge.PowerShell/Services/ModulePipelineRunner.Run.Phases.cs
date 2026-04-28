@@ -69,7 +69,8 @@ public sealed partial class ModulePipelineRunner
                     buildResult,
                     plan.ModuleName,
                     plan.BuildSpec.ExportAssemblies,
-                    plan.BuildSpec.HandleRuntimes);
+                    plan.BuildSpec.HandleRuntimes,
+                    plan);
 
             session.Done(session.ManifestStep);
         }
