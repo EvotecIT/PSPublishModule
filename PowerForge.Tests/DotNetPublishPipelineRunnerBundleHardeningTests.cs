@@ -89,6 +89,49 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
     }
 
     [Fact]
+    public void BuildBundle_GeneratedScriptTokenValuesAreNotRenderedRecursively()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
+            File.WriteAllText(Path.Combine(publishDir, "App.exe"), "app");
+
+            var outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
+            var plan = CreatePlan(
+                root,
+                new DotNetPublishBundlePlan
+                {
+                    Id = "package",
+                    PrepareFromTarget = "app",
+                    GeneratedScripts = new[]
+                    {
+                        new DotNetPublishBundleGeneratedScriptPlan
+                        {
+                            Template = "{{CommandName}}",
+                            OutputPath = "Install.ps1",
+                            Tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["CommandName"] = "{{NestedCommand}}",
+                                ["NestedCommand"] = "Install-App"
+                            }
+                        }
+                    }
+                });
+
+            BuildBundle(plan, publishDir, outputDir);
+
+            var script = File.ReadAllText(Path.Combine(outputDir, "Install.ps1"));
+            Assert.Contains("{{NestedCommand}}", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("Install-App", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void BuildBundle_ModuleIncludeThrowsWhenDestinationExistsAndClearDestinationDisabled()
     {
         var root = CreateTempRoot();

@@ -151,6 +151,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             try
             {
+                // Bound stream draining after kill so timeout handling cannot hang on net472 pipe reads.
                 Task.WhenAll(stdoutTask, stderrTask).Wait(TimeSpan.FromSeconds(5));
             }
             catch

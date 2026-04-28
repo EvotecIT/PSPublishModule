@@ -464,7 +464,7 @@
         "OutputPath": { "type": "string", "minLength": 1 },
         "Tokens": {
           "type": ["object", "null"],
-          "description": "Template token values. Values are expanded with single-brace bundle tokens before being exposed to double-brace placeholders in the generated script body.",
+          "description": "Template token values. Values are expanded with single-brace bundle tokens before being exposed to double-brace placeholders in the generated script body. Inserted values are literal and are not rendered recursively.",
           "additionalProperties": { "type": "string" }
         },
         "Overwrite": {
