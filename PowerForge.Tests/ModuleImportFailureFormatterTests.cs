@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -25,6 +26,7 @@ public sealed class ModuleImportFailureFormatterTests
         Assert.Contains("Cause: The manifest contains one or more members that are not valid ('Prerelease').", message);
         Assert.Contains("PowerShell: 7.5.4 (Core)", message);
         Assert.Contains(@"Manifest: C:\Temp\TestModule\TestModule.psd1", message);
+        Assert.Contains("Detail: Import-Module: some long stack trace line" + Environment.NewLine + "At line:1 char:1", message);
         Assert.DoesNotContain("PFIMPORT::ERROR::", message);
         Assert.DoesNotContain("StdOut:", message);
     }
