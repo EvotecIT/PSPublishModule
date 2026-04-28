@@ -135,5 +135,5 @@ internal static class ModuleConditionalExportBlockBuilder
         => value?.Replace("'", "''") ?? string.Empty;
 
     private static string EscapePsDoubleQuoted(string value)
-        => (value ?? string.Empty).Replace("`", "``").Replace("\"", "`\"");
+        => (value ?? string.Empty).Replace("`", "``").Replace("$", "`$").Replace("\"", "`\"");
 }

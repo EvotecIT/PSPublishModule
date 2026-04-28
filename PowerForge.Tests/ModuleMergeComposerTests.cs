@@ -127,7 +127,7 @@ public sealed class ModuleMergeComposerTests
 
             var sources = ModuleMergeComposer.BuildSources(
                 root.FullName,
-                "DemoModule",
+                "Demo$Module",
                 information: new InformationConfiguration { FunctionsToExportFolder = "Public", AliasesToExportFolder = "Public" },
                 exports: new ExportSet(new[] { "Get-Always", "Get-NeedsOptional" }, Array.Empty<string>(), new[] { "gno" }),
                 fixRelativePaths: false,
@@ -138,6 +138,7 @@ public sealed class ModuleMergeComposerTests
 
             Assert.Contains("$PowerForgeCommandModuleDependencies = @", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("'Contoso.Optional' = @('Get-NeedsOptional')", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("[Demo`$Module] Optional dependency module", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("Optional dependency module", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeAllAliases = $null", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)", sources.MergedScriptContent, StringComparison.Ordinal);

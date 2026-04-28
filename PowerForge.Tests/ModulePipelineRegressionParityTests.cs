@@ -371,8 +371,6 @@ public sealed class ModulePipelineRegressionParityTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
-
-
     [Fact]
     public void ValidateMissingFunctions_InfersLikelyModule_FromCommandModuleDependencies()
     {
