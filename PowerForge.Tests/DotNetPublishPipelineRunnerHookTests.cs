@@ -289,8 +289,8 @@ public sealed class DotNetPublishPipelineRunnerHookTests
                 HookId = "slow",
                 HookPhase = DotNetPublishCommandHookPhase.BeforeBuild,
                 HookCommand = "pwsh",
-                HookArguments = new[] { "-NoLogo", "-NoProfile", "-Command", "Start-Sleep -Seconds 10" },
-                HookTimeoutSeconds = 1,
+                HookArguments = new[] { "-NoLogo", "-NoProfile", "-Command", "[System.Threading.Thread]::Sleep([int]::MaxValue)" },
+                HookTimeoutSeconds = 2,
                 HookRequired = true
             };
 
@@ -303,7 +303,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
                     },
                     step));
 
-            Assert.Contains("timed out after 1 seconds", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timed out after 2 seconds", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

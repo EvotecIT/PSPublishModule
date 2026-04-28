@@ -94,6 +94,8 @@ internal static partial class Program
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
                     if (!string.IsNullOrWhiteSpace(overrideProfile))
                         spec.Profile = overrideProfile.Trim();
+                    if (effectiveStyles.Length > 1 && GetActiveDotNetPublishProfile(spec) is not null)
+                        cmdLogger.Warn("Multiple --style values were provided with an active profile; the single-value profile style filter is ignored and target styles drive matrix expansion.");
                     ApplyDotNetPublishSpecOverrides(spec, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     var plan = runner.Plan(spec, specPath);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
