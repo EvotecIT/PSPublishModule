@@ -82,7 +82,7 @@ internal static partial class Program
                         : CreateCommandLogger(outputJson, cli, logger);
 
                     var loaded = LoadDotNetPublishSpecWithPath(configPath);
-                    var spec = loaded.Value;
+                    var spec = CloneDotNetPublishSpec(loaded.Value);
                     var specPath = loaded.FullPath;
                     var matrixOverrides = ParseDotNetPublishMatrixOverrides(subArgs);
                     var effectiveRids = overrideRids.Length > 0 ? overrideRids : matrixOverrides.Runtimes;

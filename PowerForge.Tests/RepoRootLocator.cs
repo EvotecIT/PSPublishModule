@@ -2,10 +2,12 @@ namespace PowerForge.Tests;
 
 internal static class RepoRootLocator
 {
+    private const int MaxSearchDepth = 12;
+
     public static string Find()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
+        for (var i = 0; i < MaxSearchDepth && current is not null; i++)
         {
             var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
             if (File.Exists(marker))

@@ -422,6 +422,15 @@ internal static partial class Program
         throw new ArgumentException($"Unknown style: {raw}. Expected one of: {string.Join(", ", Enum.GetNames(typeof(DotNetPublishStyle)))}", nameof(value));
     }
 
+    static DotNetPublishSpec CloneDotNetPublishSpec(DotNetPublishSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+        var json = JsonSerializer.Serialize(spec, CliJson.Context.DotNetPublishSpec);
+        return JsonSerializer.Deserialize(json, CliJson.Context.DotNetPublishSpec)
+            ?? throw new InvalidOperationException("Failed to clone dotnet publish spec.");
+    }
+
     static void ApplyDotNetPublishSpecOverrides(
         DotNetPublishSpec spec,
         string[] overrideTargets,
@@ -492,7 +501,7 @@ internal static partial class Program
             .ToArray();
         if (styles.Length > 0)
         {
-            // Profile style narrows selection; target styles are what the planner expands into steps.
+            // Profile style is single-valued; multiple CLI styles are represented on targets for planner expansion.
             if (activeProfile is not null)
                 activeProfile.Style = styles.Length == 1 ? styles[0] : null;
 
