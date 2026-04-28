@@ -139,6 +139,7 @@ public sealed class ModuleMergeComposerTests
             Assert.Contains("$PowerForgeCommandModuleDependencies = @", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("'Contoso.Optional' = @('Get-NeedsOptional')", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("Optional dependency module", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("$PowerForgeAllAliases = $null", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("$PowerForgeAllAliases | Where-Object { $_.Definition -eq $PowerForgeFunction }", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport", sources.MergedScriptContent, StringComparison.Ordinal);

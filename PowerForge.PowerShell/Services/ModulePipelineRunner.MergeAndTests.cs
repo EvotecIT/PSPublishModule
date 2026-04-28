@@ -402,6 +402,15 @@ public sealed partial class ModulePipelineRunner
                     _logger.Info($"Conditional exports: module '{dependency.Key}' gates {dependency.Value.Length} command(s).");
             }
 
+            if (_logger.IsVerbose)
+            {
+                foreach (var moduleName in plan.CommandModuleDependencies.Keys.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (!dependencies.ContainsKey(moduleName))
+                        _logger.Verbose($"Conditional exports: module '{moduleName}' gates 0 command(s).");
+                }
+            }
+
             return dependencies;
         }
         catch (Exception ex)

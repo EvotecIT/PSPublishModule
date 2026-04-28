@@ -100,12 +100,15 @@ internal static class ModuleConditionalExportBlockBuilder
         builder.AppendLine("}");
         builder.AppendLine("$PowerForgeFunctionsToRemove = [System.Collections.Generic.List[string]]::new()");
         builder.AppendLine("$PowerForgeAliasesToRemove = [System.Collections.Generic.List[string]]::new()");
+        builder.AppendLine("$PowerForgeAllAliases = $null");
         builder.AppendLine("foreach ($PowerForgeDependencyModule in $PowerForgeCommandModuleDependencies.Keys) {");
         builder.AppendLine("    try {");
         builder.AppendLine("        Import-Module -Name $PowerForgeDependencyModule -ErrorAction Stop -Verbose:$false");
         builder.AppendLine("    } catch {");
         builder.AppendLine("        $PowerForgeDependencyCommands = @($PowerForgeCommandModuleDependencies[$PowerForgeDependencyModule])");
-        builder.AppendLine("        $PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)");
+        builder.AppendLine("        if ($null -eq $PowerForgeAllAliases) {");
+        builder.AppendLine("            $PowerForgeAllAliases = @(Get-Alias -ErrorAction SilentlyContinue)");
+        builder.AppendLine("        }");
         builder.Append("        Write-Warning (\"[")
             .Append(EscapePsDoubleQuoted(moduleLabel))
             .AppendLine("] Optional dependency module '{0}' is not available. Commands not exported: {1}\" -f $PowerForgeDependencyModule, ($PowerForgeDependencyCommands -join ', '))");
