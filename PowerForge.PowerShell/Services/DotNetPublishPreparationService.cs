@@ -25,6 +25,11 @@ internal sealed class DotNetPublishPreparationService
         var spec = LoadSpec(request, ref sourceLabel, warn);
         if (!string.IsNullOrWhiteSpace(request.Profile))
             spec.Profile = request.Profile!.Trim();
+        if (!string.IsNullOrWhiteSpace(request.ProjectRoot))
+        {
+            spec.DotNet ??= new DotNetPublishDotNetOptions();
+            spec.DotNet.ProjectRoot = request.ResolvePath!(request.ProjectRoot!);
+        }
         ApplyOverrides(spec, request);
 
         return new DotNetPublishPreparedContext

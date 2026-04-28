@@ -113,4 +113,42 @@ public sealed class DotNetPublishPreparationServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Prepare_from_config_applies_project_root_override()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-root-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var repoRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "repo"));
+            var configPath = Path.Combine(root.FullName, "Build", "publish.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(configPath, """
+{
+  "dotNet": {
+    "projectRoot": ".."
+  },
+  "targets": []
+}
+""");
+
+            var request = new DotNetPublishPreparationRequest
+            {
+                ParameterSetName = "Config",
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                ConfigPath = configPath,
+                ProjectRoot = repoRoot.FullName
+            };
+
+            var context = new DotNetPublishPreparationService(new NullLogger()).Prepare(request);
+
+            Assert.Equal(repoRoot.FullName, context.Spec.DotNet.ProjectRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }
