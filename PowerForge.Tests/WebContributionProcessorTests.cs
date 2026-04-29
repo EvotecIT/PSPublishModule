@@ -246,6 +246,32 @@ public class WebContributionProcessorTests
         }
     }
 
+    [Fact]
+    public void Validate_RejectsAssetsOverConfiguredSizeLimit()
+    {
+        var root = CreateTempRoot("pf-web-contributions-asset-size-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "large-asset-post");
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot,
+                MaxAssetBytes = 2
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("is larger than 2 bytes", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
     private static void WriteAuthor(string sourceRoot, string slug, string x = "JaneDoe")
     {
         var authorsRoot = Path.Combine(sourceRoot, "authors");

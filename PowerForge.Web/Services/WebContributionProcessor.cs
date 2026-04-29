@@ -567,9 +567,6 @@ public static class WebContributionProcessor
             if (!TryReadValue(meta, key, out var raw) || raw is null)
                 continue;
 
-            if (raw is string[] stringArray)
-                return stringArray.Where(static item => !string.IsNullOrWhiteSpace(item)).Select(static item => item.Trim()).ToArray();
-
             if (raw is IEnumerable<object?> items)
                 return items.Select(static item => item?.ToString() ?? string.Empty).Where(static item => !string.IsNullOrWhiteSpace(item)).Select(static item => item.Trim()).ToArray();
 
@@ -852,7 +849,7 @@ public static class WebContributionProcessor
                 continue;
             }
 
-            builder.AppendLine(line);
+            builder.Append(line).Append('\n');
         }
 
         return builder.ToString();
