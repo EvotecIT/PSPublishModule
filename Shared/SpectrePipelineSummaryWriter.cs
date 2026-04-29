@@ -392,13 +392,14 @@ internal static class SpectrePipelineSummaryWriter
 
         var message = NormalizeFailureMessage(error);
         if (!string.IsNullOrWhiteSpace(message))
-            table.AddRow($"{(unicode ? "💥" : "*")} Error", Esc(message));
+            table.AddRow($"{(unicode ? "💥" : "*")} Error", Esc(GetFailureHeadline(message)));
 
         var hint = BuildHint(message);
         if (!string.IsNullOrWhiteSpace(hint))
             table.AddRow($"{(unicode ? "💡" : "*")} Hint", Esc(hint));
 
         AnsiConsole.Write(table);
+        WriteFailureDetails(message, border);
     }
 
     private static string BuildPublishTarget(ModulePublishResult publish)
@@ -940,6 +941,96 @@ internal static class SpectrePipelineSummaryWriter
         return reasons;
     }
 
+    private static string GetFailureHeadline(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return string.Empty;
+
+        return message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.Trim())
+            .FirstOrDefault(static line => !string.IsNullOrWhiteSpace(line))
+            ?? string.Empty;
+    }
+
+    private static void WriteFailureDetails(string message, TableBorder border)
+    {
+        var rows = BuildFailureDetailRows(message);
+        // A single row would only repeat the headline already shown in the summary table.
+        if (rows.Count <= 1)
+            return;
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Error details[/]").LeftJustified());
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Field").NoWrap())
+            .AddColumn(new TableColumn("Detail"));
+
+        foreach (var row in rows)
+            table.AddRow(Markup.Escape(row.Field), Markup.Escape(row.Detail));
+
+        AnsiConsole.Write(table);
+    }
+
+    internal static IReadOnlyList<(string Field, string Detail)> BuildFailureDetailRows(string message)
+    {
+        var rows = new List<(string Field, string Detail)>();
+        if (string.IsNullOrWhiteSpace(message))
+            return rows;
+
+        foreach (var rawLine in message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var (field, detail) = SplitFailureDetailLine(line);
+            if (string.IsNullOrWhiteSpace(field) && rows.Count > 0)
+            {
+                var previousIndex = rows.Count - 1;
+                var previous = rows[previousIndex];
+                rows[previousIndex] = (previous.Field, previous.Detail + Environment.NewLine + line);
+                continue;
+            }
+
+            rows.Add((
+                string.IsNullOrWhiteSpace(field) ? "Message" : field,
+                string.IsNullOrWhiteSpace(detail) ? line : detail));
+        }
+
+        return rows;
+    }
+
+    private static (string Field, string Detail) SplitFailureDetailLine(string line)
+    {
+        if (line.StartsWith(ModuleImportFailureFormatter.FailureMessagePrefix, StringComparison.OrdinalIgnoreCase))
+            return ("Failure", line);
+
+        var separator = line.IndexOf(':');
+        if (separator <= 0)
+            return (string.Empty, line);
+
+        var field = line.Substring(0, separator).Trim();
+        if (!IsKnownFailureDetailField(field))
+            return (string.Empty, line);
+
+        return (field, line.Substring(separator + 1).Trim());
+    }
+
+    private static bool IsKnownFailureDetailField(string field)
+        => field.Equals("Cause", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Detail", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Loader", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("PowerShell", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("PSModulePath", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Manifest", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Executable", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Hint", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("Payload", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("StdOut", StringComparison.OrdinalIgnoreCase)
+           || field.Equals("StdErr", StringComparison.OrdinalIgnoreCase);
+
     internal static string NormalizeFailureMessage(Exception error, int maxLength = 0)
     {
         const int DefaultUnstructuredFailureMessageMaxLength = 2000;
@@ -964,18 +1055,14 @@ internal static class SpectrePipelineSummaryWriter
             "PowerShell:",
             "PSModulePath:",
             "Manifest:",
-            "Executable:"
+            "Executable:",
+            "Hint:",
+            "Payload:",
+            "StdOut:",
+            "StdErr:"
         };
 
-        var structuredLines = new List<string>();
-        foreach (var prefix in preferredPrefixes)
-        {
-            foreach (var line in lines.Where(line => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-            {
-                if (!structuredLines.Contains(line, StringComparer.OrdinalIgnoreCase))
-                    structuredLines.Add(line);
-            }
-        }
+        var structuredLines = ExtractStructuredFailureLines(lines, preferredPrefixes);
 
         if (structuredLines.Count == 0)
         {
@@ -1003,6 +1090,38 @@ internal static class SpectrePipelineSummaryWriter
             return msg.Substring(0, effectiveMaxLength - 1) + "…";
 
         return msg;
+    }
+
+    private static List<string> ExtractStructuredFailureLines(string[] lines, string[] preferredPrefixes)
+    {
+        var structuredLines = new List<string>();
+        var seenStructuredHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var currentStructuredLine = -1;
+
+        foreach (var line in lines)
+        {
+            if (preferredPrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (seenStructuredHeaders.Add(line))
+                {
+                    structuredLines.Add(line);
+                    currentStructuredLine = structuredLines.Count - 1;
+                }
+                else
+                {
+                    currentStructuredLine = -1;
+                }
+
+                continue;
+            }
+
+            if (currentStructuredLine < 0 || PowerShellFailureLineFilter.ShouldSkip(line))
+                continue;
+
+            structuredLines[currentStructuredLine] = structuredLines[currentStructuredLine] + Environment.NewLine + line;
+        }
+
+        return structuredLines;
     }
 
     private static string BuildHint(string message)

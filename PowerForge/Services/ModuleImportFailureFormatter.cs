@@ -7,6 +7,8 @@ namespace PowerForge;
 
 internal static class ModuleImportFailureFormatter
 {
+    internal const string FailureMessagePrefix = "Import-Module failed";
+
     internal static string BuildFailureMessage(PowerShellRunResult result, string? modulePath = null, string? validationTarget = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
@@ -19,7 +21,7 @@ internal static class ModuleImportFailureFormatter
             diagnostics.StdoutSummary);
 
         var sb = new StringBuilder();
-        sb.Append("Import-Module failed");
+        sb.Append(FailureMessagePrefix);
         if (!string.IsNullOrWhiteSpace(validationTarget))
             sb.Append(" during ").Append(validationTarget!.Trim()).Append(" validation");
         sb.Append($" (exit {result.ExitCode}).");
@@ -64,13 +66,13 @@ internal static class ModuleImportFailureFormatter
         if (string.IsNullOrWhiteSpace(cause) &&
             !string.IsNullOrWhiteSpace(result.StdOut))
         {
-            sb.AppendLine().Append("StdOut: ").Append(Normalize(result.StdOut));
+            sb.AppendLine().Append("StdOut: ").Append(NormalizeMultiline(result.StdOut));
         }
 
         if (string.IsNullOrWhiteSpace(cause) &&
             !string.IsNullOrWhiteSpace(result.StdErr))
         {
-            sb.AppendLine().Append("StdErr: ").Append(Normalize(result.StdErr));
+            sb.AppendLine().Append("StdErr: ").Append(NormalizeMultiline(result.StdErr));
         }
 
         return sb.ToString();
@@ -166,7 +168,7 @@ internal static class ModuleImportFailureFormatter
             importError,
             psModulePathEntries.ToArray(),
             loaderErrors.ToArray(),
-            Normalize(stderr),
+            NormalizeMultiline(stderr),
             stdoutSummary);
     }
 
@@ -203,6 +205,18 @@ internal static class ModuleImportFailureFormatter
 
         return string.Join(
             " ",
+            SplitLines(text)
+                .Select(static line => line.Trim())
+                .Where(static line => !string.IsNullOrWhiteSpace(line)));
+    }
+
+    private static string NormalizeMultiline(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        // Keep raw PowerShell context here; the summary renderer applies display-time noise filtering.
+        return string.Join(
+            Environment.NewLine,
             SplitLines(text)
                 .Select(static line => line.Trim())
                 .Where(static line => !string.IsNullOrWhiteSpace(line)));
