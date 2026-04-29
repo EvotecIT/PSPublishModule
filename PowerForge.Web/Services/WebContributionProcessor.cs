@@ -520,7 +520,8 @@ public static class WebContributionProcessor
         if (date is { Year: >= 2000 and <= 2100 } value)
             return value.Year;
 
-        return DateTime.UtcNow.Year;
+        // Missing or invalid dates are validation errors; keep result paths deterministic until import is blocked.
+        return 2000;
     }
 
     private static void ValidateBundleLayout(
@@ -590,6 +591,9 @@ public static class WebContributionProcessor
     private static bool TryReadValue(Dictionary<string, object?> meta, string key, out object? value)
     {
         value = null;
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
         object? current = meta;
         foreach (var part in key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -832,6 +836,7 @@ public static class WebContributionProcessor
         {
             if (skipping)
             {
+                // Imported author keys are scalar/list fields; remove their immediate YAML continuation block.
                 if (string.IsNullOrWhiteSpace(line) || char.IsWhiteSpace(line[0]) || line.TrimStart().StartsWith("-", StringComparison.Ordinal))
                     continue;
 

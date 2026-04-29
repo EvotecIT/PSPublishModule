@@ -57,6 +57,7 @@ public class WebContributionProcessorTests
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
             var imported = File.ReadAllText(Path.Combine(siteRoot, "content", "blog", "en", "sample-post.md"));
             Assert.Contains("image: \"/assets/blog/2026/sample-post/cover.webp\"", imported);
+            Assert.Contains("image_alt: \"Sample cover\"", imported);
             Assert.Contains("draft: false", imported);
             Assert.Contains("author: \"Jane Doe\"", imported);
             Assert.Contains("author_urls:\n  - \"https://www.linkedin.com/in/janedoe\"", imported);
@@ -101,6 +102,39 @@ public class WebContributionProcessorTests
             Assert.Contains(result.Errors, error => error.Contains("existing-post.md", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("keep me", File.ReadAllText(existingTarget));
             Assert.True(File.Exists(Path.Combine(siteRoot, "content", "blog", "en", "fresh-post.md")));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Import_PreservesDraftWhenPublishIsFalse()
+    {
+        var root = CreateTempRoot("pf-web-contributions-draft-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            var siteRoot = Path.Combine(root, "site");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "draft-post");
+            Directory.CreateDirectory(siteRoot);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot,
+                SiteRoot = siteRoot,
+                Import = true,
+                Publish = false,
+                Force = true
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+            var imported = File.ReadAllText(Path.Combine(siteRoot, "content", "blog", "en", "draft-post.md"));
+            Assert.Contains("draft: true", imported);
+            Assert.DoesNotContain("draft: false", imported);
         }
         finally
         {
