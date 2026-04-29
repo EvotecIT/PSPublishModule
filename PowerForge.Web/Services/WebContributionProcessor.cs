@@ -27,8 +27,16 @@ public static class WebContributionProcessor
         @"(?ms)^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    private static readonly Regex FrontMatterDelimiterRegex = new(
+        @"(?m)^---\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
     private static readonly Regex SlugRegex = new(
         "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex SlugNormalizerRegex = new(
+        @"[^a-z0-9]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
     private static readonly HashSet<string> AllowedAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -110,6 +118,7 @@ public static class WebContributionProcessor
             return authors;
         }
 
+        var deserializer = new DeserializerBuilder().Build();
         foreach (var path in Directory.GetFiles(authorsRoot, "*.*", SearchOption.TopDirectoryOnly)
                      .Where(static path => path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
                                            path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)))
@@ -117,7 +126,7 @@ public static class WebContributionProcessor
             var slug = Path.GetFileNameWithoutExtension(path);
             try
             {
-                var map = new DeserializerBuilder().Build().Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
+                var map = deserializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
                 if (map is null)
                     continue;
 
@@ -354,33 +363,47 @@ public static class WebContributionProcessor
             if (string.IsNullOrWhiteSpace(post.Language) || string.IsNullOrWhiteSpace(post.Slug))
                 continue;
 
+            var postErrorStart = errors.Count;
             var targetContentRoot = ResolveInside(siteRoot, Path.Combine(options.ContentBlogPath, post.Language));
             var targetContentPath = Path.Combine(targetContentRoot, post.Slug + ".md");
             var targetAssetRoot = ResolveInside(siteRoot, Path.Combine(options.StaticBlogAssetsPath, post.Year.ToString(CultureInfo.InvariantCulture), post.Slug));
             post.TargetContentPath = targetContentPath;
             post.TargetAssetPath = targetAssetRoot;
 
+            if (!options.Force && File.Exists(targetContentPath))
+                errors.Add($"Target post already exists: {targetContentPath}. Use --force to overwrite.");
+
+            var assetCopies = post.Assets
+                .Select(asset => new
+                {
+                    Source = Path.Combine(post.BundlePath, FromSlash(asset)),
+                    Target = Path.Combine(targetAssetRoot, FromSlash(asset))
+                })
+                .ToArray();
+
+            if (!options.Force)
+            {
+                foreach (var copy in assetCopies.Where(static copy => File.Exists(copy.Target)))
+                    errors.Add($"Target file already exists: {copy.Target}. Use --force to overwrite.");
+            }
+
+            if (errors.Count > postErrorStart)
+                continue;
+
             Directory.CreateDirectory(targetContentRoot);
             Directory.CreateDirectory(targetAssetRoot);
 
-            foreach (var asset in post.Assets)
+            foreach (var copy in assetCopies)
             {
-                var sourceAsset = Path.Combine(post.BundlePath, FromSlash(asset));
-                var targetAsset = Path.Combine(targetAssetRoot, FromSlash(asset));
-                if (CopyFile(sourceAsset, targetAsset, options.Force, errors))
+                if (CopyFile(copy.Source, copy.Target, options.Force, errors))
                     result.CopiedAssetCount++;
             }
 
-            if (errors.Count > 0)
+            if (errors.Count > postErrorStart)
                 continue;
 
             var markdown = File.ReadAllText(post.SourcePath, Encoding.UTF8);
             var imported = RewritePostMarkdown(markdown, post, authors, options);
-            if (!options.Force && File.Exists(targetContentPath))
-            {
-                errors.Add($"Target post already exists: {targetContentPath}. Use --force to overwrite.");
-                continue;
-            }
 
             File.WriteAllText(targetContentPath, imported, new UTF8Encoding(false));
             post.Imported = true;
@@ -398,14 +421,14 @@ public static class WebContributionProcessor
         WebContributionOptions options)
     {
         var assetRoutePrefix = $"/assets/blog/{post.Year.ToString(CultureInfo.InvariantCulture)}/{post.Slug}/";
-        var rewritten = FrontMatterImageRegex.Replace(markdown, match =>
+        var rewritten = RewriteFrontMatter(markdown, frontMatter => FrontMatterImageRegex.Replace(frontMatter, match =>
         {
             var target = match.Groups["target"].Value.Trim();
             if (IsExternalOrRootedWebPath(target))
                 return match.Value;
 
             return match.Groups["prefix"].Value + assetRoutePrefix + NormalizeRelativeAssetRoute(target) + match.Groups["suffix"].Value;
-        });
+        }));
 
         rewritten = ReplaceOutsideFencedCodeBlocks(rewritten, MarkdownImageRegex, match =>
         {
@@ -418,7 +441,7 @@ public static class WebContributionProcessor
         });
 
         if (options.Publish)
-            rewritten = DraftRegex.Replace(rewritten, "draft: false");
+            rewritten = RewriteFrontMatter(rewritten, frontMatter => DraftRegex.Replace(frontMatter, "draft: false"));
 
         rewritten = EnsureImportedAuthorMetadata(rewritten, post, authors);
         return rewritten.Replace("\r\n", "\n");
@@ -448,7 +471,11 @@ public static class WebContributionProcessor
         if (!string.IsNullOrWhiteSpace(firstCreator))
             insert.AppendLine("social_twitter_creator: \"" + EscapeYamlScalar(firstCreator) + "\"");
 
-        return InsertFrontMatterFields(markdown, insert.ToString());
+        return RewriteFrontMatter(
+            markdown,
+            frontMatter => InsertFrontMatterFields(
+                RemoveFrontMatterKeys(frontMatter, "author", "author_names", "author_urls", "social_twitter_creator"),
+                insert.ToString()));
     }
 
     private static string MaskFencedCodeBlocks(string markdown) =>
@@ -520,7 +547,7 @@ public static class WebContributionProcessor
             return null;
 
         var normalized = value.Trim().ToLowerInvariant();
-        normalized = Regex.Replace(normalized, @"[^a-z0-9]+", "-", RegexOptions.CultureInvariant, RegexTimeout).Trim('-');
+        normalized = SlugNormalizerRegex.Replace(normalized, "-").Trim('-');
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
@@ -592,7 +619,7 @@ public static class WebContributionProcessor
 
         var candidate = Path.GetFullPath(Path.Combine(bundleRoot, FromSlash(normalized)));
         var rootPrefix = Path.GetFullPath(bundleRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+        if (!candidate.StartsWith(rootPrefix, PathComparison))
             return false;
 
         fullPath = candidate;
@@ -756,20 +783,71 @@ public static class WebContributionProcessor
 
     private static string InsertFrontMatterFields(string markdown, string fields)
     {
-        if (string.IsNullOrWhiteSpace(fields) ||
-            !markdown.StartsWith("---", StringComparison.Ordinal))
-        {
+        if (string.IsNullOrWhiteSpace(fields))
             return markdown;
+
+        return markdown.TrimEnd('\r', '\n') + "\n" + fields.TrimEnd('\r', '\n') + "\n";
+    }
+
+    private static string RewriteFrontMatter(string markdown, Func<string, string> rewrite)
+    {
+        if (!TryGetFrontMatterBounds(markdown, out var contentStart, out var contentEnd))
+            return markdown;
+
+        var rewrittenFrontMatter = rewrite(markdown[contentStart..contentEnd]).TrimEnd('\r', '\n') + "\n";
+        return markdown[..contentStart] + rewrittenFrontMatter + markdown[contentEnd..];
+    }
+
+    private static bool TryGetFrontMatterBounds(string markdown, out int contentStart, out int contentEnd)
+    {
+        contentStart = 0;
+        contentEnd = 0;
+        var matches = FrontMatterDelimiterRegex.Matches(markdown);
+        if (matches.Count < 2 || matches[0].Index != 0)
+            return false;
+
+        contentStart = matches[0].Index + matches[0].Length;
+        if (contentStart < markdown.Length && markdown[contentStart] == '\r')
+            contentStart++;
+        if (contentStart < markdown.Length && markdown[contentStart] == '\n')
+            contentStart++;
+
+        contentEnd = matches[1].Index;
+        return contentEnd >= contentStart;
+    }
+
+    private static string RemoveFrontMatterKeys(string frontMatter, params string[] keys)
+    {
+        var keySet = keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var builder = new StringBuilder(frontMatter.Length);
+        var skipping = false;
+        foreach (var line in frontMatter.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            if (skipping)
+            {
+                if (string.IsNullOrWhiteSpace(line) || char.IsWhiteSpace(line[0]) || line.TrimStart().StartsWith("-", StringComparison.Ordinal))
+                    continue;
+
+                skipping = false;
+            }
+
+            if (IsFrontMatterKeyLine(line, keySet))
+            {
+                skipping = true;
+                continue;
+            }
+
+            builder.AppendLine(line);
         }
 
-        var newline = markdown.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var marker = newline + "---";
-        var end = markdown.IndexOf(marker, 3, StringComparison.Ordinal);
-        if (end < 0)
-            return markdown;
+        return builder.ToString();
+    }
 
-        var normalizedFields = fields.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", newline, StringComparison.Ordinal);
-        return markdown.Insert(end, newline + normalizedFields.TrimEnd() + newline);
+    private static bool IsFrontMatterKeyLine(string line, ISet<string> keys)
+    {
+        var trimmed = line.TrimStart();
+        var colon = trimmed.IndexOf(':');
+        return colon > 0 && keys.Contains(trimmed[..colon].Trim());
     }
 
     private static bool CopyFile(string source, string target, bool force, List<string> errors)
@@ -803,14 +881,17 @@ public static class WebContributionProcessor
     {
         var candidate = Path.GetFullPath(Path.Combine(root, relative));
         var rootPrefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        if (!candidate.StartsWith(rootPrefix, PathComparison) &&
+            !string.Equals(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), PathComparison))
         {
             throw new InvalidOperationException($"Path escapes root: {relative}");
         }
 
         return candidate;
     }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static string ToSlash(string path) => path.Replace('\\', '/');
 

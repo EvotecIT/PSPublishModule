@@ -7,13 +7,12 @@ internal static partial class WebCliCommandHandlers
 {
     private static int HandleContributions(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
-        var action = subArgs.Length > 0 && !subArgs[0].StartsWith("--", StringComparison.Ordinal)
-            ? subArgs[0].Trim().ToLowerInvariant()
-            : "validate";
-        var effectiveArgs = action == "validate" || action == "import" ? subArgs.Skip(1).ToArray() : subArgs;
+        var hasExplicitAction = subArgs.Length > 0 && !subArgs[0].StartsWith("--", StringComparison.Ordinal);
+        var action = hasExplicitAction ? subArgs[0].Trim().ToLowerInvariant() : "validate";
         if (action is not ("validate" or "import"))
             return Fail("Unknown contributions action. Use 'validate' or 'import'.", outputJson, logger, "web.contributions");
 
+        var effectiveArgs = hasExplicitAction ? subArgs.Skip(1).ToArray() : subArgs;
         var sourceRoot = TryGetOptionValue(effectiveArgs, "--root") ??
                          TryGetOptionValue(effectiveArgs, "--source-root") ??
                          TryGetOptionValue(effectiveArgs, "--source") ??
@@ -38,7 +37,7 @@ internal static partial class WebCliCommandHandlers
         }
         catch (Exception ex)
         {
-            return Fail(ex.Message, outputJson, logger, "web.contributions");
+            return Fail(ex.ToString(), outputJson, logger, "web.contributions");
         }
 
         if (outputJson)
