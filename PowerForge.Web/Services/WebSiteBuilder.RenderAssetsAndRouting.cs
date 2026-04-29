@@ -473,6 +473,11 @@ public static partial class WebSiteBuilder
             sb.AppendLine($@"<meta property=""og:site_name"" content=""{System.Web.HttpUtility.HtmlEncode(siteName)}"" />");
         if (isArticle && !string.IsNullOrWhiteSpace(publishedTime))
             sb.AppendLine($@"<meta property=""article:published_time"" content=""{System.Web.HttpUtility.HtmlEncode(publishedTime)}"" />");
+        if (isArticle)
+        {
+            foreach (var authorUrl in ResolveContentAuthorUrls(item).Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($@"<meta property=""article:author"" content=""{System.Web.HttpUtility.HtmlEncode(authorUrl.Trim())}"" />");
+        }
         if (isArticle && item.Tags is { Length: > 0 })
         {
             foreach (var tag in item.Tags.Where(static tag => !string.IsNullOrWhiteSpace(tag)).Distinct(StringComparer.OrdinalIgnoreCase))

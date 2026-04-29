@@ -28,6 +28,8 @@ collection: {{collection}}
             "verify" => HandleVerify(subArgs, outputJson, logger, outputSchemaVersion),
             "doctor" => HandleDoctor(subArgs, outputJson, logger, outputSchemaVersion),
             "markdown-fix" => HandleMarkdownFix(subArgs, outputJson, logger, outputSchemaVersion),
+            "contributions" => HandleContributions(subArgs, outputJson, logger, outputSchemaVersion),
+            "contribution" => HandleContributions(subArgs, outputJson, logger, outputSchemaVersion),
             "audit" => HandleAudit(subArgs, outputJson, logger, outputSchemaVersion),
             "scaffold" => HandleScaffold(subArgs, outputJson, logger, outputSchemaVersion),
             "new" => HandleNew(subArgs, outputJson, logger, outputSchemaVersion),

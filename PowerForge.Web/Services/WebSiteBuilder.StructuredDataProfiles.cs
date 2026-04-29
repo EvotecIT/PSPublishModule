@@ -35,21 +35,13 @@ public static partial class WebSiteBuilder
                 ["@type"] = "WebPage",
                 ["@id"] = pageUrl
             },
-            ["author"] = new Dictionary<string, object?>
-            {
-                ["@type"] = "Organization",
-                ["name"] = ReadMetaString(item.Meta, "author.name", "author", "article.author", "news.author", "schema.author")
-            },
+            ["author"] = BuildContentAuthorStructuredData(item, spec.Name),
             ["publisher"] = new Dictionary<string, object?>
             {
                 ["@type"] = "Organization",
                 ["name"] = ReadMetaString(item.Meta, "publisher.name", "publisher", "article.publisher", "news.publisher", "schema.publisher")
             }
         };
-
-        var authorName = ((Dictionary<string, object?>)articleModel["author"]!)["name"]?.ToString();
-        if (string.IsNullOrWhiteSpace(authorName))
-            ((Dictionary<string, object?>)articleModel["author"]!)["name"] = spec.Name;
 
         var publisherName = ((Dictionary<string, object?>)articleModel["publisher"]!)["name"]?.ToString();
         if (string.IsNullOrWhiteSpace(publisherName))
@@ -68,7 +60,7 @@ public static partial class WebSiteBuilder
             articleModel["dateModified"] = iso;
         }
 
-        var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image");
+        var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image", "image");
         var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, imageOverride);
         var localization = ResolveLocalizationConfig(spec);
         var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
