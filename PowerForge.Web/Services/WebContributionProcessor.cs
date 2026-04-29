@@ -15,6 +15,7 @@ public static class WebContributionProcessor
         @"!\[(?<alt>[^\]]*)\]\((?<target>[^)\s]+)(?:\s+""[^""]*"")?\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    // Match only the canonical front matter image key; image_alt/image_url are intentionally excluded.
     private static readonly Regex FrontMatterImageRegex = new(
         @"(?m)^(?<prefix>\s*image\s*:\s*[""']?)(?<target>[^""'\r\n]+)(?<suffix>[""']?\s*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
@@ -224,6 +225,8 @@ public static class WebContributionProcessor
             errors.Add($"{relative}: missing front matter description.");
         if (matter.Date is null)
             errors.Add($"{relative}: missing front matter date.");
+        else if (matter.Date.Value.Year is < 2000 or > 2100)
+            errors.Add($"{relative}: front matter date year must be between 2000 and 2100.");
         if (string.IsNullOrWhiteSpace(result.Language))
             errors.Add($"{relative}: missing language. Put the post under posts/<language>/... or set language.");
         if (string.IsNullOrWhiteSpace(result.Slug) || !SlugRegex.IsMatch(result.Slug))

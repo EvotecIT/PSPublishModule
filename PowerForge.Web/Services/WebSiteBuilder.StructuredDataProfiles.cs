@@ -60,7 +60,14 @@ public static partial class WebSiteBuilder
             articleModel["dateModified"] = iso;
         }
 
-        var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image", "image");
+        var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image");
+        if (string.IsNullOrWhiteSpace(imageOverride))
+        {
+            var frontMatterImage = ReadMetaString(item.Meta, "image");
+            if (IsAbsoluteOrSiteRootedUrl(frontMatterImage))
+                imageOverride = frontMatterImage;
+        }
+
         var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, imageOverride);
         var localization = ResolveLocalizationConfig(spec);
         var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
@@ -81,6 +88,12 @@ public static partial class WebSiteBuilder
 
         return BuildJsonLdScript(articleModel);
     }
+
+    private static bool IsAbsoluteOrSiteRootedUrl(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        (value.StartsWith("/", StringComparison.Ordinal) ||
+         value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+         value.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsNewsLikePage(ContentItem item)
     {

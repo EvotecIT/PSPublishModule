@@ -195,6 +195,82 @@ public class WebSiteStructuredDataProfilesTests
         }
     }
 
+    [Fact]
+    public void Build_ArticleStructuredData_UsesOnlySafeFrontMatterImageOverride()
+    {
+        var root = CreateTempRoot("pf-web-structured-article-image-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home.
+                """);
+
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "relative-image.md"),
+                """
+                ---
+                title: Relative Image
+                slug: relative-image
+                date: 2026-02-18
+                image: ./cover.webp
+                ---
+
+                Relative image should not become JSON-LD.
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "rooted-image.md"),
+                """
+                ---
+                title: Rooted Image
+                slug: rooted-image
+                date: 2026-02-18
+                image: /assets/blog/rooted/cover.webp
+                ---
+
+                Rooted image should become JSON-LD.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "pages",
+                    Input = "content/pages",
+                    Output = "/"
+                },
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Input = "content/blog",
+                    Output = "/blog"
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = false,
+                Article = true
+            };
+
+            var relativeHtml = BuildAndRead(root, spec, Path.Combine("blog", "relative-image", "index.html"));
+            Assert.DoesNotContain("./cover.webp", relativeHtml, StringComparison.Ordinal);
+
+            var rootedHtml = BuildAndRead(root, spec, Path.Combine("blog", "rooted-image", "index.html"));
+            Assert.Contains("\"image\":\"https://example.test/assets/blog/rooted/cover.webp\"", rootedHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
     private static SiteSpec BuildPagesSpec()
     {
         return new SiteSpec

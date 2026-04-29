@@ -206,6 +206,46 @@ public class WebContributionProcessorTests
         }
     }
 
+    [Fact]
+    public void Validate_RejectsOutOfRangeDate()
+    {
+        var root = CreateTempRoot("pf-web-contributions-date-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "old-post",
+                """
+                ---
+                title: "Old Post"
+                description: "A practical sample contribution."
+                date: "1999-12-31"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "Sample cover"
+                draft: true
+                ---
+
+                Old post.
+                """);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("date year must be between 2000 and 2100", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
     private static void WriteAuthor(string sourceRoot, string slug, string x = "JaneDoe")
     {
         var authorsRoot = Path.Combine(sourceRoot, "authors");
