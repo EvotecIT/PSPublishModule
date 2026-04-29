@@ -12,6 +12,7 @@ internal static partial class WebCliCommandHandlers
         if (action is not ("validate" or "import"))
             return Fail("Unknown contributions action. Use 'validate' or 'import'.", outputJson, logger, "web.contributions");
 
+        var isImport = action == "import";
         var effectiveArgs = hasExplicitAction ? subArgs.Skip(1).ToArray() : subArgs;
         var sourceRoot = TryGetOptionValue(effectiveArgs, "--root") ??
                          TryGetOptionValue(effectiveArgs, "--source-root") ??
@@ -30,7 +31,7 @@ internal static partial class WebCliCommandHandlers
             {
                 SourceRoot = sourceRoot,
                 SiteRoot = siteRoot,
-                Import = action == "import",
+                Import = isImport,
                 Force = force,
                 Publish = publish
             });
@@ -62,7 +63,7 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Contribution source: {result.SourceRoot}");
         logger.Info($"Authors: {result.AuthorCount}");
         logger.Info($"Posts: {result.PostCount}");
-        if (action == "import")
+        if (isImport)
         {
             logger.Info($"Imported posts: {result.ImportedPostCount}");
             logger.Info($"Copied assets: {result.CopiedAssetCount}");
@@ -72,7 +73,7 @@ internal static partial class WebCliCommandHandlers
         if (!result.Success)
             return 1;
 
-        logger.Success(action == "import" ? "Contribution import passed." : "Contribution validation passed.");
+        logger.Success(isImport ? "Contribution import passed." : "Contribution validation passed.");
         return 0;
     }
 }

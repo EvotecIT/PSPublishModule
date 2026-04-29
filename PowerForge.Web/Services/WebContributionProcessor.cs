@@ -39,6 +39,11 @@ public static class WebContributionProcessor
         @"[^a-z0-9]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    private static readonly Regex XHandleRegex = new(
+        "^[a-zA-Z0-9_]{1,50}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly IDeserializer AuthorDeserializer = new DeserializerBuilder().Build();
     private static readonly HashSet<string> AllowedAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".png",
@@ -118,7 +123,6 @@ public static class WebContributionProcessor
             return authors;
         }
 
-        var deserializer = new DeserializerBuilder().Build();
         foreach (var path in Directory.GetFiles(authorsRoot, "*.*", SearchOption.TopDirectoryOnly)
                      .Where(static path => path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
                                            path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)))
@@ -126,7 +130,7 @@ public static class WebContributionProcessor
             var slug = Path.GetFileNameWithoutExtension(path);
             try
             {
-                var map = deserializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
+                var map = AuthorDeserializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
                 if (map is null)
                     continue;
 
@@ -176,9 +180,9 @@ public static class WebContributionProcessor
                 errors.Add($"{label}: website must be a valid URL.");
             if (!IsEmptyOrValidHttpUrl(profile.Avatar) && !IsRootedWebPath(profile.Avatar))
                 errors.Add($"{label}: avatar must be a valid URL or site-rooted path.");
-            if (!IsEmptyOrValidSocialValue(profile.X, "x.com", "twitter.com"))
+            if (!IsEmptyOrValidSocialValue(profile.X, allowUnderscoreHandle: true, "x.com", "twitter.com"))
                 errors.Add($"{label}: x must be an X/Twitter URL or handle.");
-            if (!IsEmptyOrValidSocialValue(profile.GitHub, "github.com"))
+            if (!IsEmptyOrValidSocialValue(profile.GitHub, allowUnderscoreHandle: false, "github.com"))
                 errors.Add($"{label}: github must be a GitHub URL or username.");
         }
     }
@@ -391,7 +395,8 @@ public static class WebContributionProcessor
                 continue;
 
             Directory.CreateDirectory(targetContentRoot);
-            Directory.CreateDirectory(targetAssetRoot);
+            if (assetCopies.Length > 0)
+                Directory.CreateDirectory(targetAssetRoot);
 
             foreach (var copy in assetCopies)
             {
@@ -699,7 +704,7 @@ public static class WebContributionProcessor
                                         uri.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsEmptyOrValidSocialValue(string? value, params string[] allowedHosts)
+    private static bool IsEmptyOrValidSocialValue(string? value, bool allowUnderscoreHandle, params string[] allowedHosts)
     {
         if (string.IsNullOrWhiteSpace(value))
             return true;
@@ -709,7 +714,9 @@ public static class WebContributionProcessor
             trimmed = trimmed[1..];
 
         if (!trimmed.Contains("://", StringComparison.Ordinal))
-            return SlugRegex.IsMatch(trimmed.ToLowerInvariant());
+            return allowUnderscoreHandle
+                ? XHandleRegex.IsMatch(trimmed)
+                : SlugRegex.IsMatch(trimmed.ToLowerInvariant());
 
         return IsEmptyOrValidHttpUrl(trimmed, allowedHosts);
     }
@@ -781,12 +788,12 @@ public static class WebContributionProcessor
         return true;
     }
 
-    private static string InsertFrontMatterFields(string markdown, string fields)
+    private static string InsertFrontMatterFields(string frontMatter, string fields)
     {
         if (string.IsNullOrWhiteSpace(fields))
-            return markdown;
+            return frontMatter;
 
-        return markdown.TrimEnd('\r', '\n') + "\n" + fields.TrimEnd('\r', '\n') + "\n";
+        return frontMatter.TrimEnd('\r', '\n') + "\n" + fields.TrimEnd('\r', '\n') + "\n";
     }
 
     private static string RewriteFrontMatter(string markdown, Func<string, string> rewrite)

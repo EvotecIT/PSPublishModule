@@ -1,5 +1,7 @@
 using PowerForge.Web;
 
+namespace PowerForge.Tests;
+
 public class WebContributionProcessorTests
 {
     [Fact]
@@ -106,16 +108,80 @@ public class WebContributionProcessorTests
         }
     }
 
-    private static void WriteAuthor(string sourceRoot, string slug)
+    [Fact]
+    public void Validate_AcceptsXHandleWithUnderscore()
+    {
+        var root = CreateTempRoot("pf-web-contributions-x-handle-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe", x: "Jane_Doe");
+            WritePost(sourceRoot, "sample-post");
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_RejectsImageReferencesThatEscapePostBundle()
+    {
+        var root = CreateTempRoot("pf-web-contributions-traversal-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "sample-post",
+                """
+                ---
+                title: "Sample Post"
+                description: "A practical sample contribution."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "Sample cover"
+                draft: true
+                ---
+
+                ![Bad](../secret.png)
+                """);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("markdown image target '../secret.png'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    private static void WriteAuthor(string sourceRoot, string slug, string x = "JaneDoe")
     {
         var authorsRoot = Path.Combine(sourceRoot, "authors");
         Directory.CreateDirectory(authorsRoot);
         File.WriteAllText(Path.Combine(authorsRoot, slug + ".yml"),
-            """
+            $$"""
             name: Jane Doe
             slug: jane-doe
             linkedin: https://www.linkedin.com/in/janedoe
-            x: JaneDoe
+            x: {{x}}
             """);
     }
 
