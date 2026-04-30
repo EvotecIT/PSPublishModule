@@ -25,7 +25,7 @@ public static partial class WebContributionProcessor
                 if (map is null)
                     continue;
 
-                var profile = MapAuthorProfile(map, slug);
+                var profile = MapAuthorProfile(map, slug, path);
                 if (!string.IsNullOrWhiteSpace(profile.Slug))
                     authors[profile.Slug] = profile;
             }
@@ -38,7 +38,7 @@ public static partial class WebContributionProcessor
         return authors;
     }
 
-    private static WebContributionAuthorProfile MapAuthorProfile(Dictionary<string, object?> map, string fallbackSlug)
+    private static WebContributionAuthorProfile MapAuthorProfile(Dictionary<string, object?> map, string fallbackSlug, string sourcePath)
     {
         return new WebContributionAuthorProfile
         {
@@ -50,12 +50,14 @@ public static partial class WebContributionProcessor
             X = NullIfWhiteSpace(ReadMapString(map, "x", "twitter")),
             LinkedIn = NullIfWhiteSpace(ReadMapString(map, "linkedin", "linkedIn")),
             GitHub = NullIfWhiteSpace(ReadMapString(map, "github", "gitHub")),
-            Website = NullIfWhiteSpace(ReadMapString(map, "website", "url"))
+            Website = NullIfWhiteSpace(ReadMapString(map, "website", "url")),
+            SourcePath = sourcePath
         };
     }
 
     private static void ValidateAuthorProfiles(
         IReadOnlyDictionary<string, WebContributionAuthorProfile> authors,
+        WebContributionOptions options,
         List<string> errors)
     {
         foreach (var profile in authors.Values)
@@ -69,13 +71,54 @@ public static partial class WebContributionProcessor
                 errors.Add($"{label}: linkedin must be a valid linkedin.com URL.");
             if (!IsEmptyOrValidHttpUrl(profile.Website))
                 errors.Add($"{label}: website must be a valid URL.");
-            if (!IsEmptyOrValidHttpUrl(profile.Avatar) && !IsRootedWebPath(profile.Avatar))
-                errors.Add($"{label}: avatar must be a valid URL or site-rooted path.");
+            ValidateAuthorAvatar(profile, options, label, errors);
             if (!IsEmptyOrValidSocialValue(profile.X, allowUnderscoreHandle: true, "x.com", "twitter.com"))
                 errors.Add($"{label}: x must be an X/Twitter URL or handle.");
             if (!IsEmptyOrValidSocialValue(profile.GitHub, allowUnderscoreHandle: false, "github.com"))
                 errors.Add($"{label}: github must be a GitHub URL or username.");
         }
+    }
+
+    private static void ValidateAuthorAvatar(
+        WebContributionAuthorProfile profile,
+        WebContributionOptions options,
+        string label,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(profile.Avatar))
+            return;
+
+        var avatar = profile.Avatar.Trim();
+        if (IsEmptyOrValidHttpUrl(avatar) || IsRootedWebPath(avatar))
+            return;
+
+        if (string.IsNullOrWhiteSpace(profile.SourcePath))
+        {
+            errors.Add($"{label}: local avatar could not be resolved.");
+            return;
+        }
+
+        var authorRoot = Path.GetDirectoryName(profile.SourcePath) ?? ".";
+        if (!TryResolveAuthorAsset(authorRoot, avatar, out var fullPath))
+        {
+            errors.Add($"{label}: avatar '{avatar}' must stay inside authors/.");
+            return;
+        }
+
+        profile.AvatarSourcePath = fullPath;
+        if (!File.Exists(fullPath))
+        {
+            errors.Add($"{label}: avatar '{avatar}' does not exist.");
+            return;
+        }
+
+        var extension = Path.GetExtension(fullPath);
+        if (!AllowedAssetExtensions.Contains(extension))
+            errors.Add($"{label}: avatar '{avatar}' has unsupported extension '{extension}'. Use PNG, JPG, JPEG, WEBP, or GIF.");
+
+        var length = new FileInfo(fullPath).Length;
+        if (options.MaxAssetBytes > 0 && length > options.MaxAssetBytes)
+            errors.Add($"{label}: avatar '{avatar}' is larger than {options.MaxAssetBytes} bytes.");
     }
 
     private static WebContributionPostResult ValidatePost(

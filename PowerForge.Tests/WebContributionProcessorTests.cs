@@ -180,6 +180,41 @@ public class WebContributionProcessorTests
     }
 
     [Fact]
+    public void Import_CopiesLocalAuthorAvatarIntoWebsiteAssets()
+    {
+        var root = CreateTempRoot("pf-web-contributions-author-avatar-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            var siteRoot = Path.Combine(root, "site");
+            WriteAuthor(sourceRoot, "jane-doe", avatar: "./images/jane-doe.webp");
+            var authorImagesRoot = Path.Combine(sourceRoot, "authors", "images");
+            Directory.CreateDirectory(authorImagesRoot);
+            File.WriteAllBytes(Path.Combine(authorImagesRoot, "jane-doe.webp"), [0, 1, 2, 3]);
+            WritePost(sourceRoot, "sample-post");
+            Directory.CreateDirectory(siteRoot);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot,
+                SiteRoot = siteRoot,
+                Import = true,
+                Force = true
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+            Assert.True(File.Exists(Path.Combine(siteRoot, "static", "assets", "authors", "jane-doe", "jane-doe.webp")));
+            var catalog = File.ReadAllText(Path.Combine(siteRoot, "data", "authors", "catalog.json"));
+            Assert.Contains("\"avatar\": \"/assets/authors/jane-doe/jane-doe.webp\"", catalog);
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
     public void Validate_RejectsImageReferencesThatEscapePostBundle()
     {
         var root = CreateTempRoot("pf-web-contributions-traversal-");
@@ -212,6 +247,31 @@ public class WebContributionProcessorTests
 
             Assert.False(result.Success);
             Assert.Contains(result.Errors, error => error.Contains("markdown image target '../secret.png' must stay inside the post bundle", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_RejectsAuthorAvatarThatEscapesAuthorsFolder()
+    {
+        var root = CreateTempRoot("pf-web-contributions-avatar-traversal-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe", avatar: "../jane-doe.webp");
+            WritePost(sourceRoot, "sample-post");
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("avatar '../jane-doe.webp' must stay inside authors", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -341,15 +401,17 @@ public class WebContributionProcessorTests
         string slug,
         string x = "JaneDoe",
         string name = "Jane Doe",
-        string linkedin = "https://www.linkedin.com/in/janedoe")
+        string linkedin = "https://www.linkedin.com/in/janedoe",
+        string? avatar = null)
     {
         var authorsRoot = Path.Combine(sourceRoot, "authors");
         Directory.CreateDirectory(authorsRoot);
+        var avatarLine = string.IsNullOrWhiteSpace(avatar) ? string.Empty : $"avatar: {avatar}\n";
         File.WriteAllText(Path.Combine(authorsRoot, slug + ".yml"),
             $$"""
             name: {{name}}
             slug: {{slug}}
-            linkedin: {{linkedin}}
+            {{avatarLine}}linkedin: {{linkedin}}
             x: {{x}}
             """);
     }
