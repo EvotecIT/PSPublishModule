@@ -32,6 +32,8 @@ public class WebContributionProcessorTests
                 author_urls:
                   - "https://example.com/old"
                 social_twitter_creator: "@Old"
+                metadata:
+                  author: "Nested Name"
                 ---
 
                 Body image:
@@ -65,6 +67,7 @@ public class WebContributionProcessorTests
             Assert.Contains("![Diagram](/assets/blog/2026/sample-post/images/diagram.png)", imported);
             Assert.Contains("```yaml\nimage: \"./cover.webp\"\ndraft: true\n```", imported);
             Assert.Equal(1, CountOccurrences(imported, "author: \"Jane Doe\""));
+            Assert.Contains("metadata:\n  author: \"Nested Name\"", imported);
             Assert.DoesNotContain("Old Name", imported);
             Assert.DoesNotContain("draft: false---", imported);
         }
@@ -272,15 +275,71 @@ public class WebContributionProcessorTests
         }
     }
 
-    private static void WriteAuthor(string sourceRoot, string slug, string x = "JaneDoe")
+    [Fact]
+    public void Validate_ReportsInvalidAuthorProfiles()
+    {
+        var root = CreateTempRoot("pf-web-contributions-author-profile-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe", name: "", linkedin: "https://example.com/janedoe");
+            WritePost(sourceRoot, "sample-post");
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("author 'jane-doe': missing name", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Errors, error => error.Contains("author 'jane-doe': linkedin must be a valid linkedin.com URL", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_ReportsEscapingContributionPathsAsErrors()
+    {
+        var root = CreateTempRoot("pf-web-contributions-paths-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            Directory.CreateDirectory(sourceRoot);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot,
+                PostsPath = "../posts"
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("PostsPath must stay inside the configured root", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    private static void WriteAuthor(
+        string sourceRoot,
+        string slug,
+        string x = "JaneDoe",
+        string name = "Jane Doe",
+        string linkedin = "https://www.linkedin.com/in/janedoe")
     {
         var authorsRoot = Path.Combine(sourceRoot, "authors");
         Directory.CreateDirectory(authorsRoot);
         File.WriteAllText(Path.Combine(authorsRoot, slug + ".yml"),
             $$"""
-            name: Jane Doe
+            name: {{name}}
             slug: jane-doe
-            linkedin: https://www.linkedin.com/in/janedoe
+            linkedin: {{linkedin}}
             x: {{x}}
             """);
     }

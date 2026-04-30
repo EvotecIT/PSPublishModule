@@ -77,8 +77,15 @@ public static class WebContributionProcessor
             return result;
         }
 
-        var postsRoot = ResolveInside(sourceRoot, options.PostsPath);
-        var authorsRoot = ResolveInside(sourceRoot, options.AuthorsPath);
+        if (!TryResolveInside(sourceRoot, options.PostsPath, "PostsPath", errors, out var postsRoot) ||
+            !TryResolveInside(sourceRoot, options.AuthorsPath, "AuthorsPath", errors, out var authorsRoot))
+        {
+            result.Errors = errors.ToArray();
+            result.Warnings = warnings.ToArray();
+            result.Success = false;
+            return result;
+        }
+
         var authors = LoadAuthors(authorsRoot, warnings);
         result.AuthorCount = authors.Count;
         ValidateAuthorProfiles(authors, errors);
@@ -104,6 +111,12 @@ public static class WebContributionProcessor
                 errors.Add("Import requires SiteRoot.");
             else if (!Directory.Exists(result.SiteRoot))
                 errors.Add($"Website root does not exist: {result.SiteRoot}");
+            else
+            {
+                TryResolveInside(result.SiteRoot, options.TargetAuthorsPath, "TargetAuthorsPath", errors, out _);
+                TryResolveInside(result.SiteRoot, options.ContentBlogPath, "ContentBlogPath", errors, out _);
+                TryResolveInside(result.SiteRoot, options.StaticBlogAssetsPath, "StaticBlogAssetsPath", errors, out _);
+            }
         }
 
         if (errors.Count == 0 && options.Import && result.SiteRoot is not null)
@@ -351,16 +364,9 @@ public static class WebContributionProcessor
                 .OrderBy(static profile => profile.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static profile => profile.Slug, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var catalog = new Dictionary<string, object?>
-            {
-                ["authors"] = profiles
-            };
+            var catalog = new WebContributionAuthorCatalog { Authors = profiles };
             var catalogPath = Path.Combine(targetAuthorsRoot, "catalog.json");
-            var json = JsonSerializer.Serialize(catalog, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            });
+            var json = JsonSerializer.Serialize(catalog, WebContributionJsonContext.Default.WebContributionAuthorCatalog);
             File.WriteAllText(catalogPath, json.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n", new UTF8Encoding(false));
             result.CopiedAuthorCount = profiles.Length;
         }
@@ -857,9 +863,11 @@ public static class WebContributionProcessor
 
     private static bool IsFrontMatterKeyLine(string line, ISet<string> keys)
     {
-        var trimmed = line.TrimStart();
-        var colon = trimmed.IndexOf(':');
-        return colon > 0 && keys.Contains(trimmed[..colon].Trim());
+        if (string.IsNullOrWhiteSpace(line) || char.IsWhiteSpace(line[0]))
+            return false;
+
+        var colon = line.IndexOf(':');
+        return colon > 0 && keys.Contains(line[..colon].Trim());
     }
 
     private static bool CopyFile(string source, string target, bool force, List<string> errors)
@@ -900,6 +908,21 @@ public static class WebContributionProcessor
         }
 
         return candidate;
+    }
+
+    private static bool TryResolveInside(string root, string relative, string optionName, List<string> errors, out string resolved)
+    {
+        resolved = string.Empty;
+        try
+        {
+            resolved = ResolveInside(root, relative);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or InvalidOperationException)
+        {
+            errors.Add($"{optionName} must stay inside the configured root: {relative}");
+            return false;
+        }
     }
 
     private static StringComparison PathComparison =>

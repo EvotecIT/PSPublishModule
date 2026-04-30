@@ -63,6 +63,14 @@ public sealed class WebContributionAuthorProfile
     public string? Website { get; set; }
 }
 
+/// <summary>Author catalog imported into website data.</summary>
+public sealed class WebContributionAuthorCatalog
+{
+    /// <summary>Known website author profiles.</summary>
+    [JsonPropertyName("authors")]
+    public WebContributionAuthorProfile[] Authors { get; set; } = Array.Empty<WebContributionAuthorProfile>();
+}
+
 /// <summary>Result of validating or importing website contribution bundles.</summary>
 public sealed class WebContributionResult
 {
