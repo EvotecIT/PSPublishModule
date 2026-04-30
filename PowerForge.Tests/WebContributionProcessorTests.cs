@@ -35,6 +35,7 @@ public class WebContributionProcessorTests
                 metadata:
                   author: "Nested Name"
                   image: "./nested.webp"
+                  draft: true
                 ---
 
                 Body image:
@@ -70,6 +71,7 @@ public class WebContributionProcessorTests
             Assert.Equal(1, CountOccurrences(imported, "author: \"Jane Doe\""));
             Assert.Contains("metadata:\n  author: \"Nested Name\"", imported);
             Assert.Contains("  image: \"./nested.webp\"", imported);
+            Assert.Contains("  draft: true", imported);
             Assert.DoesNotContain("Old Name", imported);
             Assert.DoesNotContain("draft: false---", imported);
 
