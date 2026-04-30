@@ -25,6 +25,8 @@ public sealed class WebContributionOptions
     public string StaticBlogAssetsPath { get; set; } = "static/assets/blog";
     /// <summary>Relative destination authors root inside the website repository.</summary>
     public string TargetAuthorsPath { get; set; } = "data/authors";
+    /// <summary>Relative destination author image root inside the website repository.</summary>
+    public string TargetAuthorAssetsPath { get; set; } = "static/assets/authors";
     /// <summary>Maximum allowed size for a single contributed asset.</summary>
     public long MaxAssetBytes { get; set; } = 5 * 1024 * 1024;
     /// <summary>Maximum total size for all assets in one post bundle.</summary>
@@ -49,6 +51,12 @@ public sealed class WebContributionAuthorProfile
     /// <summary>Avatar URL or site-rooted avatar path.</summary>
     [JsonPropertyName("avatar")]
     public string? Avatar { get; set; }
+    /// <summary>Source YAML path; used internally for resolving local avatar paths.</summary>
+    [JsonIgnore]
+    public string? SourcePath { get; set; }
+    /// <summary>Resolved local avatar path; used internally during import.</summary>
+    [JsonIgnore]
+    public string? AvatarSourcePath { get; set; }
     /// <summary>X/Twitter profile URL or handle.</summary>
     [JsonPropertyName("x")]
     public string? X { get; set; }

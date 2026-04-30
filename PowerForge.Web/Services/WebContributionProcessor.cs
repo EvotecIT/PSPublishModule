@@ -88,7 +88,7 @@ public static partial class WebContributionProcessor
 
         var authors = LoadAuthors(authorsRoot, warnings);
         result.AuthorCount = authors.Count;
-        ValidateAuthorProfiles(authors, errors);
+        ValidateAuthorProfiles(authors, options, errors);
 
         if (!Directory.Exists(postsRoot))
             errors.Add($"Posts directory does not exist: {postsRoot}");
@@ -114,6 +114,7 @@ public static partial class WebContributionProcessor
             else
             {
                 TryResolveInside(result.SiteRoot, options.TargetAuthorsPath, "TargetAuthorsPath", errors, out _);
+                TryResolveInside(result.SiteRoot, options.TargetAuthorAssetsPath, "TargetAuthorAssetsPath", errors, out _);
                 TryResolveInside(result.SiteRoot, options.ContentBlogPath, "ContentBlogPath", errors, out _);
                 TryResolveInside(result.SiteRoot, options.StaticBlogAssetsPath, "StaticBlogAssetsPath", errors, out _);
             }
@@ -147,7 +148,11 @@ public static partial class WebContributionProcessor
                 var profiles = authors.Values
                     .OrderBy(static profile => profile.Name, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(static profile => profile.Slug, StringComparer.OrdinalIgnoreCase)
+                    .Select(profile => PrepareAuthorProfileForImport(profile, options, siteRoot, errors, result))
                     .ToArray();
+                if (errors.Count > 0)
+                    return;
+
                 var catalog = new WebContributionAuthorCatalog { Authors = profiles };
                 var catalogPath = Path.Combine(targetAuthorsRoot, "catalog.json");
                 var json = JsonSerializer.Serialize(catalog, WebContributionJsonContext.Default.WebContributionAuthorCatalog);
@@ -216,6 +221,48 @@ public static partial class WebContributionProcessor
 
         if (errors.Count == 0 && result.ImportedPostCount == 0 && posts.Length > 0)
             warnings.Add("No posts were imported.");
+    }
+
+    private static WebContributionAuthorProfile PrepareAuthorProfileForImport(
+        WebContributionAuthorProfile profile,
+        WebContributionOptions options,
+        string siteRoot,
+        List<string> errors,
+        WebContributionResult result)
+    {
+        var imported = new WebContributionAuthorProfile
+        {
+            Name = profile.Name,
+            Slug = profile.Slug,
+            Title = profile.Title,
+            Bio = profile.Bio,
+            Avatar = profile.Avatar,
+            X = profile.X,
+            LinkedIn = profile.LinkedIn,
+            GitHub = profile.GitHub,
+            Website = profile.Website
+        };
+
+        if (string.IsNullOrWhiteSpace(profile.Avatar) ||
+            IsExternalOrRootedWebPath(profile.Avatar) ||
+            string.IsNullOrWhiteSpace(profile.AvatarSourcePath))
+        {
+            return imported;
+        }
+
+        var avatarFileName = Path.GetFileName(profile.AvatarSourcePath);
+        var targetRoot = ResolveInside(siteRoot, Path.Combine(options.TargetAuthorAssetsPath, profile.Slug));
+        var target = Path.Combine(targetRoot, avatarFileName);
+        if (CopyFile(profile.AvatarSourcePath, target, options.Force, errors))
+        {
+            result.CopiedAssetCount++;
+            var publicRoot = options.TargetAuthorAssetsPath.Replace('\\', '/').Trim('/');
+            if (publicRoot.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+                publicRoot = publicRoot["static/".Length..];
+            imported.Avatar = "/" + ToSlash(Path.Combine(publicRoot, profile.Slug, avatarFileName));
+        }
+
+        return imported;
     }
 
     private static string RewritePostMarkdown(
@@ -424,6 +471,21 @@ public static partial class WebContributionProcessor
 
         var candidate = Path.GetFullPath(Path.Combine(bundleRoot, FromSlash(normalized)));
         var rootPrefix = Path.GetFullPath(bundleRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!candidate.StartsWith(rootPrefix, PathComparison))
+            return false;
+
+        fullPath = candidate;
+        return true;
+    }
+
+    private static bool TryResolveAuthorAsset(string authorsRoot, string target, out string fullPath)
+    {
+        fullPath = string.Empty;
+        if (!TryNormalizeRelativeAssetPath(target, out var normalized))
+            return false;
+
+        var candidate = Path.GetFullPath(Path.Combine(authorsRoot, FromSlash(normalized)));
+        var rootPrefix = Path.GetFullPath(authorsRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!candidate.StartsWith(rootPrefix, PathComparison))
             return false;
 
