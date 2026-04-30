@@ -138,6 +138,14 @@
         "clean": {
           "type": "boolean",
           "description": "When true, delete existing output contents before writing new build artifacts."
+        },
+        "socialAutoGenerate": {
+          "type": "boolean",
+          "description": "Override site social.autoGenerateCards for this build step."
+        },
+        "social-auto-generate": {
+          "type": "boolean",
+          "description": "Alias for socialAutoGenerate."
         }
       },
       "required": ["task", "config", "out"]

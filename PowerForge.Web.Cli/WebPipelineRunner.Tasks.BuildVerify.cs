@@ -23,11 +23,13 @@ internal static partial class WebPipelineRunner
         var language = GetString(step, "language") ?? GetString(step, "lang");
         var languages = GetArrayOfStrings(step, "languages") ?? GetArrayOfStrings(step, "langs");
         var languageAsRoot = GetBool(step, "languageAsRoot") ?? GetBool(step, "language-as-root") ?? false;
+        var socialAutoGenerate = GetBool(step, "socialAutoGenerate") ?? GetBool(step, "social-auto-generate");
         var cleanOutput = GetBool(step, "clean") ?? false;
         if (string.IsNullOrWhiteSpace(config) || string.IsNullOrWhiteSpace(outPath))
             throw new InvalidOperationException("build requires config and out.");
 
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+        ApplyBuildStepOverrides(spec, socialAutoGenerate);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
@@ -50,6 +52,15 @@ internal static partial class WebPipelineRunner
                 ? $"Built {build.OutputPath} (languages={string.Join(",", languages)})"
                 : $"Built {build.OutputPath}"
             : $"Built {build.OutputPath} (language={language}, as-root={languageAsRoot.ToString().ToLowerInvariant()})";
+    }
+
+    private static void ApplyBuildStepOverrides(SiteSpec spec, bool? socialAutoGenerate)
+    {
+        if (socialAutoGenerate is null)
+            return;
+
+        spec.Social ??= new SocialSpec();
+        spec.Social.AutoGenerateCards = socialAutoGenerate.Value;
     }
 
     private static void ExecuteVerify(JsonElement step, string baseDir, bool fast, string effectiveMode, WebPipelineStepResult stepResult)
