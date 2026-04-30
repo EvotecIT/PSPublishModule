@@ -17,7 +17,7 @@ public static class WebContributionProcessor
         RegexTimeout);
     // Match only the canonical front matter image key; image_alt/image_url are intentionally excluded.
     private static readonly Regex FrontMatterImageRegex = new(
-        @"(?m)^(?<prefix>\s*image\s*:\s*[""']?)(?<target>[^""'\r\n]+)(?<suffix>[""']?\s*)$",
+        @"(?m)^(?<prefix>image\s*:\s*[""']?)(?<target>[^""'\r\n]+)(?<suffix>[""']?\s*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
         RegexTimeout);
     private static readonly Regex DraftRegex = new(
@@ -144,7 +144,7 @@ public static class WebContributionProcessor
             var slug = Path.GetFileNameWithoutExtension(path);
             try
             {
-                var map = AuthorDeserializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
+                var map = AuthorDeserializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path, Encoding.UTF8));
                 if (map is null)
                     continue;
 
@@ -305,7 +305,9 @@ public static class WebContributionProcessor
         if (IsExternalOrRootedWebPath(image))
             return;
 
-        if (!TryResolveBundleAsset(bundleRoot, image, out var fullPath) || !File.Exists(fullPath))
+        if (!TryResolveBundleAsset(bundleRoot, image, out var fullPath))
+            errors.Add($"{relative}: featured image '{image}' must stay inside the post bundle.");
+        else if (!File.Exists(fullPath))
             errors.Add($"{relative}: featured image '{image}' does not exist next to the post.");
 
         if (!TryReadString(matter.Meta, "image_alt", out var alt) &&
@@ -338,7 +340,9 @@ public static class WebContributionProcessor
             if (IsExternalOrRootedWebPath(target))
                 continue;
 
-            if (!TryResolveBundleAsset(bundleRoot, target, out var fullPath) || !File.Exists(fullPath))
+            if (!TryResolveBundleAsset(bundleRoot, target, out var fullPath))
+                errors.Add($"{relative}: markdown image target '{target}' must stay inside the post bundle.");
+            else if (!File.Exists(fullPath))
                 errors.Add($"{relative}: markdown image target '{target}' does not exist.");
         }
 

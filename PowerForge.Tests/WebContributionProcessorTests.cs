@@ -34,6 +34,7 @@ public class WebContributionProcessorTests
                 social_twitter_creator: "@Old"
                 metadata:
                   author: "Nested Name"
+                  image: "./nested.webp"
                 ---
 
                 Body image:
@@ -68,8 +69,15 @@ public class WebContributionProcessorTests
             Assert.Contains("```yaml\nimage: \"./cover.webp\"\ndraft: true\n```", imported);
             Assert.Equal(1, CountOccurrences(imported, "author: \"Jane Doe\""));
             Assert.Contains("metadata:\n  author: \"Nested Name\"", imported);
+            Assert.Contains("  image: \"./nested.webp\"", imported);
             Assert.DoesNotContain("Old Name", imported);
             Assert.DoesNotContain("draft: false---", imported);
+
+            var catalog = File.ReadAllText(Path.Combine(siteRoot, "data", "authors", "catalog.json"));
+            Assert.Contains("\"authors\"", catalog);
+            Assert.Contains("\"name\": \"Jane Doe\"", catalog);
+            Assert.Contains("\"slug\": \"jane-doe\"", catalog);
+            Assert.Contains("\"linkedin\": \"https://www.linkedin.com/in/janedoe\"", catalog);
         }
         finally
         {
@@ -201,7 +209,7 @@ public class WebContributionProcessorTests
             });
 
             Assert.False(result.Success);
-            Assert.Contains(result.Errors, error => error.Contains("markdown image target '../secret.png'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Errors, error => error.Contains("markdown image target '../secret.png' must stay inside the post bundle", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -338,7 +346,7 @@ public class WebContributionProcessorTests
         File.WriteAllText(Path.Combine(authorsRoot, slug + ".yml"),
             $$"""
             name: {{name}}
-            slug: jane-doe
+            slug: {{slug}}
             linkedin: {{linkedin}}
             x: {{x}}
             """);
