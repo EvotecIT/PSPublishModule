@@ -579,6 +579,7 @@ public static partial class WebSiteBuilder
 
         var contentNs = XNamespace.Get("http://purl.org/rss/1.0/modules/content/");
         var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        var dcNs = XNamespace.Get("http://purl.org/dc/elements/1.1/");
 
         var feedItems = orderedItems
             .Select(i =>
@@ -592,6 +593,8 @@ public static partial class WebSiteBuilder
                     new XElement("description", description),
                     new XElement("pubDate", pubDate),
                     new XElement("guid", link));
+                foreach (var authorName in ResolveContentAuthorNames(i))
+                    element.Add(new XElement(dcNs + "creator", authorName));
                 if (includeCategories)
                 {
                     foreach (var category in ResolveRssCategories(i))
@@ -605,7 +608,8 @@ public static partial class WebSiteBuilder
 
         var root = new XElement("rss",
             new XAttribute("version", "2.0"),
-            new XAttribute(XNamespace.Xmlns + "atom", atomNs));
+            new XAttribute(XNamespace.Xmlns + "atom", atomNs),
+            new XAttribute(XNamespace.Xmlns + "dc", dcNs));
         if (includeContent)
             root.Add(new XAttribute(XNamespace.Xmlns + "content", contentNs));
 
@@ -670,6 +674,12 @@ public static partial class WebSiteBuilder
                 new XElement(XName.Get("summary", "http://www.w3.org/2005/Atom"),
                     string.IsNullOrWhiteSpace(entry.Description) ? BuildSnippet(entry.HtmlContent, 200) : entry.Description));
 
+            foreach (var authorName in ResolveContentAuthorNames(entry))
+            {
+                atomEntry.Add(new XElement(XName.Get("author", "http://www.w3.org/2005/Atom"),
+                    new XElement(XName.Get("name", "http://www.w3.org/2005/Atom"), authorName)));
+            }
+
             if (includeContent && !string.IsNullOrWhiteSpace(entry.HtmlContent))
             {
                 atomEntry.Add(new XElement(XName.Get("content", "http://www.w3.org/2005/Atom"),
@@ -729,6 +739,18 @@ public static partial class WebSiteBuilder
                     feedItem["content_html"] = entry.HtmlContent;
                 if (includeCategories)
                     feedItem["tags"] = ResolveRssCategories(entry).ToArray();
+                var authorNames = ResolveContentAuthorNames(entry);
+                if (authorNames.Length > 0)
+                {
+                    var authorUrls = ResolveContentAuthorUrls(entry);
+                    feedItem["authors"] = authorNames.Select((name, index) =>
+                    {
+                        var author = new Dictionary<string, object?> { ["name"] = name };
+                        if (index < authorUrls.Length && !string.IsNullOrWhiteSpace(authorUrls[index]))
+                            author["url"] = authorUrls[index];
+                        return author;
+                    }).ToArray();
+                }
 
                 return feedItem;
             }).ToArray()
