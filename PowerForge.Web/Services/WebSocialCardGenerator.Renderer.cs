@@ -35,6 +35,22 @@ internal static partial class WebSocialCardGenerator
 
     internal static byte[]? RenderPng(SocialCardRenderOptions options)
     {
+        var embeddedOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: true);
+        var embeddedState = CreateState(embeddedOptions);
+        var embeddedSvg = RenderSvg(embeddedState);
+        if (!string.IsNullOrWhiteSpace(embeddedSvg))
+        {
+            var externalPng = TryRenderPngWithExternalImageMagick(embeddedSvg, embeddedState.Width, embeddedState.Height);
+            if (externalPng is { Length: > 0 })
+                return externalPng;
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            Trace.TraceWarning("Social card PNG render skipped: external ImageMagick is unavailable or failed on Linux, and in-process SVG rendering is disabled to avoid native renderer crashes.");
+            return null;
+        }
+
         var rasterOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: false);
         var state = CreateState(rasterOptions);
         var svg = RenderSvg(state);
@@ -43,6 +59,7 @@ internal static partial class WebSocialCardGenerator
 
         try
         {
+            EnsureMagickFontConfigInitialized();
             var settings = new MagickReadSettings
             {
                 Width = (uint)Math.Clamp(options.Width, 600, 2400),
@@ -63,6 +80,123 @@ internal static partial class WebSocialCardGenerator
             Trace.TraceWarning($"Social card PNG render failed: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    private static byte[]? TryRenderPngWithExternalImageMagick(string svg, int width, int height)
+    {
+        if (string.IsNullOrWhiteSpace(svg))
+            return null;
+
+        var command = ResolveExternalImageMagickCommand();
+        if (command is null)
+            return null;
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "powerforge-social-card-" + Guid.NewGuid().ToString("N"));
+        var svgPath = Path.Combine(tempRoot, "card.svg");
+        var pngPath = Path.Combine(tempRoot, "card.png");
+
+        try
+        {
+            Directory.CreateDirectory(tempRoot);
+            File.WriteAllText(svgPath, svg, Encoding.UTF8);
+
+            var arguments = new[] { "-background", "none", "-size", $"{width}x{height}", svgPath, $"PNG32:{pngPath}" };
+            var startInfo = new ProcessStartInfo(command.Executable)
+            {
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            foreach (var argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return null;
+
+            var errorTask = process.StandardError.ReadToEndAsync();
+            var exited = process.WaitForExit(30_000);
+            if (!exited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // Best-effort cleanup for a timed-out renderer process.
+                }
+
+                Trace.TraceWarning("Social card external ImageMagick render timed out.");
+                return null;
+            }
+
+            if (process.ExitCode != 0 || !File.Exists(pngPath))
+            {
+                var error = errorTask.GetAwaiter().GetResult().Trim();
+                if (!string.IsNullOrWhiteSpace(error))
+                    Trace.TraceWarning($"Social card external ImageMagick render failed: {error}");
+                return null;
+            }
+
+            return File.ReadAllBytes(pngPath);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Social card external ImageMagick render failed: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, recursive: true);
+            }
+            catch
+            {
+                // Temp cleanup is best-effort.
+            }
+        }
+    }
+
+    private static ExternalImageMagickCommand? ResolveExternalImageMagickCommand()
+    {
+        if (OperatingSystem.IsWindows())
+            return null;
+
+        var magick = FindExecutableOnPath("magick");
+        if (!string.IsNullOrWhiteSpace(magick))
+            return new ExternalImageMagickCommand(magick);
+
+        var convert = FindExecutableOnPath("convert");
+        if (!string.IsNullOrWhiteSpace(convert))
+            return new ExternalImageMagickCommand(convert);
+
+        return null;
+    }
+
+    private static string? FindExecutableOnPath(string name)
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(directory, name);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch
+            {
+                // Ignore malformed PATH entries.
+            }
+        }
+
+        return null;
     }
 
     internal static string RenderSvg(SocialCardRenderOptions options)
@@ -386,6 +520,7 @@ internal static partial class WebSocialCardGenerator
     {
         try
         {
+            EnsureMagickFontConfigInitialized();
             const int startX = 96;
             const int alphaThreshold = 12;
             var canvasWidth = Math.Max(256, fontSize * 3);
@@ -453,6 +588,7 @@ internal static partial class WebSocialCardGenerator
     {
         try
         {
+            EnsureMagickFontConfigInitialized();
             const int startX = 96;
             const int alphaThreshold = 12;
             var canvasWidth = Math.Max(320, fontSize * Math.Max(4, text.Length + 2));
@@ -1659,6 +1795,7 @@ internal static partial class WebSocialCardGenerator
                 if (Path.GetExtension(localPath).Equals(".svg", StringComparison.OrdinalIgnoreCase))
                     return CreateMagickImage(SanitizeSvgBytes(File.ReadAllBytes(localPath)), localPath, widthHint, heightHint);
 
+                EnsureMagickFontConfigInitialized();
                 return new MagickImage(localPath);
             }
 
@@ -1667,6 +1804,7 @@ internal static partial class WebSocialCardGenerator
                 if (Path.GetExtension(source).Equals(".svg", StringComparison.OrdinalIgnoreCase))
                     return CreateMagickImage(SanitizeSvgBytes(File.ReadAllBytes(source)), source, widthHint, heightHint);
 
+                EnsureMagickFontConfigInitialized();
                 return new MagickImage(source);
             }
 
@@ -1685,6 +1823,7 @@ internal static partial class WebSocialCardGenerator
             sourceHint.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
         {
             var safeBytes = SanitizeSvgBytes(bytes);
+            EnsureMagickFontConfigInitialized();
             var image = new MagickImage(safeBytes, new MagickReadSettings
             {
                 Width = (uint)Math.Max(1, widthHint),
@@ -1697,6 +1836,7 @@ internal static partial class WebSocialCardGenerator
             return image;
         }
 
+        EnsureMagickFontConfigInitialized();
         return new MagickImage(bytes);
     }
 
@@ -1826,6 +1966,8 @@ internal static partial class WebSocialCardGenerator
     }
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);
+
+    private sealed record ExternalImageMagickCommand(string Executable);
 
     // ── Compatibility shims for old Append* names used in tests ────────
 
