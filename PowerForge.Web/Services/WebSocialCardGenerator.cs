@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,6 +17,7 @@ internal static partial class WebSocialCardGenerator
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         SocialRegexTimeout);
     private static readonly Lazy<HashSet<string>> AvailableMagickFontFamilies = new(CreateAvailableMagickFontFamilies);
+    private static readonly Lazy<bool> MagickFontConfigInitialized = new(InitializeMagickFontConfig);
 
     private static readonly SocialPalette[] Palettes =
     [
@@ -873,6 +876,7 @@ internal static partial class WebSocialCardGenerator
 
         try
         {
+            EnsureMagickFontConfigInitialized();
             foreach (var family in MagickNET.FontFamilies)
             {
                 if (!string.IsNullOrWhiteSpace(family))
@@ -886,6 +890,42 @@ internal static partial class WebSocialCardGenerator
 
         return families;
     }
+
+    private static void EnsureMagickFontConfigInitialized()
+    {
+        _ = MagickFontConfigInitialized.Value;
+    }
+
+    private static bool InitializeMagickFontConfig()
+    {
+        if (OperatingSystem.IsWindows())
+            return true;
+
+        try
+        {
+            _ = FcInit();
+
+            var configuredDirectory = Environment.GetEnvironmentVariable("FONTCONFIG_PATH");
+            if (!string.IsNullOrWhiteSpace(configuredDirectory))
+            {
+                MagickNET.SetFontConfigDirectory(configuredDirectory);
+                return true;
+            }
+
+            const string systemFontConfigDirectory = "/etc/fonts";
+            if (Directory.Exists(systemFontConfigDirectory))
+                MagickNET.SetFontConfigDirectory(systemFontConfigDirectory);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceInformation($"Social card fontconfig initialization skipped: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        return true;
+    }
+
+    [DllImport("libfontconfig.so.1", EntryPoint = "FcInit")]
+    private static extern int FcInit();
 
     private static string GetDefaultRasterFontFamily(SocialCardFontIntent intent)
     {
