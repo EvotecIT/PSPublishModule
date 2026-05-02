@@ -12,6 +12,8 @@ internal static class WebAssetCssStrategy
         var original = cssStrategy.Trim();
         return original.ToLowerInvariant() switch
         {
+            "blocking" => "blocking",
+            "standard" => "blocking",
             "sync" => "blocking",
             "inline" => "blocking",
             "render-blocking" => "blocking",

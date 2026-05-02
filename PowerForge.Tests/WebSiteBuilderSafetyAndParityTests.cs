@@ -249,6 +249,84 @@ public class WebSiteBuilderSafetyAndParityTests
     }
 
     [Fact]
+    public void Build_DoesNotWarn_WhenCssStrategyIsExplicitBlocking()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-css-strategy-blocking-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var writer = new StringWriter();
+        var listener = new TextWriterTraceListener(writer);
+        var listeners = Trace.Listeners.Cast<TraceListener>().ToArray();
+        var previousAutoFlush = Trace.AutoFlush;
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.AssetRegistry = new AssetRegistrySpec
+            {
+                CssStrategy = "blocking",
+                Bundles = new[]
+                {
+                    new AssetBundleSpec
+                    {
+                        Name = "global",
+                        Css = new[] { "/assets/app.css" }
+                    }
+                },
+                RouteBundles = new[]
+                {
+                    new RouteBundleSpec
+                    {
+                        Match = "/**",
+                        Bundles = new[] { "global" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            Trace.Listeners.Clear();
+            Trace.Listeners.Add(listener);
+            Trace.AutoFlush = true;
+
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            listener.Flush();
+            var traceOutput = writer.ToString();
+            Assert.Contains("<link rel=\"stylesheet\" href=\"/assets/app.css\" />", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Unknown CssStrategy", traceOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            listener.Flush();
+            listener.Close();
+            Trace.Listeners.Clear();
+            foreach (var existing in listeners)
+                Trace.Listeners.Add(existing);
+            Trace.AutoFlush = previousAutoFlush;
+
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_EmitsTraceWarning_WhenHeadFileCannotBeResolved()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-headfile-warning-" + Guid.NewGuid().ToString("N"));
