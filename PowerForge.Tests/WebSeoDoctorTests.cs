@@ -1143,6 +1143,64 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_DoesNotFlagContentLeak_ForFrontMatterExampleInCodeBlock()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-frontmatter-code-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Contribution Guide</title></head>
+                <body>
+                  <main>
+                    <article>
+                      <p>Here is a beginner-friendly starter template:</p>
+                      <pre><code class="language-markdown">---
+                title: "Your Article Title"
+                description: "A short summary of what the article explains."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - your-name
+                draft: true
+                ---
+
+                Start with a short introduction.
+                </code></pre>
+                    </article>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                CheckHreflang = false,
+                CheckStructuredData = false,
+                CheckContentLeaks = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "content-frontmatter-leak");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_FlagsRenderedMarkdownLeakWhenEscapedHtmlAndMarkdownAreVisible()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-markdown-leak-" + Guid.NewGuid().ToString("N"));
