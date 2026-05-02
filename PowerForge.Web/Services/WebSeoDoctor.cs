@@ -190,7 +190,8 @@ public static class WebSeoDoctor
 
             if (options.CheckContentLeaks)
             {
-                ValidateContentLeaks(relativePath, bodyText, AddIssue);
+                var leakCheckText = GetVisibleBodyText(doc.Body, excludeCodeBlocks: true);
+                ValidateContentLeaks(relativePath, leakCheckText, AddIssue);
             }
 
             var page = new PageScan
@@ -1958,7 +1959,7 @@ public static class WebSeoDoctor
         return string.Empty;
     }
 
-    private static string GetVisibleBodyText(AngleSharp.Dom.IElement? body)
+    private static string GetVisibleBodyText(AngleSharp.Dom.IElement? body, bool excludeCodeBlocks = false)
     {
         if (body is null)
             return string.Empty;
@@ -1967,7 +1968,10 @@ public static class WebSeoDoctor
         if (clone is null)
             return NormalizeWhitespace(body.TextContent);
 
-        foreach (var element in clone.QuerySelectorAll("script,style,template,noscript"))
+        var ignoredSelectors = excludeCodeBlocks
+            ? "script,style,template,noscript,pre,code,kbd,samp"
+            : "script,style,template,noscript";
+        foreach (var element in clone.QuerySelectorAll(ignoredSelectors))
             element.Remove();
 
         return NormalizeWhitespace(clone.TextContent);
