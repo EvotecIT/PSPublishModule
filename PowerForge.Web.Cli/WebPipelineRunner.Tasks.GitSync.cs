@@ -109,7 +109,7 @@ internal static partial class WebPipelineRunner
             {
                 var resolvedCommit = execution.Commit?.Trim();
                 if (string.IsNullOrWhiteSpace(resolvedCommit) ||
-                    !string.Equals(resolvedCommit, lockedCommit, StringComparison.OrdinalIgnoreCase))
+                    !CommitMatchesLockedCommit(resolvedCommit, lockedCommit))
                 {
                     throw new InvalidOperationException($"git-sync verify mode: repos[{i}] resolved commit '{resolvedCommit ?? "unknown"}' does not match lock commit '{lockedCommit}'.");
                 }
@@ -356,11 +356,42 @@ internal static partial class WebPipelineRunner
         if (request.Submodules)
             UpdateSubmodules(request.DestinationFull, request.SubmodulesRecursive, request.SubmoduleDepth, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs);
 
+        var resolvedHeadCommit = ResolveHeadCommit(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs);
         return new GitSyncExecutionResult
         {
             DisplayReference = ResolveHeadReference(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs),
-            Commit = ResolveHeadCommit(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs) ?? checkedOutCommit
+            Commit = SelectResolvedCommit(resolvedHeadCommit, checkedOutCommit)
         };
+    }
+
+    private static string? SelectResolvedCommit(string? resolvedHeadCommit, string? checkedOutCommit)
+    {
+        if (IsFullGitCommitSha(resolvedHeadCommit))
+            return resolvedHeadCommit!.Trim();
+
+        if (IsFullGitCommitSha(checkedOutCommit))
+            return checkedOutCommit!.Trim();
+
+        return string.IsNullOrWhiteSpace(resolvedHeadCommit)
+            ? checkedOutCommit?.Trim()
+            : resolvedHeadCommit.Trim();
+    }
+
+    private static bool CommitMatchesLockedCommit(string resolvedCommit, string? lockedCommit)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedCommit) || string.IsNullOrWhiteSpace(lockedCommit))
+            return false;
+
+        var resolved = resolvedCommit.Trim();
+        var locked = lockedCommit.Trim();
+        if (string.Equals(resolved, locked, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return resolved.Length >= 12 &&
+               resolved.Length < locked.Length &&
+               IsHexString(resolved) &&
+               IsHexString(locked) &&
+               locked.StartsWith(resolved, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsFullGitCommitSha(string? value)
@@ -372,7 +403,12 @@ internal static partial class WebPipelineRunner
         if (text.Length != 40)
             return false;
 
-        foreach (var ch in text)
+        return IsHexString(text);
+    }
+
+    private static bool IsHexString(string value)
+    {
+        foreach (var ch in value)
         {
             var isHex = ch is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
             if (!isHex)

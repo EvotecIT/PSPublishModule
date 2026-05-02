@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
@@ -894,6 +895,32 @@ public class WebPipelineRunnerGitSyncTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    [Fact]
+    public void RunPipeline_GitSync_LockModeVerify_AcceptsAbbreviatedResolvedCommit()
+    {
+        const string lockedCommit = "e8fa9063d718d13f50ce8a03142c1746d036c723";
+        var method = typeof(WebPipelineRunner).GetMethod("CommitMatchesLockedCommit", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var matches = (bool)method!.Invoke(null, new object?[] { lockedCommit[..16], lockedCommit })!;
+        var mismatch = (bool)method.Invoke(null, new object?[] { "ffffffffffffffff", lockedCommit })!;
+
+        Assert.True(matches);
+        Assert.False(mismatch);
+    }
+
+    [Fact]
+    public void RunPipeline_GitSync_PrefersCheckedOutFullCommitWhenHeadIsAbbreviated()
+    {
+        const string checkedOutCommit = "e8fa9063d718d13f50ce8a03142c1746d036c723";
+        var method = typeof(WebPipelineRunner).GetMethod("SelectResolvedCommit", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var selected = (string?)method!.Invoke(null, new object?[] { checkedOutCommit[..16], checkedOutCommit });
+
+        Assert.Equal(checkedOutCommit, selected);
     }
 
     [Fact]
