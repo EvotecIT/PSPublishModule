@@ -18,6 +18,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 - Always run with two modes:
   - dev: warn, summarize, stay fast
   - ci/release: fail on new issues, enforce budgets
+- For Linux-hosted static sites, follow `Docs\PowerForge.Web.LinuxDeployment.md` so hourly deploy checks are commit-driven and reusable across sites.
 - Always make the performance path explicit:
   - add `optimize` to CI/release pipelines with explicit `minifyHtml`, `minifyCss`, and `minifyJs`
   - choose `assetRegistry.cssStrategy` intentionally:

@@ -336,7 +336,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/CriticalCssSpec" }
         },
-        "CssStrategy": { "type": "string", "enum": ["standard", "async"] }
+        "CssStrategy": { "type": "string", "enum": ["blocking", "standard", "sync", "inline", "render-blocking", "renderblocking", "preload", "async", "async-print", "print"] }
       }
     },
     "AssetPolicySpec": {
