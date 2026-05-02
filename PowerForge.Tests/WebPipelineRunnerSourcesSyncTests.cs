@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -146,6 +147,86 @@ public class WebPipelineRunnerSourcesSyncTests
 
             Assert.Equal("clean source", File.ReadAllText(Path.Combine(staleDestination, "README.md")));
             Assert.False(File.Exists(Path.Combine(staleDestination, "stale.txt")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_SourcesSync_PassesStepDefaultsToGitSync()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sources-sync-defaults-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "defaults source");
+            RunGit(source, "init");
+            RunGit(source, "config", "user.email", "pf-tests@example.local");
+            RunGit(source, "config", "user.name", "PowerForge Tests");
+            RunGit(source, "add", ".");
+            RunGit(source, "commit", "-m", "init", "--quiet");
+
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Pipeline Sources Sync Defaults Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "{{EscapeJson(source)}}", "Slug": "demo-project" }
+                  ]
+                }
+                """);
+
+            var manifestPath = Path.Combine(root, "_reports", "git-sync.json");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "sources-sync",
+                      "config": "./site.json",
+                      "authType": "none",
+                      "retry": 2,
+                      "retryDelayMs": 25,
+                      "writeManifest": true,
+                      "manifestPath": "./_reports/git-sync.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.True(File.Exists(manifestPath));
+
+            using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var entry = manifest.RootElement.GetProperty("entries")[0];
+            Assert.Equal("none", entry.GetProperty("authType").GetString());
         }
         finally
         {
