@@ -343,8 +343,13 @@ internal static partial class WebPipelineRunner
         if (request.SparseCheckout.Length > 0)
             ConfigureSparseCheckout(request.DestinationFull, request.SparseCheckout, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs);
 
+        string? checkedOutCommit = null;
         if (!string.IsNullOrWhiteSpace(request.Reference))
+        {
             CheckoutReference(request.DestinationFull, request.Reference!, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs);
+            if (IsFullGitCommitSha(request.Reference))
+                checkedOutCommit = request.Reference!.Trim();
+        }
         else if (!cloned)
             TryFastForwardPull(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs);
 
@@ -354,8 +359,27 @@ internal static partial class WebPipelineRunner
         return new GitSyncExecutionResult
         {
             DisplayReference = ResolveHeadReference(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs),
-            Commit = ResolveHeadCommit(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs)
+            Commit = ResolveHeadCommit(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs) ?? checkedOutCommit
         };
+    }
+
+    private static bool IsFullGitCommitSha(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var text = value.Trim();
+        if (text.Length != 40)
+            return false;
+
+        foreach (var ch in text)
+        {
+            var isHex = ch is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+            if (!isHex)
+                return false;
+        }
+
+        return true;
     }
 
     private static void DeleteDirectoryForGitSyncClean(string path)
