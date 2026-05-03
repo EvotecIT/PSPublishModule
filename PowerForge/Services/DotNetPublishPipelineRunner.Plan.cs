@@ -8,6 +8,8 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private const int DefaultCommandHookTimeoutSeconds = DotNetPublishCommandHook.DefaultTimeoutSeconds;
+
     private const string DefaultMsiPrepareStagingPathTemplate =
         "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/payload";
 
@@ -175,7 +177,8 @@ public sealed partial class DotNetPublishPipelineRunner
             });
         }
 
-        var bundles = BuildBundlePlans(spec.Bundles, targets, projectRoot);
+        var bundles = BuildBundlePlans(spec.Bundles, targets, projectRoot, spec.SigningProfiles);
+        targets = OrderTargetsForBundleIncludes(targets, bundles);
         var installers = BuildInstallerPlans(spec.Installers, bundles, targets, projectCatalog, projectRoot, spec.SigningProfiles);
         var storePackages = BuildStorePackagePlans(spec.StorePackages, targets, projectCatalog, projectRoot);
 
@@ -196,6 +199,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
 
         var benchmarkGates = BuildBenchmarkGatePlans(spec.BenchmarkGates, projectRoot);
+        var hooks = NormalizeCommandHooks(spec.Hooks);
 
         if (!spec.DotNet.AllowManifestOutsideProjectRoot)
         {
@@ -298,6 +302,8 @@ public sealed partial class DotNetPublishPipelineRunner
         if (spec.DotNet.Clean)
             steps.Add(new DotNetPublishStep { Key = "clean", Kind = DotNetPublishStepKind.Clean, Title = "Clean" });
 
+        AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeRestore, cfg, targetName: null, framework: null, runtime: null, style: null, bundleId: null);
+
         if (spec.DotNet.Restore)
         {
             if (spec.DotNet.NoRestoreInPublish && distinctRuntimes.Length > 0)
@@ -318,6 +324,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 steps.Add(new DotNetPublishStep { Key = "restore", Kind = DotNetPublishStepKind.Restore, Title = "Restore" });
             }
         }
+
+        AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeBuild, cfg, targetName: null, framework: null, runtime: null, style: null, bundleId: null);
 
         if (spec.DotNet.Build)
         {
@@ -344,6 +352,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             foreach (var combo in t.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
             {
+                AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeTargetPublish, cfg, t.Name, combo.Framework, combo.Runtime, combo.Style, bundleId: null);
+
                 var key = $"publish:{t.Name}:{combo.Framework}:{combo.Runtime}:{combo.Style}";
                 steps.Add(new DotNetPublishStep
                 {
@@ -355,6 +365,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     Runtime = combo.Runtime,
                     Style = combo.Style
                 });
+
+                AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.AfterTargetPublish, cfg, t.Name, combo.Framework, combo.Runtime, combo.Style, bundleId: null);
 
                 if (t.Publish.Service?.Lifecycle?.Enabled == true
                     && t.Publish.Service.Lifecycle.Mode == DotNetPublishServiceLifecycleMode.Step)
@@ -398,7 +410,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             "Use unique bundle IDs or path templates.");
                     }
 
+                    AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeBundle, cfg, t.Name, combo.Framework, combo.Runtime, combo.Style, bundle.Id);
                     steps.Add(bundleStep);
+                    AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.AfterBundle, cfg, t.Name, combo.Framework, combo.Runtime, combo.Style, bundle.Id);
                 }
 
                 foreach (var installer in installers.Where(i => string.Equals(i.PrepareFromTarget, t.Name, StringComparison.OrdinalIgnoreCase)))
@@ -622,6 +636,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     || selectedTargetNames.Contains(i.PrepareFromTarget.Trim()))
                 .ToArray(),
             BenchmarkGates = CloneBenchmarkGates(spec.BenchmarkGates),
+            Hooks = CloneCommandHooks(spec.Hooks),
             Matrix = CloneMatrix(spec.Matrix),
             DotNet = dotNet,
             Targets = selectedTargets,
@@ -699,6 +714,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestPath = i.HarvestPath,
                 HarvestDirectoryRefId = i.HarvestDirectoryRefId,
                 HarvestComponentGroupId = i.HarvestComponentGroupId,
+                HarvestExcludePatterns = NormalizeStrings(i.HarvestExcludePatterns),
                 Versioning = CloneMsiVersionOptions(i.Versioning),
                 MsBuildProperties = CloneDictionary(i.MsBuildProperties),
                 SignProfile = i.SignProfile,
@@ -746,12 +762,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 Frameworks = NormalizeStrings(b.Frameworks),
                 Styles = NormalizeStyles(b.Styles),
                 OutputPath = b.OutputPath,
+                PrimarySubdirectory = b.PrimarySubdirectory,
                 ClearOutput = b.ClearOutput,
                 Zip = b.Zip,
                 ZipPath = b.ZipPath,
                 ZipNameTemplate = b.ZipNameTemplate,
                 Includes = CloneBundleIncludes(b.Includes),
-                Scripts = CloneBundleScripts(b.Scripts)
+                CopyItems = CloneBundleCopyItems(b.CopyItems),
+                ModuleIncludes = CloneBundleModuleIncludes(b.ModuleIncludes),
+                GeneratedScripts = CloneBundleGeneratedScripts(b.GeneratedScripts),
+                Scripts = CloneBundleScripts(b.Scripts),
+                PostProcess = CloneBundlePostProcessOptions(b.PostProcess)
             })
             .ToArray();
     }
@@ -772,6 +793,53 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
+    private static DotNetPublishBundleCopyItem[] CloneBundleCopyItems(DotNetPublishBundleCopyItem[] items)
+    {
+        return (items ?? Array.Empty<DotNetPublishBundleCopyItem>())
+            .Where(i => i is not null)
+            .Select(i => new DotNetPublishBundleCopyItem
+            {
+                SourcePath = i.SourcePath,
+                DestinationPath = i.DestinationPath,
+                Required = i.Required,
+                ClearDestination = i.ClearDestination
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishBundleModuleInclude[] CloneBundleModuleIncludes(DotNetPublishBundleModuleInclude[] modules)
+    {
+        return (modules ?? Array.Empty<DotNetPublishBundleModuleInclude>())
+            .Where(m => m is not null)
+            .Select(m => new DotNetPublishBundleModuleInclude
+            {
+                ModuleName = m.ModuleName,
+                SourcePath = m.SourcePath,
+                DestinationPath = m.DestinationPath,
+                Required = m.Required,
+                ClearDestination = m.ClearDestination
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishBundleGeneratedScript[] CloneBundleGeneratedScripts(DotNetPublishBundleGeneratedScript[] scripts)
+    {
+        return (scripts ?? Array.Empty<DotNetPublishBundleGeneratedScript>())
+            .Where(s => s is not null)
+            .Select(s => new DotNetPublishBundleGeneratedScript
+            {
+                TemplatePath = s.TemplatePath,
+                Template = s.Template,
+                OutputPath = s.OutputPath,
+                Tokens = CloneDictionary(s.Tokens),
+                Overwrite = s.Overwrite,
+                SignProfile = s.SignProfile,
+                Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(s.Sign),
+                SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(s.SignOverrides)
+            })
+            .ToArray();
+    }
+
     private static DotNetPublishBundleScript[] CloneBundleScripts(DotNetPublishBundleScript[] scripts)
     {
         return (scripts ?? Array.Empty<DotNetPublishBundleScript>())
@@ -784,6 +852,28 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeoutSeconds = s.TimeoutSeconds,
                 PreferPwsh = s.PreferPwsh,
                 Required = s.Required
+            })
+            .ToArray();
+    }
+
+    private static DotNetPublishCommandHook[] CloneCommandHooks(DotNetPublishCommandHook[]? hooks)
+    {
+        return (hooks ?? Array.Empty<DotNetPublishCommandHook>())
+            .Where(h => h is not null)
+            .Select(h => new DotNetPublishCommandHook
+            {
+                Id = h.Id,
+                Phase = h.Phase,
+                Command = h.Command,
+                Arguments = NormalizeArguments(h.Arguments),
+                WorkingDirectory = h.WorkingDirectory,
+                Environment = CloneDictionary(h.Environment),
+                TimeoutSeconds = h.TimeoutSeconds,
+                Required = h.Required,
+                Targets = NormalizeStrings(h.Targets),
+                Runtimes = NormalizeStrings(h.Runtimes),
+                Frameworks = NormalizeStrings(h.Frameworks),
+                Styles = NormalizeStyles(h.Styles)
             })
             .ToArray();
     }
@@ -1058,11 +1148,133 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
+    private static string[] NormalizeArguments(IEnumerable<string>? values)
+    {
+        return (values ?? Array.Empty<string>())
+            .Select(v => v ?? string.Empty)
+            .ToArray();
+    }
+
     private static DotNetPublishStyle[] NormalizeStyles(IEnumerable<DotNetPublishStyle>? values)
     {
         return (values ?? Array.Empty<DotNetPublishStyle>())
             .Distinct()
             .ToArray();
+    }
+
+    private static DotNetPublishCommandHook[] NormalizeCommandHooks(IEnumerable<DotNetPublishCommandHook>? hooks)
+    {
+        var result = new List<DotNetPublishCommandHook>();
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var hook in hooks ?? Array.Empty<DotNetPublishCommandHook>())
+        {
+            if (hook is null) continue;
+            var id = (hook.Id ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Hooks[].Id is required.");
+            if (!ids.Add(id))
+                throw new ArgumentException($"Duplicate hook ID detected: {id}");
+            if (string.IsNullOrWhiteSpace(hook.Command))
+                throw new ArgumentException($"Hooks['{id}'].Command is required.");
+
+            result.Add(new DotNetPublishCommandHook
+            {
+                Id = id,
+                Phase = hook.Phase,
+                Command = hook.Command.Trim(),
+                Arguments = NormalizeArguments(hook.Arguments),
+                WorkingDirectory = string.IsNullOrWhiteSpace(hook.WorkingDirectory) ? null : hook.WorkingDirectory!.Trim(),
+                Environment = CloneDictionary(hook.Environment),
+                TimeoutSeconds = hook.TimeoutSeconds <= 0
+                    ? DefaultCommandHookTimeoutSeconds
+                    : Math.Max(1, hook.TimeoutSeconds),
+                Required = hook.Required,
+                Targets = NormalizeStrings(hook.Targets),
+                Runtimes = NormalizeStrings(hook.Runtimes),
+                Frameworks = NormalizeStrings(hook.Frameworks),
+                Styles = NormalizeStyles(hook.Styles)
+            });
+        }
+
+        return result.ToArray();
+    }
+
+    private static void AddCommandHookSteps(
+        List<DotNetPublishStep> steps,
+        IReadOnlyList<DotNetPublishCommandHook> hooks,
+        DotNetPublishCommandHookPhase phase,
+        string configuration,
+        string? targetName,
+        string? framework,
+        string? runtime,
+        DotNetPublishStyle? style,
+        string? bundleId)
+    {
+        foreach (var hook in hooks.Where(hook => hook.Phase == phase))
+        {
+            if (!CommandHookMatches(hook, targetName, framework, runtime, style))
+                continue;
+
+            var suffixParts = new[] { targetName, framework, runtime, style?.ToString(), bundleId }
+                .Where(part => !string.IsNullOrWhiteSpace(part))
+                .Select(part => part!.Trim())
+                .ToArray();
+            var suffix = suffixParts.Length == 0 ? string.Empty : ":" + string.Join(":", suffixParts);
+
+            steps.Add(new DotNetPublishStep
+            {
+                Key = $"hook:{phase}:{hook.Id}{suffix}",
+                Kind = DotNetPublishStepKind.CommandHook,
+                Title = $"Hook {phase}: {hook.Id}",
+                HookId = hook.Id,
+                HookPhase = phase,
+                HookCommand = hook.Command,
+                HookArguments = hook.Arguments,
+                HookWorkingDirectory = hook.WorkingDirectory,
+                HookEnvironment = hook.Environment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                HookTimeoutSeconds = hook.TimeoutSeconds,
+                HookRequired = hook.Required,
+                TargetName = targetName,
+                Framework = framework,
+                Runtime = runtime,
+                Style = style,
+                BundleId = bundleId
+            });
+        }
+    }
+
+    private static bool CommandHookMatches(
+        DotNetPublishCommandHook hook,
+        string? targetName,
+        string? framework,
+        string? runtime,
+        DotNetPublishStyle? style)
+    {
+        if (hook.Targets.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(targetName) || !hook.Targets.Any(pattern => WildcardMatch(targetName!, pattern)))
+                return false;
+        }
+
+        if (hook.Frameworks.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(framework) || !hook.Frameworks.Any(pattern => WildcardMatch(framework!, pattern)))
+                return false;
+        }
+
+        if (hook.Runtimes.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(runtime) || !hook.Runtimes.Any(pattern => WildcardMatch(runtime!, pattern)))
+                return false;
+        }
+
+        if (hook.Styles.Length > 0)
+        {
+            if (!style.HasValue || !hook.Styles.Contains(style.Value))
+                return false;
+        }
+
+        return true;
     }
 
     private static Dictionary<string, string> BuildProjectCatalog(IEnumerable<DotNetPublishProject>? projects, string projectRoot)
@@ -1106,7 +1318,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static DotNetPublishBundlePlan[] BuildBundlePlans(
         IEnumerable<DotNetPublishBundle>? bundles,
         IEnumerable<DotNetPublishTargetPlan>? targets,
-        string projectRoot)
+        string projectRoot,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
     {
         var targetPlans = (targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
@@ -1165,6 +1378,73 @@ public sealed partial class DotNetPublishPipelineRunner
                 });
             }
 
+            var copyItemPlans = new List<DotNetPublishBundleCopyItemPlan>();
+            foreach (var item in bundle.CopyItems ?? Array.Empty<DotNetPublishBundleCopyItem>())
+            {
+                if (item is null) continue;
+                if (string.IsNullOrWhiteSpace(item.SourcePath))
+                    throw new ArgumentException($"Bundle '{id}' CopyItems[] requires SourcePath.");
+                if (string.IsNullOrWhiteSpace(item.DestinationPath))
+                    throw new ArgumentException($"Bundle '{id}' CopyItems[] requires DestinationPath.");
+
+                copyItemPlans.Add(new DotNetPublishBundleCopyItemPlan
+                {
+                    SourcePath = item.SourcePath.Trim(),
+                    DestinationPath = item.DestinationPath.Trim(),
+                    Required = item.Required,
+                    ClearDestination = item.ClearDestination
+                });
+            }
+
+            var moduleIncludePlans = new List<DotNetPublishBundleModuleIncludePlan>();
+            foreach (var module in bundle.ModuleIncludes ?? Array.Empty<DotNetPublishBundleModuleInclude>())
+            {
+                if (module is null) continue;
+                var moduleName = (module.ModuleName ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(moduleName))
+                    throw new ArgumentException($"Bundle '{id}' ModuleIncludes[] requires ModuleName.");
+                if (string.IsNullOrWhiteSpace(module.SourcePath))
+                    throw new ArgumentException($"Bundle '{id}' ModuleIncludes['{moduleName}'] requires SourcePath.");
+
+                moduleIncludePlans.Add(new DotNetPublishBundleModuleIncludePlan
+                {
+                    ModuleName = moduleName,
+                    SourcePath = module.SourcePath.Trim(),
+                    DestinationPath = string.IsNullOrWhiteSpace(module.DestinationPath)
+                        ? $"Modules/{{moduleName}}"
+                        : module.DestinationPath!.Trim(),
+                    Required = module.Required,
+                    ClearDestination = module.ClearDestination
+                });
+            }
+
+            var generatedScriptPlans = new List<DotNetPublishBundleGeneratedScriptPlan>();
+            foreach (var generated in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScript>())
+            {
+                if (generated is null) continue;
+                if (string.IsNullOrWhiteSpace(generated.OutputPath))
+                    throw new ArgumentException($"Bundle '{id}' GeneratedScripts[] requires OutputPath.");
+                if (string.IsNullOrWhiteSpace(generated.TemplatePath) && string.IsNullOrWhiteSpace(generated.Template))
+                    throw new ArgumentException($"Bundle '{id}' GeneratedScripts['{generated.OutputPath}'] requires TemplatePath or Template.");
+
+                generatedScriptPlans.Add(new DotNetPublishBundleGeneratedScriptPlan
+                {
+                    TemplatePath = string.IsNullOrWhiteSpace(generated.TemplatePath)
+                        ? null
+                        : generated.TemplatePath!.Trim(),
+                    Template = generated.Template,
+                    OutputPath = generated.OutputPath.Trim(),
+                    Tokens = CloneDictionary(generated.Tokens) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    Overwrite = generated.Overwrite,
+                    Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                        signingProfiles,
+                        generated.SignProfile,
+                        generated.Sign,
+                        generated.SignOverrides,
+                        $"Bundle '{id}' generated script '{generated.OutputPath}'")
+                });
+            }
+
             var scriptPlans = new List<DotNetPublishBundleScriptPlan>();
             foreach (var script in bundle.Scripts ?? Array.Empty<DotNetPublishBundleScript>())
             {
@@ -1196,13 +1476,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 Frameworks = frameworks,
                 Styles = styles,
                 OutputPath = bundle.OutputPath,
+                PrimarySubdirectory = string.IsNullOrWhiteSpace(bundle.PrimarySubdirectory)
+                    ? null
+                    : bundle.PrimarySubdirectory!.Trim(),
                 ClearOutput = bundle.ClearOutput,
                 Zip = bundle.Zip,
                 ZipPath = bundle.ZipPath,
                 ZipNameTemplate = bundle.ZipNameTemplate,
                 Includes = includePlans.ToArray(),
+                CopyItems = copyItemPlans.ToArray(),
+                ModuleIncludes = moduleIncludePlans.ToArray(),
+                GeneratedScripts = generatedScriptPlans.ToArray(),
                 Scripts = scriptPlans.ToArray(),
-                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess)
+                PostProcess = NormalizeBundlePostProcess(id, bundle.PostProcess, signingProfiles)
             });
         }
 
@@ -1295,6 +1581,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 HarvestPath = installer.HarvestPath,
                 HarvestDirectoryRefId = installer.HarvestDirectoryRefId,
                 HarvestComponentGroupId = installer.HarvestComponentGroupId,
+                HarvestExcludePatterns = NormalizeStrings(installer.HarvestExcludePatterns),
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
                 MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
                 Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
@@ -1308,6 +1595,71 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return plans.ToArray();
+    }
+
+    private static List<DotNetPublishTargetPlan> OrderTargetsForBundleIncludes(
+        List<DotNetPublishTargetPlan> targets,
+        IReadOnlyList<DotNetPublishBundlePlan> bundles)
+    {
+        if (targets is null || targets.Count < 2 || bundles is null || bundles.Count == 0)
+            return targets ?? new List<DotNetPublishTargetPlan>();
+
+        var targetMap = targets
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name))
+            .ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        var dependencies = targetMap.Keys.ToDictionary(
+            name => name,
+            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var bundle in bundles)
+        {
+            if (bundle is null || string.IsNullOrWhiteSpace(bundle.PrepareFromTarget))
+                continue;
+            if (!dependencies.TryGetValue(bundle.PrepareFromTarget, out var sourceDependencies))
+                continue;
+
+            foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
+            {
+                if (include is null || string.IsNullOrWhiteSpace(include.Target))
+                    continue;
+                if (targetMap.ContainsKey(include.Target))
+                    sourceDependencies.Add(include.Target);
+            }
+        }
+
+        if (dependencies.Values.All(set => set.Count == 0))
+            return targets;
+
+        var ordered = new List<DotNetPublishTargetPlan>(targets.Count);
+        var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Visit(string targetName)
+        {
+            if (visited.Contains(targetName))
+                return;
+            if (!visiting.Add(targetName))
+                throw new ArgumentException($"Bundle include target dependency cycle detected at '{targetName}'.");
+
+            if (dependencies.TryGetValue(targetName, out var deps))
+            {
+                foreach (var dependency in deps)
+                {
+                    if (targetMap.ContainsKey(dependency))
+                        Visit(dependency);
+                }
+            }
+
+            visiting.Remove(targetName);
+            visited.Add(targetName);
+            ordered.Add(targetMap[targetName]);
+        }
+
+        foreach (var target in targets)
+            Visit(target.Name);
+
+        return ordered;
     }
 
     private static DotNetPublishStorePackagePlan[] BuildStorePackagePlans(
@@ -1866,7 +2218,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static DotNetPublishBundlePostProcessOptions? NormalizeBundlePostProcess(
         string bundleId,
-        DotNetPublishBundlePostProcessOptions? options)
+        DotNetPublishBundlePostProcessOptions? options,
+        IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles)
     {
         var clone = CloneBundlePostProcessOptions(options);
         if (clone is null)
@@ -1888,6 +2241,15 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
 
         clone.DeletePatterns = NormalizeStrings(clone.DeletePatterns);
+        clone.SignPatterns = NormalizeStrings(clone.SignPatterns);
+        clone.Sign = DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+            signingProfiles,
+            clone.SignProfile,
+            clone.Sign,
+            clone.SignOverrides,
+            $"Bundle '{bundleId}' post-process signing");
+        clone.SignProfile = null;
+        clone.SignOverrides = null;
 
         if (clone.Metadata is not null)
         {
@@ -1995,6 +2357,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 })
                 .ToArray(),
             DeletePatterns = NormalizeStrings(options.DeletePatterns),
+            SignPatterns = NormalizeStrings(options.SignPatterns),
+            SignProfile = options.SignProfile,
+            Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(options.Sign),
+            SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(options.SignOverrides),
             Metadata = options.Metadata is null
                 ? null
                 : new DotNetPublishBundleMetadataOptions

@@ -8,6 +8,7 @@ internal sealed class DotNetPublishPreparationRequest
     public string CurrentPath { get; set; } = string.Empty;
     public ScriptBlock? Settings { get; set; }
     public string? ConfigPath { get; set; }
+    public string? ProjectRoot { get; set; }
     public string? Profile { get; set; }
     public string[]? Target { get; set; }
     public string[]? Runtimes { get; set; }

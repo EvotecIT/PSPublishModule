@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 
 namespace PowerForge;
 
@@ -59,7 +60,12 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         Directory.CreateDirectory(outputDir);
-        DirectoryCopy(sourceArtefact.OutputDir, outputDir);
+        var primaryDestination = string.IsNullOrWhiteSpace(bundle.PrimarySubdirectory)
+            ? outputDir
+            : ResolvePath(outputDir, bundle.PrimarySubdirectory!);
+        EnsurePathWithinRoot(outputDir, primaryDestination, $"Bundle '{bundleId}' primary destination");
+        Directory.CreateDirectory(primaryDestination);
+        DirectoryCopy(sourceArtefact.OutputDir, primaryDestination);
 
         foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
         {
@@ -106,6 +112,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["projectRoot"] = plan.ProjectRoot,
             ["output"] = outputDir,
             ["sourceOutput"] = sourceArtefact.OutputDir,
+            ["primaryOutput"] = primaryDestination,
             ["zip"] = step.BundleZipPath ?? string.Empty
         };
 
@@ -115,6 +122,9 @@ public sealed partial class DotNetPublishPipelineRunner
         tokens["keepDocs"] = (sourceTargetPlan?.Publish?.KeepDocs ?? false).ToString();
         tokens["signEnabled"] = (sourceTargetPlan?.Publish?.Sign?.Enabled ?? false).ToString();
 
+        CopyBundleItems(plan, bundle, outputDir, tokens);
+        CopyBundleModules(plan, bundle, outputDir, tokens);
+        GenerateBundleScripts(plan, bundle, outputDir, tokens);
         RunBundleScripts(plan, bundle, tokens);
         if (bundle.PostProcess is not null)
         {
@@ -133,6 +143,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 SourceOutputPath = sourceArtefact.OutputDir,
                 PostProcess = bundle.PostProcess
             });
+
+            SignBundlePostProcessFiles(plan, bundle, outputDir);
         }
 
         string? zipPath = null;
@@ -213,6 +225,144 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private void CopyBundleItems(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var item in bundle.CopyItems ?? Array.Empty<DotNetPublishBundleCopyItemPlan>())
+        {
+            if (item is null) continue;
+
+            var source = ResolvePath(plan.ProjectRoot, ApplyTemplate(item.SourcePath, tokens));
+            var destination = ResolvePath(outputDir, ApplyTemplate(item.DestinationPath, tokens));
+            EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' copy destination");
+
+            CopyBundlePath(source, destination, item.Required, item.ClearDestination, $"Bundle '{bundle.Id}' copy item");
+        }
+    }
+
+    private void CopyBundleModules(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var module in bundle.ModuleIncludes ?? Array.Empty<DotNetPublishBundleModuleIncludePlan>())
+        {
+            if (module is null) continue;
+
+            var moduleTokens = tokens.ToDictionary(
+                token => token.Key,
+                token => token.Value,
+                StringComparer.OrdinalIgnoreCase);
+            moduleTokens["moduleName"] = module.ModuleName;
+            var source = ResolvePath(plan.ProjectRoot, ApplyTemplate(module.SourcePath, moduleTokens));
+            var destination = ResolvePath(outputDir, ApplyTemplate(module.DestinationPath, moduleTokens));
+            EnsurePathWithinRoot(outputDir, destination, $"Bundle '{bundle.Id}' module include destination");
+
+            CopyBundlePath(source, destination, module.Required, module.ClearDestination, $"Bundle '{bundle.Id}' module include '{module.ModuleName}'");
+        }
+    }
+
+    private void GenerateBundleScripts(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        foreach (var script in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScriptPlan>())
+        {
+            if (script is null) continue;
+
+            var outputPath = ResolvePath(outputDir, ApplyTemplate(script.OutputPath, tokens));
+            EnsurePathWithinRoot(outputDir, outputPath, $"Bundle '{bundle.Id}' generated script output path");
+            if (File.Exists(outputPath) && !script.Overwrite)
+                throw new IOException($"Generated script already exists and Overwrite=false: {outputPath}");
+
+            var templateName = script.TemplatePath ?? script.OutputPath;
+            var template = script.Template;
+            if (!string.IsNullOrWhiteSpace(script.TemplatePath))
+            {
+                var templatePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(script.TemplatePath!, tokens));
+                EnsurePathWithinRoot(plan.ProjectRoot, templatePath, $"Bundle '{bundle.Id}' generated script template path");
+                if (!File.Exists(templatePath))
+                    throw new FileNotFoundException($"Generated script template not found for bundle '{bundle.Id}': {templatePath}", templatePath);
+                templateName = templatePath;
+                template = File.ReadAllText(templatePath, Encoding.UTF8);
+            }
+
+            var renderTokens = tokens.ToDictionary(
+                token => token.Key,
+                token => token.Value,
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var token in script.Tokens ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+                renderTokens[token.Key] = ApplyTemplate(token.Value ?? string.Empty, tokens);
+
+            var rendered = ScriptTemplateRenderer.Render(templateName ?? "bundle generated script", template ?? string.Empty, renderTokens);
+            var outputDirectory = Path.GetDirectoryName(outputPath)
+                ?? throw new InvalidOperationException($"Cannot determine parent directory for generated script output: {outputPath}");
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(outputPath, rendered, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            _logger.Info($"Generated bundle script -> {FrameworkCompatibility.GetRelativePath(outputDir, outputPath)} ({bundle.Id})");
+            if (script.Sign is not null && script.Sign.Enabled)
+                _ = TrySignFiles(new[] { outputPath }, outputDir, script.Sign, scope: $"bundle '{bundle.Id}' generated scripts");
+        }
+    }
+
+    private void CopyBundlePath(
+        string source,
+        string destination,
+        bool required,
+        bool clearDestination,
+        string description)
+    {
+        source = Path.GetFullPath(source);
+        destination = Path.GetFullPath(destination);
+
+        if (Directory.Exists(source))
+        {
+            if (clearDestination && Directory.Exists(destination))
+                Directory.Delete(destination, recursive: true);
+            else if (clearDestination && File.Exists(destination))
+                File.Delete(destination);
+            else if (!clearDestination && (Directory.Exists(destination) || File.Exists(destination)))
+                throw new IOException($"{description}: destination already exists and ClearDestination=false: {destination}");
+
+            DirectoryCopy(source, destination);
+            return;
+        }
+
+        if (File.Exists(source))
+        {
+            var destinationWasDirectory = Directory.Exists(destination);
+            var destinationFile = destinationWasDirectory
+                ? Path.Combine(destination, Path.GetFileName(source))
+                : destination;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+            if (clearDestination && destinationWasDirectory)
+            {
+                Directory.Delete(destination, recursive: true);
+                Directory.CreateDirectory(destination);
+            }
+            if (clearDestination && File.Exists(destinationFile))
+                File.Delete(destinationFile);
+            if (!clearDestination && File.Exists(destinationFile))
+                throw new IOException($"{description}: destination already exists and ClearDestination=false: {destinationFile}");
+            File.Copy(source, destinationFile, overwrite: clearDestination);
+            return;
+        }
+
+        var message = $"{description} source not found: {source}";
+        if (required)
+            throw new FileNotFoundException(message, source);
+
+        _logger.Warn(message);
+    }
+
     private string? CreateBundleZip(
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,
@@ -284,5 +434,97 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.TrimEnd());
             if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.TrimEnd());
         }
+    }
+
+    private void SignBundlePostProcessFiles(
+        DotNetPublishPlan plan,
+        DotNetPublishBundlePlan bundle,
+        string outputDir)
+    {
+        var sign = bundle.PostProcess?.Sign;
+        if (sign is null || !sign.Enabled)
+            return;
+
+        var patterns = NormalizeBundleSignPatterns(bundle.PostProcess?.SignPatterns, sign);
+        var targets = FindBundleSignTargets(outputDir, patterns);
+        var signed = TrySignFiles(
+            targets,
+            outputDir,
+            sign,
+            scope: $"bundle '{bundle.Id}' files");
+
+        _logger.Info($"Bundle sign completed for '{bundle.Id}' -> {signed.Length}/{targets.Length} signed.");
+    }
+
+    internal static string[] NormalizeBundleSignPatterns(
+        IReadOnlyList<string>? patterns,
+        DotNetPublishSignOptions sign)
+    {
+        var normalized = (patterns ?? Array.Empty<string>())
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(pattern => pattern.Trim().Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Length > 0)
+            return normalized;
+
+        var defaults = new List<string> { "**/*.exe" };
+        if (sign.IncludeDlls)
+            defaults.Add("**/*.dll");
+        return defaults.ToArray();
+    }
+
+    internal static string[] FindBundleSignTargets(string bundleRoot, IReadOnlyList<string>? patterns)
+    {
+        var root = Path.GetFullPath(bundleRoot);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Bundle root was not found: {root}");
+
+        var matches = new List<string>();
+        foreach (var pattern in patterns ?? Array.Empty<string>())
+        {
+            var normalizedPattern = (pattern ?? string.Empty)
+                .Trim()
+                .Replace('\\', '/');
+            if (normalizedPattern.Length == 0)
+                continue;
+
+            var exactPath = ResolvePath(root, normalizedPattern);
+            if (File.Exists(exactPath))
+            {
+                EnsurePathWithinRoot(root, exactPath, "Bundle signing target");
+                matches.Add(exactPath);
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = GetRelativePath(root, file).Replace('\\', '/');
+                if (BundleSignPatternMatches(relative, normalizedPattern))
+                    matches.Add(Path.GetFullPath(file));
+            }
+        }
+
+        return matches
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool BundleSignPatternMatches(string relativePath, string pattern)
+    {
+        // Match full relative paths, bare basename globs, and rootless **/ globs used by bundle configs.
+        if (WildcardMatch(relativePath, pattern))
+            return true;
+
+        var fileName = Path.GetFileName(relativePath);
+        if (WildcardMatch(fileName, pattern))
+            return true;
+
+        if (pattern.StartsWith("**/", StringComparison.Ordinal))
+            return WildcardMatch(relativePath, pattern.Substring("**/".Length));
+
+        return false;
     }
 }

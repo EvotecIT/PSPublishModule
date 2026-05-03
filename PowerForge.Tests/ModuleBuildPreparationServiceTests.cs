@@ -317,6 +317,57 @@ public sealed class ModuleBuildPreparationServiceTests
         }
     }
 
+    [Fact]
+    public void Prepare_from_config_loads_pipeline_json_and_resolves_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-config-json-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "PowerTierBridge.psd1"), "@{ ModuleVersion = '4.0.2' }");
+
+            var configDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            var configPath = Path.Combine(configDir.FullName, "module.build.json");
+            File.WriteAllText(configPath, """
+{
+  "Build": {
+    "Name": "PowerTierBridge",
+    "SourcePath": "../Module",
+    "StagingPath": "../Build/Artifacts/Module/Staging",
+    "CsprojPath": "../TierBridge.PowerShell/TierBridge.PowerShell.csproj",
+    "Version": "4.0.X"
+  },
+  "Diagnostics": {
+    "BaselinePath": ".powerforge/module-baseline.json"
+  }
+}
+""");
+
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Config",
+                ConfigPath = configPath,
+                CurrentPath = root.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path))
+            });
+
+            Assert.Equal("PowerTierBridge", prepared.ModuleName);
+            Assert.Equal(moduleRoot.FullName, prepared.ProjectRoot);
+            Assert.False(prepared.UseLegacy);
+            Assert.Null(prepared.BasePathForScaffold);
+            Assert.Equal("json", prepared.ConfigLabel);
+            Assert.Equal(configPath, prepared.ConfigFilePath);
+            Assert.Equal(Path.Combine(root.FullName, "Build", "Artifacts", "Module", "Staging"), prepared.PipelineSpec.Build.StagingPath);
+            Assert.Equal(Path.Combine(root.FullName, "TierBridge.PowerShell", "TierBridge.PowerShell.csproj"), prepared.PipelineSpec.Build.CsprojPath);
+            Assert.Equal(Path.Combine(configDir.FullName, ".powerforge", "module-baseline.json"), prepared.PipelineSpec.Diagnostics.BaselinePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions

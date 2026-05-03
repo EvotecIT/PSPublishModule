@@ -1,5 +1,11 @@
 ﻿# PSPublishModule Changelog
 
+## Unreleased
+- Add reusable dotnet publish command hooks (`Hooks[]`) for restore, build, target publish, and bundle phases.
+- Add bundle composition primitives for primary subdirectories, copy items, module includes, and generated scripts.
+- Add bundle post-process signing and MSI harvest exclude patterns for package/MSI reuse across projects.
+- DotNet publish CLI overrides (`--target`, `--runtime`, `--framework`, `--style`) are applied before profile resolution so profile-filtered plan/export output matches the executed run.
+
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32
