@@ -97,6 +97,69 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectDocsSync_FiltersProjectsWhenConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-filter-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    { "slug": "alpha", "surfaces": { "docs": true } },
+                    { "slug": "beta", "surfaces": { "docs": true } }
+                  ]
+                }
+                """);
+
+            var alphaDocs = Path.Combine(root, "projects-sources", "alpha", "Docs");
+            Directory.CreateDirectory(alphaDocs);
+            File.WriteAllText(Path.Combine(alphaDocs, "index.md"), "# Alpha");
+
+            var betaDocs = Path.Combine(root, "projects-sources", "beta", "Docs");
+            Directory.CreateDirectory(betaDocs);
+            File.WriteAllText(Path.Combine(betaDocs, "index.md"), "# Beta");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-docs-sync",
+                      "catalog": "./data/projects/catalog.json",
+                      "projects": ["beta"],
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/docs",
+                      "summaryPath": "./Build/sync-project-docs-summary.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.True(File.Exists(Path.Combine(root, "content", "docs", "beta", "index.md")));
+            Assert.False(File.Exists(Path.Combine(root, "content", "docs", "alpha", "index.md")));
+
+            using var summaryDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "sync-project-docs-summary.json")));
+            Assert.Equal(1, summaryDoc.RootElement.GetProperty("totalProjects").GetInt32());
+            Assert.Equal(1, summaryDoc.RootElement.GetProperty("docsProjects").GetInt32());
+            Assert.Equal(1, summaryDoc.RootElement.GetProperty("synced").GetInt32());
+            Assert.Equal(0, summaryDoc.RootElement.GetProperty("skipped").GetInt32());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectDocsSync_FailsWhenMissingDocsSourceAndFailOnMissingSourceEnabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-fail-missing-" + Guid.NewGuid().ToString("N"));

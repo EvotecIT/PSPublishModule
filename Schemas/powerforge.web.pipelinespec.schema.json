@@ -1487,6 +1487,11 @@
         "skip-modes": { "type": "array", "items": { "type": "string" } },
 
         "config": { "type": "string", "description": "Path to site.json containing Sources entries." },
+        "projects": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Optional source/project slugs to sync from site.json Sources." },
+        "project": { "type": "string", "description": "Alias for projects when syncing one source/project slug." },
+        "sourceSlugs": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for projects." },
+        "source-slugs": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for projects." },
+        "sources": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for projects." },
 
         "lockMode": { "type": "string", "description": "Passed through to git-sync lockMode (off|verify|update)." },
         "lock-mode": { "type": "string", "description": "Alias for lockMode." },
@@ -1599,6 +1604,10 @@
         "catalog": { "type": "string" },
         "catalogPath": { "type": "string" },
         "catalog-path": { "type": "string" },
+        "projects": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Optional project slugs to sync from the project catalog." },
+        "project": { "type": "string", "description": "Alias for projects when syncing one project slug." },
+        "projectSlugs": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for projects." },
+        "project-slugs": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }], "description": "Alias for projects." },
         "sourcesRoot": { "type": "string" },
         "sources-root": { "type": "string" },
         "contentRoot": { "type": "string" },

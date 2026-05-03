@@ -23,6 +23,11 @@ internal static partial class WebPipelineRunner
 
         var repos = new List<Dictionary<string, object?>>();
         var cleanDefault = GetBool(step, "clean") ?? GetBool(step, "clean-target");
+        var selectedSourceSlugs = ResolveSourcesSyncSourceFilter(step);
+        var lockModeText = GetString(step, "lockMode") ?? GetString(step, "lock-mode");
+        if (selectedSourceSlugs.Count > 0 && string.Equals(lockModeText?.Trim(), "update", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("sources-sync project filters cannot be used with lockMode=update because a filtered lock update would drop unrelated source entries. Use lockMode=verify/off for project-scoped source hydration, or run an unfiltered update to advance the lock.");
+
         var destinationComparer = FileSystemPathComparison == StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
@@ -35,6 +40,10 @@ internal static partial class WebPipelineRunner
             var slug = !string.IsNullOrWhiteSpace(source.Slug) ? source.Slug!.Trim() : InferRepoSlug(source.Repo);
             if (string.IsNullOrWhiteSpace(slug))
                 slug = "repo";
+
+            var normalizedSlug = NormalizeSlug(slug);
+            if (selectedSourceSlugs.Count > 0 && !selectedSourceSlugs.Contains(normalizedSlug))
+                continue;
 
             var destinationValue = string.IsNullOrWhiteSpace(source.Destination)
                 ? null
@@ -76,7 +85,12 @@ internal static partial class WebPipelineRunner
         }
 
         if (repos.Count == 0)
+        {
+            if (selectedSourceSlugs.Count > 0)
+                throw new InvalidOperationException($"sources-sync: no Sources entries matched requested projects: {string.Join(", ", selectedSourceSlugs.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))}.");
+
             throw new InvalidOperationException("sources-sync: Sources entries are empty.");
+        }
 
         var gitSyncStep = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -94,7 +108,7 @@ internal static partial class WebPipelineRunner
             ["submodules"] = GetBool(step, "submodules") ?? GetBool(step, "submodule"),
             ["submodulesRecursive"] = GetBool(step, "submodulesRecursive") ?? GetBool(step, "submodules-recursive") ?? GetBool(step, "recursiveSubmodules") ?? GetBool(step, "recursive-submodules"),
             ["submoduleDepth"] = GetInt(step, "submoduleDepth") ?? GetInt(step, "submodule-depth"),
-            ["lockMode"] = GetString(step, "lockMode") ?? GetString(step, "lock-mode"),
+            ["lockMode"] = lockModeText,
             ["lockPath"] = GetString(step, "lockPath") ?? GetString(step, "lock-path") ?? GetString(step, "lock"),
             ["writeManifest"] = GetBool(step, "writeManifest") ?? GetBool(step, "write-manifest"),
             ["manifestPath"] = GetString(step, "manifestPath") ?? GetString(step, "manifest-path") ?? GetString(step, "manifest")
@@ -105,6 +119,37 @@ internal static partial class WebPipelineRunner
 
         ExecuteGitSync(doc.RootElement, plan.RootPath, logger, stepResult);
         stepResult.Task = "sources-sync";
+    }
+
+    private static HashSet<string> ResolveSourcesSyncSourceFilter(JsonElement step)
+    {
+        var selected = ParseTokenSet(
+            GetString(step, "projects") ??
+            GetString(step, "project") ??
+            GetString(step, "sourceSlugs") ??
+            GetString(step, "source-slugs") ??
+            GetString(step, "sources"));
+
+        foreach (var key in new[] { "projects", "sourceSlugs", "source-slugs", "sources" })
+        {
+            var values = GetArrayOfStrings(step, key);
+            if (values is null)
+                continue;
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    selected.Add(value.Trim());
+            }
+        }
+
+        if (selected.Count == 0)
+            return selected;
+
+        return selected
+            .Select(NormalizeSlug)
+            .Where(static slug => !string.IsNullOrWhiteSpace(slug))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static string InferRepoSlug(string repo)
