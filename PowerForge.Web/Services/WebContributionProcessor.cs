@@ -32,6 +32,18 @@ public static partial class WebContributionProcessor
         @"(?m)^---\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
+    private static readonly Regex DecorativeSeparatorRegex = new(
+        @"(?m)^[ \t]*(?<marker>_{5,}|-{5,}|={5,})[ \t]*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex BareFenceLanguageLabelRegex = new(
+        @"(?im)^[ \t]*(?<label>bash|csharp|html|json|powershell|ps1|text|xml|yaml|yml)[ \t]*\r?\n[ \t]*(```|~~~)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
+    private static readonly Regex SlugLikeAltTextRegex = new(
+        @"^[a-z0-9]+(?:[-_][a-z0-9]+)+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
     private static readonly Regex SlugRegex = new(
         "^[a-z0-9]+(?:-[a-z0-9]+)*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,

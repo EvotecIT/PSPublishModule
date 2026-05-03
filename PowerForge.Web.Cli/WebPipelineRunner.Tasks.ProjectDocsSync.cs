@@ -79,6 +79,7 @@ internal static partial class WebPipelineRunner
             arrayKeys: new[] { "sourceExamplesPaths", "source-examples-paths" },
             scalarKeys: new[] { "sourceExamplesPath", "source-examples-path", "sourceExamplesFolder", "source-examples-folder" },
             defaults: new[] { "Website/content/examples", "content/examples" });
+        var selectedProjectSlugs = ResolveProjectDocsProjectFilter(step);
 
         var apiRoot = ResolvePath(baseDir,
             GetString(step, "apiRoot") ??
@@ -175,6 +176,12 @@ internal static partial class WebPipelineRunner
         }
 
         var projects = ReadProjectDocsCatalog(catalogPath, onlyLocalLinks);
+        if (selectedProjectSlugs.Count > 0)
+        {
+            projects = projects
+                .Where(project => selectedProjectSlugs.Contains(NormalizeSlug(project.Slug)))
+                .ToList();
+        }
         var docsProjects = syncDocs
             ? projects.Where(p => p.HasDocsSurface && (includeDedicatedExternal || !p.ContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))).ToList()
             : new List<ProjectDocsCatalogItem>();
@@ -1666,6 +1673,36 @@ internal static partial class WebPipelineRunner
         return values
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static HashSet<string> ResolveProjectDocsProjectFilter(JsonElement step)
+    {
+        var selected = ParseTokenSet(
+            GetString(step, "projects") ??
+            GetString(step, "project") ??
+            GetString(step, "projectSlugs") ??
+            GetString(step, "project-slugs"));
+
+        foreach (var key in new[] { "projects", "projectSlugs", "project-slugs" })
+        {
+            var values = GetArrayOfStrings(step, key);
+            if (values is null)
+                continue;
+
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    selected.Add(value.Trim());
+            }
+        }
+
+        if (selected.Count == 0)
+            return selected;
+
+        return selected
+            .Select(NormalizeSlug)
+            .Where(static slug => !string.IsNullOrWhiteSpace(slug))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static void AddPathCandidate(ICollection<string> values, string? value)

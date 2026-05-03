@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
@@ -389,6 +390,191 @@ public class WebContributionProcessorTests
 
             Assert.False(result.Success);
             Assert.Contains(result.Errors, error => error.Contains("PostsPath must stay inside the configured root", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_ReportsPublishReadinessWarnings()
+    {
+        var root = CreateTempRoot("pf-web-contributions-editorial-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "editorial-post",
+                """
+                ---
+                title: "Editorial Post"
+                description: "A practical sample contribution."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "Screenshot showing a configured workflow"
+                draft: true
+                ---
+
+                PowerApps and PowerAutomate save files into Sharepoint.
+
+                yaml
+                ```text
+                sample: true
+                ```
+
+                • File Name
+                ________________________________________
+                """);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+            Assert.Contains(result.Warnings, warning => warning.Contains("decorative separator lines", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("standalone 'yaml'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("bullet characters", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("PowerApps", StringComparison.Ordinal));
+            Assert.Contains(result.Warnings, warning => warning.Contains("PowerAutomate", StringComparison.Ordinal));
+            Assert.Contains(result.Warnings, warning => warning.Contains("Sharepoint", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_AllowsSetextHeadings()
+    {
+        var root = CreateTempRoot("pf-web-contributions-setext-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "setext-post",
+                """
+                ---
+                title: "Setext Post"
+                description: "A practical sample contribution."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "Screenshot showing a configured workflow"
+                draft: true
+                ---
+
+                Main Section
+                ============
+
+                Secondary Section
+                -----------------
+                """);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("decorative separator lines", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_RejectsSlugLikeFeaturedImageAlt()
+    {
+        var root = CreateTempRoot("pf-web-contributions-alt-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "bad-alt-post",
+                """
+                ---
+                title: "Bad Alt Post"
+                description: "A practical sample contribution."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "powerplatform-save-files-issue"
+                draft: true
+                ---
+
+                Body.
+                """);
+
+            var result = WebContributionProcessor.Process(new WebContributionOptions
+            {
+                SourceRoot = sourceRoot
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("image_alt looks like a slug", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            DeleteTempRoot(root);
+        }
+    }
+
+    [Fact]
+    public void ContributionsCli_FailOnWarningsReturnsNonZeroForEditorialWarnings()
+    {
+        var root = CreateTempRoot("pf-web-contributions-cli-warnings-");
+
+        try
+        {
+            var sourceRoot = Path.Combine(root, "contributions");
+            WriteAuthor(sourceRoot, "jane-doe");
+            WritePost(sourceRoot, "warning-post",
+                """
+                ---
+                title: "Warning Post"
+                description: "A practical sample contribution."
+                date: "2026-04-29"
+                language: "en"
+                authors:
+                  - jane-doe
+                image: "./cover.webp"
+                image_alt: "Screenshot showing a workflow"
+                draft: true
+                ---
+
+                ________________________________________
+                """);
+
+            var relaxed = WebCliCommandHandlers.HandleSubCommand(
+                "contributions",
+                new[] { "validate", "--root", sourceRoot },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+            var strict = WebCliCommandHandlers.HandleSubCommand(
+                "contributions",
+                new[] { "validate", "--root", sourceRoot, "--fail-on-warnings" },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, relaxed);
+            Assert.Equal(1, strict);
         }
         finally
         {

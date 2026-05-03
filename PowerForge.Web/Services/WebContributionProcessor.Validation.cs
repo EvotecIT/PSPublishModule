@@ -209,6 +209,7 @@ public static partial class WebContributionProcessor
 
         ValidateFeaturedImage(indexPath, relative, bundleRoot, matter, errors);
         ValidateMarkdownImages(relative, bundleRoot, body, errors, warnings);
+        ValidateMarkdownEditorialHygiene(relative, body, warnings);
         return result;
     }
 
@@ -240,6 +241,10 @@ public static partial class WebContributionProcessor
         {
             errors.Add($"{relative}: featured image_alt is empty.");
         }
+        else if (LooksLikeSlugOrFileName(alt))
+        {
+            errors.Add($"{relative}: featured image_alt looks like a slug or file name. Describe what the image shows.");
+        }
     }
 
     private static void ValidateMarkdownImages(
@@ -268,5 +273,104 @@ public static partial class WebContributionProcessor
 
         if (scannableBody.Contains("<img", StringComparison.OrdinalIgnoreCase))
             warnings.Add($"{relative}: contains raw <img> HTML. Prefer Markdown image syntax so validation can check alt text and local files.");
+    }
+
+    private static void ValidateMarkdownEditorialHygiene(
+        string relative,
+        string body,
+        List<string> warnings)
+    {
+        var scannableBody = MaskFencedCodeBlocks(body);
+        if (ContainsDecorativeSeparator(scannableBody))
+            warnings.Add($"{relative}: contains decorative separator lines. Prefer headings, paragraphs, or Markdown lists.");
+
+        // Use the unmasked body here because the anti-pattern is the label immediately before a fence.
+        var bareFenceLabelMatch = BareFenceLanguageLabelRegex.Match(body);
+        if (bareFenceLabelMatch.Success)
+        {
+            var label = bareFenceLabelMatch.Groups["label"].Value;
+            warnings.Add($"{relative}: contains standalone '{label}' before a fenced code block. Put the language on the opening fence, for example ```{label}.");
+        }
+
+        if (scannableBody.Contains('•'))
+            warnings.Add($"{relative}: contains bullet characters. Prefer Markdown list markers such as '-'.");
+
+        WarnIfContains(scannableBody, "PowerApps", "Power Apps", relative, warnings);
+        WarnIfContains(scannableBody, "PowerAutomate", "Power Automate", relative, warnings);
+        WarnIfContains(scannableBody, "Sharepoint", "SharePoint", relative, warnings);
+    }
+
+    private static bool ContainsDecorativeSeparator(string body)
+    {
+        foreach (Match match in DecorativeSeparatorRegex.Matches(body))
+        {
+            if (!IsLikelySetextHeadingUnderline(body, match))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsLikelySetextHeadingUnderline(string body, Match separatorMatch)
+    {
+        var markerGroup = separatorMatch.Groups["marker"];
+        if (!markerGroup.Success)
+            return false;
+
+        var marker = markerGroup.Value;
+        if (string.IsNullOrWhiteSpace(marker) || marker[0] == '_')
+            return false;
+
+        var previousLineEnd = separatorMatch.Index - 1;
+        while (previousLineEnd >= 0 && (body[previousLineEnd] == '\r' || body[previousLineEnd] == '\n'))
+            previousLineEnd--;
+        if (previousLineEnd < 0)
+            return false;
+
+        var previousLineStart = body.LastIndexOf('\n', previousLineEnd);
+        previousLineStart = previousLineStart < 0 ? 0 : previousLineStart + 1;
+        var previousLine = body.Substring(previousLineStart, previousLineEnd - previousLineStart + 1).Trim();
+        if (previousLine.Length == 0)
+            return false;
+
+        if (previousLine.StartsWith("#", StringComparison.Ordinal) ||
+            previousLine.StartsWith(">", StringComparison.Ordinal) ||
+            previousLine.StartsWith("|", StringComparison.Ordinal) ||
+            previousLine.StartsWith("-", StringComparison.Ordinal) ||
+            previousLine.StartsWith("*", StringComparison.Ordinal) ||
+            previousLine.StartsWith("+", StringComparison.Ordinal) ||
+            previousLine.StartsWith("`", StringComparison.Ordinal) ||
+            previousLine.StartsWith("~", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeSlugOrFileName(string value)
+    {
+        var text = value.Trim();
+        if (text.Length < 8)
+            return false;
+
+        if (text.Contains(' ', StringComparison.Ordinal))
+            return false;
+
+        if (Path.HasExtension(text))
+            return true;
+
+        return SlugLikeAltTextRegex.IsMatch(text);
+    }
+
+    private static void WarnIfContains(
+        string body,
+        string current,
+        string preferred,
+        string relative,
+        List<string> warnings)
+    {
+        if (body.Contains(current, StringComparison.Ordinal))
+            warnings.Add($"{relative}: contains '{current}'. Prefer '{preferred}' in visible article copy.");
     }
 }

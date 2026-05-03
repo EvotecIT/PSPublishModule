@@ -234,6 +234,138 @@ public class WebPipelineRunnerSourcesSyncTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_SourcesSync_FiltersSourcesWhenProjectsConfigured()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sources-sync-filter-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var alphaSource = CreateGitSource(root, "alpha-source", "README.md", "alpha source");
+            var betaSource = CreateGitSource(root, "beta-source", "README.md", "beta source");
+
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                $$"""
+                {
+                  "Name": "Pipeline Sources Sync Filter Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "{{EscapeJson(alphaSource)}}", "Slug": "alpha" },
+                    { "Repo": "{{EscapeJson(betaSource)}}", "Slug": "beta" }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    { "task": "sources-sync", "config": "./site.json", "projects": ["beta"] }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.True(File.Exists(Path.Combine(root, "projects", "beta", "README.md")));
+            Assert.False(Directory.Exists(Path.Combine(root, "projects", "alpha")));
+            Assert.Equal("beta source", File.ReadAllText(Path.Combine(root, "projects", "beta", "README.md")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_SourcesSync_RejectsFilteredLockUpdate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sources-sync-filter-update-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "Name": "Pipeline Sources Sync Filter Update Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "https://example.test/alpha.git", "Slug": "alpha" }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    { "task": "sources-sync", "config": "./site.json", "projects": "alpha", "lockMode": "update" }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("filtered lock update", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static string CreateGitSource(string root, string name, string fileName, string content)
+    {
+        var source = Path.Combine(root, name);
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, fileName), content);
+        RunGit(source, "init");
+        RunGit(source, "config", "user.email", "pf-tests@example.local");
+        RunGit(source, "config", "user.name", "PowerForge Tests");
+        RunGit(source, "add", ".");
+        RunGit(source, "commit", "-m", "init", "--quiet");
+        return source;
+    }
+
     private static bool IsGitAvailable()
     {
         try

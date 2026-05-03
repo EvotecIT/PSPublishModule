@@ -23,6 +23,8 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(effectiveArgs, "--site");
         var force = HasOption(effectiveArgs, "--force");
         var publish = HasOption(effectiveArgs, "--publish");
+        var failOnWarnings = HasOption(effectiveArgs, "--fail-on-warnings") ||
+                             HasOption(effectiveArgs, "--strict");
 
         WebContributionResult result;
         try
@@ -41,18 +43,20 @@ internal static partial class WebCliCommandHandlers
             return Fail(ex.ToString(), outputJson, logger, "web.contributions");
         }
 
+        var success = result.Success && (!failOnWarnings || result.Warnings.Length == 0);
+
         if (outputJson)
         {
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
                 SchemaVersion = outputSchemaVersion,
                 Command = "web.contributions",
-                Success = result.Success,
-                ExitCode = result.Success ? 0 : 1,
+                Success = success,
+                ExitCode = success ? 0 : 1,
                 Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebContributionResult),
-                Error = result.Success ? null : string.Join(" | ", result.Errors)
+                Error = success ? null : string.Join(" | ", failOnWarnings && result.Warnings.Length > 0 ? result.Warnings : result.Errors)
             });
-            return result.Success ? 0 : 1;
+            return success ? 0 : 1;
         }
 
         foreach (var warning in result.Warnings)
@@ -71,6 +75,8 @@ internal static partial class WebCliCommandHandlers
         }
 
         if (!result.Success)
+            return 1;
+        if (failOnWarnings && result.Warnings.Length > 0)
             return 1;
 
         logger.Success(isImport ? "Contribution import passed." : "Contribution validation passed.");
