@@ -7,10 +7,12 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
+    private const string SupportedServerActions = "inspect, plan, capture, deploy, verify, bootstrap-plan, restore-secrets-plan";
+
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         if (subArgs.Length == 0)
-            return Fail("Missing server action. Supported action: plan.", outputJson, logger, "web.server");
+            return Fail($"Missing server action. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server");
 
         var action = subArgs[0].ToLowerInvariant();
         var actionArgs = subArgs.Skip(1).ToArray();
@@ -25,7 +27,7 @@ internal static partial class WebCliCommandHandlers
             "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
             "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
             "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
-            _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: inspect, plan, capture, deploy, verify, bootstrap-plan, restore-secrets-plan.", outputJson, logger, "web.server")
+            _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
         };
     }
 
@@ -282,13 +284,20 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(manifestPath))
             return (null, null, Fail("Missing required --manifest.", outputJson, logger, commandName));
 
-        var fullManifestPath = ResolveExistingFilePath(manifestPath);
-        var manifest = JsonSerializer.Deserialize<PowerForgeServerRecoveryManifest>(
-            File.ReadAllText(fullManifestPath), WebCliJson.Options);
-        if (manifest is null)
-            return (null, null, Fail("Invalid server recovery manifest.", outputJson, logger, commandName));
+        try
+        {
+            var fullManifestPath = ResolveExistingFilePath(manifestPath);
+            var manifest = JsonSerializer.Deserialize<PowerForgeServerRecoveryManifest>(
+                File.ReadAllText(fullManifestPath), WebCliJson.Options);
+            if (manifest is null)
+                return (null, null, Fail("Invalid server recovery manifest.", outputJson, logger, commandName));
 
-        return (manifest, fullManifestPath, 0);
+            return (manifest, fullManifestPath, 0);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return (null, null, Fail($"Failed to load server recovery manifest: {ex.Message}", outputJson, logger, commandName));
+        }
     }
 
     private static string? ResolveBackupRecipient(PowerForgeServerRecoveryManifest manifest)
@@ -328,7 +337,7 @@ internal static partial class WebCliCommandHandlers
         var id = SanitizeFileName(string.IsNullOrWhiteSpace(command.Id) ? "command" : command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
-        var execution = RunProcessCaptureText(sshCommand, new[] { target, command.Command ?? string.Empty });
+        var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -351,7 +360,7 @@ internal static partial class WebCliCommandHandlers
         string outputPath)
     {
         var script = BuildRemoteTarScript(files);
-        return RunProcessCaptureBinary(sshCommand, new[] { target, $"sh -lc {ShellQuote(script)}" }, outputPath);
+        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
     }
 
     private static ProcessResult CaptureEncryptedRemoteTarArchive(
@@ -363,7 +372,7 @@ internal static partial class WebCliCommandHandlers
         string recipient)
     {
         var script = BuildRemoteTarScript(files);
-        using var ssh = CreateProcess(sshCommand, new[] { target, $"sh -lc {ShellQuote(script)}" });
+        using var ssh = CreateProcess(sshCommand, BuildSshArguments(target, script));
         using var age = CreateProcess(ageCommand, new[] { "-r", recipient, "-o", outputPath });
         ssh.StartInfo.RedirectStandardOutput = true;
         ssh.StartInfo.RedirectStandardError = true;
@@ -406,7 +415,7 @@ internal static partial class WebCliCommandHandlers
         string recipient)
     {
         var script = BuildRemoteEncryptedTarScript(files, recipient);
-        return RunProcessCaptureBinary(sshCommand, new[] { target, $"sh -lc {ShellQuote(script)}" }, outputPath);
+        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
     }
 
     private static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
@@ -437,16 +446,24 @@ internal static partial class WebCliCommandHandlers
     private static string ShellQuote(string value)
         => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
+    private static string[] BuildSshArguments(string target, string command)
+        => new[] { "-o", "ConnectTimeout=30", target, $"sh -lc {ShellQuote(command)}" };
+
     private static ProcessResult RunProcessCaptureText(string fileName, IReadOnlyList<string> args)
     {
         using var process = CreateProcess(fileName, args);
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.Start();
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
-        return new ProcessResult { ExitCode = process.ExitCode, Stdout = stdout, Stderr = stderr };
+        return new ProcessResult
+        {
+            ExitCode = process.ExitCode,
+            Stdout = stdoutTask.GetAwaiter().GetResult(),
+            Stderr = stderrTask.GetAwaiter().GetResult()
+        };
     }
 
     private static ProcessResult RunProcessCaptureBinary(string fileName, IReadOnlyList<string> args, string stdoutPath)
@@ -455,11 +472,12 @@ internal static partial class WebCliCommandHandlers
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.Start();
-        using (var output = File.Create(stdoutPath))
-            process.StandardOutput.BaseStream.CopyTo(output);
-        var stderr = process.StandardError.ReadToEnd();
+        using var output = File.Create(stdoutPath);
+        var copyTask = process.StandardOutput.BaseStream.CopyToAsync(output);
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
-        return new ProcessResult { ExitCode = process.ExitCode, Stdout = string.Empty, Stderr = stderr };
+        copyTask.GetAwaiter().GetResult();
+        return new ProcessResult { ExitCode = process.ExitCode, Stdout = string.Empty, Stderr = stderrTask.GetAwaiter().GetResult() };
     }
 
     private static Process CreateProcess(string fileName, IReadOnlyList<string> args)
@@ -497,9 +515,14 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("1. Bootstrap Ubuntu and install prerequisite packages.");
         builder.AppendLine("2. Restore plain configuration files from the plain archive.");
         builder.AppendLine("3. Restore encrypted secrets only after decrypting them on a trusted machine.");
-        builder.AppendLine("4. Clone or update the Website and PSPublishModule repositories.");
+        builder.AppendLine("4. Clone or update the manifest repositories.");
         builder.AppendLine("5. Run the deployment command from the manifest.");
         builder.AppendLine("6. Run the verification commands and public URL checks from the manifest.");
+        builder.AppendLine();
+        builder.AppendLine("## Required Repositories");
+        builder.AppendLine();
+        foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+            builder.AppendLine($"- `{repository.Role ?? "repository"}`: `{repository.Path ?? repository.Url ?? "manual"}`");
         builder.AppendLine();
         builder.AppendLine("## Required Secrets");
         builder.AppendLine();
@@ -523,7 +546,7 @@ internal static partial class WebCliCommandHandlers
         var invalid = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(value.Length);
         foreach (var c in value)
-            builder.Append(invalid.Contains(c) ? '-' : c);
+            builder.Append(invalid.Contains(c) || c is '/' or '\\' ? '-' : c);
         return builder.ToString();
     }
 

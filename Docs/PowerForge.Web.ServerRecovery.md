@@ -67,7 +67,7 @@ powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serve
 
 `server bootstrap-plan` generates a reviewable markdown plan, JSON plan, and LF-normalized shell script draft for rebuilding a fresh host. Manual and sensitive steps are left as blocking TODOs in the script so it cannot silently deploy without restored secrets.
 
-`server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age`, decrypts to a temporary directory, lists archive contents, and refuses to extract into `/` unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.
+`server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age`, decrypts to a temporary directory, lists archive contents, rejects absolute or path-traversal archive entries, and refuses to extract into `/` unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.
 
 Proposed PowerShell shape:
 
@@ -99,6 +99,8 @@ A recovery manifest should describe:
 - Cloudflare DNS/cache expectations when a site uses Cloudflare
 
 The manifest must not contain secret values. It may contain secret paths and secret environment variable names.
+
+Manifest files are trusted operator input. Command fields are executed on the target host through SSH, so review changes to bootstrap, deploy, verify, and capture command entries with the same care as shell scripts.
 
 ## Capture Sets
 

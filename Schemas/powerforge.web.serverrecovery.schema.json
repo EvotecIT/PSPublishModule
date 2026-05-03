@@ -52,7 +52,11 @@
         "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "os": { "type": "string" },
         "architecture": { "type": "string" }
-      }
+      },
+      "anyOf": [
+        { "required": ["sshAlias"] },
+        { "required": ["host"] }
+      ]
     },
     "Repository": {
       "type": "object",
@@ -275,7 +279,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "url": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
         "expectedStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
         "via": { "type": "string" }
       },
@@ -285,11 +289,17 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["github"]
+        },
         "repository": { "type": "string" },
         "branch": { "type": "string" },
         "path": { "type": "string" },
-        "encryption": { "type": "string" },
+        "encryption": {
+          "type": "string",
+          "enum": ["age"]
+        },
         "recipient": { "type": "string" },
         "recipientEnv": { "type": "string" },
         "retention": { "$ref": "#/$defs/BackupRetention" }
@@ -299,8 +309,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "keepLatest": { "type": "integer", "minimum": 0 },
-        "keepDays": { "type": "integer", "minimum": 0 }
+        "keepLatest": { "type": "integer", "minimum": 1 },
+        "keepDays": { "type": "integer", "minimum": 1 }
       }
     }
   }

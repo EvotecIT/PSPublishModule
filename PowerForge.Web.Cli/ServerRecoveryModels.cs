@@ -19,6 +19,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public PowerForgeServerCommandGroup? Deploy { get; set; }
     public PowerForgeServerVerify? Verify { get; set; }
     public PowerForgeServerBackupTarget? BackupTarget { get; set; }
+    public string[]? Notes { get; set; }
 }
 
 internal sealed class PowerForgeServerTarget
@@ -28,6 +29,7 @@ internal sealed class PowerForgeServerTarget
     public string? User { get; set; }
     public int? SshPort { get; set; }
     public string? Os { get; set; }
+    public string? Architecture { get; set; }
 }
 
 internal sealed class PowerForgeServerRepository
@@ -265,6 +267,7 @@ internal sealed class PowerForgeServerVerifyUrlResult
     public string? Via { get; set; }
     public bool Success { get; set; }
     public string? ServerHeader { get; set; }
+    public string? CloudflareRay { get; set; }
     public string? Error { get; set; }
 }
 

@@ -121,9 +121,13 @@ internal static partial class WebCliCommandHandlers
             var status = (int)response.StatusCode;
             var expected = verifyUrl.ExpectedStatus ?? 200;
             var serverHeader = response.Headers.Server.ToString();
+            var cloudflareRay = response.Headers.TryGetValues("CF-Ray", out var cloudflareRayValues)
+                ? cloudflareRayValues.FirstOrDefault()
+                : null;
             var success = status == expected;
             if (verifyUrl.Via?.Equals("cloudflare", StringComparison.OrdinalIgnoreCase) == true)
-                success = success && serverHeader.Contains("cloudflare", StringComparison.OrdinalIgnoreCase);
+                success = success && (!string.IsNullOrWhiteSpace(cloudflareRay) ||
+                                      serverHeader.Contains("cloudflare", StringComparison.OrdinalIgnoreCase));
 
             return new PowerForgeServerVerifyUrlResult
             {
@@ -133,6 +137,7 @@ internal static partial class WebCliCommandHandlers
                 Via = verifyUrl.Via,
                 Success = success,
                 ServerHeader = serverHeader,
+                CloudflareRay = cloudflareRay,
                 Error = success ? null : "Unexpected status or missing expected proxy header."
             };
         }

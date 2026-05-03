@@ -22,7 +22,7 @@ internal static partial class WebCliCommandHandlers
         Directory.CreateDirectory(outputRoot);
 
         var warnings = new List<string>();
-        if (!manifest.BackupTarget?.Encryption?.Equals("age", StringComparison.OrdinalIgnoreCase) == true)
+        if (!string.Equals(manifest.BackupTarget?.Encryption, "age", StringComparison.OrdinalIgnoreCase))
             warnings.Add("Restore script currently assumes age encryption.");
         if (manifest.Secrets?.Length is null or 0)
             warnings.Add("Manifest does not define any secrets.");
@@ -113,7 +113,7 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine($"Archive: `{archivePath}`");
         builder.AppendLine($"Encryption: `{manifest.BackupTarget?.Encryption ?? "unknown"}`");
         builder.AppendLine();
-        builder.AppendLine("The generated script decrypts into a temporary directory, lists archive contents, and refuses to restore unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.");
+        builder.AppendLine("The generated script decrypts into a temporary directory, lists archive contents, rejects unsafe archive paths, and refuses to restore unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.");
         builder.AppendLine();
         builder.AppendLine("## Secrets");
         builder.AppendLine();
@@ -153,6 +153,11 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("age -d -o \"$tmp_dir/secrets.tar.gz\" \"$archive\"");
         builder.AppendLine("echo 'Encrypted secret archive contents:'");
         builder.AppendLine("tar -tzf \"$tmp_dir/secrets.tar.gz\"");
+        builder.AppendLine();
+        builder.AppendLine("if tar -tzf \"$tmp_dir/secrets.tar.gz\" | grep -E '(^/|(^|/)\\.\\.(/|$))' >/dev/null; then");
+        builder.AppendLine("  echo 'Unsafe secret archive path detected; refusing to extract.' >&2");
+        builder.AppendLine("  exit 4");
+        builder.AppendLine("fi");
         builder.AppendLine();
         builder.AppendLine("if [ \"${POWERFORGE_RESTORE_SECRETS_CONFIRM:-}\" != \"YES\" ]; then");
         builder.AppendLine("  echo 'Set POWERFORGE_RESTORE_SECRETS_CONFIRM=YES to extract secrets to /.' >&2");

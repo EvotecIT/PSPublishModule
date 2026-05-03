@@ -86,6 +86,13 @@ internal static partial class WebCliCommandHandlers
                 path.Path);
         }
 
+        foreach (var path in manifest.Paths?.Where(static path => path.Kind?.Equals("symlink", StringComparison.OrdinalIgnoreCase) == true) ?? Array.Empty<PowerForgeServerPath>())
+        {
+            if (string.IsNullOrWhiteSpace(path.Path)) continue;
+            AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.target", "paths", $"Managed symlink resolves: {path.Path}",
+                ExecuteRemote(sshCommand, target, $"readlink -f {ShellQuote(path.Path)}"), "symlink target");
+        }
+
         InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Services, "service", checks);
         InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Timers, "timer", checks);
 
@@ -133,9 +140,6 @@ internal static partial class WebCliCommandHandlers
                 "exists/missing");
         }
 
-        AddCommandCheck(checks, "release.links", "deploy", "Current release symlinks resolve",
-            ExecuteRemote(sshCommand, target, "readlink -f /var/www/evotec/xyz/current && readlink -f /var/www/evotec/pl/current"), "/var/www/evotec");
-
         var failed = checks.Where(static check => !check.Success).ToArray();
         if (failed.Length > 0)
             warnings.Add($"{failed.Length} inspect check(s) reported drift or failure.");
@@ -177,7 +181,7 @@ internal static partial class WebCliCommandHandlers
     }
 
     private static ProcessResult ExecuteRemote(string sshCommand, string target, string command)
-        => RunProcessCaptureText(sshCommand, new[] { target, $"sh -lc {ShellQuote(command)}" });
+        => RunProcessCaptureText(sshCommand, BuildSshArguments(target, command));
 
     private static void InspectSystemdUnits(
         string sshCommand,
@@ -249,7 +253,7 @@ internal static partial class WebCliCommandHandlers
 
     private static bool HasLine(string text, string expected)
         => text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Any(line => line.Trim().Equals(expected, StringComparison.OrdinalIgnoreCase));
+            .Any(line => line.Contains(expected, StringComparison.OrdinalIgnoreCase));
 
     private static string? FirstMatchingLine(string text, string prefix)
         => text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
