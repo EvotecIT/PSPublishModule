@@ -199,7 +199,7 @@ Ready-to-adapt templates are available in:
 
 ## Migration Rule of Thumb
 
-For TestimoX/TierBridge/Sectigo-style repos:
+For service/installer-heavy repos:
 
 1. start by expressing publish/sign/package steps in JSON,
 2. then add service/MSI/state primitives,

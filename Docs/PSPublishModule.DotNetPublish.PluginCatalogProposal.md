@@ -1,6 +1,6 @@
 # PowerForge Plugin Catalog Proposal
 
-This proposal defines the boundary for moving plugin-oriented build mechanics into PowerForge without dragging IntelligenceX-specific product policy into the engine.
+This proposal defines the boundary for moving plugin-oriented build mechanics into PowerForge without dragging product-specific policy into the engine.
 
 ## Goal
 
@@ -18,7 +18,7 @@ Keep product-specific policy in each repo:
 - which projects are "public" vs "private"
 - manifest branding and schema names
 - README text, launcher text, environment-variable naming
-- assumptions about sibling repos like `TestimoX`
+- assumptions about sibling/private repos
 
 ## Current State
 
@@ -31,13 +31,13 @@ PowerForge already owns a meaningful part of bundle mechanics:
 - bundle scripts
 - installer-from-bundle flow
 
-That means `Complete-PortableBundle.ps1` should not be copied into PowerForge as-is. Most of its remaining value is IntelligenceX-specific content and plugin export invocation, not missing generic bundle primitives.
+That means a product-specific portable bundle finalizer should not be copied into PowerForge as-is. Most of its remaining value is product-specific content and plugin export invocation, not missing generic bundle primitives.
 
 The biggest duplication that still looks engine-worthy is the plugin catalog/export lane:
 
-- IntelligenceX keeps hardcoded project catalogs in two separate scripts
+- the product repo keeps hardcoded project catalogs in separate scripts
 - folder export and NuGet pack flows each rediscover the same groups
-- private plugin handling currently knows about `TestimoXRoot`
+- private plugin handling currently knows about external private-repo roots
 
 ## Proposed Contract
 
@@ -87,11 +87,11 @@ This is a proposed config shape, not an implemented schema yet:
         }
       },
       {
-        "Id": "testimox",
-        "ProjectPath": "src/Tools/TestimoX/TestimoX.csproj",
+        "Id": "private-tool",
+        "ProjectPath": "src/Tools/PrivateTool/PrivateTool.csproj",
         "Groups": ["private"],
         "MsBuildProperties": {
-          "TestimoXRoot": "{externalRoots.testimox}"
+          "PrivateToolRoot": "{externalRoots.privateTool}"
         }
       }
     ]
@@ -111,12 +111,12 @@ This is a proposed config shape, not an implemented schema yet:
 
 ## What Must Stay Repo-Specific
 
-- IntelligenceX project membership in `public` / `private`
+- product project membership in `public` / `private`
 - `ix-plugin.json` naming unless generalized as a configurable format
 - launcher scripts named `run-chat.ps1`
-- README text that references IntelligenceX Chat
-- env var names like `INTELLIGENCEX_PORTABLE_PLUGIN_MODE`
-- repo-specific sibling dependency meaning such as `TestimoXRoot`
+- README text that references a product UI or product name
+- product-specific environment variable names
+- repo-specific sibling dependency meaning such as a private tool root
 
 ## Bundle Guidance
 
@@ -133,13 +133,13 @@ That is already a reusable contract. Repos should prefer those features before a
 
 The remaining repo-side bundle logic should stay outside PowerForge unless two or more repos need the same behavior with the same contract.
 
-## IntelligenceX Migration Path
+## Product Migration Path
 
 1. Add a PowerForge plugin catalog contract and execution service.
 2. Replace `Export-PluginFolders.ps1` with a thin wrapper over that contract.
 3. Replace `Publish-Plugins.ps1` with the same catalog plus `PackNuGet`.
-4. Keep `Complete-PortableBundle.ps1` only for IntelligenceX-specific content generation until another repo proves the same launcher/readme contract is reusable.
-5. Revisit launcher/readme generation only after at least one non-IntelligenceX consumer exists.
+4. Keep product-specific bundle finalizers only for product content generation until another repo proves the same launcher/readme contract is reusable.
+5. Revisit launcher/readme generation only after at least one second consumer exists.
 
 ## Decision Rule
 
@@ -148,7 +148,6 @@ Before moving anything from a repo into PowerForge, ask:
 1. Is this build machinery rather than product policy?
 2. Would at least two repos likely want the same contract?
 3. Can the behavior be expressed as config instead of hardcoded product names?
-4. Would a non-IntelligenceX repo recognize the option names as generic?
+4. Would another repo recognize the option names as generic?
 
 If any answer is "no", keep it in the repo for now.
-

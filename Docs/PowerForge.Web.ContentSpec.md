@@ -40,9 +40,9 @@ Example:
 ```json
 {
   "extends": ["../shared/site.base.json"],
-  "name": "IntelligenceX",
+  "name": "ExampleDocs",
   "baseUrl": "https://example.com",
-  "defaultTheme": "intelligencex",
+  "defaultTheme": "exampledocs",
   "navigation": {
     "menus": [
       { "name": "main", "items": [{ "title": "Home", "url": "/" }] }
@@ -247,8 +247,8 @@ Enable multi-language URLs in `site.json`:
     "DetectFromPath": true,
     "FallbackToDefaultLanguage": true,
     "Languages": [
-      { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://evotec.xyz" },
-      { "Code": "pl", "Label": "Polski", "BaseUrl": "https://evotec.pl" }
+      { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://example.com" },
+      { "Code": "pl", "Label": "Polski", "BaseUrl": "https://example.pl" }
     ]
   }
 }
@@ -963,14 +963,14 @@ themes/nova/assets/app.css
     "Breadcrumbs": true,
     "Website": true,
     "Organization": true,
-    "OrganizationLegalName": "Evotec Services sp. z o.o.",
+    "OrganizationLegalName": "Example Software Ltd.",
     "OrganizationDescription": "AI-powered developer tooling.",
     "OrganizationLogo": "/assets/brand/logo.png",
     "OrganizationSameAs": [
-      "https://github.com/EvotecIT/IntelligenceX",
-      "https://x.com/evotecit"
+      "https://github.com/example/exampledocs",
+      "https://social.example.com/example"
     ],
-    "OrganizationEmail": "support@evotec.xyz",
+    "OrganizationEmail": "support@example.com",
     "OrganizationTelephone": "+1-555-0100",
     "OrganizationContactUrl": "/contact/",
     "Article": true,
@@ -1053,7 +1053,7 @@ Generated card data widgets:
 
 Recommended generated-card presets for owned sites:
 - Project overview pages: `style: default`, `variant: product` or `variant: metrics`; use inferred GitHub/Gallery/release metrics where available.
-- Project examples and CodeGlyphX/HtmlForgeX sample pages: `style: examples`, `variant: code`; metrics can show examples, snippets, downloads, or supported formats.
+- Project examples and sample pages: `style: examples`, `variant: code`; metrics can show examples, snippets, downloads, or supported formats.
 - API/reference pages: `style: api`, `variant: reference`.
 - Docs pages: `style: docs`, `variant: shelf`.
 - Blog/news/RSS/feed pages: `style: blog` for editorial pages, `style: feed` / `variant: feed` for feed landing pages.
@@ -1116,16 +1116,16 @@ meta.howto.steps:
   - "Test|Run dotnet test."
 
 # Product
-meta.product.name: IntelligenceX Pro
-meta.product.brand: Evotec
-meta.product.sku: IX-PRO-01
+meta.product.name: ExampleDocs Pro
+meta.product.brand: Example
+meta.product.sku: EX-PRO-01
 meta.product.price: 49.99
 meta.product.price_currency: USD
 meta.product.rating_value: 4.8
 meta.product.rating_count: 137
 
 # SoftwareApplication
-meta.software.name: IntelligenceX CLI
+meta.software.name: ExampleDocs CLI
 meta.software.application_category: DeveloperApplication
 meta.software.operating_system: Windows, Linux, macOS
 meta.software.version: 1.4.0

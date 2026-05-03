@@ -37,7 +37,7 @@ themes/
       site.js
     critical.css
 
-  codeglyphx/
+  example/
     theme.json
     layouts/
       home.html
@@ -56,7 +56,7 @@ Theme manifest defines identity, engine, inheritance, and assets.
 Schema: `Schemas/powerforge.web.themespec.schema.json`.
 ```json
 {
-  "name": "codeglyphx",
+  "name": "example",
   "schemaVersion": 2,
   "version": "1.0.0",
   "author": "Evotec",
@@ -87,7 +87,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
       { "match": "/**", "bundles": ["global"] }
     ],
     "preloads": [
-      { "href": "/themes/codeglyphx/assets/app.css", "as": "style" }
+      { "href": "/themes/example/assets/app.css", "as": "style" }
     ],
     "criticalCss": [
       { "name": "base", "path": "critical.css" }
@@ -190,14 +190,14 @@ PowerForge.Web copies theme assets during `build`:
 
 Example mapping (default settings):
 ```
-themes/intelligencex/assets/site.css
-=> /themes/intelligencex/assets/site.css
+themes/example/assets/site.css
+=> /themes/example/assets/site.css
 ```
 
 If a theme extends another theme, **both** themes’ assets are copied:
 ```
 /themes/base/assets/...
-/themes/intelligencex/assets/...
+/themes/example/assets/...
 ```
 
 ## How asset URLs are resolved
@@ -207,7 +207,7 @@ Prefer the asset registry helpers instead of hard-coded `<link>` tags:
 
 When you must hard-code an asset in a layout/partial, use absolute paths:
 ```
-<link rel="stylesheet" href="/themes/intelligencex/assets/site.css" />
+<link rel="stylesheet" href="/themes/example/assets/site.css" />
 ```
 Avoid relative paths like `assets/site.css` because they resolve relative to the
 current page URL and will break on nested routes.

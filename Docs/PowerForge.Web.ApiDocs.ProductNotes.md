@@ -201,7 +201,7 @@ Future API-doc quality gates should also check for relevance signals:
 4. Extend those quality gates beyond quick-start types:
    - configuration/builder-heavy APIs without walkthroughs
    - suite-level portal guidance for important cross-project entry points
-5. Ship an API suite contract for multi-project websites like TestimoX. (done in this branch)
+5. Ship an API suite contract for multi-project websites. (done in this branch)
    - docs-template HTML now renders project/module switchers
    - per-type and index JSON now emit `suite`
    - batch `apidocs` and `project-apidocs` can infer/populate suite entries automatically

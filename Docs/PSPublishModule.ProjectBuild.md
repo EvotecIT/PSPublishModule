@@ -105,7 +105,7 @@ Unified release entrypoint
   - `--configuration Debug|Release`
   - `--module-no-dotnet-build`, `--module-version`, `--module-prerelease-tag`, `--module-no-sign`, `--module-sign`
   - `--skip-workspace-validation`, `--workspace-config`, `--workspace-profile`
-  - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-testimox-root`
+  - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-external-root <name=path>`
   - `--target`, `--rid`, `--framework`, `--style`
   - `--tool-output <Tool|Portable|Installer|Store>` and `--skip-tool-output <...>` when the unified release should keep the high-level release intent simple while PowerForge decides which internal DotNetPublish steps still need to run
   - `--skip-restore` and `--skip-build` for DotNetPublish-backed tool/app flows
@@ -172,23 +172,23 @@ Example Winget generation from staged assets:
 "Winget": {
   "Enabled": true,
   "OutputPath": "Artifacts/UploadReady/Winget",
-  "InstallerUrlTemplate": "https://github.com/EvotecIT/IntelligenceX/releases/download/v{PackageVersion}/{FileName}",
+  "InstallerUrlTemplate": "https://github.com/ExampleOrg/ExampleApp/releases/download/v{PackageVersion}/{FileName}",
   "Packages": [
     {
-      "PackageIdentifier": "EvotecIT.IntelligenceX.Tray",
+      "PackageIdentifier": "ExampleOrg.ExampleApp.Tray",
       "PackageVersion": "1.0.0",
-      "Publisher": "Evotec",
-      "PackageName": "IntelligenceX Tray",
+      "Publisher": "ExampleOrg",
+      "PackageName": "ExampleApp Tray",
       "License": "MIT",
-      "ShortDescription": "Windows tray app for IntelligenceX.",
+      "ShortDescription": "Windows tray app for ExampleApp.",
       "Installers": [
         {
           "Category": "Portable",
-          "Target": "IntelligenceX.Tray",
+          "Target": "ExampleApp.Tray",
           "Runtime": "win-x64",
           "InstallerType": "zip",
           "NestedInstallerType": "portable",
-          "RelativeFilePath": "IntelligenceX.Tray.exe"
+          "RelativeFilePath": "ExampleApp.Tray.exe"
         }
       ]
     }
@@ -247,19 +247,19 @@ Example configuration
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/project.build.schema.json",
   "RootPath": "..",
   "VersionTracks": {
-    "OfficeIMO": {
+    "ExampleSuite": {
       "ExpectedVersion": "1.0.X",
-      "AnchorProject": "OfficeIMO.Word",
+      "AnchorProject": "ExampleSuite.Core",
       "Projects": [
-        "OfficeIMO.CSV",
-        "OfficeIMO.Excel",
-        "OfficeIMO.Markdown"
+        "ExampleSuite.Csv",
+        "ExampleSuite.Excel",
+        "ExampleSuite.Markdown"
       ]
     }
   },
   "ExpectedVersionMapAsInclude": true,
   "ExpectedVersionMapUseWildcards": false,
-  "ExcludeProjects": [ "OfficeIMO.Visio", "OfficeIMO.Project" ],
+  "ExcludeProjects": [ "ExampleSuite.Legacy", "ExampleSuite.Experimental" ],
   "Configuration": "Release",
   "StagingPath": "Artefacts/ProjectBuild",
   "CleanStaging": true,
@@ -273,14 +273,14 @@ Example configuration
   "CertificateThumbprint": "THUMBPRINT",
   "CertificateStore": "CurrentUser",
   "PublishSource": "https://api.nuget.org/v3/index.json",
-  "PublishApiKeyFilePath": "C:\\Support\\Important\\NugetOrgEvotec.txt",
+  "PublishApiKeyFilePath": "C:\\path\\to\\nuget-api-key.txt",
   "SkipDuplicate": true,
   "PublishFailFast": true,
-  "GitHubAccessTokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
-  "GitHubUsername": "EvotecIT",
-  "GitHubRepositoryName": "OfficeIMO",
+  "GitHubAccessTokenFilePath": "C:\\path\\to\\github-token.txt",
+  "GitHubUsername": "ExampleOrg",
+  "GitHubRepositoryName": "ExampleSuite",
   "GitHubReleaseMode": "Single",
-  "GitHubPrimaryProject": "OfficeIMO.Word",
+  "GitHubPrimaryProject": "ExampleSuite.Core",
   "GitHubTagTemplate": "{Repo}-v{Version}",
   "GitHubGenerateReleaseNotes": true
 }
@@ -343,7 +343,7 @@ GitHub releases
 - For mixed-version repositories, prefer one of these patterns:
   - `GitHubReleaseMode: "PerProject"` for one release per package version.
   - `GitHubTagConflictPolicy: "Fail"` or `AppendUtcTimestamp` to avoid silent reuse.
-  - `GitHubTagTemplate: "{Repo}-v{UtcTimestamp}"` for unique per-run tags (OfficeIMO-style).
+  - `GitHubTagTemplate: "{Repo}-v{UtcTimestamp}"` for unique per-run tags.
 
 Signing
 - `CertificateThumbprint`, `CertificateStore`, `TimeStampServer` control package signing.

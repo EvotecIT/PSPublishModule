@@ -41,7 +41,7 @@ Check these explicitly when reviewing or refactoring an existing site:
 
 - Localization routing:
   - Verify `localization.languages[].baseUrl`, `renderAtRoot`, and menu URLs agree.
-  - For languages rendered at their domain root (for example `evotec.pl/kontakt/`), do not keep public menu links under `/<lang>/...`.
+  - For languages rendered at their domain root (for example `example.pl/kontakt/`), do not keep public menu links under `/<lang>/...`.
   - For localhost preview, check both the deployed public route intent and the generated local route/alias behavior.
 - Navigation consistency:
   - Compare header, footer, docs, and API surfaces; do not assume `build -serve` validated them.
@@ -79,4 +79,3 @@ When editing localized websites:
 
 - `references/blueprint.md`: minimal recommended `site.json`/`pipeline.json`/theme contract patterns.
 - `references/theme-contracts.md`: feature contract checklist (docs/apiDocs/blog/search/404).
-- `references/agent-prompts.md`: copy/paste prompts for Claude/agents (new site, refactor theme, fix api docs).

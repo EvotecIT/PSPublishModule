@@ -115,7 +115,7 @@ Notes:
 - `clean: true` clears the output directory before building (avoids stale files).
 - `language: "pl"` builds a single language slice.
 - `languages: ["en","fr","de","es"]` builds a selected multi-language subset into one artifact.
-- `languageAsRoot: true` only applies to single-language domain-style builds (for example `evotec.pl` as Polish at `/`).
+- `languageAsRoot: true` only applies to single-language domain-style builds (for example `example.pl` as Polish at `/`).
 
 #### nav-export
 Exports a deterministic `site-nav.json` payload (including `surfaces` + `profiles`) from `site.json` + discovered content, without building HTML output.
@@ -492,7 +492,7 @@ Generates a `data/changelog.json` file from a local `CHANGELOG.md` or GitHub rel
   "task": "changelog",
   "source": "auto",
   "changelog": "./CHANGELOG.md",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleDocs",
   "out": "./Artifacts/site/data/changelog.json"
 }
 ```
@@ -519,7 +519,7 @@ GitHub releases only:
 {
   "task": "changelog",
   "source": "github",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleDocs",
   "token": "%GITHUB_TOKEN%",
   "max": 20,
   "out": "./Artifacts/site/data/changelog.json"
@@ -543,14 +543,14 @@ Generates a normalized `data/release-hub.json` document for changelog + download
 {
   "task": "release-hub",
   "source": "github",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleProduct",
   "tokenEnv": "GITHUB_TOKEN",
   "maxReleases": 200,
   "pageSize": 100,
   "maxPages": 3,
   "assetRules": [
-    { "product": "intelligencex.chat", "match": ["*Chat*.zip"], "kind": "zip" },
-    { "product": "intelligencex.cli", "match": ["*Cli*.zip"], "kind": "zip" }
+    { "product": "example.desktop", "match": ["*Desktop*.zip"], "kind": "zip" },
+    { "product": "example.cli", "match": ["*Cli*.zip"], "kind": "zip" }
   ],
   "out": "./data/release-hub.json"
 }
@@ -568,7 +568,7 @@ Generates version-switcher metadata for multi-version docs sites.
 ```json
 {
   "task": "version-hub",
-  "title": "CodeGlyphX Versions",
+  "title": "ExampleDocs Versions",
   "discoverRoot": "./versions",
   "discoverPattern": "v*",
   "basePath": "/docs/",
@@ -591,13 +591,13 @@ Generates a unified package/module metadata JSON file from `.csproj` and `.psd1`
 ```json
 {
   "task": "package-hub",
-  "title": "IntelligenceX Package Hub",
+  "title": "Example Package Hub",
   "projectFiles": [
-    "../IntelligenceX/IntelligenceX.csproj",
-    "../IntelligenceX.Cli/IntelligenceX.Cli.csproj"
+    "../src/Example.Core/Example.Core.csproj",
+    "../src/Example.Cli/Example.Cli.csproj"
   ],
   "moduleFiles": [
-    "../Module/IntelligenceX.psd1"
+    "../Module/Example.psd1"
   ],
   "out": "./data/package-hub.json"
 }
@@ -638,13 +638,13 @@ Generates compatibility matrix data for C# libraries and PowerShell modules.
 ```json
 {
   "task": "compat-matrix",
-  "title": "CodeGlyphX Compatibility",
-  "csprojFiles": ["./src/CodeGlyphX/CodeGlyphX.csproj"],
-  "psd1Files": ["./Module/CodeGlyphX.psd1"],
+  "title": "Example Compatibility",
+  "csprojFiles": ["./src/Example/Example.csproj"],
+  "psd1Files": ["./Module/Example.psd1"],
   "entries": [
     {
       "type": "nuget",
-      "id": "CodeGlyphX.Extensions",
+      "id": "Example.Extensions",
       "version": "1.2.0-preview.1",
       "targetFrameworks": ["net8.0", "net10.0"],
       "status": "preview"
@@ -718,7 +718,7 @@ Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash asset
   "task": "optimize",
   "siteRoot": "./Artifacts/site",
   "config": "./site.json",
-  "criticalCss": "./themes/codeglyphx/critical.css",
+  "criticalCss": "./themes/example/critical.css",
   "cssPattern": "(app|api-docs)\\.css",
   "minifyHtml": true,
   "minifyCss": true,
@@ -848,7 +848,7 @@ Reference this file from your pipeline step:
 ```
 
 Sample file in this repo:
-- `Samples/PowerForge.Web.CodeGlyphX.Sample/config/media-profiles.json`
+- `Samples/PowerForge.Web.Sample/config/media-profiles.json`
 
 #### seo-doctor
 Runs editorial + technical SEO heuristics over generated HTML.
@@ -1176,10 +1176,10 @@ Syncs a local working folder from a Git repository (public/private via token env
 ```json
 {
   "task": "git-sync",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleDocs",
   "repoBaseUrl": "https://github.com",
   "authType": "ssh",
-  "destination": "./_temp/src/IntelligenceX",
+  "destination": "./_temp/src/ExampleDocs",
   "ref": "master",
   "tokenEnv": "GITHUB_TOKEN",
   "retry": 2,
@@ -1200,13 +1200,13 @@ Batch mode:
   "tokenEnv": "GITHUB_TOKEN",
   "repos": [
     {
-      "repo": "EvotecIT/IntelligenceX",
-      "destination": "./_temp/src/IntelligenceX",
+      "repo": "ExampleOrg/ExampleDocs",
+      "destination": "./_temp/src/ExampleDocs",
       "ref": "main"
     },
     {
-      "repo": "EvotecIT/CodeGlyphX",
-      "destination": "./_temp/src/CodeGlyphX",
+      "repo": "ExampleOrg/ExampleApi",
+      "destination": "./_temp/src/ExampleApi",
       "ref": "main",
       "submodules": true
     }
@@ -1247,6 +1247,7 @@ This is a convenience wrapper that lets you declare repos once (in `site.json`) 
 Notes:
 - Reads `Sources` from `site.json` and maps each entry to a `git-sync` repo item.
 - Lock/manifest settings are passed through to the underlying `git-sync` implementation (`lockMode`, `lockPath`, `writeManifest`, `manifestPath`).
+- Optional `projects` / `sourceSlugs` filters the `Sources` list by slug for project-scoped source hydration. Filters are allowed with `lockMode: verify` or `off`; filtered `lockMode: update` is rejected so a partial lock update cannot drop unrelated source entries.
 - Recommended workflow:
   - In CI: use `lockMode: verify` with a committed lock file.
   - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
@@ -1260,8 +1261,8 @@ Generates legacy WordPress AMP continuity redirects as a CSV consumed by link va
   "sourceCsvPath": "./data/redirects/legacy-wordpress-generated.csv",
   "outputCsvPath": "./data/redirects/legacy-amp-generated.csv",
   "languageHosts": {
-    "en": "evotec.xyz",
-    "pl": "evotec.pl"
+    "en": "example.com",
+    "pl": "example.pl"
   },
   "summaryPath": "./Build/generate-legacy-amp-redirects-last-run.json"
 }
@@ -1305,6 +1306,7 @@ Synchronizes project documentation, curated public examples, and optionally API 
 {
   "task": "project-docs-sync",
   "catalog": "./data/projects/catalog.json",
+  "projects": ["project-a", "project-b"],
   "sourcesRoot": "./projects-sources",
   "contentRoot": "./content/docs",
   "sourceDocsPaths": ["Website/content/docs", "Docs"],
@@ -1326,6 +1328,7 @@ Notes:
   - docs: `surfaces.docs`
   - api: `surfaces.apiDotNet` or `surfaces.apiPowerShell` (when `syncApi: true`)
   - examples: `surfaces.examples` (when `syncExamples: true`)
+- Optional `projects` / `projectSlugs` limits the sync to specific catalog slugs, which is useful for project-only refresh jobs.
 - Supports path candidates:
   - docs: `sourceDocsPaths` (array) or `sourceDocsPath` (string)
   - api: `sourceApiPaths` (array) or `sourceApiPath` (string)
@@ -1522,7 +1525,7 @@ Safe by default: `dryRun` is `true` unless you set `apply:true`.
 ```json
 {
   "task": "github-artifacts-prune",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleDocs",
   "tokenEnv": "GITHUB_TOKEN",
   "name": "test-results*,coverage*,github-pages",
   "keep": 5,
@@ -1538,7 +1541,7 @@ Apply mode:
 ```json
 {
   "task": "github-artifacts-prune",
-  "repo": "EvotecIT/IntelligenceX",
+  "repo": "ExampleOrg/ExampleDocs",
   "tokenEnv": "GITHUB_TOKEN",
   "name": "test-results*,coverage*,github-pages",
   "keep": 5,
@@ -1573,11 +1576,11 @@ Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
 ```json
 {
   "task": "indexnow",
-  "baseUrl": "https://intelligencex.dev",
+  "baseUrl": "https://docs.example.com",
   "siteRoot": "./_site",
   "scopeFromBuildUpdated": true,
   "keyEnv": "INDEXNOW_KEY",
-  "keyLocation": "https://intelligencex.dev/your-indexnow-key.txt",
+  "keyLocation": "https://docs.example.com/your-indexnow-key.txt",
   "batchSize": 500,
   "retryCount": 2,
   "retryDelayMs": 750,
@@ -1590,7 +1593,7 @@ Explicit URL/path mode:
 ```json
 {
   "task": "indexnow",
-  "baseUrl": "https://codeglyphx.com",
+  "baseUrl": "https://api.example.com",
   "keyEnv": "INDEXNOW_KEY",
   "paths": "/,/docs/,/api/,/blog/",
   "sitemap": "./_site/sitemap.xml",

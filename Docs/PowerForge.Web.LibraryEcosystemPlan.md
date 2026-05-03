@@ -8,11 +8,7 @@ This plan focuses on making PowerForge.Web a first-class docs engine for:
 - PowerShell modules (single and module suites),
 - mixed ecosystems that need one coherent website.
 
-It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into implementation slices with direct value for:
-
-- HtmlForgeX Website
-- IntelligenceX Website
-- CodeGlyphX Website
+It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into implementation slices with direct value for library, module, and mixed API documentation sites.
 
 ## Review Findings (Current Gaps)
 
@@ -31,7 +27,7 @@ It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into imp
 3. Added merge tooling:
    - New CLI/pipeline task `xref-merge` to combine multiple xref maps with duplicate handling and CI warning control.
 4. Wired website pipelines:
-   - HtmlForgeX, IntelligenceX, and CodeGlyphX now merge API maps into `data/xrefmap.json` and rebuild before LLMS export.
+   - Sites can merge API maps into `data/xrefmap.json` and rebuild before LLMS export.
 5. Added package/module metadata generation:
    - New pipeline task `package-hub` emits unified library/module JSON from `.csproj` + `.psd1` inputs (frameworks, dependencies, exported commands, module requirements).
 
@@ -45,8 +41,8 @@ It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into imp
 - Add deterministic UID normalization so links stay stable across versions.
 
 Site impact:
-- HtmlForgeX and CodeGlyphX can deep-link guides to exact API members.
-- IntelligenceX can deep-link command parameter docs in onboarding flows.
+- .NET library sites can deep-link guides to exact API members.
+- PowerShell module sites can deep-link command parameter docs in onboarding flows.
 
 ### 2) Package/Module Hub Generator (V2)
 
@@ -64,8 +60,8 @@ Site impact:
 - Verify cross-version xref integrity and canonical URL behavior in CI.
 
 Site impact:
-- Safer major-version rollouts for HtmlForgeX and CodeGlyphX.
-- Cleaner docs lifecycle and onboarding paths for IntelligenceX.
+- Safer major-version rollouts for library and module sites.
+- Cleaner docs lifecycle and onboarding paths for mixed ecosystems.
 
 ### 4) Search Facets + Ranking Profiles
 
@@ -92,9 +88,9 @@ Acceptance:
 - Same xref syntax works across C# and PowerShell docs.
 
 Why it helps sites:
-- HtmlForgeX: reliable links from guides to API members.
-- IntelligenceX: links from onboarding docs to command/API references.
-- CodeGlyphX: deep cross-linking between analyzers, rules, and API types.
+- C# library sites: reliable links from guides to API members.
+- PowerShell module sites: links from onboarding docs to command/API references.
+- Mixed ecosystems: deep cross-linking between concepts, rules, and API types.
 
 ### 2) API Provider Contract (Adapter Model)
 
@@ -117,7 +113,7 @@ Why it helps sites:
 - Keep environment-based CI detection as fallback.
 
 Status:
-- Implemented for HtmlForgeX, IntelligenceX, and CodeGlyphX build scripts.
+- Implemented in the starter contract and reusable build guidance.
 
 ## P1 - Productized Docs Experience
 
@@ -136,8 +132,8 @@ Acceptance:
 - One command generates a release-oriented "package hub" section.
 
 Why it helps sites:
-- HtmlForgeX/CodeGlyphX: clear package lifecycle and upgrade guidance.
-- IntelligenceX: module/feature compatibility made visible for onboarding.
+- .NET package sites get clear package lifecycle and upgrade guidance.
+- PowerShell module sites get module/feature compatibility made visible for onboarding.
 
 ### 5) Versioned Docs Contract
 
@@ -164,7 +160,7 @@ Acceptance:
 - Search relevance improvements are measurable and testable in CI snapshots.
 
 Why it helps sites:
-- Faster discovery in large outputs (especially HtmlForgeX and CodeGlyphX).
+- Faster discovery in large docs/API outputs.
 
 ## P2 - Ecosystem Differentiators
 
