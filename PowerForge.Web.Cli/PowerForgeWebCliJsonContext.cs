@@ -64,6 +64,22 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebLegacyAmpRedirectResult))]
 [JsonSerializable(typeof(WebSitemapMigrationResult))]
 [JsonSerializable(typeof(WebLinkCommandSummary))]
+[JsonSerializable(typeof(PowerForgeServerRecoveryManifest))]
+[JsonSerializable(typeof(PowerForgeServerBackupRetention))]
+[JsonSerializable(typeof(PowerForgeServerRecoveryPlanResult))]
+[JsonSerializable(typeof(PowerForgeServerCaptureResult))]
+[JsonSerializable(typeof(PowerForgeServerCaptureCommandResult))]
+[JsonSerializable(typeof(PowerForgeServerInspectResult))]
+[JsonSerializable(typeof(PowerForgeServerInspectCheck))]
+[JsonSerializable(typeof(PowerForgeServerVerifyResult))]
+[JsonSerializable(typeof(PowerForgeServerVerifyCommandResult))]
+[JsonSerializable(typeof(PowerForgeServerVerifyUrlResult))]
+[JsonSerializable(typeof(PowerForgeServerDeployResult))]
+[JsonSerializable(typeof(PowerForgeServerDeployCommandResult))]
+[JsonSerializable(typeof(PowerForgeServerBootstrapPlanResult))]
+[JsonSerializable(typeof(PowerForgeServerBootstrapPlanStep))]
+[JsonSerializable(typeof(PowerForgeServerRestoreSecretsPlanResult))]
+[JsonSerializable(typeof(PowerForgeServerRestoreSecretEntry))]
 internal partial class PowerForgeWebCliJsonContext : JsonSerializerContext
 {
 }

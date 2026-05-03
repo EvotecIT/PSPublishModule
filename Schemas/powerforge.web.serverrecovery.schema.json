@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.serverrecovery.schema.json",
+  "title": "PowerForge Web Server Recovery Manifest (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "target": { "$ref": "#/$defs/Target" },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Repository" }
+    },
+    "packages": { "$ref": "#/$defs/Packages" },
+    "paths": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ManagedPath" }
+    },
+    "apache": { "$ref": "#/$defs/Apache" },
+    "firewall": { "$ref": "#/$defs/Firewall" },
+    "certificates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Certificate" }
+    },
+    "systemd": { "$ref": "#/$defs/Systemd" },
+    "secrets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Secret" }
+    },
+    "capture": { "$ref": "#/$defs/Capture" },
+    "bootstrap": { "$ref": "#/$defs/CommandGroup" },
+    "deploy": { "$ref": "#/$defs/CommandGroup" },
+    "verify": { "$ref": "#/$defs/Verify" },
+    "backupTarget": { "$ref": "#/$defs/BackupTarget" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["schemaVersion", "name", "target"],
+  "$defs": {
+    "Target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sshAlias": { "type": "string" },
+        "host": { "type": "string" },
+        "user": { "type": "string" },
+        "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "os": { "type": "string" },
+        "architecture": { "type": "string" }
+      }
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "path": { "type": "string" },
+        "branch": { "type": "string" },
+        "required": { "type": "boolean" }
+      },
+      "required": ["role", "path"]
+    },
+    "Packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apt": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "apacheModules": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dotnetSdks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "powershell": { "type": "boolean" }
+      }
+    },
+    "ManagedPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string" },
+        "owner": { "type": "string" },
+        "group": { "type": "string" },
+        "mode": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["directory", "file", "symlink"]
+        }
+      },
+      "required": ["id", "path"]
+    },
+    "Apache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service": { "type": "string" },
+        "modules": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ManagedFile" }
+        },
+        "conf": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ManagedFile" }
+        },
+        "validateCommand": { "type": "string" },
+        "reloadCommand": { "type": "string" }
+      }
+    },
+    "ManagedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "required": { "type": "boolean" },
+        "sensitive": { "type": "boolean" }
+      },
+      "required": ["target"]
+    },
+    "Firewall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "defaultIncoming": { "type": "string" },
+        "defaultOutgoing": { "type": "string" },
+        "sshPorts": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        },
+        "webOriginPolicy": { "type": "string" },
+        "syncCommand": { "type": "string" }
+      }
+    },
+    "Certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "domains": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "authenticator": { "type": "string" },
+        "credentialsPath": { "type": "string" },
+        "renewalConfigPath": { "type": "string" },
+        "dryRunCommand": { "type": "string" },
+        "secretRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["name"]
+    },
+    "Systemd": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SystemdUnit" }
+        },
+        "timers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SystemdUnit" }
+        }
+      }
+    },
+    "SystemdUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "required": { "type": "boolean" }
+      },
+      "required": ["name"]
+    },
+    "Secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string" },
+        "env": { "type": "string" },
+        "requiredFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "capture": {
+          "type": "string",
+          "enum": ["exclude", "encrypted"]
+        },
+        "restoreMode": { "type": "string" }
+      },
+      "required": ["id", "capture"]
+    },
+    "Capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plainFiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ManagedFile" }
+        },
+        "encryptedFiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ManagedFile" }
+        },
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "CommandGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        }
+      }
+    },
+    "NamedCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 },
+        "workingDirectory": { "type": "string" },
+        "sensitive": { "type": "boolean" },
+        "required": { "type": "boolean" }
+      },
+      "required": ["id", "command"]
+    },
+    "Verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        },
+        "urls": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VerifyUrl" }
+        }
+      }
+    },
+    "VerifyUrl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "expectedStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "via": { "type": "string" }
+      },
+      "required": ["url"]
+    },
+    "BackupTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "repository": { "type": "string" },
+        "branch": { "type": "string" },
+        "path": { "type": "string" },
+        "encryption": { "type": "string" },
+        "recipient": { "type": "string" },
+        "recipientEnv": { "type": "string" },
+        "retention": { "$ref": "#/$defs/BackupRetention" }
+      }
+    },
+    "BackupRetention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keepLatest": { "type": "integer", "minimum": 0 },
+        "keepDays": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
