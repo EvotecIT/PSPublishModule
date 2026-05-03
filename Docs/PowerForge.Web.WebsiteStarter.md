@@ -135,7 +135,7 @@ powerforge-web scaffold --out .\Website --engine scriban --starter-profile multi
 To promote the starter into a real first project immediately:
 
 ```powershell
-powerforge-web scaffold --out .\Website --engine scriban --starter-profile multi-project-api-suite --suite-project-slug testimox --suite-project-name "TestimoX" --suite-project-surface powershell
+powerforge-web scaffold --out .\Website --engine scriban --starter-profile multi-project-api-suite --suite-project-slug samplemodule --suite-project-name "Sample Module" --suite-project-surface powershell
 ```
 
 That seeded project also gets source staging that matches `project-apidocs` discovery:
@@ -214,15 +214,15 @@ Minimal catalog example:
 {
   "projects": [
     {
-      "slug": "testimox",
-      "name": "TestimoX",
-      "hubPath": "/projects/testimox/",
+      "slug": "samplemodule",
+      "name": "Sample Module",
+      "hubPath": "/projects/samplemodule/",
       "surfaces": {
         "apiPowerShell": true
       },
       "apiDocs": {
-        "quickStartTypes": "Invoke-TestimoXAction",
-        "relatedContentManifest": "./data/projects/testimox-api-guides.json"
+        "quickStartTypes": "Invoke-SampleAction",
+        "relatedContentManifest": "./data/projects/samplemodule-api-guides.json"
       }
     }
   ]
@@ -240,12 +240,12 @@ Minimal suite narrative example:
       "summary": "Begin with the primary automation project, then move into supporting APIs.",
       "items": [
         {
-          "title": "Open the TestimoX quick start",
-          "url": "/projects/testimox/docs/quick-start/",
+          "title": "Open the Sample Module quick start",
+          "url": "/projects/samplemodule/docs/quick-start/",
           "kind": "workflow",
           "audience": "New maintainers",
           "estimatedTime": "10 min",
-          "projects": [ "testimox" ]
+          "projects": [ "samplemodule" ]
         }
       ]
     }
@@ -281,8 +281,8 @@ Example `site.json` snippet:
   "ProjectsRoot": "projects",
   "Sources": [
     {
-      "Repo": "EvotecIT/IntelligenceX",
-      "Slug": "intelligencex",
+      "Repo": "ExampleOrg/ExampleDocs",
+      "Slug": "exampledocs",
       "Ref": "main",
       "AuthType": "token",
       "TokenEnv": "GITHUB_TOKEN"

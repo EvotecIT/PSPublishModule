@@ -9,7 +9,7 @@ Pause feature-first PowerForge Studio work long enough to lock the architecture 
 - `PSPublishModule` cmdlets stay thin.
 - reusable build/publish/sign/verify logic lives in `PowerForge` / `PowerForge.PowerShell`.
 - `PowerForgeStudio` acts as an orchestration shell over those services, not a second build engine.
-- future integrations such as `IntelligenceX` plug into provider seams instead of forcing Studio-specific business rules into the queue runner.
+- future product integrations plug into provider seams instead of forcing product-specific business rules into the queue runner.
 
 ## What Is Already Good
 
@@ -297,7 +297,7 @@ Studio should still persist its own checkpoint/receipt models, but those receipt
 
 ### Phase D: add provider seams for external attention sources
 
-For future `IntelligenceX` integration, define provider interfaces around attention and governance signals, for example:
+For future product integrations, define provider interfaces around attention and governance signals, for example:
 
 - repository health/inbox items
 - release recommendations
@@ -325,7 +325,7 @@ Effective immediately:
 4. Refactor Studio project plan/build execution to call shared services directly.
 5. Refactor Studio module plan/build execution to call shared services directly through `PowerForge.PowerShell`.
 6. Refactor Studio publish/verify execution to reuse shared publish and verification services.
-7. Only then continue broader Studio UX work and any IntelligenceX-driven inbox expansion.
+7. Only then continue broader Studio UX work and any product-driven inbox expansion.
 
 ## Definition Of Success
 
@@ -336,4 +336,4 @@ We are back on track when:
 - external tools such as git are wrapped once in reusable C# services instead of being hardcoded in Studio
 - the same shared services are testable without PowerShell host plumbing
 - WPF and CLI remain thin over one Studio orchestrator
-- future IntelligenceX integration plugs into provider seams instead of bypassing PowerForge
+- future product integrations plug into provider seams instead of bypassing PowerForge

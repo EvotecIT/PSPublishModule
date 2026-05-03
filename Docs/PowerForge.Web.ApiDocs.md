@@ -420,11 +420,11 @@ Use a JSON manifest when examples/guides live outside XML docs or PowerShell hel
     {
       "title": "Styling axis titles",
       "url": "/docs/charts/axis-titles/",
-      "summary": "Walkthrough for configuring [[cref:T:HtmlForgeX.ApexAxisTitle]].",
+      "summary": "Walkthrough for configuring [[cref:T:ExampleCharts.AxisTitle]].",
       "kind": "guide",
       "targets": [
-        "T:HtmlForgeX.ApexAxisTitle",
-        "M:HtmlForgeX.ApexAxisTitle.SetText(System.String)"
+        "T:ExampleCharts.AxisTitle",
+        "M:ExampleCharts.AxisTitle.SetText(System.String)"
       ]
     }
   ]
@@ -516,7 +516,7 @@ Notes:
 - Batch `apidocs` can infer suite entries automatically when a step contains multiple `inputs`/`entries` with distinct `baseUrl` values.
   - optional parent-step overrides like `suiteTitle` and `suiteHomeUrl` are then applied consistently to every generated API.
 - `project-apidocs` now auto-injects suite entries across all prepared project APIs and writes `api-suite.json` under the `outRoot` by default.
-  - this gives sites like TestimoX one reusable API-suite manifest plus in-API project switching without maintaining a second hand-authored registry.
+  - this gives multi-project API sites one reusable API-suite manifest plus in-API project switching without maintaining a second hand-authored registry.
 - `project-apidocs` now also emits suite-root aggregate artifacts by default when more than one project API is generated:
   - `api-suite-search.json`
   - `api-suite-xrefmap.json`

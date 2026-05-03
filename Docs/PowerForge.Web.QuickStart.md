@@ -18,12 +18,12 @@ Starter profiles:
 
 Multi-project API suite starter example:
 ```
-powerforge-web scaffold --out ./SuiteSite --name "TestimoX" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite
+powerforge-web scaffold --out ./SuiteSite --name "Sample Suite" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite
 ```
 
 Materialize a real first project while scaffolding:
 ```
-powerforge-web scaffold --out ./SuiteSite --name "TestimoX" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite --suite-project-slug testimox --suite-project-name "TestimoX" --suite-project-surface powershell
+powerforge-web scaffold --out ./SuiteSite --name "Sample Suite" --base-url "https://example.com" --engine scriban --starter-profile multi-project-api-suite --suite-project-slug samplemodule --suite-project-name "Sample Module" --suite-project-surface powershell
 ```
 
 When you seed a first project, the scaffold also creates surface-specific source staging:
@@ -332,7 +332,7 @@ content/
   blog/
   snippets/
 projects/
-  HtmlForgeX/
+  ExampleLibrary/
     project.json
     content/
       pages/
@@ -340,14 +340,14 @@ projects/
       blog/
     data/
     assets/
-  TestimoX/
+  SampleModule/
     project.json
     content/
     data/
     assets/
 themes/
   base/
-  codeglyphx/
+  exampledocs/
 shared/
   snippets/
   data/
@@ -409,5 +409,5 @@ Guidelines:
 - `Docs/PowerForge.Web.ContentSpec.md`
 - `Docs/PowerForge.Web.RFC.md`
 - `Docs/PowerForge.Web.Theme.md`
-- `Docs/PowerForge.Web.CodeGlyphX.Build.md`
+- `Docs/PowerForge.Web.WebsiteStarter.md`
 - `Samples/PowerForge.Web.Sample/README.md`

@@ -117,7 +117,7 @@ $release = New-ConfigurationProjectRelease `
 
 $target = New-ConfigurationProjectTarget `
     -Name 'ChatApp' `
-    -ProjectPath '.\IntelligenceX.Chat.App\IntelligenceX.Chat.App.csproj' `
+    -ProjectPath '.\src\ExampleApp\ExampleApp.csproj' `
     -Runtime 'win-x64' `
     -Framework 'net8.0-windows10.0.26100.0' `
     -Style 'PortableCompat' `
@@ -126,10 +126,10 @@ $target = New-ConfigurationProjectTarget `
 $signing = New-ConfigurationProjectSigning `
     -Mode OnDemand `
     -TimestampUrl 'https://timestamp.digicert.com' `
-    -Description 'IntelligenceX Chat'
+    -Description 'ExampleApp'
 
 $project = New-ConfigurationProject `
-    -Name 'IntelligenceX' `
+    -Name 'ExampleApp' `
     -Release $release `
     -Target $target `
     -Signing $signing
@@ -169,7 +169,7 @@ $output = New-ConfigurationProjectOutput `
 
 $target = New-ConfigurationProjectTarget `
     -Name 'ChatApp' `
-    -ProjectPath '.\IntelligenceX.Chat.App\IntelligenceX.Chat.App.csproj' `
+    -ProjectPath '.\src\ExampleApp\ExampleApp.csproj' `
     -Runtime 'win-x64' `
     -Framework 'net8.0-windows10.0.26100.0' `
     -Style 'PortableCompat' `
@@ -180,7 +180,7 @@ $signing = New-ConfigurationProjectSigning `
     -TimestampUrl 'https://timestamp.digicert.com'
 
 $project = New-ConfigurationProject `
-    -Name 'IntelligenceX' `
+    -Name 'ExampleApp' `
     -Release (New-ConfigurationProjectRelease -Configuration Release) `
     -Workspace $workspace `
     -Output $output `

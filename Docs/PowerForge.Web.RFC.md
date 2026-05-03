@@ -1,7 +1,7 @@
 # PowerForge.Web RFC (Draft)
 
 ## Summary
-PowerForge.Web is a website/docs engine that builds static, high-performance sites from markdown + generated API docs, with optional Blazor islands for interactive content. It is driven by a JSON pipeline spec (like existing PowerForge pipeline specs) and designed to scale from single-project sites to a multi-project hub under one domain. The first pilot is HtmlForgeX + HtmlForgeX.Email. We will borrow proven concepts from Hugo/Jekyll/DocFX/Docusaurus (content collections, data files, front matter, API models, edit links), but implement them in a typed, PowerForge-native way.
+PowerForge.Web is a website/docs engine that builds static, high-performance sites from markdown + generated API docs, with optional Blazor islands for interactive content. It is driven by a JSON pipeline spec (like existing PowerForge pipeline specs) and designed to scale from single-project sites to a multi-project hub under one domain. We will borrow proven concepts from Hugo/Jekyll/DocFX/Docusaurus (content collections, data files, front matter, API models, edit links), but implement them in a typed, PowerForge-native way.
 
 ## Goals
 - Markdown as source of truth for content (pages, docs, blog).
@@ -19,8 +19,8 @@ PowerForge.Web is a website/docs engine that builds static, high-performance sit
 - Mandatory server-side features; output should work on static hosting.
 
 ## Terminology
-- Site: a single website output (e.g., HtmlForgeX domain).
-- Project: a product/library inside the site (HtmlForgeX.Email as a project under HtmlForgeX site).
+- Site: a single website output (for example a docs domain).
+- Project: a product/library inside the site (for example an add-on package under a suite site).
 - Content: author-written markdown pages/blogs/docs.
 - API reference: generated from C# XML and PowerShell help metadata.
 
@@ -48,18 +48,18 @@ Recommended repo layout (per site):
   - blog/
   - snippets/
 - projects/ (optional)
-  - HtmlForgeX/
+  - ExampleLibrary/
     - project.json
     - content/
     - assets/
     - api/ (generated output, or input folder depending on step)
-  - HtmlForgeX.Email/
+  - ExampleLibrary.Email/
     - project.json
     - content/
     - assets/
 - themes/
   - base/
-  - htmlforgex/
+  - example/
 - shared/
   - snippets/
   - data/
@@ -251,36 +251,36 @@ It shows collections, asset/a11y registries, edit links, redirects, and analytic
 {
   "$schema": "../Schemas/powerforge.web.projectspec.schema.json",
   "SchemaVersion": 1,
-  "Name": "HtmlForgeX",
-  "Slug": "htmlforgex",
-  "Theme": "htmlforgex",
+  "Name": "Example Library",
+  "Slug": "example",
+  "Theme": "example",
   "Repository": {
     "Provider": "GitHub",
     "Owner": "EvotecIT",
-    "Name": "HtmlForgeX",
+    "Name": "Example Library",
     "Branch": "main",
     "PathBase": ""
   },
   "Packages": [
-    { "Type": "NuGet", "Id": "HtmlForgeX", "Version": "1.2.3" },
-    { "Type": "NuGet", "Id": "HtmlForgeX.Email", "Version": "0.9.1" }
+    { "Type": "NuGet", "Id": "Example.Library", "Version": "1.2.3" },
+    { "Type": "NuGet", "Id": "Example.Library.Email", "Version": "0.9.1" }
   ],
   "Links": [
-    { "Title": "GitHub", "Url": "https://github.com/EvotecIT/HtmlForgeX" },
-    { "Title": "NuGet", "Url": "https://www.nuget.org/packages/HtmlForgeX" }
+    { "Title": "GitHub", "Url": "https://github.com/ExampleOrg/Example.Library" },
+    { "Title": "NuGet", "Url": "https://www.nuget.org/packages/Example.Library" }
   ],
   "ApiDocs": {
     "Type": "CSharp",
-    "AssemblyPath": "artifacts/HtmlForgeX.dll",
-    "XmlDocPath": "artifacts/HtmlForgeX.xml",
+    "AssemblyPath": "artifacts/Example.Library.dll",
+    "XmlDocPath": "artifacts/Example.Library.xml",
     "OutputPath": "api"
   },
   "Redirects": [
-    { "From": "/htmlforgex/docs/getting-started", "To": "/projects/htmlforgex/docs/getting-started", "Status": 301 }
+    { "From": "/old-docs/getting-started", "To": "/projects/example/docs/getting-started", "Status": 301 }
   ],
   "EditLinks": {
     "Enabled": true,
-    "Template": "https://github.com/EvotecIT/HtmlForgeX/edit/main/{path}"
+    "Template": "https://github.com/ExampleOrg/Example.Library/edit/main/{path}"
   }
 }
 ```
@@ -290,7 +290,7 @@ Docs page (`content/docs/getting-started.md`):
 ```markdown
 ---
 title: Getting Started
-description: Install HtmlForgeX and build your first dashboard.
+description: Install Example Library and build your first output.
 date: 2026-01-10
 tags: [install, quickstart]
 slug: getting-started
@@ -303,27 +303,27 @@ aliases:
 # Getting Started
 
 > [!NOTE]
-> HtmlForgeX is UI-only. It does not host data or APIs for you.
+> Example Library is UI-only. It does not host data or APIs for you.
 
 ```powershell title="Install"
-Install-Module HtmlForgeX -Scope CurrentUser
+Install-Module Example.Library -Scope CurrentUser
 ```
 
 {{< include path="shared/snippets/support.md" >}}
 ```
 
-Blog post (`content/blog/2026-01-05-htmlforgex-1-2.md`):
+Blog post (`content/blog/2026-01-05-example-library-1-2.md`):
 ```markdown
 ---
-title: HtmlForgeX 1.2 Released
+title: Example Library 1.2 Released
 description: New components, performance fixes, and better docs.
 date: 2026-01-05
-tags: [release, htmlforgex]
-slug: htmlforgex-1-2
+tags: [release, example]
+slug: example-library-1-2
 collection: blog
 ---
 
-# HtmlForgeX 1.2 Released
+# Example Library 1.2 Released
 
 Highlights:
 - New DataGrid behaviors
@@ -512,7 +512,7 @@ To keep CSS/JS loading and A11y consistent, we define a central registry (in `si
 This ensures we don’t scatter performance and accessibility decisions across templates.
 
 ## Performance baseline
-We should formalize the CodeGlyphX performance practices as defaults:
+We should formalize proven static-site performance practices as defaults:
 - Critical CSS inlined in base layout.
 - Remaining CSS deferred via preload + onload media swap.
 - Font preloads (single critical weight only) + `font-display: swap`.
@@ -588,7 +588,7 @@ We should formalize the CodeGlyphX performance practices as defaults:
   },
   "Optimize": {
     "SiteRoot": "./Artifacts/publish/wwwroot",
-    "CriticalCss": "./themes/codeglyphx/critical.css",
+    "CriticalCss": "./themes/example/critical.css",
     "MinifyHtml": true,
     "MinifyCss": true,
     "MinifyJs": true
@@ -609,11 +609,11 @@ We should formalize the CodeGlyphX performance practices as defaults:
 - Preserve slugs and build redirect map.
 - Manual cleanup for low-quality posts.
 
-## Pilot: HtmlForgeX + HtmlForgeX.Email
+## Pilot: Example Library + Add-On Package
 - Single site output with two projects.
 - Shared base theme with per-project overrides.
 - Docs + API + blog per project.
-- Pipeline file stored in HtmlForgeX repo (or site repo if split).
+- Pipeline file stored in the product repo (or site repo if split).
 
 ## Testing and validation
 - Unit tests for:
@@ -635,7 +635,7 @@ We should formalize the CodeGlyphX performance practices as defaults:
 
 ## Milestones
 1) Add PowerForge.Web project + SitePipelineSpec + basic segments.
-2) Build HtmlForgeX pilot with static output and API docs.
+2) Build the pilot with static output and API docs.
 3) Add search index and validation.
 4) Add optional Blazor islands/playground.
-5) Migrate CodeGlyphX to PowerForge.Web.
+5) Migrate another docs site to PowerForge.Web.

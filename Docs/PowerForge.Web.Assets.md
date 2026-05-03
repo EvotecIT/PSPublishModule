@@ -30,7 +30,7 @@ cache‑friendly sites with minimal payload per route.
         "Match": "https://cdn.example.com/prism/",
         "Replace": "/assets/prism/",
         "MatchType": "prefix",
-        "Source": "./themes/intelligencex/assets/prism-core.js",
+        "Source": "./themes/example/assets/prism-core.js",
         "Destination": "/assets/prism/prism-core.js"
       }
     ]
@@ -72,8 +72,8 @@ Configuration lives in `site.json`:
     "Mode": "auto",
     "Source": "local",
     "DefaultLanguage": "csharp",
-    "ThemeLight": "intelligencex-light",
-    "ThemeDark": "intelligencex-dark",
+    "ThemeLight": "example-light",
+    "ThemeDark": "example-dark",
     "Local": {
       "ThemeLight": "/assets/prism/prism.css",
       "ThemeDark": "/assets/prism/prism-okaidia.css",
@@ -106,7 +106,7 @@ injects code blocks dynamically (tabs, accordions, client‑side fetch), call
 ### Theme selection shortcuts
 `ThemeLight` / `ThemeDark` accept:
 - A full URL (used as-is)
-- An absolute path (`/themes/intelligencex/assets/prism.css`)
+- An absolute path (`/themes/example/assets/prism.css`)
 - A bare name (maps to `/assets/prism/prism-<name>.css` for local,
   or `<cdn>/themes/<name>.min.css` for CDN)
 

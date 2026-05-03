@@ -47,7 +47,7 @@ content/
   docs/
   blog/
 projects/
-  HtmlForgeX/
+  ExampleLibrary/
     project.json
     content/
       pages/
@@ -170,4 +170,4 @@ Artifacts/
 - `Docs/PowerForge.Web.ContentSpec.md`
 - `Docs/PowerForge.Web.Theme.md`
 - `Docs/PowerForge.Web.Pipeline.md`
-- `Docs/PowerForge.Web.CodeGlyphX.Build.md`
+- `Docs/PowerForge.Web.WebsiteStarter.md`

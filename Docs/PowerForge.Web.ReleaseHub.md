@@ -8,10 +8,10 @@ Websites need one shared engine capability for:
 
 - changelog history from GitHub releases
 - download buttons outside changelog pages (home/docs/product cards)
-- multi-asset releases (for example one OfficeIMO release with many product ZIPs)
+- multi-asset releases (for example one release with many product ZIPs)
 - scalable rendering for hundreds of releases
 
-This document defines a concrete contract so IntelligenceX, HtmlForgeX, CodeGlyphX, and HtmlForgeX.Email can all use the same model.
+This document defines a concrete contract so productized docs and download sites can all use the same model.
 
 ## Current engine state
 
@@ -38,7 +38,7 @@ Keep `changelog` for simple sites. Add `release-hub` for productized downloads.
 {
   "task": "release-hub",
   "source": "github",
-  "repo": "EvotecIT/OfficeIMO",
+  "repo": "ExampleOrg/ExampleSuite",
   "tokenEnv": "GITHUB_TOKEN",
   "out": "./data/release-hub.json",
   "maxReleases": 400,
@@ -49,21 +49,21 @@ Keep `changelog` for simple sites. Add `release-hub` for productized downloads.
   "defaultChannel": "stable",
   "assetRules": [
     {
-      "product": "officeimo.word",
-      "label": "OfficeIMO.Word",
-      "match": ["OfficeIMO.Word*.zip", "officeimo.word*.zip"],
+      "product": "example.writer",
+      "label": "Example Writer",
+      "match": ["Example.Writer*.zip", "example-writer*.zip"],
       "kind": "zip"
     },
     {
-      "product": "officeimo.excel",
-      "label": "OfficeIMO.Excel",
-      "match": ["OfficeIMO.Excel*.zip", "officeimo.excel*.zip"],
+      "product": "example.sheet",
+      "label": "Example Sheet",
+      "match": ["Example.Sheet*.zip", "example-sheet*.zip"],
       "kind": "zip"
     }
   ],
   "products": [
-    { "id": "officeimo.word", "name": "OfficeIMO.Word", "order": 10 },
-    { "id": "officeimo.excel", "name": "OfficeIMO.Excel", "order": 20 }
+    { "id": "example.writer", "name": "Example Writer", "order": 10 },
+    { "id": "example.sheet", "name": "Example Sheet", "order": 20 }
   ]
 }
 ```
@@ -86,24 +86,24 @@ Keep `changelog` for simple sites. Add `release-hub` for productized downloads.
 
 ```json
 {
-  "title": "OfficeIMO Releases",
+  "title": "Example Suite Releases",
   "generatedAtUtc": "2026-02-28T12:00:00Z",
   "source": "github",
-  "repo": "EvotecIT/OfficeIMO",
+  "repo": "ExampleOrg/ExampleSuite",
   "latest": {
     "stableTag": "v1.2.0",
     "prereleaseTag": "v1.3.0-preview1"
   },
   "products": [
-    { "id": "officeimo.word", "name": "OfficeIMO.Word", "order": 10 },
-    { "id": "officeimo.excel", "name": "OfficeIMO.Excel", "order": 20 }
+    { "id": "example.writer", "name": "Example Writer", "order": 10 },
+    { "id": "example.sheet", "name": "Example Sheet", "order": 20 }
   ],
   "releases": [
     {
       "id": "v1.2.0",
       "tag": "v1.2.0",
-      "name": "OfficeIMO 1.2.0",
-      "url": "https://github.com/EvotecIT/OfficeIMO/releases/tag/v1.2.0",
+      "name": "Example Suite 1.2.0",
+      "url": "https://github.com/ExampleOrg/ExampleSuite/releases/tag/v1.2.0",
       "publishedAt": "2026-02-20T19:01:10Z",
       "isPrerelease": false,
       "isDraft": false,
@@ -111,17 +111,17 @@ Keep `changelog` for simple sites. Add `release-hub` for productized downloads.
       "body_md": "## Added\n- ...",
       "assets": [
         {
-          "id": "officeimo-word-v1.2.0.zip",
-          "name": "OfficeIMO.Word-v1.2.0.zip",
-          "downloadUrl": "https://github.com/.../OfficeIMO.Word-v1.2.0.zip",
+          "id": "example-writer-v1.2.0.zip",
+          "name": "Example.Writer-v1.2.0.zip",
+          "downloadUrl": "https://github.com/.../Example.Writer-v1.2.0.zip",
           "size": 1812345,
           "contentType": "application/zip",
-          "product": "officeimo.word",
+          "product": "example.writer",
           "channel": "stable",
           "platform": "any",
           "arch": "any",
           "kind": "zip",
-          "thumbnailUrl": "https://github.com/.../OfficeIMO.Word-v1.2.0-thumb.png",
+          "thumbnailUrl": "https://github.com/.../Example.Writer-v1.2.0-thumb.png",
           "sha256": null
         }
       ]
@@ -182,10 +182,10 @@ Expected behavior:
 For content authors (without editing theme layouts):
 
 ```md
-{{< release-button product="officeimo.word" channel="stable" label="Download Word" class="btn btn-primary" >}}
-{{< release-buttons product="officeimo.word" groupBy="platform" channel="stable" >}}
+{{< release-button product="example.writer" channel="stable" label="Download Writer" class="btn btn-primary" >}}
+{{< release-buttons product="example.writer" groupBy="platform" channel="stable" >}}
 {{< release-buttons product="*" groupBy="product" channel="stable" limit="20" >}}
-{{< release-changelog product="officeimo.word" limit="20" >}}
+{{< release-changelog product="example.writer" limit="20" >}}
 ```
 
 These shortcodes should consume the same `data.release_hub` payload and helper selection logic.
@@ -217,7 +217,7 @@ Minimal placement schema:
 {
   "home": {
     "chat_primary": {
-      "product": "intelligencex.chat",
+      "product": "example.desktop",
       "channel": "stable",
       "platform": "windows",
       "arch": "x64",
@@ -232,7 +232,7 @@ Minimal placement schema:
       "limit": 20
     },
     "chat_matrix": {
-      "product": "intelligencex.chat",
+      "product": "example.desktop",
       "channel": "stable",
       "groupBy": "platform",
       "limit": 3
@@ -240,7 +240,7 @@ Minimal placement schema:
   },
   "changelog": {
     "chat_timeline": {
-      "product": "intelligencex.chat",
+      "product": "example.desktop",
       "limit": 50,
       "includePreview": true
     }
@@ -252,7 +252,7 @@ Minimal placement schema:
 
 ### Homepage CTA
 
-- `pf.release_button "intelligencex.chat" "stable" "windows" "x64" "zip" "Download Chat for Windows"`
+- `pf.release_button "example.desktop" "stable" "windows" "x64" "zip" "Download App for Windows"`
 
 ### Product detail page
 
@@ -308,9 +308,9 @@ CI guidance:
 - verify warnings implemented (`PFWEB.RELEASE.PRODUCT_MISSING`, `PFWEB.RELEASE.NO_MATCH`, `PFWEB.RELEASE.ASSET_COLLISION`)
 - optional cache (`etagCachePath`) and profiling diagnostics remain open
 
-## IntelligenceX first adoption
+## First Adoption Checklist
 
-1. Add `release-hub` step to [pipeline.json](C:/Support/GitHub/IntelligenceX/Website/pipeline.json) writing `./data/release-hub.json`.
-2. Replace [changelog.md](C:/Support/GitHub/IntelligenceX/Website/content/pages/changelog.md) placeholder with helper-based rendering.
+1. Add a `release-hub` step to the site pipeline writing `./data/release-hub.json`.
+2. Replace placeholder changelog content with helper-based rendering.
 3. Add homepage/product CTAs using the same selector contract.
 4. Add verify baseline entries only for legacy noise; fail on new release/download warnings in CI.
