@@ -144,6 +144,7 @@ internal static partial class WebCliCommandHandlers
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
         var ageCommand = TryGetOptionValue(subArgs, "--age") ?? "age";
+        var target = BuildServerSshTarget(manifest.Target);
 
         var outputRoot = ResolveCaptureOutputPath(outPathArg, manifest);
         Directory.CreateDirectory(outputRoot);
@@ -157,7 +158,6 @@ internal static partial class WebCliCommandHandlers
         var commandList = manifest.Capture?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
-        var target = BuildServerSshTarget(manifest.Target);
         var plainArchivePath = dryRun || skipFiles || plainFiles.Length == 0
             ? null
             : Path.Combine(outputRoot, "plain-files.tar.gz");
