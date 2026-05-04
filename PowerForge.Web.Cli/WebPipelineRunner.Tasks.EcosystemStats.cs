@@ -1,12 +1,16 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Xml;
+using System.Xml.Linq;
 using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private static readonly HttpClient PowerShellGalleryPackageClient = CreatePowerShellGalleryPackageClient();
+
     private static void ExecuteEcosystemStats(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var outputPath = ResolvePath(baseDir,
@@ -26,6 +30,23 @@ internal static partial class WebPipelineRunner
             GetString(step, "publishPath") ??
             GetString(step, "publish-path") ??
             "./static/data/ecosystem/stats.json");
+        var syncProjectCatalogTelemetry =
+            GetBool(step, "syncProjectCatalogTelemetry") ??
+            GetBool(step, "sync-project-catalog-telemetry") ??
+            false;
+        var projectCatalogPath = ResolvePath(baseDir,
+            GetString(step, "projectCatalogPath") ??
+            GetString(step, "project-catalog-path") ??
+            GetString(step, "catalog") ??
+            GetString(step, "catalogPath") ??
+            GetString(step, "catalog-path") ??
+            "./data/projects/catalog.json");
+        var projectCatalogPublishPath = ResolvePath(baseDir,
+            GetString(step, "projectCatalogPublishPath") ??
+            GetString(step, "project-catalog-publish-path") ??
+            GetString(step, "catalogPublishPath") ??
+            GetString(step, "catalog-publish-path") ??
+            "./static/data/projects/catalog.json");
         var summaryPath = ResolvePath(baseDir,
             GetString(step, "summaryPath") ??
             GetString(step, "summary-path") ??
@@ -57,6 +78,15 @@ internal static partial class WebPipelineRunner
         var title = GetString(step, "title");
         var maxItems = GetInt(step, "maxItems") ?? GetInt(step, "max-items") ?? 500;
         var timeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 30;
+        var refreshPowerShellGalleryByIdOnFallback =
+            GetBool(step, "refreshPowerShellGalleryByIdOnFallback") ??
+            GetBool(step, "refresh-powershell-gallery-by-id-on-fallback") ??
+            false;
+        var powerShellGalleryByIdRefreshTimeoutSeconds =
+            GetInt(step, "powerShellGalleryByIdRefreshTimeoutSeconds") ??
+            GetInt(step, "powershell-gallery-by-id-refresh-timeout-seconds") ??
+            // By default the per-ID fallback shares the step timeout; sites can give it a separate budget.
+            timeoutSeconds;
 
         if (string.IsNullOrWhiteSpace(githubOrganization) &&
             string.IsNullOrWhiteSpace(nugetOwner) &&
@@ -121,6 +151,8 @@ internal static partial class WebPipelineRunner
                     hasGitHub: !string.IsNullOrWhiteSpace(githubOrganization),
                     hasNuGet: !string.IsNullOrWhiteSpace(nugetOwner),
                     hasPowerShellGallery: !string.IsNullOrWhiteSpace(powerShellGalleryOwner) || !string.IsNullOrWhiteSpace(powerShellGalleryAuthor),
+                    refreshPowerShellGalleryByIdOnFallback,
+                    powerShellGalleryByIdRefreshTimeoutSeconds,
                     out var preservedSources))
             {
                 usedFallback = true;
@@ -145,6 +177,17 @@ internal static partial class WebPipelineRunner
             File.Copy(outputPath, publishPath, overwrite: true);
         }
 
+        var projectCatalogTelemetryMerged = 0;
+        string? projectCatalogTelemetryWarning = null;
+        if (syncProjectCatalogTelemetry)
+        {
+            projectCatalogTelemetryMerged = SyncProjectCatalogTelemetryFromStats(
+                outputPath,
+                projectCatalogPath,
+                projectCatalogPublishPath,
+                out projectCatalogTelemetryWarning);
+        }
+
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
             var summaryDir = Path.GetDirectoryName(summaryPath);
@@ -166,26 +209,94 @@ internal static partial class WebPipelineRunner
                 repositoryCount = finalSummary?.RepositoryCount ?? result?.RepositoryCount,
                 nugetPackageCount = finalSummary?.NuGetPackageCount ?? result?.NuGetPackageCount,
                 powerShellGalleryModuleCount = finalSummary?.PowerShellGalleryModuleCount ?? result?.PowerShellGalleryModuleCount,
+                projectCatalogTelemetry = new
+                {
+                    enabled = syncProjectCatalogTelemetry,
+                    catalogPath = syncProjectCatalogTelemetry && !string.IsNullOrWhiteSpace(projectCatalogPath) ? Path.GetFullPath(projectCatalogPath) : null,
+                    publishPath = syncProjectCatalogTelemetry && !string.IsNullOrWhiteSpace(projectCatalogPublishPath) ? Path.GetFullPath(projectCatalogPublishPath) : null,
+                    merged = projectCatalogTelemetryMerged,
+                    warning = projectCatalogTelemetryWarning
+                },
                 warningCount = finalDocument?.Warnings?.Count ?? result?.Warnings?.Length ?? 0
             };
             File.WriteAllText(summaryPath, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
         }
 
         stepResult.Success = true;
+        var catalogSuffix = syncProjectCatalogTelemetry
+            ? $"; projectCatalogTelemetry={projectCatalogTelemetryMerged}"
+            : string.Empty;
         if (usedFallback)
         {
             stepResult.Message = string.Equals(fallbackReason, "existing-on-warning-empty", StringComparison.Ordinal)
-                ? $"ecosystem-stats fallback: preserved existing '{outputPath}' because new data had warnings and empty totals."
+                ? $"ecosystem-stats fallback: preserved existing '{outputPath}' because new data had warnings and empty totals{catalogSuffix}."
                 : string.Equals(fallbackReason, "existing-source-on-warning-empty", StringComparison.Ordinal)
-                    ? stepResult.Message
-                : $"ecosystem-stats fallback: reused existing '{outputPath}'.";
+                    ? $"{stepResult.Message}{catalogSuffix}"
+                : $"ecosystem-stats fallback: reused existing '{outputPath}'{catalogSuffix}.";
             return;
         }
 
         var warningSuffix = result is null || result.Warnings.Length == 0
             ? string.Empty
             : $"; warnings={result.Warnings.Length}";
-        stepResult.Message = $"ecosystem-stats ok: repos={result?.RepositoryCount ?? 0}; nuget={result?.NuGetPackageCount ?? 0}; psgallery={result?.PowerShellGalleryModuleCount ?? 0}{warningSuffix}";
+        stepResult.Message = $"ecosystem-stats ok: repos={result?.RepositoryCount ?? 0}; nuget={result?.NuGetPackageCount ?? 0}; psgallery={result?.PowerShellGalleryModuleCount ?? 0}{catalogSuffix}{warningSuffix}";
+    }
+
+    private static int SyncProjectCatalogTelemetryFromStats(
+        string? statsPath,
+        string? projectCatalogPath,
+        string? projectCatalogPublishPath,
+        out string? warning)
+    {
+        warning = null;
+        if (string.IsNullOrWhiteSpace(statsPath) || !File.Exists(statsPath))
+            return 0;
+        if (string.IsNullOrWhiteSpace(projectCatalogPath) || !File.Exists(projectCatalogPath))
+            return 0;
+
+        var serializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        };
+
+        ProjectCatalogDocument? catalog;
+        try
+        {
+            catalog = JsonSerializer.Deserialize<ProjectCatalogDocument>(File.ReadAllText(projectCatalogPath), serializerOptions);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            warning = $"Project catalog telemetry sync skipped: {ex.GetType().Name}: {ex.Message}";
+            return 0;
+        }
+
+        if (catalog?.Projects is null || catalog.Projects.Count == 0)
+            return 0;
+
+        var merged = MergeProjectTelemetry(catalog.Projects, statsPath, serializerOptions);
+        if (merged <= 0)
+            return 0;
+
+        catalog.GeneratedOn = DateTimeOffset.UtcNow.ToString("O");
+        catalog.Projects = catalog.Projects
+            .OrderBy(static value => value.Name ?? value.Slug ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var catalogDirectory = Path.GetDirectoryName(projectCatalogPath);
+        if (!string.IsNullOrWhiteSpace(catalogDirectory))
+            Directory.CreateDirectory(catalogDirectory);
+        File.WriteAllText(projectCatalogPath, JsonSerializer.Serialize(catalog, serializerOptions));
+
+        if (!string.IsNullOrWhiteSpace(projectCatalogPublishPath))
+        {
+            var publishDirectory = Path.GetDirectoryName(projectCatalogPublishPath);
+            if (!string.IsNullOrWhiteSpace(publishDirectory))
+                Directory.CreateDirectory(publishDirectory);
+            File.Copy(projectCatalogPath, projectCatalogPublishPath, overwrite: true);
+        }
+
+        return merged;
     }
 
     private static EcosystemStatsSnapshot? TryReadEcosystemStatsSnapshotFromFile(string path)
@@ -241,6 +352,8 @@ internal static partial class WebPipelineRunner
         bool hasGitHub,
         bool hasNuGet,
         bool hasPowerShellGallery,
+        bool refreshPowerShellGalleryByIdOnFallback,
+        int powerShellGalleryByIdRefreshTimeoutSeconds,
         out string[] preservedSources)
     {
         preservedSources = Array.Empty<string>();
@@ -277,7 +390,17 @@ internal static partial class WebPipelineRunner
             HasPowerShellGalleryData(existing) &&
             !HasPowerShellGalleryData(generated))
         {
-            generated.PowerShellGallery = existing.PowerShellGallery;
+            var refreshedCount = 0;
+            var refreshed = refreshPowerShellGalleryByIdOnFallback
+                ? TryRefreshPowerShellGalleryModulesById(
+                    existing.PowerShellGallery,
+                    generated.Warnings,
+                    powerShellGalleryByIdRefreshTimeoutSeconds,
+                    out refreshedCount)
+                : null;
+            generated.PowerShellGallery = refreshed ?? existing.PowerShellGallery;
+            if (refreshed is not null)
+                generated.Warnings.Add($"Refreshed {refreshedCount} preserved PowerShell Gallery modules by package ID after owner query failed.");
             preserved.Add("PowerShell Gallery");
         }
 
@@ -303,6 +426,200 @@ internal static partial class WebPipelineRunner
         preservedSources = preserved.ToArray();
         return true;
     }
+
+    private static WebEcosystemPowerShellGalleryStats? TryRefreshPowerShellGalleryModulesById(
+        WebEcosystemPowerShellGalleryStats? existing,
+        List<string> warnings,
+        int timeoutSeconds,
+        out int refreshedCount)
+    {
+        refreshedCount = 0;
+        if (existing?.Modules is null || existing.Modules.Count == 0)
+            return null;
+
+        var boundedTimeoutSeconds = Math.Clamp(timeoutSeconds, 5, 300);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(boundedTimeoutSeconds));
+
+        PowerShellGalleryModuleRefreshResult[] results;
+        try
+        {
+            // The pipeline runner is synchronous; this bounded async batch is bridged once at the edge.
+            results = RefreshPowerShellGalleryModulesByIdAsync(PowerShellGalleryPackageClient, existing.Modules, cancellation.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            warnings.Add($"PowerShell Gallery package refresh failed: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+
+        var modules = new List<WebEcosystemPowerShellGalleryModule>(results.Length);
+        foreach (var result in results)
+        {
+            var warning = result.Warning;
+            if (!string.IsNullOrWhiteSpace(warning))
+                warnings.Add(warning);
+
+            if (result.Refreshed is null)
+            {
+                modules.Add(result.Existing);
+                continue;
+            }
+
+            modules.Add(MergePowerShellGalleryModule(result.Existing, result.Refreshed));
+            refreshedCount++;
+        }
+
+        if (refreshedCount == 0)
+            return null;
+
+        modules = modules
+            .OrderByDescending(static module => module.DownloadCount)
+            .ThenBy(static module => module.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new WebEcosystemPowerShellGalleryStats
+        {
+            Owner = existing.Owner,
+            AuthorFilter = existing.AuthorFilter,
+            ModuleCount = modules.Count,
+            TotalDownloads = modules.Sum(static module => module.DownloadCount),
+            Modules = modules
+        };
+    }
+
+    private static HttpClient CreatePowerShellGalleryPackageClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge.Web/1.0");
+        return client;
+    }
+
+    private static async Task<PowerShellGalleryModuleRefreshResult[]> RefreshPowerShellGalleryModulesByIdAsync(
+        HttpClient client,
+        IReadOnlyList<WebEcosystemPowerShellGalleryModule> modules,
+        CancellationToken cancellationToken)
+    {
+        const int maxConcurrency = 8;
+        using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+
+        var tasks = modules.Select(async module =>
+        {
+            var id = module.Id;
+            if (string.IsNullOrWhiteSpace(id))
+                return new PowerShellGalleryModuleRefreshResult(module, null, null);
+
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var refreshed = await TryFetchPowerShellGalleryModuleByIdAsync(client, id, cancellationToken).ConfigureAwait(false);
+                return new PowerShellGalleryModuleRefreshResult(module, refreshed, null);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or XmlException or IOException)
+            {
+                // The fallback is best-effort: modules that finish refresh, modules that time out keep existing metrics.
+                return new PowerShellGalleryModuleRefreshResult(
+                    module,
+                    null,
+                    $"PowerShell Gallery package refresh failed for {id}: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private static WebEcosystemPowerShellGalleryModule MergePowerShellGalleryModule(
+        WebEcosystemPowerShellGalleryModule existing,
+        WebEcosystemPowerShellGalleryModule refreshed)
+    {
+        return new WebEcosystemPowerShellGalleryModule
+        {
+            Id = string.IsNullOrWhiteSpace(refreshed.Id) ? existing.Id : refreshed.Id,
+            Version = string.IsNullOrWhiteSpace(refreshed.Version) ? existing.Version : refreshed.Version,
+            DownloadCount = refreshed.DownloadCount > 0 ? refreshed.DownloadCount : existing.DownloadCount,
+            Authors = string.IsNullOrWhiteSpace(refreshed.Authors) ? existing.Authors : refreshed.Authors,
+            Owners = string.IsNullOrWhiteSpace(refreshed.Owners) ? existing.Owners : refreshed.Owners,
+            GalleryUrl = string.IsNullOrWhiteSpace(refreshed.GalleryUrl) ? existing.GalleryUrl : refreshed.GalleryUrl,
+            ProjectUrl = string.IsNullOrWhiteSpace(refreshed.ProjectUrl) ? existing.ProjectUrl : refreshed.ProjectUrl,
+            Description = string.IsNullOrWhiteSpace(refreshed.Description) ? existing.Description : refreshed.Description
+        };
+    }
+
+    private static async Task<WebEcosystemPowerShellGalleryModule?> TryFetchPowerShellGalleryModuleByIdAsync(
+        HttpClient client,
+        string id,
+        CancellationToken cancellationToken)
+    {
+        var url = BuildPowerShellGalleryPackageByIdUrl(id);
+
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreComments = true
+        };
+        using var reader = XmlReader.Create(stream, settings);
+        var document = XDocument.Load(reader, LoadOptions.None);
+        return ParseFirstPowerShellGalleryModule(document);
+    }
+
+    private static string BuildPowerShellGalleryPackageByIdUrl(string id)
+    {
+        var odataLiteral = id.Replace("'", "''", StringComparison.Ordinal);
+        var filter = $"Id eq '{odataLiteral}' and IsLatestVersion eq true";
+        return "https://www.powershellgallery.com/api/v2/Packages?$filter=" + Uri.EscapeDataString(filter);
+    }
+
+    private static WebEcosystemPowerShellGalleryModule? ParseFirstPowerShellGalleryModule(XDocument document)
+    {
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+        var dataNs = XNamespace.Get("http://schemas.microsoft.com/ado/2007/08/dataservices");
+        var metadataNs = XNamespace.Get("http://schemas.microsoft.com/ado/2007/08/dataservices/metadata");
+
+        var entry = document.Root?.Elements(atomNs + "entry").FirstOrDefault();
+        if (entry is null)
+            return null;
+
+        var properties = entry.Element(metadataNs + "properties") ??
+                         entry.Element(atomNs + "content")?.Element(metadataNs + "properties");
+        if (properties is null)
+            return null;
+
+        var id = properties.Element(dataNs + "Id")?.Value?.Trim();
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
+
+        _ = long.TryParse(properties.Element(dataNs + "DownloadCount")?.Value?.Trim(), out var downloadCount);
+        return new WebEcosystemPowerShellGalleryModule
+        {
+            Id = id,
+            Version = properties.Element(dataNs + "Version")?.Value?.Trim(),
+            DownloadCount = downloadCount,
+            Authors = properties.Element(dataNs + "Authors")?.Value?.Trim(),
+            Owners = properties.Element(dataNs + "Owners")?.Value?.Trim(),
+            GalleryUrl = properties.Element(dataNs + "GalleryDetailsUrl")?.Value?.Trim(),
+            ProjectUrl = properties.Element(dataNs + "ProjectUrl")?.Value?.Trim(),
+            Description = properties.Element(dataNs + "Description")?.Value?.Trim()
+        };
+    }
+
+    private sealed record PowerShellGalleryModuleRefreshResult(
+        WebEcosystemPowerShellGalleryModule Existing,
+        WebEcosystemPowerShellGalleryModule? Refreshed,
+        string? Warning);
 
     private static WebEcosystemStatsDocument? TryReadEcosystemStatsDocument(string? json)
     {
