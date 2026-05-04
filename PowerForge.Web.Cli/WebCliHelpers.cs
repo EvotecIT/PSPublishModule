@@ -137,7 +137,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
         Console.WriteLine("  powerforge-web server inspect --manifest <serverrecovery.json> [--fail-on-drift] [--output json]");
         Console.WriteLine("  powerforge-web server plan --manifest <serverrecovery.json> [--output json]");
-        Console.WriteLine("  powerforge-web server capture --manifest <serverrecovery.json> [--out <dir>] [--dry-run] [--skip-files] [--skip-encrypted] [--encrypt-remote] [--output json]");
+        Console.WriteLine("  powerforge-web server validate --manifest <serverrecovery.json> [--output json] (alias for plan)");
+        Console.WriteLine("  powerforge-web server capture --manifest <serverrecovery.json> [--out <dir>] [--dry-run] [--skip-files] [--skip-encrypted] [--encrypt-remote] [--fail-on-failure] [--output json]");
         Console.WriteLine("  powerforge-web server deploy --manifest <serverrecovery.json> [--dry-run] [--fail-on-failure] [--output json]");
         Console.WriteLine("  powerforge-web server verify --manifest <serverrecovery.json> [--fail-on-failure] [--url-timeout-seconds <n>] [--output json]");
         Console.WriteLine("  powerforge-web server bootstrap-plan --manifest <serverrecovery.json> [--out <dir>] [--output json]");

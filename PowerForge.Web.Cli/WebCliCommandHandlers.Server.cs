@@ -7,7 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string SupportedServerActions = "inspect, plan, capture, deploy, verify, bootstrap-plan, restore-secrets-plan";
+    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, bootstrap-plan, restore-secrets-plan";
 
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
@@ -17,18 +17,25 @@ internal static partial class WebCliCommandHandlers
         var action = subArgs[0].ToLowerInvariant();
         var actionArgs = subArgs.Skip(1).ToArray();
 
-        return action switch
+        try
         {
-            "inspect" => HandleServerInspect(actionArgs, outputJson, logger, outputSchemaVersion),
-            "plan" => HandleServerPlan(actionArgs, outputJson, logger, outputSchemaVersion),
-            "validate" => HandleServerPlan(actionArgs, outputJson, logger, outputSchemaVersion),
-            "capture" => HandleServerCapture(actionArgs, outputJson, logger, outputSchemaVersion),
-            "verify" => HandleServerVerify(actionArgs, outputJson, logger, outputSchemaVersion),
-            "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
-            "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
-            "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
-            _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
-        };
+            return action switch
+            {
+                "inspect" => HandleServerInspect(actionArgs, outputJson, logger, outputSchemaVersion),
+                "plan" => HandleServerPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                "validate" => HandleServerPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                "capture" => HandleServerCapture(actionArgs, outputJson, logger, outputSchemaVersion),
+                "verify" => HandleServerVerify(actionArgs, outputJson, logger, outputSchemaVersion),
+                "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
+                "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Fail($"Server action failed: {ex.Message}", outputJson, logger, "web.server");
+        }
     }
 
     private static int HandleServerPlan(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
@@ -129,12 +136,12 @@ internal static partial class WebCliCommandHandlers
         var manifest = loaded.Manifest;
         var manifestPath = loaded.ManifestPath!;
         var outPathArg = TryGetOptionValue(subArgs, "--out") ??
-                         TryGetOptionValue(subArgs, "--output") ??
                          TryGetOptionValue(subArgs, "--output-dir");
         var dryRun = HasOption(subArgs, "--dry-run");
         var skipFiles = HasOption(subArgs, "--skip-files");
         var skipEncrypted = HasOption(subArgs, "--skip-encrypted");
         var encryptRemote = HasOption(subArgs, "--encrypt-remote") || HasOption(subArgs, "--remote-encryption");
+        var failOnFailure = HasOption(subArgs, "--fail-on-failure");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
         var ageCommand = TryGetOptionValue(subArgs, "--age") ?? "age";
 
@@ -225,6 +232,8 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        var success = dryRun || warnings.Count == 0;
+        var exitCode = success || !failOnFailure ? 0 : 1;
         var checklistPath = Path.Combine(outputRoot, "restore-checklist.md");
         WriteRestoreChecklist(checklistPath, manifest, plainArchivePath, encryptedArchivePath, warnings);
 
@@ -249,17 +258,19 @@ internal static partial class WebCliCommandHandlers
             {
                 SchemaVersion = outputSchemaVersion,
                 Command = "web.server.capture",
-                Success = true,
-                ExitCode = 0,
+                Success = success || !failOnFailure,
+                ExitCode = exitCode,
                 Config = "web.serverrecovery",
                 ConfigPath = manifestPath,
                 Result = WebCliJson.SerializeToElement(resultSummary, WebCliJson.Context.PowerForgeServerCaptureResult),
                 Error = warnings.Count == 0 ? null : string.Join(" | ", warnings)
             });
-            return 0;
+            return exitCode;
         }
 
-        logger.Success(dryRun ? "Server capture dry run completed." : "Server capture completed.");
+        logger.Success(success
+            ? (dryRun ? "Server capture dry run completed." : "Server capture completed.")
+            : "Server capture completed with warnings.");
         logger.Info($"Output: {outputRoot}");
         logger.Info($"Command captures: {commandResults.Count}");
         if (!string.IsNullOrWhiteSpace(plainArchivePath))
@@ -270,7 +281,7 @@ internal static partial class WebCliCommandHandlers
         foreach (var warning in warnings)
             logger.Warn(warning);
 
-        return 0;
+        return exitCode;
     }
 
     private static (PowerForgeServerRecoveryManifest? Manifest, string? ManifestPath, int ExitCode) LoadServerRecoveryManifest(
@@ -384,27 +395,44 @@ internal static partial class WebCliCommandHandlers
         if (!age.Start())
             throw new InvalidOperationException("Failed to start age.");
 
-        var copyTask = ssh.StandardOutput.BaseStream.CopyToAsync(age.StandardInput.BaseStream)
-            .ContinueWith(task =>
-            {
-                age.StandardInput.Close();
-                if (task.IsFaulted && task.Exception is not null)
-                    throw task.Exception;
-            });
+        var copyTask = CopyAndCloseAsync(ssh.StandardOutput.BaseStream, age.StandardInput.BaseStream);
         var sshErrTask = ssh.StandardError.ReadToEndAsync();
         var ageErrTask = age.StandardError.ReadToEndAsync();
 
         ssh.WaitForExit();
-        copyTask.GetAwaiter().GetResult();
+        string? copyError = null;
+        try
+        {
+            copyTask.GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            copyError = ex.GetBaseException().Message;
+        }
         age.WaitForExit();
 
-        var stderr = string.Concat(sshErrTask.GetAwaiter().GetResult(), ageErrTask.GetAwaiter().GetResult());
+        var stderr = string.Concat(
+            sshErrTask.GetAwaiter().GetResult(),
+            ageErrTask.GetAwaiter().GetResult(),
+            string.IsNullOrWhiteSpace(copyError) ? string.Empty : $"{Environment.NewLine}stream copy failed: {copyError}");
         return new ProcessResult
         {
-            ExitCode = ssh.ExitCode == 0 ? age.ExitCode : ssh.ExitCode,
+            ExitCode = copyError is null ? (ssh.ExitCode == 0 ? age.ExitCode : ssh.ExitCode) : 1,
             Stdout = string.Empty,
             Stderr = stderr
         };
+    }
+
+    private static async Task CopyAndCloseAsync(Stream input, Stream output)
+    {
+        try
+        {
+            await input.CopyToAsync(output);
+        }
+        finally
+        {
+            output.Close();
+        }
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(

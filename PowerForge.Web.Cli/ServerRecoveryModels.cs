@@ -111,7 +111,7 @@ internal sealed class PowerForgeServerSecret
     public string? Path { get; set; }
     public string? Env { get; set; }
     public string[]? RequiredFor { get; set; }
-    public string Capture { get; set; } = string.Empty;
+    public string Capture { get; set; } = "exclude";
     public string? RestoreMode { get; set; }
 }
 
@@ -138,7 +138,7 @@ internal sealed class PowerForgeServerCommandGroup
 
 internal sealed class PowerForgeServerNamedCommand
 {
-    public string? Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public string? Command { get; set; }
     public string? WorkingDirectory { get; set; }
     public bool Sensitive { get; set; }

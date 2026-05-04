@@ -48,6 +48,7 @@ Current implemented slices:
 powerforge-web server inspect --manifest deploy/linux/example.serverrecovery.json
 powerforge-web server plan --manifest deploy/linux/example.serverrecovery.json
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example
+powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --fail-on-failure
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --encrypt-remote
 powerforge-web server deploy --manifest deploy/linux/example.serverrecovery.json --dry-run
 powerforge-web server verify --manifest deploy/linux/example.serverrecovery.json --fail-on-failure
@@ -57,9 +58,9 @@ powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serve
 
 `server inspect` runs read-only SSH checks against the target host and compares live state with the manifest: OS, SSH posture, packages, Apache modules/config, managed paths, systemd units, UFW policy, Certbot renewal config, required secret-path presence, and release symlinks. Pass `--fail-on-drift` when CI or automation should exit non-zero on drift.
 
-`server plan` loads the manifest, summarizes recovery coverage, emits the planned stages, and warns when encrypted capture is configured but no encryption recipient environment variable is available.
+`server plan` loads the manifest, summarizes recovery coverage, emits the planned stages, and warns when encrypted capture is configured but no encryption recipient environment variable is available. `server validate` is currently an alias for `server plan`; it does not run a schema-only validation pass.
 
-`server capture` uses SSH to collect manifest-defined command outputs, streams the plain capture file set into `plain-files.tar.gz`, writes `capture-summary.json`, and creates a restore checklist. Encrypted files are skipped unless `backupTarget.recipient` is set or the configured `backupTarget.recipientEnv` environment variable is present. By default, the secret tar stream is encrypted by local `age`; with `--encrypt-remote`, the target host runs `tar | age` and only the encrypted `.age` blob is streamed back to the workstation.
+`server capture` uses SSH to collect manifest-defined command outputs, streams the plain capture file set into `plain-files.tar.gz`, writes `capture-summary.json`, and creates a restore checklist. Encrypted files are skipped unless `backupTarget.recipient` is set or the configured `backupTarget.recipientEnv` environment variable is present. By default, the secret tar stream is encrypted by local `age`; with `--encrypt-remote`, the target host runs `tar | age` and only the encrypted `.age` blob is streamed back to the workstation. Capture warnings remain non-fatal for interactive use unless `--fail-on-failure` is passed, which exits non-zero when required command captures, archive capture, or encrypted capture reports warnings.
 
 `server deploy` runs the manifest's deploy commands over SSH. Use `--dry-run` to print the resolved remote commands without executing them, and `--fail-on-failure` when automation should exit non-zero if a required deploy command fails.
 
