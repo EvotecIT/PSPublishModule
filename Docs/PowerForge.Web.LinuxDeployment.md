@@ -111,6 +111,7 @@ Reusable:
 - redirect generation
 - sitemap/feed/IndexNow outputs
 - deploy metadata shape and change-detection rules
+- server recovery manifest schema, inspection, capture, bootstrap, restore, deploy, and verification workflow
 
 Site-local:
 
@@ -119,5 +120,33 @@ Site-local:
 - Apache service names
 - cache purge hosts
 - contact relay or other site-specific services
+- concrete recovery manifests that name site domains, secrets, services, and server paths
 
 When a site-local script becomes useful for more than one site, lift the convention into this pattern first, then into a scaffold/install command.
+
+## Server Recovery
+
+Linux deployment scripts handle the normal happy path on an already prepared host. Server recovery covers the bigger case: a fresh Ubuntu server needs to be made production-ready and then redeployed from source control.
+
+Use a site-local manifest such as:
+
+```text
+deploy/linux/example.serverrecovery.json
+```
+
+The manifest should point at the reusable schema:
+
+```text
+Schemas/powerforge.web.serverrecovery.schema.json
+```
+
+PowerForge should use that manifest to support these stages:
+
+1. inspect the existing host for drift
+2. capture plain configuration and encrypted secrets
+3. bootstrap a new host
+4. restore or prompt for required secrets
+5. run the normal deploy script
+6. verify services, certificates, origin behavior, and public URLs
+
+Generated site output and timestamped release folders are not primary backup state. They are rebuildable from Git, lock files, and the deployment pipeline. Private keys, API tokens, SMTP credentials, and environment files must only enter GitHub backup storage as encrypted bundles.

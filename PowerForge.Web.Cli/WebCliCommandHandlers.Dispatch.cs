@@ -55,6 +55,7 @@ collection: {{collection}}
             "agent-ready" => HandleAgentReady(subArgs, outputJson, logger, outputSchemaVersion),
             "agentready" => HandleAgentReady(subArgs, outputJson, logger, outputSchemaVersion),
             "xref-merge" => HandleXrefMerge(subArgs, outputJson, logger, outputSchemaVersion),
+            "server" => HandleServer(subArgs, outputJson, logger, outputSchemaVersion),
             "cloudflare" => HandleCloudflare(subArgs, outputJson, logger, outputSchemaVersion),
             _ => HandleUnknownCommand()
         };
