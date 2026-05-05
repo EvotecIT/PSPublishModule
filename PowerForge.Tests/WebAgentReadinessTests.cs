@@ -319,6 +319,10 @@ public class WebAgentReadinessTests
                     AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
                     MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true },
                     MarkdownNegotiation = true,
+                    SecurityHeaders = new AgentSecurityHeadersSpec
+                    {
+                        ContentSecurityPolicyValue = "default-src 'self'\r\nHeader set X-Injected \"bad\""
+                    },
                     Apache = new AgentApacheSupportSpec { Enabled = true }
                 }
             });
@@ -327,8 +331,9 @@ public class WebAgentReadinessTests
 
             var apache = File.ReadAllText(Path.Combine(root, ".htaccess"));
             Assert.Contains("ErrorDocument 404 /404.html", apache, StringComparison.Ordinal);
-            Assert.Contains("Header add Link \"</.well-known/api-catalog>; rel=\\\"api-catalog\\\"; type=\\\"application/linkset+json\\\"\"", apache, StringComparison.Ordinal);
+            Assert.Contains("Header always add Link \"</.well-known/api-catalog>; rel=\\\"api-catalog\\\"; type=\\\"application/linkset+json\\\"\"", apache, StringComparison.Ordinal);
             Assert.Contains("Header set Content-Signal \"search=yes, ai-input=yes, ai-train=no\"", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain(Environment.NewLine + "  Header set X-Injected", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^$ /index.md [L,T=text/markdown]", apache, StringComparison.Ordinal);
             Assert.Contains("<If \"%{REQUEST_URI} == '/.well-known/api-catalog'\">", apache, StringComparison.Ordinal);
@@ -748,6 +753,71 @@ public class WebAgentReadinessTests
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
             Assert.DoesNotContain(result.Checks, check => string.Equals(check.Status, "fail", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_IgnoresApacheConfigWhenApacheSupportIsDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, ".htaccess"),
+                """
+                <IfModule mod_headers.c>
+                  Header set Strict-Transport-Security "max-age=31536000"
+                </IfModule>
+                """);
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec
+                    {
+                        Enabled = true,
+                        Hsts = true,
+                        ContentSecurityPolicy = false,
+                        XContentTypeOptions = false,
+                        XFrameOptions = false,
+                        ReferrerPolicy = false,
+                        CorsForWellKnown = false
+                    },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownNegotiation = false,
+                    Apache = new AgentApacheSupportSpec { Enabled = false }
+                }
+            });
+
+            Assert.Contains(result.Checks, check => check.Id == "security-hsts" && check.Status == "fail");
         }
         finally
         {

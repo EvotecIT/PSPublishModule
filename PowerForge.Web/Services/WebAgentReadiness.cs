@@ -201,19 +201,22 @@ public static class WebAgentReadiness
 
         var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
-        var apachePath = ResolveSitePath(siteRoot, spec.Apache?.EffectiveOutputPath ?? AgentApacheSupportSpec.DefaultOutputPath);
-        var apacheText = File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
+        var apacheEnabled = spec.Apache?.Enabled == true;
+        var apachePath = apacheEnabled
+            ? ResolveSitePath(siteRoot, spec.Apache!.EffectiveOutputPath)
+            : ResolveSitePath(siteRoot, AgentApacheSupportSpec.DefaultOutputPath);
+        var apacheText = apacheEnabled && File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
         var effectiveHeadersText = string.Join(Environment.NewLine, headersText, apacheText);
-        var linkHeadersPresent = effectiveHeadersText.Contains("Link:", StringComparison.OrdinalIgnoreCase) ||
-                                 effectiveHeadersText.Contains("Header add Link", StringComparison.OrdinalIgnoreCase);
+        var effectiveHeadersPath = File.Exists(headersPath) ? headersPath : (apacheEnabled ? apachePath : headersPath);
+        var linkHeadersPresent = HeaderDirectiveExists(effectiveHeadersText, "Link");
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
             linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
             linkHeadersPresent
                 ? "Static host headers include Link discovery hints."
                 : (spec.LinkHeaders ? "No static host Link headers found. Add _headers output or configure host-level response headers." : "Link header generation is disabled."),
-            File.Exists(headersPath) ? headersPath : apachePath);
+            effectiveHeadersPath);
 
-        AddSecurityHeaderChecks(checks, effectiveHeadersText, File.Exists(headersPath) ? headersPath : apachePath, spec.SecurityHeaders);
+        AddSecurityHeaderChecks(checks, effectiveHeadersText, effectiveHeadersPath, spec.SecurityHeaders);
 
         var rootHtml = ReadFirstHtml(siteRoot);
         AddHtmlSemanticsChecks(checks, rootHtml.Text, rootHtml.Path);
@@ -1263,7 +1266,7 @@ public static class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(value))
             return;
 
-        sb.Append("  Header add ")
+        sb.Append("  Header always add ")
             .Append(name)
             .Append(" \"")
             .Append(EscapeApacheQuotedValue(value))
@@ -1290,7 +1293,10 @@ public static class WebAgentReadiness
         => $"search={(signals.Search ? "yes" : "no")}, ai-input={(signals.AiInput ? "yes" : "no")}, ai-train={(signals.AiTrain ? "yes" : "no")}";
 
     private static string EscapeApacheQuotedValue(string value)
-        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+        => value.Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
 
     private static string EscapeApacheExpressionString(string value)
         => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "\\'", StringComparison.Ordinal);
