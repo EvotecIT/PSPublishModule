@@ -1210,6 +1210,9 @@ internal static partial class WebPipelineRunner
         if (ShouldExpectAgentReadyHeaders(siteRoot, spec))
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!));
 
+        if (spec.Apache?.Enabled == true)
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.Apache.OutputPath) ? ".htaccess" : spec.Apache.OutputPath!));
+
         return outputs
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -1259,7 +1262,8 @@ internal static partial class WebPipelineRunner
             OpenApi = spec.OpenApi,
             WebMcp = spec.WebMcp,
             MarkdownArtifacts = spec.MarkdownArtifacts,
-            MarkdownNegotiation = spec.MarkdownNegotiation
+            MarkdownNegotiation = spec.MarkdownNegotiation,
+            Apache = spec.Apache
         };
 
         if (resolved.Enabled)

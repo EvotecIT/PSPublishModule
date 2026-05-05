@@ -35,6 +35,8 @@ public sealed class AgentReadinessSpec
     public AgentMarkdownArtifactsSpec? MarkdownArtifacts { get; set; }
     /// <summary>When true, treat markdown negotiation as expected during remote scans.</summary>
     public bool MarkdownNegotiation { get; set; } = true;
+    /// <summary>Optional Apache .htaccess support for Link headers and Markdown negotiation.</summary>
+    public AgentApacheSupportSpec? Apache { get; set; }
 }
 
 /// <summary>Static markdown artifacts generated from rendered HTML for agent readers and edge negotiation.</summary>
@@ -48,6 +50,28 @@ public sealed class AgentMarkdownArtifactsSpec
     public int MaxPages { get; set; }
     /// <summary>When true, prepend the page title as a top-level heading when one can be resolved.</summary>
     public bool IncludeTitle { get; set; } = true;
+}
+
+/// <summary>Apache/mod_headers and mod_rewrite integration for static agent-readiness output.</summary>
+public sealed class AgentApacheSupportSpec
+{
+    /// <summary>Default Apache configuration output path.</summary>
+    public const string DefaultOutputPath = ".htaccess";
+
+    /// <summary>Enable .htaccess generation for Apache-hosted static sites.</summary>
+    public bool Enabled { get; set; }
+    /// <summary>Output path relative to site root. Defaults to .htaccess.</summary>
+    public string OutputPath { get; set; } = DefaultOutputPath;
+    /// <summary>Output path with the default fallback applied.</summary>
+    public string EffectiveOutputPath => string.IsNullOrWhiteSpace(OutputPath) ? DefaultOutputPath : OutputPath;
+    /// <summary>Emit homepage Link response headers through mod_headers.</summary>
+    public bool LinkHeaders { get; set; } = true;
+    /// <summary>Emit Content-Signal response headers when Content Signals are configured.</summary>
+    public bool ContentSignalsHeader { get; set; } = true;
+    /// <summary>Emit AddType and mod_rewrite rules for Accept: text/markdown requests.</summary>
+    public bool MarkdownNegotiation { get; set; } = true;
+    /// <summary>Emit Content-Type and CORS headers for generated discovery resources.</summary>
+    public bool DiscoveryResourceHeaders { get; set; } = true;
 }
 
 /// <summary>Security headers that agent and AI-readiness scanners commonly expect.</summary>
