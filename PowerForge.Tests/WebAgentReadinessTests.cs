@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -337,7 +338,75 @@ public class WebAgentReadinessTests
             Assert.Contains("RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^$ /index.md [L,T=text/markdown]", apache, StringComparison.Ordinal);
             Assert.Contains("<If \"%{REQUEST_URI} == '/.well-known/api-catalog'\">", apache, StringComparison.Ordinal);
-            Assert.Contains("Header set Content-Type \"application/linkset+json; profile=\\\"https://www.rfc-editor.org/info/rfc9727\\\"\"", apache, StringComparison.Ordinal);
+            Assert.Contains("Header always set Content-Type \"application/linkset+json; profile=\\\"https://www.rfc-editor.org/info/rfc9727\\\"\"", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_ReplacesExistingApacheManagedBlock()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-idempotent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><main><h1>Example</h1><p>Hello agents.</p></main></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, ".htaccess"),
+                """
+                # Keep this custom line
+                # BEGIN PowerForge Agent Readiness
+                Header set X-Stale "yes"
+                # END PowerForge Agent Readiness
+                """);
+
+            var options = new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = false },
+                    MarkdownNegotiation = false,
+                    Apache = new AgentApacheSupportSpec { Enabled = true }
+                }
+            };
+
+            var first = WebAgentReadiness.Prepare(options);
+            var second = WebAgentReadiness.Prepare(options);
+
+            Assert.True(first.Success, string.Join(Environment.NewLine, first.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.True(second.Success, string.Join(Environment.NewLine, second.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+
+            var apache = File.ReadAllText(Path.Combine(root, ".htaccess"));
+            Assert.Contains("# Keep this custom line", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("X-Stale", apache, StringComparison.Ordinal);
+            Assert.Single(Regex.Matches(apache, "# BEGIN PowerForge Agent Readiness").Cast<Match>());
+            Assert.Single(Regex.Matches(apache, "# END PowerForge Agent Readiness").Cast<Match>());
         }
         finally
         {

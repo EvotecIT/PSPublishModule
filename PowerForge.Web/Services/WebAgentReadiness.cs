@@ -202,12 +202,10 @@ public static class WebAgentReadiness
         var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
         var apacheEnabled = spec.Apache?.Enabled == true;
-        var apachePath = apacheEnabled
-            ? ResolveSitePath(siteRoot, spec.Apache!.EffectiveOutputPath)
-            : ResolveSitePath(siteRoot, AgentApacheSupportSpec.DefaultOutputPath);
-        var apacheText = apacheEnabled && File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
+        var apachePath = apacheEnabled ? ResolveSitePath(siteRoot, spec.Apache!.EffectiveOutputPath) : null;
+        var apacheText = apachePath is not null && File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
         var effectiveHeadersText = string.Join(Environment.NewLine, headersText, apacheText);
-        var effectiveHeadersPath = File.Exists(headersPath) ? headersPath : (apacheEnabled ? apachePath : headersPath);
+        var effectiveHeadersPath = File.Exists(headersPath) ? headersPath : (apachePath ?? headersPath);
         var linkHeadersPresent = HeaderDirectiveExists(effectiveHeadersText, "Link");
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
             linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
@@ -1202,9 +1200,9 @@ public static class WebAgentReadiness
             return;
 
         sb.Append("  <If \"%{REQUEST_URI} == '").Append(EscapeApacheExpressionString(NormalizeRoute(route))).AppendLine("'\">");
-        AppendApacheHeaderSet(sb, "Content-Type", contentType, indent: "    ");
+        AppendApacheHeaderSet(sb, "Content-Type", contentType, indent: "    ", always: true);
         if (security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin))
-            AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ");
+            AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ", always: true);
         sb.AppendLine("  </If>");
     }
 
@@ -1248,13 +1246,13 @@ public static class WebAgentReadiness
             sb.Append("  Access-Control-Allow-Origin: ").Append(security.CorsAllowOrigin!.Trim()).AppendLine();
     }
 
-    private static void AppendApacheHeaderSet(StringBuilder sb, string name, string? value, string indent = "  ")
+    private static void AppendApacheHeaderSet(StringBuilder sb, string name, string? value, string indent = "  ", bool always = false)
     {
         if (string.IsNullOrWhiteSpace(value))
             return;
 
         sb.Append(indent)
-            .Append("Header set ")
+            .Append(always ? "Header always set " : "Header set ")
             .Append(name)
             .Append(" \"")
             .Append(EscapeApacheQuotedValue(value!))
@@ -1579,7 +1577,7 @@ public static class WebAgentReadiness
             if (!line.StartsWith("Header", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             var headerIndex = parts.Length > 2 && parts[1].Equals("always", StringComparison.OrdinalIgnoreCase)
                 ? 3
                 : 2;
