@@ -55,12 +55,15 @@ public sealed class AgentMarkdownArtifactsSpec
 /// <summary>Apache/mod_headers and mod_rewrite integration for static agent-readiness output.</summary>
 public sealed class AgentApacheSupportSpec
 {
+    /// <summary>Default Apache configuration output path.</summary>
+    public const string DefaultOutputPath = ".htaccess";
+
     /// <summary>Enable .htaccess generation for Apache-hosted static sites.</summary>
     public bool Enabled { get; set; }
     /// <summary>Output path relative to site root. Defaults to .htaccess.</summary>
-    public string? OutputPath { get; set; } = ".htaccess";
+    public string? OutputPath { get; set; } = DefaultOutputPath;
     /// <summary>Output path with the default fallback applied.</summary>
-    public string EffectiveOutputPath => string.IsNullOrWhiteSpace(OutputPath) ? ".htaccess" : OutputPath!;
+    public string EffectiveOutputPath => string.IsNullOrWhiteSpace(OutputPath) ? DefaultOutputPath : OutputPath!;
     /// <summary>Emit homepage Link response headers through mod_headers.</summary>
     public bool LinkHeaders { get; set; } = true;
     /// <summary>Emit Content-Signal response headers when Content Signals are configured.</summary>

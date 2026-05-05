@@ -201,7 +201,7 @@ public static class WebAgentReadiness
 
         var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
-        var apachePath = ResolveSitePath(siteRoot, (spec.Apache ?? new AgentApacheSupportSpec()).EffectiveOutputPath);
+        var apachePath = ResolveSitePath(siteRoot, spec.Apache?.EffectiveOutputPath ?? AgentApacheSupportSpec.DefaultOutputPath);
         var apacheText = File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
         var effectiveHeadersText = string.Join(Environment.NewLine, headersText, apacheText);
         var linkHeadersPresent = effectiveHeadersText.Contains("Link:", StringComparison.OrdinalIgnoreCase) ||
@@ -956,12 +956,18 @@ public static class WebAgentReadiness
         if (html.Contains("navigator.modelContext.provideContext", StringComparison.Ordinal))
             return true;
 
+        if (!html.Contains("tool-name", StringComparison.OrdinalIgnoreCase) &&
+            !html.Contains("tool-description", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         try
         {
             var doc = HtmlParser.ParseWithAngleSharp(html);
             return doc.QuerySelector("[tool-name],[tool-description]") is not null;
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return false;
         }
@@ -1026,7 +1032,7 @@ public static class WebAgentReadiness
         var writeLinkHeaders = apache.LinkHeaders && spec.LinkHeaders && linkTargets.Count > 0;
         var writeContentSignals = apache.ContentSignalsHeader && contentSignals.Enabled;
         var writeMarkdownNegotiation = apache.MarkdownNegotiation && spec.MarkdownNegotiation && spec.MarkdownArtifacts?.Enabled == true && markdownArtifactPaths.Count > 0;
-        var writeDiscoveryHeaders = apache.DiscoveryResourceHeaders;
+        var writeDiscoveryHeaders = apache.DiscoveryResourceHeaders && HasApacheDiscoveryResources(spec);
         var markdownExtension = NormalizeMarkdownExtension(spec.MarkdownArtifacts?.Extension);
 
         sb.AppendLine(AgentBlockStart);
@@ -1198,6 +1204,13 @@ public static class WebAgentReadiness
             AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ");
         sb.AppendLine("  </If>");
     }
+
+    private static bool HasApacheDiscoveryResources(AgentReadinessSpec spec)
+        => spec.ApiCatalog?.Enabled == true ||
+           spec.AgentSkills?.Enabled == true ||
+           spec.AgentsJson?.Enabled == true ||
+           spec.A2AAgentCard?.Enabled == true ||
+           spec.McpServerCard?.Enabled == true;
 
     private static void AppendResourceHeaders(StringBuilder sb, string route, string contentType, AgentSecurityHeadersSpec security)
     {
@@ -1544,10 +1557,42 @@ public static class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(headersText) || string.IsNullOrWhiteSpace(headerName))
             return false;
 
-        var escaped = Regex.Escape(headerName);
-        return Regex.IsMatch(headersText, @"(?im)^\s*" + escaped + @"\s*:", RegexOptions.CultureInvariant) ||
-               Regex.IsMatch(headersText, @"(?im)^\s*Header\s+(?:always\s+)?(?:set|add|append|merge)\s+" + escaped + @"\b", RegexOptions.CultureInvariant);
+        foreach (var rawLine in headersText.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None))
+        {
+            var line = rawLine.TrimStart();
+            if (line.Length == 0 || line[0] == '#')
+                continue;
+
+            if (line.StartsWith(headerName, StringComparison.OrdinalIgnoreCase) &&
+                line.Length > headerName.Length &&
+                line[headerName.Length] == ':')
+            {
+                return true;
+            }
+
+            if (!line.StartsWith("Header", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var headerIndex = parts.Length > 2 && parts[1].Equals("always", StringComparison.OrdinalIgnoreCase)
+                ? 3
+                : 2;
+            if (parts.Length > headerIndex &&
+                IsApacheHeaderAction(parts[headerIndex - 1]) &&
+                parts[headerIndex].Equals(headerName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    private static bool IsApacheHeaderAction(string value)
+        => value.Equals("set", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("add", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("append", StringComparison.OrdinalIgnoreCase) ||
+           value.Equals("merge", StringComparison.OrdinalIgnoreCase);
 
     private static void AddRemoteSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, HttpResponseMessage? response, string target)
     {
