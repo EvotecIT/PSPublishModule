@@ -59,6 +59,8 @@ public sealed class AgentApacheSupportSpec
     public bool Enabled { get; set; }
     /// <summary>Output path relative to site root. Defaults to .htaccess.</summary>
     public string? OutputPath { get; set; } = ".htaccess";
+    /// <summary>Output path with the default fallback applied.</summary>
+    public string EffectiveOutputPath => string.IsNullOrWhiteSpace(OutputPath) ? ".htaccess" : OutputPath!;
     /// <summary>Emit homepage Link response headers through mod_headers.</summary>
     public bool LinkHeaders { get; set; } = true;
     /// <summary>Emit Content-Signal response headers when Content Signals are configured.</summary>

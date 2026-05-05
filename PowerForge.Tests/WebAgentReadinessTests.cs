@@ -341,6 +341,134 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void Prepare_WritesApacheVaryHeaderWhenOnlyMarkdownNegotiationIsEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-vary-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownArtifacts = new AgentMarkdownArtifactsSpec { Enabled = true },
+                    MarkdownNegotiation = true,
+                    Apache = new AgentApacheSupportSpec
+                    {
+                        Enabled = true,
+                        LinkHeaders = false,
+                        ContentSignalsHeader = false,
+                        DiscoveryResourceHeaders = false,
+                        MarkdownNegotiation = true
+                    }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+
+            var apache = File.ReadAllText(Path.Combine(root, ".htaccess"));
+            Assert.Contains("<IfModule mod_headers.c>", apache, StringComparison.Ordinal);
+            Assert.Contains("Header merge Vary \"Accept\"", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^$ /index.md [L,T=text/markdown]", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_PassesSecurityHeadersFromApacheConfig()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-security-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, ".htaccess"),
+                """
+                <IfModule mod_headers.c>
+                  Header set Strict-Transport-Security "max-age=31536000"
+                  Header set Content-Security-Policy "default-src 'self'; frame-ancestors 'none'"
+                  Header set X-Content-Type-Options "nosniff"
+                  Header set X-Frame-Options "DENY"
+                  Header set Referrer-Policy "strict-origin-when-cross-origin"
+                  Header set Access-Control-Allow-Origin "*"
+                </IfModule>
+                """);
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = true },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownNegotiation = false,
+                    Apache = new AgentApacheSupportSpec { Enabled = true }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.Contains(result.Checks, check => check.Id == "security-hsts" && check.Status == "pass");
+            Assert.Contains(result.Checks, check => check.Id == "security-csp" && check.Status == "pass");
+            Assert.Contains(result.Checks, check => check.Id == "security-cors" && check.Status == "pass");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Verify_DisabledAgentReadinessShortCircuits()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-disabled-all-" + Guid.NewGuid().ToString("N"));
@@ -671,6 +799,56 @@ public class WebAgentReadinessTests
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
             Assert.Contains(result.Checks, check => check.Id == "webmcp" && check.Status == "pass");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotPassWebMcpForCommentsOrDataAttributes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-webmcp-false-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><!-- tool-name="site-search" --><button data-tool-name="copy">Copy</button></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    WebMcp = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownNegotiation = false
+                }
+            });
+
+            Assert.Contains(result.Checks, check => check.Id == "webmcp" && check.Status == "fail");
         }
         finally
         {

@@ -80,7 +80,7 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - OpenAPI detection/configuration
 - local HTML, JSON-LD, and semantic checks aligned with AI-readiness scanners
 - local WebMCP smoke detection for imperative `navigator.modelContext` calls
-  and conservative declarative tool annotations such as `tool-name` and
+  and exact declarative HTML tool attributes such as `tool-name` and
   `tool-description`
 - remote scan of live headers and well-known URLs
 
@@ -159,6 +159,10 @@ If `agentSkills.skills` is empty, PowerForge writes a conservative default
 `site-assistant` skill and computes the SHA-256 digest required by the Agent
 Skills Discovery index.
 
+Optional discovery documents such as Agent Skills and `agents.json` are reported
+as informational when disabled or absent. They become required checks only when
+the matching generator is enabled in `site.json`.
+
 If `apiCatalog.entries` is empty but `_site/api/index.json` exists, PowerForge
 infers a basic API documentation entry. For public programmable APIs, prefer
 explicit entries that point `serviceDesc` at an OpenAPI document.
@@ -176,6 +180,11 @@ configured, sets content types/CORS for generated well-known resources, and
 uses `mod_rewrite` to serve generated Markdown artifacts when a request sends
 `Accept: text/markdown`. This is intended for Apache static deployments where
 `AllowOverride` and `mod_headers`/`mod_rewrite` are enabled.
+
+The generated Apache Markdown negotiation rules cover the site root and
+directory-style routes such as `/docs/` that map to `index.md`. If a deployment
+serves extensionless deep paths without trailing slashes, configure canonical
+trailing-slash redirects before the managed PowerForge block.
 
 Do not enable MCP, WebMCP, OAuth, OpenAPI, A2A, or commerce settings just to
 make a scanner green. These discovery files are contracts. Publish them only
