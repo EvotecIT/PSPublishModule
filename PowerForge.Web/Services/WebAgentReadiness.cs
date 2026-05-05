@@ -205,16 +205,17 @@ public static class WebAgentReadiness
         var apachePath = apacheEnabled ? ResolveSitePath(siteRoot, spec.Apache!.EffectiveOutputPath) : null;
         var apacheText = apachePath is not null && File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
         var effectiveHeadersText = string.Join(Environment.NewLine, headersText, apacheText);
-        var effectiveHeadersPath = File.Exists(headersPath) ? headersPath : (apachePath ?? headersPath);
-        var linkHeadersPresent = HeaderDirectiveExists(effectiveHeadersText, "Link");
+        var fallbackHeadersPath = File.Exists(headersPath) ? headersPath : (apachePath ?? headersPath);
+        var linkHeaderPath = ResolveHeaderSourcePath("Link", headersText, headersPath, apacheText, apachePath ?? headersPath, fallbackHeadersPath);
+        var linkHeadersPresent = linkHeaderPath != fallbackHeadersPath || HeaderDirectiveExists(effectiveHeadersText, "Link");
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
             linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
             linkHeadersPresent
                 ? "Static host headers include Link discovery hints."
                 : (spec.LinkHeaders ? "No static host Link headers found. Add _headers output or configure host-level response headers." : "Link header generation is disabled."),
-            effectiveHeadersPath);
+            linkHeadersPresent ? linkHeaderPath : fallbackHeadersPath);
 
-        AddSecurityHeaderChecks(checks, effectiveHeadersText, effectiveHeadersPath, spec.SecurityHeaders);
+        AddSecurityHeaderChecks(checks, headersText, headersPath, apacheText, apachePath ?? headersPath, fallbackHeadersPath, spec.SecurityHeaders);
 
         var rootHtml = ReadFirstHtml(siteRoot);
         AddHtmlSemanticsChecks(checks, rootHtml.Text, rootHtml.Path);
@@ -1002,10 +1003,7 @@ public static class WebAgentReadiness
             {
                 foreach (var target in linkTargets.DistinctBy(static t => t.Href, StringComparer.OrdinalIgnoreCase))
                 {
-                    sb.Append("  Link: <").Append(target.Href).Append(">; rel=\"").Append(target.Rel).Append("\"");
-                    if (!string.IsNullOrWhiteSpace(target.Type))
-                        sb.Append("; type=\"").Append(target.Type).Append("\"");
-                    sb.AppendLine();
+                    sb.Append("  Link: ").AppendLine(BuildLinkHeaderValue(target));
                 }
             }
         }
@@ -1281,18 +1279,31 @@ public static class WebAgentReadiness
     private static string BuildLinkHeaderValue(HeaderLinkTarget target)
     {
         var sb = new StringBuilder();
-        sb.Append('<').Append(target.Href).Append(">; rel=\"").Append(target.Rel).Append('"');
+        sb.Append('<').Append(EscapeLinkUriReference(target.Href)).Append(">; rel=\"").Append(EscapeLinkParameterValue(target.Rel)).Append('"');
         if (!string.IsNullOrWhiteSpace(target.Type))
-            sb.Append("; type=\"").Append(target.Type).Append('"');
+            sb.Append("; type=\"").Append(EscapeLinkParameterValue(target.Type!)).Append('"');
         return sb.ToString();
     }
+
+    private static string EscapeLinkUriReference(string value)
+        => StripHeaderControlCharacters(value)
+            .Replace("<", "%3C", StringComparison.Ordinal)
+            .Replace(">", "%3E", StringComparison.Ordinal)
+            .Replace("\"", "%22", StringComparison.Ordinal);
+
+    private static string EscapeLinkParameterValue(string value)
+        => StripHeaderControlCharacters(value)
+            .Replace("\\", "%5C", StringComparison.Ordinal)
+            .Replace("\"", "%22", StringComparison.Ordinal);
 
     private static string BuildContentSignalValue(AgentContentSignalsSpec signals)
         => $"search={(signals.Search ? "yes" : "no")}, ai-input={(signals.AiInput ? "yes" : "no")}, ai-train={(signals.AiTrain ? "yes" : "no")}";
 
+    private static string StripHeaderControlCharacters(string value)
+        => value.Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal);
+
     private static string EscapeApacheQuotedValue(string value)
-        => value.Replace("\r", string.Empty, StringComparison.Ordinal)
-            .Replace("\n", string.Empty, StringComparison.Ordinal)
+        => StripHeaderControlCharacters(value)
             .Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
@@ -1522,38 +1533,74 @@ public static class WebAgentReadiness
         => text.Contains("<urlset", StringComparison.OrdinalIgnoreCase) ||
            text.Contains("<sitemapindex", StringComparison.OrdinalIgnoreCase);
 
-    private static void AddSecurityHeaderChecks(List<WebAgentReadinessCheck> checks, string headersText, string target, AgentSecurityHeadersSpec? spec)
+    private static void AddSecurityHeaderChecks(
+        List<WebAgentReadinessCheck> checks,
+        string headersText,
+        string headersPath,
+        string apacheText,
+        string apachePath,
+        string fallbackTarget,
+        AgentSecurityHeadersSpec? spec)
     {
         var expected = spec?.Enabled == true;
-        AddConfiguredHeaderCheck(checks, "security-hsts", "HSTS", headersText, target, expected && spec!.Hsts, "Strict-Transport-Security",
+        AddConfiguredHeaderCheck(checks, "security-hsts", "HSTS", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.Hsts, "Strict-Transport-Security",
             "Static host headers include HSTS.", "Static host headers do not include Strict-Transport-Security.");
-        AddConfiguredHeaderCheck(checks, "security-csp", "CSP", headersText, target, expected && spec!.ContentSecurityPolicy, "Content-Security-Policy",
+        AddConfiguredHeaderCheck(checks, "security-csp", "CSP", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.ContentSecurityPolicy, "Content-Security-Policy",
             "Static host headers include Content-Security-Policy.", "Static host headers do not include Content-Security-Policy.");
-        AddConfiguredHeaderCheck(checks, "security-xcto", "X-Content-Type-Options", headersText, target, expected && spec!.XContentTypeOptions, "X-Content-Type-Options",
+        AddConfiguredHeaderCheck(checks, "security-xcto", "X-Content-Type-Options", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.XContentTypeOptions, "X-Content-Type-Options",
             "Static host headers include X-Content-Type-Options.", "Static host headers do not include X-Content-Type-Options.");
 
         var hasFrameProtection = HeaderDirectiveExists(headersText, "X-Frame-Options") ||
-                                 headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase);
+                                 HeaderDirectiveExists(apacheText, "X-Frame-Options") ||
+                                 headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase) ||
+                                 apacheText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase);
+        var frameTarget = ResolveHeaderSourcePath("X-Frame-Options", headersText, headersPath, apacheText, apachePath, fallbackTarget);
+        if (frameTarget == fallbackTarget && headersText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase))
+            frameTarget = headersPath;
+        else if (frameTarget == fallbackTarget && apacheText.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase))
+            frameTarget = apachePath;
         AddCheck(checks, "security-xfo", "security-trust", "X-Frame-Options",
             hasFrameProtection ? "pass" : (expected && spec!.XFrameOptions ? "fail" : "info"),
             hasFrameProtection
                 ? "Static host headers include clickjacking protection."
                 : (expected && spec!.XFrameOptions ? "Static host headers do not include X-Frame-Options or CSP frame-ancestors." : "Clickjacking protection header generation is disabled."),
-            target);
+            hasFrameProtection ? frameTarget : fallbackTarget);
 
-        AddConfiguredHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", headersText, target, expected && spec!.ReferrerPolicy, "Referrer-Policy",
+        AddConfiguredHeaderCheck(checks, "security-referrer-policy", "Referrer-Policy", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.ReferrerPolicy, "Referrer-Policy",
             "Static host headers include Referrer-Policy.", "Static host headers do not include Referrer-Policy.");
-        AddConfiguredHeaderCheck(checks, "security-cors", "CORS", headersText, target, expected && spec!.CorsForWellKnown, "Access-Control-Allow-Origin",
+        AddConfiguredHeaderCheck(checks, "security-cors", "CORS", headersText, headersPath, apacheText, apachePath, fallbackTarget, expected && spec!.CorsForWellKnown, "Access-Control-Allow-Origin",
             "Agent discovery resources include CORS headers.", "No Access-Control-Allow-Origin header configured for agent discovery resources.");
     }
 
-    private static void AddConfiguredHeaderCheck(List<WebAgentReadinessCheck> checks, string id, string name, string headersText, string target, bool expected, string headerName, string passMessage, string failMessage)
+    private static void AddConfiguredHeaderCheck(
+        List<WebAgentReadinessCheck> checks,
+        string id,
+        string name,
+        string headersText,
+        string headersPath,
+        string apacheText,
+        string apachePath,
+        string fallbackTarget,
+        bool expected,
+        string headerName,
+        string passMessage,
+        string failMessage)
     {
-        var present = HeaderDirectiveExists(headersText, headerName);
+        var target = ResolveHeaderSourcePath(headerName, headersText, headersPath, apacheText, apachePath, fallbackTarget);
+        var present = target != fallbackTarget || HeaderDirectiveExists(headersText + Environment.NewLine + apacheText, headerName);
         AddCheck(checks, id, "security-trust", name,
             present ? "pass" : (expected ? "fail" : "info"),
             present ? passMessage : (expected ? failMessage : $"{name} header generation is disabled."),
-            target);
+            present ? target : fallbackTarget);
+    }
+
+    private static string ResolveHeaderSourcePath(string headerName, string headersText, string headersPath, string apacheText, string apachePath, string fallbackTarget)
+    {
+        if (HeaderDirectiveExists(headersText, headerName))
+            return headersPath;
+        if (HeaderDirectiveExists(apacheText, headerName))
+            return apachePath;
+        return fallbackTarget;
     }
 
     private static bool HeaderDirectiveExists(string headersText, string headerName)
