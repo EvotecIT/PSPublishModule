@@ -127,6 +127,9 @@ public static class WebAgentReadiness
         if (ShouldWriteHeaders(spec, linkTargets))
             written.Add(UpdateHeaders(siteRoot, spec, linkTargets, markdownArtifactPaths));
 
+        if (spec.Apache?.Enabled == true)
+            written.Add(UpdateApacheConfig(siteRoot, spec, linkTargets, markdownArtifactPaths));
+
         var verify = Verify(new WebAgentReadinessVerifyOptions
         {
             SiteRoot = siteRoot,
@@ -198,15 +201,19 @@ public static class WebAgentReadiness
 
         var headersPath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.HeadersPath) ? "_headers" : spec.HeadersPath!);
         var headersText = File.Exists(headersPath) ? File.ReadAllText(headersPath) : string.Empty;
-        var linkHeadersPresent = File.Exists(headersPath) && headersText.Contains("Link:", StringComparison.OrdinalIgnoreCase);
+        var apachePath = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(spec.Apache?.OutputPath) ? ".htaccess" : spec.Apache!.OutputPath!);
+        var apacheText = File.Exists(apachePath) ? File.ReadAllText(apachePath) : string.Empty;
+        var effectiveHeadersText = string.Join(Environment.NewLine, headersText, apacheText);
+        var linkHeadersPresent = effectiveHeadersText.Contains("Link:", StringComparison.OrdinalIgnoreCase) ||
+                                 effectiveHeadersText.Contains("Header add Link", StringComparison.OrdinalIgnoreCase);
         AddCheck(checks, "link-headers", "discoverability", "Link headers (RFC 8288)",
             linkHeadersPresent ? "pass" : (spec.LinkHeaders ? "fail" : "info"),
             linkHeadersPresent
                 ? "Static host headers include Link discovery hints."
                 : (spec.LinkHeaders ? "No static host Link headers found. Add _headers output or configure host-level response headers." : "Link header generation is disabled."),
-            headersPath);
+            File.Exists(headersPath) ? headersPath : apachePath);
 
-        AddSecurityHeaderChecks(checks, headersText, headersPath, spec.SecurityHeaders);
+        AddSecurityHeaderChecks(checks, effectiveHeadersText, File.Exists(headersPath) ? headersPath : apachePath, spec.SecurityHeaders);
 
         var rootHtml = ReadFirstHtml(siteRoot);
         AddHtmlSemanticsChecks(checks, rootHtml.Text, rootHtml.Path);
@@ -266,9 +273,9 @@ public static class WebAgentReadiness
             var hasWebMcp = Directory.Exists(siteRoot) &&
                             Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
                                 .Take(500)
-                                .Any(file => File.ReadAllText(file).Contains("navigator.modelContext.provideContext", StringComparison.Ordinal));
+                                .Any(file => HtmlContainsWebMcpSignal(File.ReadAllText(file)));
             AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", hasWebMcp ? "pass" : "fail",
-                hasWebMcp ? "Rendered HTML includes WebMCP registration." : "No WebMCP browser tool registration found.",
+                hasWebMcp ? "Rendered HTML includes WebMCP tool registration or declarative tool annotations." : "No WebMCP browser tool registration or declarative tool annotations found.",
                 siteRoot);
         }
 
@@ -351,15 +358,17 @@ public static class WebAgentReadiness
             openApi.Url ?? baseUrl);
 
         var agentSkills = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"), null, cancellationToken).ConfigureAwait(false);
+        var agentSkillsValid = agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text);
         AddCheck(checks, "agent-skills", "api-auth-mcp-skill-discovery", "Agent Skills index",
-            agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text) ? "pass" : "fail",
-            agentSkills.Success && ValidateAgentSkillsIndexText(agentSkills.Text) ? "Agent Skills discovery index is valid." : agentSkills.Message,
+            agentSkillsValid ? "pass" : "info",
+            agentSkillsValid ? "Agent Skills discovery index is valid." : "Agent Skills index was not found or is not valid.",
             CombineUrl(baseUrl, "/.well-known/agent-skills/index.json"));
 
         var agentsJson = await TryGetTextAsync(http, CombineUrl(baseUrl, "/agents.json"), null, cancellationToken).ConfigureAwait(false);
+        var agentsJsonValid = agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text);
         AddCheck(checks, "agents-json", "agent-protocols", "agents.json",
-            agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text) ? "pass" : "fail",
-            agentsJson.Success && ValidateAgentsJsonText(agentsJson.Text) ? "agents.json discovery document is valid." : agentsJson.Message,
+            agentsJsonValid ? "pass" : "info",
+            agentsJsonValid ? "agents.json discovery document is valid." : "agents.json was not found or is not valid.",
             CombineUrl(baseUrl, "/agents.json"));
 
         var a2a = await TryGetTextAsync(http, CombineUrl(baseUrl, "/.well-known/agent-card.json"), null, cancellationToken).ConfigureAwait(false);
@@ -405,7 +414,8 @@ public static class WebAgentReadiness
                 OpenApi = spec.OpenApi,
                 WebMcp = spec.WebMcp,
                 MarkdownArtifacts = spec.MarkdownArtifacts,
-                MarkdownNegotiation = spec.MarkdownNegotiation
+                MarkdownNegotiation = spec.MarkdownNegotiation,
+                Apache = spec.Apache
             };
 
             if (resolved.Enabled)
@@ -427,7 +437,8 @@ public static class WebAgentReadiness
             ContentSignals = new AgentContentSignalsSpec(),
             ApiCatalog = new AgentApiCatalogSpec(),
             AgentSkills = new AgentSkillsDiscoverySpec(),
-            AgentsJson = new AgentDiscoveryDocumentSpec()
+            AgentsJson = new AgentDiscoveryDocumentSpec(),
+            Apache = new AgentApacheSupportSpec { Enabled = false }
         };
     }
 
@@ -937,6 +948,14 @@ public static class WebAgentReadiness
     private static string EscapeMarkdownLinkText(string text)
         => text.Replace("[", "\\[", StringComparison.Ordinal).Replace("]", "\\]", StringComparison.Ordinal);
 
+    private static bool HtmlContainsWebMcpSignal(string html)
+        => !string.IsNullOrWhiteSpace(html) &&
+           (html.Contains("navigator.modelContext.provideContext", StringComparison.Ordinal) ||
+            html.Contains("tool-name=", StringComparison.OrdinalIgnoreCase) ||
+            html.Contains("toolname=", StringComparison.OrdinalIgnoreCase) ||
+            html.Contains("tool-description=", StringComparison.OrdinalIgnoreCase) ||
+            html.Contains("tooldescription=", StringComparison.OrdinalIgnoreCase));
+
     private static bool ShouldWriteHeaders(AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
         => spec.SecurityHeaders?.Enabled == true ||
            (spec.LinkHeaders && linkTargets.Count > 0) ||
@@ -974,6 +993,82 @@ public static class WebAgentReadiness
         }
 
         AppendDiscoveryResourceHeaders(sb, siteRoot, spec, security, markdownArtifactPaths);
+        sb.AppendLine(AgentBlockEnd);
+
+        var next = string.IsNullOrWhiteSpace(cleaned)
+            ? sb.ToString()
+            : cleaned + Environment.NewLine + Environment.NewLine + sb;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, next);
+        return path;
+    }
+
+    private static string UpdateApacheConfig(string siteRoot, AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets, IReadOnlyList<string> markdownArtifactPaths)
+    {
+        var apache = spec.Apache ?? new AgentApacheSupportSpec();
+        var path = ResolveSitePath(siteRoot, string.IsNullOrWhiteSpace(apache.OutputPath) ? ".htaccess" : apache.OutputPath!);
+        var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        var cleaned = RemoveGeneratedBlock(existing).TrimEnd();
+        var sb = new StringBuilder();
+        var security = spec.SecurityHeaders ?? new AgentSecurityHeadersSpec();
+        var contentSignals = spec.ContentSignals ?? new AgentContentSignalsSpec();
+        var writeLinkHeaders = apache.LinkHeaders && spec.LinkHeaders && linkTargets.Count > 0;
+        var writeContentSignals = apache.ContentSignalsHeader && contentSignals.Enabled;
+        var writeMarkdownNegotiation = apache.MarkdownNegotiation && spec.MarkdownNegotiation && spec.MarkdownArtifacts?.Enabled == true && markdownArtifactPaths.Count > 0;
+        var writeDiscoveryHeaders = apache.DiscoveryResourceHeaders;
+        var markdownExtension = NormalizeMarkdownExtension(spec.MarkdownArtifacts?.Extension);
+
+        sb.AppendLine(AgentBlockStart);
+
+        if (writeLinkHeaders || writeContentSignals || security.Enabled || writeDiscoveryHeaders)
+        {
+            sb.AppendLine("<IfModule mod_headers.c>");
+            if (writeMarkdownNegotiation)
+                sb.AppendLine("  Header merge Vary \"Accept\"");
+
+            if (security.Enabled)
+            {
+                AppendApacheHeaderSet(sb, "Strict-Transport-Security", security.Hsts ? security.HstsValue : null);
+                AppendApacheHeaderSet(sb, "Content-Security-Policy", security.ContentSecurityPolicy ? security.ContentSecurityPolicyValue : null);
+                if (security.XContentTypeOptions)
+                    AppendApacheHeaderSet(sb, "X-Content-Type-Options", "nosniff");
+                if (security.XFrameOptions)
+                    AppendApacheHeaderSet(sb, "X-Frame-Options", "DENY");
+                if (security.ReferrerPolicy)
+                    AppendApacheHeaderSet(sb, "Referrer-Policy", string.IsNullOrWhiteSpace(security.ReferrerPolicyValue) ? "strict-origin-when-cross-origin" : security.ReferrerPolicyValue);
+            }
+
+            if (writeContentSignals)
+                AppendApacheHeaderSet(sb, "Content-Signal", BuildContentSignalValue(contentSignals));
+
+            if (writeLinkHeaders)
+            {
+                foreach (var target in linkTargets.DistinctBy(static t => t.Href, StringComparer.OrdinalIgnoreCase))
+                    AppendApacheHeaderAdd(sb, "Link", BuildLinkHeaderValue(target));
+            }
+
+            if (writeDiscoveryHeaders)
+                AppendApacheDiscoveryHeaders(sb, siteRoot, spec, security, markdownArtifactPaths);
+
+            sb.AppendLine("</IfModule>");
+        }
+
+        if (writeMarkdownNegotiation)
+        {
+            sb.AppendLine("<IfModule mod_mime.c>");
+            sb.Append("  AddType text/markdown ").Append(markdownExtension).AppendLine();
+            sb.AppendLine("</IfModule>");
+            sb.AppendLine("<IfModule mod_rewrite.c>");
+            sb.AppendLine("  RewriteEngine On");
+            sb.AppendLine("  RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]");
+            sb.Append("  RewriteCond %{DOCUMENT_ROOT}/index").Append(markdownExtension).AppendLine(" -f");
+            sb.Append("  RewriteRule ^$ /index").Append(markdownExtension).AppendLine(" [L,T=text/markdown]");
+            sb.AppendLine("  RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]");
+            sb.Append("  RewriteCond %{DOCUMENT_ROOT}/$1/index").Append(markdownExtension).AppendLine(" -f");
+            sb.Append("  RewriteRule ^(.+)/$ /$1/index").Append(markdownExtension).AppendLine(" [L,T=text/markdown]");
+            sb.AppendLine("</IfModule>");
+        }
+
         sb.AppendLine(AgentBlockEnd);
 
         var next = string.IsNullOrWhiteSpace(cleaned)
@@ -1036,6 +1131,61 @@ public static class WebAgentReadiness
         }
     }
 
+    private static void AppendApacheDiscoveryHeaders(StringBuilder sb, string siteRoot, AgentReadinessSpec spec, AgentSecurityHeadersSpec security, IReadOnlyList<string> markdownArtifactPaths)
+    {
+        if (spec.ApiCatalog?.Enabled == true)
+        {
+            AppendApacheResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.ApiCatalog.OutputPath, ".well-known/api-catalog"),
+                "application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\"", security);
+        }
+
+        if (spec.AgentSkills?.Enabled == true)
+        {
+            AppendApacheResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.AgentSkills.IndexPath, ".well-known/agent-skills/index.json"),
+                "application/json", security);
+        }
+
+        if (spec.AgentsJson?.Enabled == true)
+        {
+            var routes = new[]
+                {
+                    ResolveSiteRoute(siteRoot, spec.AgentsJson.OutputPath, "agents.json"),
+                    ResolveSiteRoute(siteRoot, spec.AgentsJson.WellKnownOutputPath, ".well-known/agents.json")
+                }
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var route in routes)
+                AppendApacheResourceHeaders(sb, route, "application/json", security);
+        }
+
+        if (spec.A2AAgentCard?.Enabled == true)
+        {
+            AppendApacheResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json"),
+                "application/json", security);
+        }
+
+        if (spec.McpServerCard?.Enabled == true)
+        {
+            AppendApacheResourceHeaders(sb, ResolveSiteRoute(siteRoot, spec.McpServerCard.OutputPath, ".well-known/mcp/server-card.json"),
+                "application/json", security);
+        }
+
+        // Markdown artifacts use AddType/RewriteRule in Apache; per-file Header
+        // blocks would make .htaccess enormous on documentation/blog sites.
+    }
+
+    private static void AppendApacheResourceHeaders(StringBuilder sb, string route, string contentType, AgentSecurityHeadersSpec security)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return;
+
+        sb.Append("  <If \"%{REQUEST_URI} == '").Append(EscapeApacheExpressionString(NormalizeRoute(route))).AppendLine("'\">");
+        AppendApacheHeaderSet(sb, "Content-Type", contentType, indent: "    ");
+        if (security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin))
+            AppendApacheHeaderSet(sb, "Access-Control-Allow-Origin", security.CorsAllowOrigin, indent: "    ");
+        sb.AppendLine("  </If>");
+    }
+
     private static void AppendResourceHeaders(StringBuilder sb, string route, string contentType, AgentSecurityHeadersSpec security)
     {
         if (string.IsNullOrWhiteSpace(route))
@@ -1068,6 +1218,49 @@ public static class WebAgentReadiness
         if (security.Enabled && security.CorsForWellKnown && !string.IsNullOrWhiteSpace(security.CorsAllowOrigin))
             sb.Append("  Access-Control-Allow-Origin: ").Append(security.CorsAllowOrigin!.Trim()).AppendLine();
     }
+
+    private static void AppendApacheHeaderSet(StringBuilder sb, string name, string? value, string indent = "  ")
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        sb.Append(indent)
+            .Append("Header set ")
+            .Append(name)
+            .Append(" \"")
+            .Append(EscapeApacheQuotedValue(value!))
+            .AppendLine("\"");
+    }
+
+    private static void AppendApacheHeaderAdd(StringBuilder sb, string name, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        sb.Append("  Header add ")
+            .Append(name)
+            .Append(" \"")
+            .Append(EscapeApacheQuotedValue(value))
+            .AppendLine("\"");
+    }
+
+    private static string BuildLinkHeaderValue(HeaderLinkTarget target)
+    {
+        var sb = new StringBuilder();
+        sb.Append('<').Append(target.Href).Append(">; rel=\"").Append(target.Rel).Append('"');
+        if (!string.IsNullOrWhiteSpace(target.Type))
+            sb.Append("; type=\"").Append(target.Type).Append('"');
+        return sb.ToString();
+    }
+
+    private static string BuildContentSignalValue(AgentContentSignalsSpec signals)
+        => $"search={(signals.Search ? "yes" : "no")}, ai-input={(signals.AiInput ? "yes" : "no")}, ai-train={(signals.AiTrain ? "yes" : "no")}";
+
+    private static string EscapeApacheQuotedValue(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    private static string EscapeApacheExpressionString(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "\\'", StringComparison.Ordinal);
 
     private static string RemoveGeneratedBlock(string text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : GeneratedBlockRegex.Replace(text, string.Empty);
@@ -1513,11 +1706,23 @@ public static class WebAgentReadiness
            !string.IsNullOrWhiteSpace(value.ToString());
 
     private static bool HeaderExists(HttpResponseMessage? response, string name)
-        => response?.Headers.Contains(name) == true || response?.Content.Headers.Contains(name) == true;
+    {
+        if (response is null)
+            return false;
+
+        return response.Headers.TryGetValues(name, out _) ||
+               response.Content.Headers.TryGetValues(name, out _);
+    }
 
     private static bool HeaderContains(HttpResponseMessage? response, string name, string value)
-        => response?.Headers.TryGetValues(name, out var values) == true &&
-           values.Any(header => header.Contains(value, StringComparison.OrdinalIgnoreCase));
+    {
+        if (response is null)
+            return false;
+
+        return (response.Headers.TryGetValues(name, out var values) ||
+                response.Content.Headers.TryGetValues(name, out values)) &&
+               values.Any(header => header.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string? ResolveOpenApiRoute(string siteRoot, AgentOpenApiSpec? spec)
     {

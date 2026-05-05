@@ -844,7 +844,9 @@
         "MarkdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
         "markdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
         "MarkdownNegotiation": { "type": "boolean" },
-        "markdownNegotiation": { "type": "boolean" }
+        "markdownNegotiation": { "type": "boolean" },
+        "Apache": { "$ref": "#/$defs/AgentApacheSupportSpec" },
+        "apache": { "$ref": "#/$defs/AgentApacheSupportSpec" }
       }
     },
     "AgentMarkdownArtifactsSpec": {
@@ -859,6 +861,24 @@
         "maxPages": { "type": "integer", "minimum": 0 },
         "IncludeTitle": { "type": "boolean" },
         "includeTitle": { "type": "boolean" }
+      }
+    },
+    "AgentApacheSupportSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "LinkHeaders": { "type": "boolean" },
+        "linkHeaders": { "type": "boolean" },
+        "ContentSignalsHeader": { "type": "boolean" },
+        "contentSignalsHeader": { "type": "boolean" },
+        "MarkdownNegotiation": { "type": "boolean" },
+        "markdownNegotiation": { "type": "boolean" },
+        "DiscoveryResourceHeaders": { "type": "boolean" },
+        "discoveryResourceHeaders": { "type": "boolean" }
       }
     },
     "AgentSecurityHeadersSpec": {

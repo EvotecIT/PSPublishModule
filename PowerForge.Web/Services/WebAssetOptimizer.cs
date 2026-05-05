@@ -26,6 +26,10 @@ public static partial class WebAssetOptimizer
     private static readonly Regex ImgHeightAttrRegex = new("\\bheight\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgLoadingAttrRegex = new("\\bloading\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgDecodingAttrRegex = new("\\bdecoding\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex JsonLdScriptTypeRegex = new(
+        "(<script\\b[^>]*?\\btype\\s*=\\s*)application/ld\\+json(?=(?:\\s|>|/))",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private sealed class ImageVariantPlan
     {
@@ -194,6 +198,7 @@ public static partial class WebAssetOptimizer
                 try
                 {
                     minified = HtmlOptimizer.OptimizeHtml(html, cssDecodeEscapes: true, treatAsDocument: true);
+                    minified = PreserveJsonLdScriptTypeQuotes(minified);
                 }
                 catch (Exception ex)
                 {
@@ -321,6 +326,14 @@ public static partial class WebAssetOptimizer
         }
 
         return result;
+    }
+
+    private static string? PreserveJsonLdScriptTypeQuotes(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        return JsonLdScriptTypeRegex.Replace(html, "$1\"application/ld+json\"");
     }
 
     private static AssetHashSpec ResolveHashSpec(WebAssetOptimizerOptions options, AssetPolicySpec? policy)

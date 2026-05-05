@@ -40,6 +40,44 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_PreservesQuotedJsonLdScriptType()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-jsonld-quote-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Example</title>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example"}</script>
+                </head>
+                <body><h1>Example</h1></body>
+                </html>
+                """);
+
+            WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true
+            });
+
+            var optimized = File.ReadAllText(htmlPath);
+            Assert.Contains("type=\"application/ld+json\"", optimized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("type=application/ld+json", optimized, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_WritesRoot404HtmlForNotFoundSlug()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-build-" + Guid.NewGuid().ToString("N"));

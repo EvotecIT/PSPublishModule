@@ -67,6 +67,8 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - robots.txt with Content Signals
 - sitemap.xml integration
 - static host `_headers` with Link headers and well-known content types
+- optional Apache `.htaccess` rules with homepage Link headers and Markdown
+  negotiation for Apache-hosted static sites
 - static security headers for HSTS, CSP, X-Content-Type-Options,
   X-Frame-Options, Referrer-Policy, and discovery-resource CORS
 - optional static Markdown artifacts generated from rendered HTML
@@ -77,7 +79,9 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - optional MCP server card
 - OpenAPI detection/configuration
 - local HTML, JSON-LD, and semantic checks aligned with AI-readiness scanners
-- local WebMCP smoke detection
+- local WebMCP smoke detection for imperative `navigator.modelContext` calls
+  and conservative declarative tool annotations such as `tool-name` and
+  `tool-description`
 - remote scan of live headers and well-known URLs
 
 Cloudflare Markdown for Agents is a host-level feature. PowerForge verifies it
@@ -129,6 +133,14 @@ Add an `agentReadiness` block to `site.json`:
       "maxPages": 0,
       "includeTitle": true
     },
+    "apache": {
+      "enabled": false,
+      "outputPath": ".htaccess",
+      "linkHeaders": true,
+      "contentSignalsHeader": true,
+      "markdownNegotiation": true,
+      "discoveryResourceHeaders": true
+    },
     "a2aAgentCard": {
       "enabled": false
     },
@@ -156,6 +168,14 @@ HTML pages to sibling Markdown files such as `index.md` and `docs/index.md`.
 These files are useful directly and can be served by host-level rules for
 `Accept: text/markdown`. Keep this disabled on very large sites unless the
 extra files are expected; use `maxPages` for staged rollouts.
+
+If `apache.enabled` is true, `agent-ready prepare` appends a managed block to
+`.htaccess` (or `apache.outputPath`). The block emits homepage discovery Link
+headers with `mod_headers`, sets Content Signals as a response header when
+configured, sets content types/CORS for generated well-known resources, and
+uses `mod_rewrite` to serve generated Markdown artifacts when a request sends
+`Accept: text/markdown`. This is intended for Apache static deployments where
+`AllowOverride` and `mod_headers`/`mod_rewrite` are enabled.
 
 Do not enable MCP, WebMCP, OAuth, OpenAPI, A2A, or commerce settings just to
 make a scanner green. These discovery files are contracts. Publish them only
@@ -219,6 +239,15 @@ powerforge-web agent-ready scan --url https://example.com --fail-on-failures
 
 The generated `_headers` file is compatible with Cloudflare Pages-style static
 headers. Other hosts may need their own response-header configuration.
+
+GitHub Pages does not consume `_headers` or `.htaccess`. For GitHub Pages sites,
+generate the discovery files and Markdown artifacts, then put Cloudflare or
+another edge in front if the live site must satisfy response-header and
+`Accept: text/markdown` negotiation checks.
+
+Apache deployments can set `agentReadiness.apache.enabled: true` and run
+`agent-ready prepare` after any step that creates or filters `.htaccess`, so the
+managed agent-readiness block is appended after redirect and cache artifacts.
 
 For Cloudflare zones, enable Markdown for Agents in AI Crawl Control or with a
 Configuration Rule. PowerForge can scan the deployed behavior, but it does not
