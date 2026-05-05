@@ -335,6 +335,7 @@ public class WebAgentReadinessTests
             Assert.Contains("Header always add Link \"</.well-known/api-catalog>; rel=\\\"api-catalog\\\"; type=\\\"application/linkset+json\\\"\"", apache, StringComparison.Ordinal);
             Assert.Contains("Header set Content-Signal \"search=yes, ai-input=yes, ai-train=no\"", apache, StringComparison.Ordinal);
             Assert.DoesNotContain(Environment.NewLine + "  Header set X-Injected", apache, StringComparison.Ordinal);
+            Assert.Contains("Header set Content-Security-Policy \"default-src 'self'Header set X-Injected \\\"bad\\\"\"", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^$ /index.md [L,T=text/markdown]", apache, StringComparison.Ordinal);
             Assert.Contains("<If \"%{REQUEST_URI} == '/.well-known/api-catalog'\">", apache, StringComparison.Ordinal);
