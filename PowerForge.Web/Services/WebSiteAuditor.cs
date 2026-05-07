@@ -41,12 +41,15 @@ public static partial class WebSiteAuditor
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var hasHtmlIncludeScope = options.Include.Any(pattern => !string.IsNullOrWhiteSpace(pattern));
         // Sitemap-wide SEO checks must still inspect every generated page when the main
         // audit is narrowed with Include/MaxHtmlFiles for a fast page sample.
         var sitemapSeoHtmlFiles = options.CheckSeoMeta
-            ? EnumerateHtmlFiles(siteRoot, Array.Empty<string>(), options.Exclude, options.UseDefaultExcludes)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToList()
+            ? hasHtmlIncludeScope
+                ? EnumerateHtmlFiles(siteRoot, Array.Empty<string>(), options.Exclude, options.UseDefaultExcludes)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : allHtmlFiles
             : new List<string>();
         var htmlFiles = allHtmlFiles;
         if (options.MaxHtmlFiles > 0 && htmlFiles.Count > options.MaxHtmlFiles)

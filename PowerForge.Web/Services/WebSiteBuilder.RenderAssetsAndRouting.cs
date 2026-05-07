@@ -1101,6 +1101,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(route))
             return route;
 
+        // Root 404 content is written as /404.html, so public metadata must not advertise /404/.
         var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
         var path = suffixIndex >= 0 ? route.Substring(0, suffixIndex) : route;
         var suffix = suffixIndex >= 0 ? route.Substring(suffixIndex) : string.Empty;
@@ -1209,7 +1210,7 @@ public static partial class WebSiteBuilder
         var queryIndex = normalized.IndexOf('?', StringComparison.Ordinal);
         var query = queryIndex >= 0 ? normalized[queryIndex..] : string.Empty;
         var pathOnly = queryIndex >= 0 ? normalized[..queryIndex] : normalized;
-        // Query-bearing aliases can never equal a canonical route, but the path segment still needs route normalization.
+        // Query-bearing aliases are intentionally preserved as redirects, while their path segment still gets route normalization.
         if (!pathOnly.StartsWith("/", StringComparison.Ordinal))
             pathOnly = "/" + pathOnly.TrimStart('/');
 

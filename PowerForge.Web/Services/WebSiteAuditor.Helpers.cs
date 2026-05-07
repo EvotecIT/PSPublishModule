@@ -797,7 +797,7 @@ public static partial class WebSiteAuditor
             {
                 doc = HtmlParser.ParseWithAngleSharp(html);
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException)
             {
                 parseErrorCount++;
                 AddSample(parseErrorSamples, relativePath, sampleLimit);
