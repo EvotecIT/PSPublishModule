@@ -43,7 +43,7 @@ public static partial class WebApiDocsGenerator
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
-        var indexRoute = NormalizeApiRoute(options.BaseUrl);
+        var indexRoute = NormalizeApiIndexRoute(options.BaseUrl);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var searchScript = JoinHtmlFragments(
@@ -141,7 +141,7 @@ public static partial class WebApiDocsGenerator
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", NormalizeApiRoute(baseUrl)),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", NormalizeApiIndexRoute(baseUrl)),
             ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
@@ -568,6 +568,25 @@ $@"<!doctype html>
         if (!trimmed.StartsWith("/"))
             trimmed = "/" + trimmed;
         return trimmed;
+    }
+
+    private static string NormalizeApiIndexRoute(string? route)
+    {
+        var normalized = NormalizeApiRoute(route);
+        if (string.IsNullOrWhiteSpace(normalized) ||
+            normalized.EndsWith("/", StringComparison.Ordinal))
+            return normalized;
+
+        var path = normalized;
+        var queryIndex = path.IndexOfAny(new[] { '?', '#' });
+        if (queryIndex >= 0)
+            path = path[..queryIndex];
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute))
+            path = absolute.AbsolutePath;
+
+        return string.IsNullOrWhiteSpace(Path.GetExtension(path))
+            ? normalized + "/"
+            : normalized;
     }
 
     private static string ResolveApiAbsoluteUrl(string? siteBaseUrl, string? routeOrUrl)

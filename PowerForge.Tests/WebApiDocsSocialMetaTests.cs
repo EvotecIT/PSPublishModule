@@ -55,7 +55,7 @@ public class WebApiDocsSocialMetaTests
             Assert.True(File.Exists(htmlIndexPath));
             var html = File.ReadAllText(htmlIndexPath);
             Assert.Contains("property=\"og:title\"", html, StringComparison.Ordinal);
-            Assert.Contains("property=\"og:url\" content=\"https://example.test/api\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:url\" content=\"https://example.test/api/\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/share-card.png\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image:alt\" content=\"Sample API Reference\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
@@ -65,7 +65,7 @@ public class WebApiDocsSocialMetaTests
             Assert.Contains("name=\"twitter:creator\" content=\"@apiAuthor\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/share-card.png\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image:alt\" content=\"Sample API Reference\"", html, StringComparison.Ordinal);
-            Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/api\"", html, StringComparison.Ordinal);
+            Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/api/\"", html, StringComparison.Ordinal);
         }
         finally
         {
