@@ -759,12 +759,24 @@ public static partial class WebSiteAuditor
         return raw;
     }
 
-    private static SitemapSeoScan CollectSitemapSeoMetadata(string siteRoot, IReadOnlyCollection<string> htmlFiles)
+    private static SitemapSeoScan CollectSitemapSeoMetadata(
+        string siteRoot,
+        IReadOnlyCollection<string> htmlFiles,
+        Action<string, string, string?, string, string?> addIssue)
     {
+        const int sampleLimit = 5;
         var noIndexRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pagesByRoute = new Dictionary<string, SitemapPageSeoMetadata>(StringComparer.OrdinalIgnoreCase);
+        var readErrorSamples = new List<string>(sampleLimit);
+        var parseErrorSamples = new List<string>(sampleLimit);
+        var routeCollisionSamples = new List<string>(sampleLimit);
+        var readErrorCount = 0;
+        var parseErrorCount = 0;
+        var routeCollisionCount = 0;
+
         foreach (var file in htmlFiles)
         {
+            var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
             string html;
             try
             {
@@ -772,6 +784,8 @@ public static partial class WebSiteAuditor
             }
             catch
             {
+                readErrorCount++;
+                AddSample(readErrorSamples, relativePath, sampleLimit);
                 continue;
             }
 
@@ -785,10 +799,11 @@ public static partial class WebSiteAuditor
             }
             catch
             {
+                parseErrorCount++;
+                AddSample(parseErrorSamples, relativePath, sampleLimit);
                 continue;
             }
 
-            var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
             var routePath = ToRoutePath(relativePath);
             if (doc.Head is not null)
             {
@@ -802,7 +817,18 @@ public static partial class WebSiteAuditor
                     foreach (var candidate in BuildGeneratedPageRouteCandidates(relativePath, routePath))
                     {
                         if (!string.IsNullOrWhiteSpace(candidate))
+                        {
+                            if (pagesByRoute.TryGetValue(candidate, out var existing) &&
+                                (!string.Equals(existing.RelativePath, metadata.RelativePath, StringComparison.OrdinalIgnoreCase) ||
+                                 !string.Equals(existing.CanonicalUrl, metadata.CanonicalUrl, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                routeCollisionCount++;
+                                AddSample(routeCollisionSamples, $"{candidate} ({existing.RelativePath}, {metadata.RelativePath})", sampleLimit);
+                                continue;
+                            }
+
                             pagesByRoute[candidate] = metadata;
+                        }
                     }
                 }
             }
@@ -817,7 +843,39 @@ public static partial class WebSiteAuditor
             }
         }
 
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-metadata-read-error",
+            "sitemap SEO metadata scan skipped {0} HTML file(s) that could not be read.",
+            readErrorCount, readErrorSamples);
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-metadata-parse-error",
+            "sitemap SEO metadata scan skipped {0} HTML file(s) that could not be parsed.",
+            parseErrorCount, parseErrorSamples);
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-route-collision",
+            "sitemap SEO metadata scan found {0} generated route candidate collision(s).",
+            routeCollisionCount, routeCollisionSamples);
+
         return new SitemapSeoScan(noIndexRoutes, pagesByRoute);
+    }
+
+    private static void AddSample(List<string> samples, string value, int sampleLimit)
+    {
+        if (samples.Count < sampleLimit && !string.IsNullOrWhiteSpace(value))
+            samples.Add(value);
+    }
+
+    private static void AddSitemapSeoScanSummaryIssue(
+        Action<string, string, string?, string, string?> addIssue,
+        string hint,
+        string messageFormat,
+        int count,
+        List<string> samples)
+    {
+        if (count <= 0)
+            return;
+
+        var sampleText = samples.Count > 0 ? $" Sample: {string.Join(", ", samples)}." : string.Empty;
+        addIssue("warning", "seo", "sitemap.xml",
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, messageFormat, count) + sampleText,
+            hint);
     }
 
     private static void ValidateSitemapSeoConsistency(
@@ -954,6 +1012,7 @@ public static partial class WebSiteAuditor
         var authority = uri.IsDefaultPort
             ? uri.IdnHost.ToLowerInvariant()
             : uri.IdnHost.ToLowerInvariant() + ":" + uri.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Fragments are intentionally omitted because sitemap and canonical URLs identify documents, not anchors.
         return $"{uri.Scheme.ToLowerInvariant()}://{authority}{path}{uri.Query}";
     }
 

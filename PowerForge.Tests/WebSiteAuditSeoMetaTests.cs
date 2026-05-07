@@ -81,6 +81,7 @@ public class WebSiteAuditSeoMetaTests
                 """);
 
             var options = CreateSeoOnlyOptions(root);
+            // The sitemap SEO pass stays global even when the normal audit is scoped to a page sample.
             options.Include = new[] { "index.html" };
 
             var result = WebSiteAuditor.Audit(options);
@@ -134,6 +135,7 @@ public class WebSiteAuditSeoMetaTests
                 """);
 
             var options = CreateSeoOnlyOptions(root);
+            // The sitemap SEO pass stays global even when the normal audit is scoped to a page sample.
             options.Include = new[] { "index.html" };
 
             var result = WebSiteAuditor.Audit(options);
