@@ -54,6 +54,10 @@ public sealed class WebSitemapOptions
     public string? HtmlCssHref { get; set; }
     /// <summary>When true, include the generated HTML sitemap route in sitemap.xml.</summary>
     public bool IncludeGeneratedHtmlRouteInXml { get; set; }
+    /// <summary>When true, write a lightweight browser stylesheet for generated XML sitemaps. The generated stylesheet file is overwritten on each run when the href resolves under the site root.</summary>
+    public bool GenerateBrowserStylesheet { get; set; } = true;
+    /// <summary>Optional href override for the generated XML sitemap browser stylesheet.</summary>
+    public string? BrowserStylesheetHref { get; set; }
     /// <summary>Optional news sitemap generation options.</summary>
     public WebSitemapNewsOptions? NewsSitemap { get; set; }
     /// <summary>Optional image sitemap generation options.</summary>
@@ -142,6 +146,9 @@ public sealed class WebSitemapAlternate
 /// <summary>Generates sitemap.xml for the site output.</summary>
 public static partial class WebSitemapGenerator
 {
+    private const string DefaultSitemapStylesheetHref = "/sitemap.css";
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     private static readonly string[] DefaultExcludedHtmlPatterns =
     {
         "*.scripts.html",
@@ -315,9 +322,10 @@ public static partial class WebSitemapGenerator
         var entriesXml = orderedEntries
             .Select(u => BuildEntry(baseUrl, u, today, ns, xhtmlNs))
             .ToArray();
+        var browserStylesheetHref = ResolveSitemapBrowserStylesheetHref(options);
 
-        var doc = new XDocument(
-            new XDeclaration("1.0", "UTF-8", null),
+        var doc = CreateSitemapDocument(
+            browserStylesheetHref,
             new XElement(
                 ns + "urlset",
                 new XAttribute(XNamespace.Xmlns + "xhtml", xhtmlNs.NamespaceName),
@@ -328,6 +336,7 @@ public static partial class WebSitemapGenerator
         {
             doc.Save(stream);
         }
+        WriteSitemapBrowserStylesheet(siteRoot, browserStylesheetHref);
 
         if (generateNewsSitemap && !string.IsNullOrWhiteSpace(newsOutputPath))
         {
@@ -336,6 +345,7 @@ public static partial class WebSitemapGenerator
                 baseUrl,
                 options.NewsSitemap!,
                 orderedEntries,
+                browserStylesheetHref,
                 today,
                 newsOutputPath);
         }
@@ -346,6 +356,7 @@ public static partial class WebSitemapGenerator
                 baseUrl,
                 options.ImageSitemap!,
                 orderedEntries,
+                browserStylesheetHref,
                 imageOutputPath);
         }
         if (generateVideoSitemap && !string.IsNullOrWhiteSpace(videoOutputPath))
@@ -355,6 +366,7 @@ public static partial class WebSitemapGenerator
                 baseUrl,
                 options.VideoSitemap!,
                 orderedEntries,
+                browserStylesheetHref,
                 videoOutputPath);
         }
 
@@ -364,6 +376,7 @@ public static partial class WebSitemapGenerator
                 siteRoot,
                 baseUrl,
                 indexOutputPath,
+                browserStylesheetHref,
                 today,
                 outputPath,
                 newsOutputPath,
@@ -392,6 +405,127 @@ public static partial class WebSitemapGenerator
             HtmlOutputPath = htmlOutputPath,
             UrlCount = entriesXml.Length
         };
+    }
+
+    private static string? ResolveSitemapBrowserStylesheetHref(WebSitemapOptions options)
+    {
+        if (!options.GenerateBrowserStylesheet)
+            return null;
+
+        var href = string.IsNullOrWhiteSpace(options.BrowserStylesheetHref)
+            ? DefaultSitemapStylesheetHref
+            : options.BrowserStylesheetHref.Trim();
+        if (href.Contains('"') || href.Contains("?>", StringComparison.Ordinal))
+            throw new ArgumentException("BrowserStylesheetHref cannot contain double quotes or processing instruction terminators.", nameof(options));
+
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absoluteUri))
+        {
+            if (absoluteUri.Scheme != Uri.UriSchemeHttp && absoluteUri.Scheme != Uri.UriSchemeHttps)
+                throw new ArgumentException("BrowserStylesheetHref absolute URLs must use http or https.", nameof(options));
+
+            return href;
+        }
+
+        return href.StartsWith("/", StringComparison.Ordinal) ? href : "/" + href;
+    }
+
+    private static XDocument CreateSitemapDocument(string? browserStylesheetHref, XElement root)
+    {
+        return string.IsNullOrWhiteSpace(browserStylesheetHref)
+            ? new XDocument(new XDeclaration("1.0", "UTF-8", null), root)
+            : new XDocument(
+                new XDeclaration("1.0", "UTF-8", null),
+                new XProcessingInstruction(
+                    "xml-stylesheet",
+                    $"type=\"text/css\" href=\"{browserStylesheetHref}\""),
+                root);
+    }
+
+    private static void WriteSitemapBrowserStylesheet(string siteRoot, string? browserStylesheetHref)
+    {
+        if (!TryResolveRootRelativeHref(siteRoot, browserStylesheetHref, out var outputPath))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
+        File.WriteAllText(
+            outputPath,
+            """
+            urlset, sitemapindex {
+              display: block;
+              min-height: 100vh;
+              box-sizing: border-box;
+              padding: 24px;
+              background: #f8fafc;
+              color: #0f172a;
+              font-family: "Segoe UI", Arial, sans-serif;
+            }
+            urlset::before {
+              content: "XML sitemap";
+              display: block;
+              margin: 0 0 16px;
+              font-size: 28px;
+              font-weight: 700;
+            }
+            sitemapindex::before {
+              content: "XML sitemap index";
+              display: block;
+              margin: 0 0 16px;
+              font-size: 28px;
+              font-weight: 700;
+            }
+            url, sitemap {
+              display: block;
+              margin: 0 0 12px;
+              padding: 14px 16px;
+              border: 1px solid #dbe4ef;
+              border-radius: 8px;
+              background: #ffffff;
+              box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            }
+            loc {
+              display: block;
+              margin: 0 0 8px;
+              color: #075985;
+              font-family: "Cascadia Mono", Consolas, monospace;
+              font-size: 14px;
+              word-break: break-all;
+            }
+            lastmod, changefreq, priority {
+              display: inline-block;
+              margin-right: 16px;
+              color: #475569;
+              font-size: 13px;
+            }
+            lastmod::before { content: "Last modified: "; font-weight: 600; color: #334155; }
+            changefreq::before { content: "Change frequency: "; font-weight: 600; color: #334155; }
+            priority::before { content: "Priority: "; font-weight: 600; color: #334155; }
+            link {
+              display: none;
+            }
+            """,
+            Utf8NoBom);
+    }
+
+    private static bool TryResolveRootRelativeHref(string siteRoot, string? href, out string outputPath)
+    {
+        outputPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(href))
+            return false;
+
+        var trimmed = href.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+            return false;
+
+        var pathOnly = trimmed.Split('?', '#')[0].TrimStart('/');
+        if (string.IsNullOrWhiteSpace(pathOnly))
+            return false;
+
+        var candidate = Path.GetFullPath(Path.Combine(siteRoot, pathOnly.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsUnderRoot(siteRoot, candidate))
+            return false;
+
+        outputPath = candidate;
+        return true;
     }
 
     private static string NormalizeRoute(string path)
