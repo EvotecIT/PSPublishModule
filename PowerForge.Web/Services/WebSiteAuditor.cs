@@ -215,19 +215,26 @@ public static partial class WebSiteAuditor
             .Select(route => route.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var htmlSet = new HashSet<string>(
-            htmlFiles.Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
-            StringComparer.OrdinalIgnoreCase);
+        HashSet<string>? routeFileSet = null;
+        HashSet<string> GetRouteFileSet()
+        {
+            return routeFileSet ??= new HashSet<string>(
+                EnumerateRouteFiles(siteRoot, options.Exclude, options.UseDefaultExcludes)
+                    .Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
         requiredRouteCount = requiredRoutes.Length;
         if (requiredRoutes.Length > 0)
         {
+            var generatedRoutes = GetRouteFileSet();
             foreach (var requiredRoute in requiredRoutes)
             {
                 var candidates = ResolveRequiredRouteCandidates(requiredRoute);
                 if (candidates.Length == 0)
                     continue;
 
-                var exists = candidates.Any(candidate => htmlSet.Contains(candidate));
+                var exists = candidates.Any(candidate => generatedRoutes.Contains(candidate));
                 if (exists)
                     continue;
 
@@ -247,6 +254,7 @@ public static partial class WebSiteAuditor
         forbiddenRouteCount = forbiddenRoutes.Length;
         if (forbiddenRoutes.Length > 0)
         {
+            var generatedRoutes = GetRouteFileSet();
             foreach (var forbiddenRoute in forbiddenRoutes)
             {
                 var candidates = ResolveRequiredRouteCandidates(forbiddenRoute);
@@ -254,7 +262,7 @@ public static partial class WebSiteAuditor
                     continue;
 
                 var matches = candidates
-                    .Where(candidate => htmlSet.Contains(candidate))
+                    .Where(candidate => generatedRoutes.Contains(candidate))
                     .ToArray();
                 if (matches.Length == 0)
                     continue;

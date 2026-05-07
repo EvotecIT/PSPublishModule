@@ -635,6 +635,43 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_AcceptsRequiredStaticFileRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-required-static-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllBytes(Path.Combine(root, "favicon.ico"), new byte[] { 0, 0, 1, 0, 0, 0 });
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                RequiredRoutes = new[] { "/", "/favicon.ico" },
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(2, result.RequiredRouteCount);
+            Assert.Equal(0, result.MissingRequiredRouteCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FailsWhenForbiddenRouteExists()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-forbidden-routes-" + Guid.NewGuid().ToString("N"));
@@ -672,6 +709,44 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Equal(1, result.ForbiddenRouteCount);
             Assert.Equal(1, result.PresentForbiddenRouteCount);
             Assert.Contains(result.Errors, error => error.Contains("forbidden route '/pl/kontakt/' exists", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FailsWhenForbiddenStaticFileRouteExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-forbidden-static-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllBytes(Path.Combine(root, "favicon.ico"), new byte[] { 0, 0, 1, 0, 0, 0 });
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                ForbiddenRoutes = new[] { "/favicon.ico" },
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(1, result.ForbiddenRouteCount);
+            Assert.Equal(1, result.PresentForbiddenRouteCount);
+            Assert.Contains(result.Errors, error => error.Contains("forbidden route '/favicon.ico' exists", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
