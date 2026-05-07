@@ -50,6 +50,163 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
+    public void Generate_WritesSitemapCss_AndEmitsProcessingInstruction()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            Assert.True(File.Exists(Path.Combine(root, "sitemap.css")));
+            var doc = XDocument.Load(result.OutputPath);
+            var stylesheet = doc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(stylesheet);
+            Assert.Contains("href=\"/sitemap.css\"", stylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+
+            var css = File.ReadAllText(Path.Combine(root, "sitemap.css"));
+            Assert.Contains("urlset::before", css, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_CanDisableBrowserStylesheet()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-off-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                GenerateBrowserStylesheet = false
+            });
+
+            Assert.False(File.Exists(Path.Combine(root, "sitemap.css")));
+            var doc = XDocument.Load(result.OutputPath);
+            Assert.DoesNotContain(doc.Nodes().OfType<XProcessingInstruction>(), node => node.Target == "xml-stylesheet");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_CanUseCustomBrowserStylesheetHref()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-custom-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                BrowserStylesheetHref = "assets/sitemap-view.css"
+            });
+
+            Assert.True(File.Exists(Path.Combine(root, "assets", "sitemap-view.css")));
+            var doc = XDocument.Load(result.OutputPath);
+            var stylesheet = doc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(stylesheet);
+            Assert.Contains("href=\"/assets/sitemap-view.css\"", stylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_CanUseAbsoluteBrowserStylesheetHref()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-absolute-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                BrowserStylesheetHref = "https://cdn.example.test/sitemap.css"
+            });
+
+            Assert.False(File.Exists(Path.Combine(root, "sitemap.css")));
+            var doc = XDocument.Load(result.OutputPath);
+            var stylesheet = doc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(stylesheet);
+            Assert.Contains("href=\"https://cdn.example.test/sitemap.css\"", stylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsUnsafeBrowserStylesheetHref()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-unsafe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            Assert.Throws<ArgumentException>(() => WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                BrowserStylesheetHref = "/sitemap.css\" type=\"text/xsl"
+            }));
+
+            Assert.Throws<ArgumentException>(() => WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                BrowserStylesheetHref = "javascript:alert(1)"
+            }));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_CollapsesLegacyApiHtmlAliases_FromMergedApiSitemap()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-api-merge-alias-" + Guid.NewGuid().ToString("N"));
@@ -301,10 +458,15 @@ public class WebSitemapGeneratorCanonicalizationTests
             Assert.True(File.Exists(result.OutputPath));
             Assert.True(File.Exists(result.NewsOutputPath));
             Assert.True(File.Exists(result.IndexOutputPath));
+            Assert.True(File.Exists(Path.Combine(root, "sitemap.css")));
 
             var newsNs = XNamespace.Get("http://www.google.com/schemas/sitemap-news/0.9");
             var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
             var newsDoc = XDocument.Load(result.NewsOutputPath!);
+            var newsStylesheet = newsDoc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(newsStylesheet);
+            Assert.Contains("href=\"/sitemap.css\"", newsStylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+
             var newsUrls = newsDoc.Descendants(sitemapNs + "url").ToArray();
             Assert.Single(newsUrls);
             Assert.Contains("https://example.test/news/launch/",
@@ -319,6 +481,10 @@ public class WebSitemapGeneratorCanonicalizationTests
                     .Value);
 
             var indexDoc = XDocument.Load(result.IndexOutputPath!);
+            var stylesheet = indexDoc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(stylesheet);
+            Assert.Contains("href=\"/sitemap.css\"", stylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+
             var indexedLocs = indexDoc
                 .Descendants(sitemapNs + "sitemap")
                 .Select(node => node.Element(sitemapNs + "loc")?.Value)
@@ -419,12 +585,20 @@ public class WebSitemapGeneratorCanonicalizationTests
             var videoNs = XNamespace.Get("http://www.google.com/schemas/sitemap-video/1.1");
 
             var imageDoc = XDocument.Load(result.ImageOutputPath!);
+            var imageStylesheet = imageDoc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(imageStylesheet);
+            Assert.Contains("href=\"/sitemap.css\"", imageStylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+
             Assert.Contains(
                 "https://example.test/assets/hero.png",
                 imageDoc.Descendants(imageNs + "loc").Select(node => node.Value),
                 StringComparer.OrdinalIgnoreCase);
 
             var videoDoc = XDocument.Load(result.VideoOutputPath!);
+            var videoStylesheet = videoDoc.Nodes().OfType<XProcessingInstruction>().FirstOrDefault(node => node.Target == "xml-stylesheet");
+            Assert.NotNull(videoStylesheet);
+            Assert.Contains("href=\"/sitemap.css\"", videoStylesheet!.Data, StringComparison.OrdinalIgnoreCase);
+
             Assert.Contains(
                 "https://example.test/media/demo.mp4",
                 videoDoc.Descendants(videoNs + "content_loc").Select(node => node.Value),
