@@ -42,7 +42,7 @@ public static partial class WebSiteAuditor
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
         // Sitemap-wide SEO checks must still inspect every generated page when the main
-        // audit is narrowed with Include for a fast page sample.
+        // audit is narrowed with Include/MaxHtmlFiles for a fast page sample.
         var sitemapSeoHtmlFiles = options.CheckSeoMeta
             ? EnumerateHtmlFiles(siteRoot, Array.Empty<string>(), options.Exclude, options.UseDefaultExcludes)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)

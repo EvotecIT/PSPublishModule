@@ -782,7 +782,7 @@ public static partial class WebSiteAuditor
             {
                 html = File.ReadAllText(file);
             }
-            catch
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
                 readErrorCount++;
                 AddSample(readErrorSamples, relativePath, sampleLimit);
@@ -797,7 +797,7 @@ public static partial class WebSiteAuditor
             {
                 doc = HtmlParser.ParseWithAngleSharp(html);
             }
-            catch
+            catch (Exception)
             {
                 parseErrorCount++;
                 AddSample(parseErrorSamples, relativePath, sampleLimit);
@@ -814,6 +814,7 @@ public static partial class WebSiteAuditor
                 if (!string.IsNullOrWhiteSpace(canonicalHref))
                 {
                     var metadata = new SitemapPageSeoMetadata(relativePath, canonicalHref);
+                    var routeCollisionRecordedForPage = false;
                     foreach (var candidate in BuildGeneratedPageRouteCandidates(relativePath, routePath))
                     {
                         if (!string.IsNullOrWhiteSpace(candidate))
@@ -822,8 +823,13 @@ public static partial class WebSiteAuditor
                                 (!string.Equals(existing.RelativePath, metadata.RelativePath, StringComparison.OrdinalIgnoreCase) ||
                                  !string.Equals(existing.CanonicalUrl, metadata.CanonicalUrl, StringComparison.OrdinalIgnoreCase)))
                             {
-                                routeCollisionCount++;
-                                AddSample(routeCollisionSamples, $"{candidate} ({existing.RelativePath}, {metadata.RelativePath})", sampleLimit);
+                                // Keep first-registered route metadata deterministic while reporting the colliding page once.
+                                if (!routeCollisionRecordedForPage)
+                                {
+                                    routeCollisionCount++;
+                                    AddSample(routeCollisionSamples, $"{candidate} ({existing.RelativePath}, {metadata.RelativePath})", sampleLimit);
+                                    routeCollisionRecordedForPage = true;
+                                }
                                 continue;
                             }
 

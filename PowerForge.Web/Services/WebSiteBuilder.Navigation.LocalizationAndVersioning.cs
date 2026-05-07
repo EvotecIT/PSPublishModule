@@ -608,21 +608,6 @@ public static partial class WebSiteBuilder
         return EnsureTrailingSlash(publicRoute, spec.TrailingSlash);
     }
 
-    private static string NormalizeRootNotFoundPublicRoute(string route)
-    {
-        if (string.IsNullOrWhiteSpace(route))
-            return route;
-
-        var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
-        var path = suffixIndex >= 0 ? route.Substring(0, suffixIndex) : route;
-        var suffix = suffixIndex >= 0 ? route.Substring(suffixIndex) : string.Empty;
-        var normalizedPath = NormalizePath(path);
-        return normalizedPath.Equals("404", StringComparison.OrdinalIgnoreCase) ||
-               normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase)
-            ? "/404.html" + suffix
-            : route;
-    }
-
     private static string RebaseRouteForSelectedLanguageRootBuild(
         SiteSpec spec,
         string route)

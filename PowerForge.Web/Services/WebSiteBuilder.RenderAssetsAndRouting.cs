@@ -1096,6 +1096,21 @@ public static partial class WebSiteBuilder
         return path;
     }
 
+    private static string NormalizeRootNotFoundPublicRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return route;
+
+        var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
+        var path = suffixIndex >= 0 ? route.Substring(0, suffixIndex) : route;
+        var suffix = suffixIndex >= 0 ? route.Substring(suffixIndex) : string.Empty;
+        var normalizedPath = NormalizePath(path);
+        return normalizedPath.Equals("404", StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase)
+            ? "/404.html" + suffix
+            : route;
+    }
+
     private static string NormalizePath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
@@ -1194,6 +1209,7 @@ public static partial class WebSiteBuilder
         var queryIndex = normalized.IndexOf('?', StringComparison.Ordinal);
         var query = queryIndex >= 0 ? normalized[queryIndex..] : string.Empty;
         var pathOnly = queryIndex >= 0 ? normalized[..queryIndex] : normalized;
+        // Query-bearing aliases can never equal a canonical route, but the path segment still needs route normalization.
         if (!pathOnly.StartsWith("/", StringComparison.Ordinal))
             pathOnly = "/" + pathOnly.TrimStart('/');
 
