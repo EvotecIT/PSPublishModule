@@ -773,7 +773,7 @@ public class WebPipelineRunnerProjectApiDocsTests
                       {
                         "code": "fr",
                         "label": "Français",
-                        "baseUrl": "https://example.test"
+                        "baseUrl": "https://fr.example.test"
                       }
                     ]
                   },
@@ -842,6 +842,7 @@ public class WebPipelineRunnerProjectApiDocsTests
 
             Assert.True(result.Success);
             var html = File.ReadAllText(Path.Combine(root, "_site-fr", "projects", "alpha", "api", "index.html"));
+            Assert.Contains("<link rel=\"canonical\" href=\"https://fr.example.test/fr/projects/alpha/api/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("id=\"overview\" href=\"/fr/projects/alpha/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("id=\"api\" href=\"/fr/projects/alpha/api/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("id=\"docs\" href=\"https://example.test/projects/alpha/docs/\"", html, StringComparison.OrdinalIgnoreCase);

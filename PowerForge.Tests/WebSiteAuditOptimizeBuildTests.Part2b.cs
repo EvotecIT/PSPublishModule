@@ -144,4 +144,112 @@ public partial class WebSiteAuditOptimizeBuildTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Build_LanguageRootRebase_PreservesFileAssetUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-language-root-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "index.md"),
+                """
+                ---
+                title: Home
+                ---
+
+            # Home
+
+            <img src="/assets/logo.png" alt="Logo" />
+            """);
+            var localizedContentRoot = Path.Combine(contentRoot, "pl");
+            Directory.CreateDirectory(localizedContentRoot);
+            File.WriteAllText(Path.Combine(localizedContentRoot, "index.md"),
+                """
+                ---
+                title: Start
+                ---
+
+                # Start
+
+                <img src="/assets/logo.png" alt="Logo" />
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Default = true, BaseUrl = "https://example.test" },
+                        new LanguageSpec { Code = "pl", BaseUrl = "https://pl.example.test", RenderAtRoot = true }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                AssetRegistry = new AssetRegistrySpec
+                {
+                    Bundles = new[]
+                    {
+                        new AssetBundleSpec
+                        {
+                            Name = "main",
+                            Css = new[] { "/assets/app.css" },
+                            Js = new[] { "/assets/app.js" }
+                        }
+                    },
+                    RouteBundles = new[]
+                    {
+                        new RouteBundleSpec { Match = "**", Bundles = new[] { "main" } }
+                    },
+                    Preloads = new[]
+                    {
+                        new PreloadSpec { Href = "/assets/font.woff2", As = "font", Type = "font/woff2" }
+                    }
+                },
+                Feed = new FeedSpec
+                {
+                    Enabled = true
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot, language: "pl", languageAsRoot: true);
+
+            var html = File.ReadAllText(Path.Combine(outputRoot, "index.html"));
+            Assert.Contains("href=\"/assets/app.css\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/assets/app.js\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/assets/font.woff2\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/assets/logo.png\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/app.css/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/app.js/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/font.woff2/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/assets/logo.png/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }
