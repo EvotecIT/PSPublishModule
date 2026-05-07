@@ -81,6 +81,18 @@ public static partial class WebSiteAuditor
         }
     }
 
+    private static IEnumerable<string> EnumerateRouteFiles(string root, string[] excludePatterns, bool useDefaultExcludes)
+    {
+        var excludes = BuildExcludePatterns(excludePatterns, useDefaultExcludes);
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (excludes.Length > 0 && MatchesAny(excludes, relative))
+                continue;
+            yield return file;
+        }
+    }
+
     private static string[] NormalizePatterns(string[] patterns)
     {
         return patterns
