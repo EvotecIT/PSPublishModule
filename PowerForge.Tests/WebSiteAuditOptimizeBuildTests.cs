@@ -565,6 +565,87 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_SkipsAliasRedirects_ThatResolveToCanonicalRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-self-alias-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "allianz.md"),
+                """
+                ---
+                title: Allianz
+                slug: allianz
+                aliases:
+                  - /allianz/
+                  - /?page_id=8328
+                ---
+
+                Allianz
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "self-alias-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "page.html"),
+                """
+                <!doctype html>
+                <html><body>{{ content }}</body></html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Self Alias Redirect Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "self-alias-test",
+                ThemesRoot = "themes",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/",
+                        DefaultLayout = "page"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var metadataPath = Path.Combine(result.OutputPath, "_powerforge", "redirects.json");
+            using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+            var redirects = metadata.RootElement.GetProperty("redirects")
+                .EnumerateArray()
+                .Select(static entry => new
+                {
+                    From = entry.GetProperty("from").GetString(),
+                    To = entry.GetProperty("to").GetString()
+                })
+                .ToArray();
+
+            Assert.DoesNotContain(redirects, static entry =>
+                string.Equals(entry.From, "/allianz", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.From, "/allianz/", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(redirects, static entry =>
+                string.Equals(entry.From, "/?page_id=8328", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.To, "/allianz", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_FeedOptions_LimitItems_IncludeContent_AndRespectTaxonomyOutputs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-options-" + Guid.NewGuid().ToString("N"));

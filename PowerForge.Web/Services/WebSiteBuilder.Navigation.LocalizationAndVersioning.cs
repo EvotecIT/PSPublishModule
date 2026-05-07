@@ -15,13 +15,17 @@ public static partial class WebSiteBuilder
     {
         var localization = ResolveLocalizationConfig(spec);
         var currentCode = ResolveEffectiveLanguageCode(localization, page.Language);
-        var currentPath = string.IsNullOrWhiteSpace(page.OutputPath) ? "/" : page.OutputPath;
+        var currentPath = string.IsNullOrWhiteSpace(page.OutputPath)
+            ? "/"
+            : ResolvePublicRouteForLanguage(spec, localization, page.OutputPath, currentCode);
 
         var languages = new List<LocalizationLanguageRuntime>();
         foreach (var language in localization.Languages)
         {
             var route = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
-            var localRoute = string.IsNullOrWhiteSpace(route) ? currentPath : route;
+            var localRoute = string.IsNullOrWhiteSpace(route)
+                ? currentPath
+                : ResolvePublicRouteForLanguage(spec, localization, route, language.Code);
             var publicRoute = route;
             if (!string.IsNullOrWhiteSpace(route) &&
                 !route.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
@@ -597,7 +601,11 @@ public static partial class WebSiteBuilder
             return EnsureTrailingSlash(normalizedRoute, spec.TrailingSlash);
 
         var stripped = StripLanguagePrefix(localization, normalizedRoute);
-        return EnsureTrailingSlash(stripped, spec.TrailingSlash);
+        var publicRoute = NormalizeRootNotFoundPublicRoute(stripped);
+        if (publicRoute.StartsWith("/404.html", StringComparison.OrdinalIgnoreCase))
+            return publicRoute;
+
+        return EnsureTrailingSlash(publicRoute, spec.TrailingSlash);
     }
 
     private static string RebaseRouteForSelectedLanguageRootBuild(

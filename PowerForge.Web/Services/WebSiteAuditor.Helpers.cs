@@ -684,8 +684,7 @@ public static partial class WebSiteAuditor
     private static string[] BuildRouteCandidatesForSeoChecks(string relativePath, string routePath, AngleSharp.Dom.IDocument doc)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddRouteCandidates(candidates, routePath);
-        AddRouteCandidates(candidates, "/" + relativePath.Replace('\\', '/').TrimStart('/'));
+        AddGeneratedPageRouteCandidates(candidates, relativePath, routePath);
 
         if (doc.Head is not null)
         {
@@ -698,6 +697,19 @@ public static partial class WebSiteAuditor
         }
 
         return candidates.ToArray();
+    }
+
+    private static string[] BuildGeneratedPageRouteCandidates(string relativePath, string routePath)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddGeneratedPageRouteCandidates(candidates, relativePath, routePath);
+        return candidates.ToArray();
+    }
+
+    private static void AddGeneratedPageRouteCandidates(HashSet<string> candidates, string relativePath, string routePath)
+    {
+        AddRouteCandidates(candidates, routePath);
+        AddRouteCandidates(candidates, "/" + relativePath.Replace('\\', '/').TrimStart('/'));
     }
 
     private static void AddRouteCandidates(HashSet<string> routes, string? value)
@@ -747,12 +759,138 @@ public static partial class WebSiteAuditor
         return raw;
     }
 
-    private static void ValidateSitemapNoIndexConsistency(
+    private static SitemapSeoScan CollectSitemapSeoMetadata(
         string siteRoot,
-        HashSet<string> noIndexRoutes,
+        IReadOnlyCollection<string> htmlFiles,
         Action<string, string, string?, string, string?> addIssue)
     {
-        if (noIndexRoutes.Count == 0)
+        const int sampleLimit = 5;
+        var noIndexRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pagesByRoute = new Dictionary<string, SitemapPageSeoMetadata>(StringComparer.OrdinalIgnoreCase);
+        var readErrorSamples = new List<string>(sampleLimit);
+        var parseErrorSamples = new List<string>(sampleLimit);
+        var routeCollisionSamples = new List<string>(sampleLimit);
+        var readErrorCount = 0;
+        var parseErrorCount = 0;
+        var routeCollisionCount = 0;
+
+        foreach (var file in htmlFiles)
+        {
+            var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
+            string html;
+            try
+            {
+                html = File.ReadAllText(file);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                readErrorCount++;
+                AddSample(readErrorSamples, relativePath, sampleLimit);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(html))
+                continue;
+
+            AngleSharp.Dom.IDocument doc;
+            try
+            {
+                doc = HtmlParser.ParseWithAngleSharp(html);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException)
+            {
+                parseErrorCount++;
+                AddSample(parseErrorSamples, relativePath, sampleLimit);
+                continue;
+            }
+
+            var routePath = ToRoutePath(relativePath);
+            if (doc.Head is not null)
+            {
+                var canonicalLinks = GetHeadLinkValues(doc, "canonical", html);
+                var canonicalHref = canonicalLinks.Length == 1 && IsAbsoluteHttpUrl(canonicalLinks[0])
+                    ? canonicalLinks[0]
+                    : string.Empty;
+                if (!string.IsNullOrWhiteSpace(canonicalHref))
+                {
+                    var metadata = new SitemapPageSeoMetadata(relativePath, canonicalHref);
+                    var routeCollisionRecordedForPage = false;
+                    foreach (var candidate in BuildGeneratedPageRouteCandidates(relativePath, routePath))
+                    {
+                        if (!string.IsNullOrWhiteSpace(candidate))
+                        {
+                            if (pagesByRoute.TryGetValue(candidate, out var existing) &&
+                                (!string.Equals(existing.RelativePath, metadata.RelativePath, StringComparison.OrdinalIgnoreCase) ||
+                                 !string.Equals(existing.CanonicalUrl, metadata.CanonicalUrl, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                // Keep first-registered route metadata deterministic while reporting the colliding page once.
+                                if (!routeCollisionRecordedForPage)
+                                {
+                                    routeCollisionCount++;
+                                    AddSample(routeCollisionSamples, $"{candidate} ({existing.RelativePath}, {metadata.RelativePath})", sampleLimit);
+                                    routeCollisionRecordedForPage = true;
+                                }
+                                continue;
+                            }
+
+                            pagesByRoute[candidate] = metadata;
+                        }
+                    }
+                }
+            }
+
+            if (!HasNoIndexRobots(doc, html))
+                continue;
+
+            foreach (var candidate in BuildRouteCandidatesForSeoChecks(relativePath, routePath, doc))
+            {
+                if (!string.IsNullOrWhiteSpace(candidate))
+                    noIndexRoutes.Add(candidate);
+            }
+        }
+
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-metadata-read-error",
+            "sitemap SEO metadata scan skipped {0} HTML file(s) that could not be read.",
+            readErrorCount, readErrorSamples);
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-metadata-parse-error",
+            "sitemap SEO metadata scan skipped {0} HTML file(s) that could not be parsed.",
+            parseErrorCount, parseErrorSamples);
+        AddSitemapSeoScanSummaryIssue(addIssue, "seo-sitemap-route-collision",
+            "sitemap SEO metadata scan found {0} generated route candidate collision(s).",
+            routeCollisionCount, routeCollisionSamples);
+
+        return new SitemapSeoScan(noIndexRoutes, pagesByRoute);
+    }
+
+    private static void AddSample(List<string> samples, string value, int sampleLimit)
+    {
+        if (samples.Count < sampleLimit && !string.IsNullOrWhiteSpace(value))
+            samples.Add(value);
+    }
+
+    private static void AddSitemapSeoScanSummaryIssue(
+        Action<string, string, string?, string, string?> addIssue,
+        string hint,
+        string messageFormat,
+        int count,
+        List<string> samples)
+    {
+        if (count <= 0)
+            return;
+
+        var sampleText = samples.Count > 0 ? $" Sample: {string.Join(", ", samples)}." : string.Empty;
+        addIssue("warning", "seo", "sitemap.xml",
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, messageFormat, count) + sampleText,
+            hint);
+    }
+
+    private static void ValidateSitemapSeoConsistency(
+        string siteRoot,
+        HashSet<string> noIndexRoutes,
+        Dictionary<string, SitemapPageSeoMetadata> pageMetadataByRoute,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        if (noIndexRoutes.Count == 0 && pageMetadataByRoute.Count == 0)
             return;
 
         var sitemapPath = Path.Combine(siteRoot, "sitemap.xml");
@@ -765,35 +903,98 @@ public static partial class WebSiteAuditor
             var locs = doc
                 .Descendants()
                 .Where(node => node.Name.LocalName.Equals("loc", StringComparison.OrdinalIgnoreCase))
-                .Select(node => NormalizeRouteLikeValue(node.Value))
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(node => (Url: (node.Value ?? string.Empty).Trim(), ComparableUrl: NormalizeExactSeoUrl(node.Value), Route: NormalizeRouteLikeValue(node.Value)))
+                .Where(loc => !string.IsNullOrWhiteSpace(loc.Url))
                 .ToArray();
 
-            var noIndexInSitemap = new List<string>();
-            foreach (var loc in locs)
-            {
-                var matches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                AddRouteCandidates(matches, loc);
-                if (matches.Any(candidate => noIndexRoutes.Contains(candidate)))
-                    noIndexInSitemap.Add(loc);
-            }
-
-            foreach (var route in noIndexInSitemap
-                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            var duplicateLocs = locs
+                .Where(loc => !string.IsNullOrWhiteSpace(loc.ComparableUrl))
+                .GroupBy(loc => loc.ComparableUrl, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .ToArray();
+            foreach (var duplicate in duplicateLocs
+                         .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                          .Take(50))
             {
                 addIssue("warning", "seo", "sitemap.xml",
-                    $"sitemap includes noindex route '{route}'.",
-                    $"seo-sitemap-noindex:{route}");
+                    $"sitemap includes duplicate URL '{duplicate.First().Url}' ({duplicate.Count()} entries).",
+                    $"seo-sitemap-duplicate-loc:{duplicate.First().Route}");
             }
-
-            if (noIndexInSitemap.Count > 50)
+            if (duplicateLocs.Length > 50)
             {
                 addIssue("warning", "seo", "sitemap.xml",
-                    $"sitemap includes additional noindex routes ({noIndexInSitemap.Count - 50} more).",
-                    "seo-sitemap-noindex-more");
+                    $"sitemap includes additional duplicate URL groups ({duplicateLocs.Length - 50} more).",
+                    "seo-sitemap-duplicate-loc-more");
+            }
+
+            if (noIndexRoutes.Count > 0)
+            {
+                var noIndexInSitemap = new List<string>();
+                foreach (var loc in locs.Where(loc => !string.IsNullOrWhiteSpace(loc.Route)))
+                {
+                    var matches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    AddRouteCandidates(matches, loc.Route);
+                    if (matches.Any(candidate => noIndexRoutes.Contains(candidate)))
+                        noIndexInSitemap.Add(loc.Route);
+                }
+
+                foreach (var route in noIndexInSitemap
+                             .Distinct(StringComparer.OrdinalIgnoreCase)
+                             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                             .Take(50))
+                {
+                    addIssue("warning", "seo", "sitemap.xml",
+                        $"sitemap includes noindex route '{route}'.",
+                        $"seo-sitemap-noindex:{route}");
+                }
+
+                if (noIndexInSitemap.Count > 50)
+                {
+                    addIssue("warning", "seo", "sitemap.xml",
+                        $"sitemap includes additional noindex routes ({noIndexInSitemap.Count - 50} more).",
+                        "seo-sitemap-noindex-more");
+                }
+            }
+
+            if (pageMetadataByRoute.Count > 0)
+            {
+                var canonicalMismatches = new List<(string Url, string Route, SitemapPageSeoMetadata Metadata)>();
+                foreach (var loc in locs
+                             .Where(loc => !string.IsNullOrWhiteSpace(loc.Route) && !string.IsNullOrWhiteSpace(loc.ComparableUrl))
+                             .GroupBy(loc => loc.ComparableUrl, StringComparer.OrdinalIgnoreCase)
+                             .Select(group => group.First()))
+                {
+                    var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    AddRouteCandidates(candidates, loc.Route);
+                    var metadata = candidates
+                        .Select(candidate => pageMetadataByRoute.TryGetValue(candidate, out var value) ? value : null)
+                        .FirstOrDefault(value => value is not null);
+                    if (metadata is null)
+                        continue;
+
+                    var canonicalUrl = NormalizeExactSeoUrl(metadata.CanonicalUrl);
+                    if (string.IsNullOrWhiteSpace(canonicalUrl))
+                        continue;
+
+                    if (!string.Equals(loc.ComparableUrl, canonicalUrl, StringComparison.OrdinalIgnoreCase))
+                        canonicalMismatches.Add((loc.Url, loc.Route, metadata));
+                }
+
+                foreach (var mismatch in canonicalMismatches
+                             .OrderBy(item => item.Route, StringComparer.OrdinalIgnoreCase)
+                             .Take(50))
+                {
+                    addIssue("warning", "seo", "sitemap.xml",
+                        $"sitemap URL '{mismatch.Url}' points to generated page '{mismatch.Metadata.RelativePath}' whose canonical is '{mismatch.Metadata.CanonicalUrl}'.",
+                        $"seo-sitemap-canonical-mismatch:{mismatch.Route}");
+                }
+
+                if (canonicalMismatches.Count > 50)
+                {
+                    addIssue("warning", "seo", "sitemap.xml",
+                        $"sitemap includes additional URLs whose page canonical points elsewhere ({canonicalMismatches.Count - 50} more).",
+                        "seo-sitemap-canonical-mismatch-more");
+                }
             }
         }
         catch (Exception ex)
@@ -803,6 +1004,29 @@ public static partial class WebSiteAuditor
                 "seo-sitemap-parse");
         }
     }
+
+    private static string NormalizeExactSeoUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return string.Empty;
+        }
+
+        var path = string.IsNullOrWhiteSpace(uri.AbsolutePath) ? "/" : uri.AbsolutePath;
+        var authority = uri.IsDefaultPort
+            ? uri.IdnHost.ToLowerInvariant()
+            : uri.IdnHost.ToLowerInvariant() + ":" + uri.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Fragments are intentionally omitted because sitemap and canonical URLs identify documents, not anchors.
+        return $"{uri.Scheme.ToLowerInvariant()}://{authority}{path}{uri.Query}";
+    }
+
+    private sealed record SitemapPageSeoMetadata(string RelativePath, string CanonicalUrl);
+
+    private sealed record SitemapSeoScan(
+        HashSet<string> NoIndexRoutes,
+        Dictionary<string, SitemapPageSeoMetadata> PagesByRoute);
 
     private static string[] GetMetaPropertyValues(AngleSharp.Dom.IDocument doc, string propertyName, string? rawHtml = null)
     {

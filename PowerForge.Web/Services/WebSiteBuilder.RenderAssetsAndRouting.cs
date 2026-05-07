@@ -1096,6 +1096,22 @@ public static partial class WebSiteBuilder
         return path;
     }
 
+    private static string NormalizeRootNotFoundPublicRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return route;
+
+        // Root 404 content is written as /404.html, so public metadata must not advertise /404/.
+        var suffixIndex = route.IndexOfAny(new[] { '?', '#' });
+        var path = suffixIndex >= 0 ? route.Substring(0, suffixIndex) : route;
+        var suffix = suffixIndex >= 0 ? route.Substring(suffixIndex) : string.Empty;
+        var normalizedPath = NormalizePath(path);
+        return normalizedPath.Equals("404", StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.Equals("404.html", StringComparison.OrdinalIgnoreCase)
+            ? "/404.html" + suffix
+            : route;
+    }
+
     private static string NormalizePath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
@@ -1175,6 +1191,34 @@ public static partial class WebSiteBuilder
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool IsAliasRedirectSourceEquivalentToRoute(string aliasSource, string route)
+    {
+        var source = NormalizeRedirectComparisonPath(aliasSource);
+        var target = NormalizeRedirectComparisonPath(route);
+        return !string.IsNullOrWhiteSpace(source) &&
+               source.Equals(target, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRedirectComparisonPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = NormalizeAlias(path).Trim();
+        var queryIndex = normalized.IndexOf('?', StringComparison.Ordinal);
+        var query = queryIndex >= 0 ? normalized[queryIndex..] : string.Empty;
+        var pathOnly = queryIndex >= 0 ? normalized[..queryIndex] : normalized;
+        // Query-bearing aliases are intentionally preserved as redirects, while their path segment still gets route normalization.
+        if (!pathOnly.StartsWith("/", StringComparison.Ordinal))
+            pathOnly = "/" + pathOnly.TrimStart('/');
+
+        var route = "/" + NormalizePath(pathOnly).Trim('/');
+        if (route.Length > 1)
+            route = route.TrimEnd('/');
+
+        return route + query;
     }
 
     private static string Slugify(string input)

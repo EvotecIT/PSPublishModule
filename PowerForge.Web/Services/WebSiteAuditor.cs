@@ -41,6 +41,16 @@ public static partial class WebSiteAuditor
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var hasHtmlIncludeScope = options.Include.Any(pattern => !string.IsNullOrWhiteSpace(pattern));
+        // Sitemap-wide SEO checks must still inspect every generated page when the main
+        // audit is narrowed with Include/MaxHtmlFiles for a fast page sample.
+        var sitemapSeoHtmlFiles = options.CheckSeoMeta
+            ? hasHtmlIncludeScope
+                ? EnumerateHtmlFiles(siteRoot, Array.Empty<string>(), options.Exclude, options.UseDefaultExcludes)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : allHtmlFiles
+            : new List<string>();
         var htmlFiles = allHtmlFiles;
         if (options.MaxHtmlFiles > 0 && htmlFiles.Count > options.MaxHtmlFiles)
             htmlFiles = htmlFiles.Take(options.MaxHtmlFiles).ToList();
@@ -118,7 +128,6 @@ public static partial class WebSiteAuditor
         var navMismatchCount = 0;
         var navCheckedCount = 0;
         var navIgnoredCount = 0;
-        var noIndexRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var navMissing = new Dictionary<string, (int Count, List<string> Samples)>(StringComparer.OrdinalIgnoreCase);
         var duplicateIdCount = 0;
         var requiredRouteCount = 0;
@@ -326,14 +335,6 @@ public static partial class WebSiteAuditor
                 AddIssue("warning", "utf8", relativePath, "contains replacement characters (�).", "replacement-char");
 
             var routePath = ToRoutePath(relativePath);
-            if (HasNoIndexRobots(doc, html))
-            {
-                foreach (var candidate in BuildRouteCandidatesForSeoChecks(relativePath, routePath, doc))
-                {
-                    if (!string.IsNullOrWhiteSpace(candidate))
-                        noIndexRoutes.Add(candidate);
-                }
-            }
 
             if (options.CheckUtf8 && options.CheckMetaCharset && !HasUtf8Meta(doc))
                 AddIssue("warning", "utf8", relativePath, "missing UTF-8 meta charset declaration.", "meta-charset");
@@ -531,7 +532,10 @@ public static partial class WebSiteAuditor
         }
 
         if (options.CheckSeoMeta)
-            ValidateSitemapNoIndexConsistency(siteRoot, noIndexRoutes, AddIssue);
+        {
+            var sitemapSeoScan = CollectSitemapSeoMetadata(siteRoot, sitemapSeoHtmlFiles, AddIssue);
+            ValidateSitemapSeoConsistency(siteRoot, sitemapSeoScan.NoIndexRoutes, sitemapSeoScan.PagesByRoute, AddIssue);
+        }
 
         if (options.CheckRendered && htmlFiles.Count > 0)
         {
