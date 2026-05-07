@@ -134,6 +134,9 @@ public partial class WebSiteAuditOptimizeBuildTests
 
             Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
             Assert.False(File.Exists(Path.Combine(outputRoot, "404", "index.html")));
+            var html = File.ReadAllText(Path.Combine(outputRoot, "404.html"));
+            Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/404.html\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"/404/\"", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
