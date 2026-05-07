@@ -598,14 +598,34 @@ public static partial class WebSiteBuilder
             : route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route.TrimStart('/');
 
         if (!ShouldRenderLanguageAtRoot(localization, languageCode))
+        {
+            if (LooksLikeFileRoute(normalizedRoute))
+                return normalizedRoute;
+
             return EnsureTrailingSlash(normalizedRoute, spec.TrailingSlash);
+        }
 
         var stripped = StripLanguagePrefix(localization, normalizedRoute);
         var publicRoute = NormalizeRootNotFoundPublicRoute(stripped);
         if (publicRoute.StartsWith("/404.html", StringComparison.OrdinalIgnoreCase))
             return publicRoute;
+        if (LooksLikeFileRoute(publicRoute))
+            return publicRoute;
 
         return EnsureTrailingSlash(publicRoute, spec.TrailingSlash);
+    }
+
+    private static bool LooksLikeFileRoute(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+
+        var path = route.Trim();
+        var queryIndex = path.IndexOfAny(new[] { '?', '#' });
+        if (queryIndex >= 0)
+            path = path[..queryIndex];
+
+        return !string.IsNullOrWhiteSpace(Path.GetExtension(path));
     }
 
     private static string RebaseRouteForSelectedLanguageRootBuild(

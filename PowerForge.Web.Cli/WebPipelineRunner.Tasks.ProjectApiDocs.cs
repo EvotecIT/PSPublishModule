@@ -181,6 +181,7 @@ internal static partial class WebPipelineRunner
             WriteIndented = true
         };
         var siteSpec = TryLoadProjectApiSiteSpec(siteConfigPath, logger);
+        var apiSiteBaseUrl = ResolveProjectApiSiteBaseUrl(siteSpec, apiLanguage);
 
         var catalog = JsonSerializer.Deserialize<ProjectCatalogDocument>(File.ReadAllText(catalogPath), serializerOptions)
                       ?? new ProjectCatalogDocument();
@@ -247,6 +248,7 @@ internal static partial class WebPipelineRunner
                 siteSpec,
                 apiLanguage,
                 navSurfaceName,
+                apiSiteBaseUrl,
                 GetProjectApiDocsOverrides(project, baseDir)));
         }
 
@@ -343,6 +345,7 @@ internal static partial class WebPipelineRunner
                     suiteEntries,
                     defaultCssHref,
                     siteConfigPath,
+                    apiSiteBaseUrl,
                     suiteArtifacts?.SearchOutputPath,
                     suiteArtifacts?.XrefMapOutputPath,
                     suiteArtifacts?.CoverageOutputPath,
@@ -793,6 +796,7 @@ internal static partial class WebPipelineRunner
         SiteSpec? siteSpec,
         string language,
         string navSurfaceName,
+        string? siteBaseUrl,
         ProjectApiDocsCatalogOverrides? apiDocsOverrides)
     {
         var name = NormalizeOptionalString(project.Name) ?? slug;
@@ -815,6 +819,7 @@ internal static partial class WebPipelineRunner
             ["title"] = $"{name} API Reference",
             ["out"] = outputPath,
             ["baseUrl"] = apiBaseUrl,
+            ["siteBaseUrl"] = siteBaseUrl,
             ["language"] = string.IsNullOrWhiteSpace(language) ? "en" : language,
             ["docsHome"] = docsHomeUrl,
             ["navContextPath"] = "/",
@@ -1218,6 +1223,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<WebApiDocsSuiteEntry> suiteEntries,
         string? cssHref,
         string? siteConfigPath,
+        string? siteBaseUrl,
         string? suiteSearchPath,
         string? suiteXrefMapPath,
         string? suiteCoveragePath,
@@ -1257,6 +1263,7 @@ internal static partial class WebPipelineRunner
                 DocsScriptPath = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script")),
                 NavJsonPath = siteConfigPath,
                 SiteConfigPath = siteConfigPath,
+                SiteBaseUrl = siteBaseUrl,
                 NavContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ?? "/",
                 NavContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection"),
                 NavContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout"),
@@ -2496,6 +2503,15 @@ internal static partial class WebPipelineRunner
         var normalizedBaseUrl = baseUrl.TrimEnd('/') + "/";
         var normalizedRoute = EnsureProjectRouteTrailingSlash(route).TrimStart('/');
         return new Uri(new Uri(normalizedBaseUrl, UriKind.Absolute), normalizedRoute).ToString();
+    }
+
+    private static string? ResolveProjectApiSiteBaseUrl(SiteSpec? siteSpec, string? targetLanguage)
+    {
+        if (siteSpec is null)
+            return null;
+
+        return NormalizeOptionalString(ResolveProjectApiLanguageSpec(siteSpec, targetLanguage)?.BaseUrl) ??
+               NormalizeOptionalString(siteSpec.BaseUrl);
     }
 
     private static bool ProjectApiCollectionSupportsLanguage(SiteSpec siteSpec, string? collectionName, string? languageCode)
