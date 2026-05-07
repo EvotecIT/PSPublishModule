@@ -80,11 +80,118 @@ public class WebSiteAuditSeoMetaTests
                 </urlset>
                 """);
 
-            var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+            var options = CreateSeoOnlyOptions(root);
+            options.Include = new[] { "index.html" };
+
+            var result = WebSiteAuditor.Audit(options);
 
             Assert.Contains(result.Issues, issue => issue.Category == "seo" &&
                                                    issue.Path == "sitemap.xml" &&
                                                    issue.Hint.StartsWith("seo-sitemap-noindex", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FlagsSitemapCanonicalMismatch_WhenSitemapLocDiffersFromPageCanonical()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-sitemap-canonical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "blog", "network-tools"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "blog", "network-tools", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Network Tools</title>
+                  <link rel="canonical" href="https://example.test/blog/network-tools" />
+                  <meta property="og:title" content="Network Tools" />
+                  <meta property="og:description" content="Network diagnostics." />
+                  <meta property="og:url" content="https://example.test/blog/network-tools" />
+                  <meta property="og:image" content="https://example.test/assets/card.png" />
+                  <meta name="twitter:card" content="summary_large_image" />
+                  <meta name="twitter:title" content="Network Tools" />
+                  <meta name="twitter:description" content="Network diagnostics." />
+                  <meta name="twitter:url" content="https://example.test/blog/network-tools" />
+                  <meta name="twitter:image" content="https://example.test/assets/card.png" />
+                </head>
+                <body>Network Tools</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/blog/network-tools/</loc></url>
+                </urlset>
+                """);
+
+            var options = CreateSeoOnlyOptions(root);
+            options.Include = new[] { "index.html" };
+
+            var result = WebSiteAuditor.Audit(options);
+
+            Assert.Contains(result.Issues, issue => issue.Category == "seo" &&
+                                                   issue.Path == "sitemap.xml" &&
+                                                   issue.Hint.StartsWith("seo-sitemap-canonical-mismatch", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FlagsDuplicateSitemapLocs_WhenSameUrlAppearsMoreThanOnce()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-sitemap-duplicate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "blog", "network-tools"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "blog", "network-tools", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Network Tools</title>
+                  <link rel="canonical" href="https://example.test/blog/network-tools/" />
+                  <meta property="og:title" content="Network Tools" />
+                  <meta property="og:description" content="Network diagnostics." />
+                  <meta property="og:url" content="https://example.test/blog/network-tools/" />
+                  <meta property="og:image" content="https://example.test/assets/card.png" />
+                  <meta name="twitter:card" content="summary_large_image" />
+                  <meta name="twitter:title" content="Network Tools" />
+                  <meta name="twitter:description" content="Network diagnostics." />
+                  <meta name="twitter:url" content="https://example.test/blog/network-tools/" />
+                  <meta name="twitter:image" content="https://example.test/assets/card.png" />
+                </head>
+                <body>Network Tools</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/blog/network-tools/</loc></url>
+                  <url><loc>https://example.test/blog/network-tools/</loc></url>
+                </urlset>
+                """);
+
+            var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Category == "seo" &&
+                                                   issue.Path == "sitemap.xml" &&
+                                                   issue.Hint.StartsWith("seo-sitemap-duplicate-loc", StringComparison.Ordinal));
         }
         finally
         {

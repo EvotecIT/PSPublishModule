@@ -168,6 +168,8 @@ public static partial class WebSiteBuilder
                         {
                             if (!seenAliasSources.Add(aliasSource))
                                 continue;
+                            if (IsAliasRedirectSourceEquivalentToRoute(aliasSource, route))
+                                continue;
                             redirects.Add(new RedirectSpec
                             {
                                 From = aliasSource,

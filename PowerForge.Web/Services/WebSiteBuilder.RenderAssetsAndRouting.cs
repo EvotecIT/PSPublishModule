@@ -1177,6 +1177,33 @@ public static partial class WebSiteBuilder
             .ToArray();
     }
 
+    private static bool IsAliasRedirectSourceEquivalentToRoute(string aliasSource, string route)
+    {
+        var source = NormalizeRedirectComparisonPath(aliasSource);
+        var target = NormalizeRedirectComparisonPath(route);
+        return !string.IsNullOrWhiteSpace(source) &&
+               source.Equals(target, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRedirectComparisonPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = NormalizeAlias(path).Trim();
+        var queryIndex = normalized.IndexOf('?', StringComparison.Ordinal);
+        var query = queryIndex >= 0 ? normalized[queryIndex..] : string.Empty;
+        var pathOnly = queryIndex >= 0 ? normalized[..queryIndex] : normalized;
+        if (!pathOnly.StartsWith("/", StringComparison.Ordinal))
+            pathOnly = "/" + pathOnly.TrimStart('/');
+
+        var route = "/" + NormalizePath(pathOnly).Trim('/');
+        if (route.Length > 1)
+            route = route.TrimEnd('/');
+
+        return route + query;
+    }
+
     private static string Slugify(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
