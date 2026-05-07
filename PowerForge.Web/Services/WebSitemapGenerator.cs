@@ -457,53 +457,121 @@ public static partial class WebSitemapGenerator
               display: block;
               min-height: 100vh;
               box-sizing: border-box;
-              padding: 24px;
-              background: #f8fafc;
-              color: #0f172a;
-              font-family: "Segoe UI", Arial, sans-serif;
+              padding: 28px;
+              background: #f5f7fb;
+              color: #1f2937;
+              counter-reset: sitemap-entry;
+              font-family: "Segoe UI", Roboto, Arial, sans-serif;
+              line-height: 1.45;
             }
             urlset::before {
               content: "XML sitemap";
               display: block;
-              margin: 0 0 16px;
-              font-size: 28px;
+              max-width: 1120px;
+              margin: 0 auto 6px;
+              color: #0f172a;
+              font-size: 30px;
               font-weight: 700;
             }
             sitemapindex::before {
               content: "XML sitemap index";
               display: block;
-              margin: 0 0 16px;
-              font-size: 28px;
+              max-width: 1120px;
+              margin: 0 auto 6px;
+              color: #0f172a;
+              font-size: 30px;
               font-weight: 700;
             }
-            url, sitemap {
+            urlset::after {
+              content: "Generated for search engines. Styled only for human inspection.";
               display: block;
-              margin: 0 0 12px;
-              padding: 14px 16px;
-              border: 1px solid #dbe4ef;
-              border-radius: 8px;
+              max-width: 1120px;
+              margin: 4px auto 22px;
+              color: #64748b;
+              font-size: 14px;
+            }
+            sitemapindex::after {
+              content: "Sitemap index. Each entry points to a machine-readable sitemap.";
+              display: block;
+              max-width: 1120px;
+              margin: 4px auto 22px;
+              color: #64748b;
+              font-size: 14px;
+            }
+            url, sitemap {
+              counter-increment: sitemap-entry;
+              display: block;
+              position: relative;
+              max-width: 1120px;
+              margin: 0 auto 12px;
+              padding: 16px 18px 16px 58px;
+              border: 1px solid #d9e2ef;
+              border-left: 4px solid #2563eb;
+              border-radius: 10px;
               background: #ffffff;
-              box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+              box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+            }
+            url::before, sitemap::before {
+              content: counter(sitemap-entry);
+              position: absolute;
+              top: 16px;
+              left: 16px;
+              display: inline-flex;
+              width: 26px;
+              height: 26px;
+              align-items: center;
+              justify-content: center;
+              border-radius: 999px;
+              background: #eff6ff;
+              color: #1d4ed8;
+              font-size: 12px;
+              font-weight: 700;
             }
             loc {
               display: block;
-              margin: 0 0 8px;
-              color: #075985;
+              margin: 0 0 10px;
+              color: #0f5f8f;
               font-family: "Cascadia Mono", Consolas, monospace;
-              font-size: 14px;
+              font-size: 13px;
+              font-weight: 600;
               word-break: break-all;
             }
             lastmod, changefreq, priority {
               display: inline-block;
-              margin-right: 16px;
+              margin: 0 10px 8px 0;
+              padding: 4px 9px;
+              border-radius: 999px;
+              background: #f1f5f9;
               color: #475569;
-              font-size: 13px;
+              font-size: 12px;
             }
             lastmod::before { content: "Last modified: "; font-weight: 600; color: #334155; }
             changefreq::before { content: "Change frequency: "; font-weight: 600; color: #334155; }
             priority::before { content: "Priority: "; font-weight: 600; color: #334155; }
             link {
-              display: none;
+              display: inline-block;
+              margin: 0 8px 8px 0;
+              padding: 3px 8px;
+              border: 1px solid #dbe4ef;
+              border-radius: 999px;
+              color: #64748b;
+              font-size: 12px;
+            }
+            link::before {
+              content: attr(hreflang);
+              font-weight: 600;
+            }
+            @media (max-width: 720px) {
+              urlset, sitemapindex {
+                padding: 18px;
+              }
+              url, sitemap {
+                padding: 52px 14px 14px;
+              }
+              url::before, sitemap::before {
+                top: 14px;
+                left: 14px;
+              }
             }
             """,
             Utf8NoBom);

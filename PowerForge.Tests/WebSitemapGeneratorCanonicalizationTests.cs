@@ -74,6 +74,8 @@ public class WebSitemapGeneratorCanonicalizationTests
 
             var css = File.ReadAllText(Path.Combine(root, "sitemap.css"));
             Assert.Contains("urlset::before", css, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("counter(sitemap-entry)", css, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("link::before", css, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
