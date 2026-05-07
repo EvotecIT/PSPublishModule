@@ -418,6 +418,9 @@ public static partial class WebSitemapGenerator
         if (href.Contains('"') || href.Contains("?>", StringComparison.Ordinal))
             throw new ArgumentException("BrowserStylesheetHref cannot contain double quotes or processing instruction terminators.", nameof(options));
 
+        if (href.StartsWith("/", StringComparison.Ordinal))
+            return href;
+
         if (Uri.TryCreate(href, UriKind.Absolute, out var absoluteUri))
         {
             if (absoluteUri.Scheme != Uri.UriSchemeHttp && absoluteUri.Scheme != Uri.UriSchemeHttps)
