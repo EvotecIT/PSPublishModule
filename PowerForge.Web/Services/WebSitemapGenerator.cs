@@ -516,7 +516,8 @@ public static partial class WebSitemapGenerator
             return false;
 
         var trimmed = href.Trim();
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal) &&
+            Uri.TryCreate(trimmed, UriKind.Absolute, out _))
             return false;
 
         var pathOnly = trimmed.Split('?', '#')[0].TrimStart('/');
