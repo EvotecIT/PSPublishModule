@@ -77,7 +77,7 @@ if ($PSEdition -eq 'Core') {
                     $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
                 }
             } else {
-                Write-Warning -Message "AddExportedCmdlet is not available on this PowerShell version; cmdlets from $LibraryName may not be exported."
+                throw [System.NotSupportedException]::new("AddExportedCmdlet is not available on this PowerShell version; cmdlets from $LibraryName cannot be exported from the ALC-loaded module.")
             }
         }
     } elseif (-not ($Class -as [type])) {
@@ -88,6 +88,8 @@ if ($PSEdition -eq 'Core') {
     }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {
+        throw
+    } elseif ($_.Exception -is [System.NotSupportedException]) {
         throw
     } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"

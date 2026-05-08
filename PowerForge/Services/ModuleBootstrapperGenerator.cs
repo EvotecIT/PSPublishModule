@@ -11,7 +11,7 @@ internal static class ModuleBootstrapperGenerator
     // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
     private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
-    private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(10);
 
     internal static void Generate(
         string moduleRoot,
@@ -303,6 +303,8 @@ internal static class ModuleBootstrapperGenerator
             return;
         }
 
+        EnsureDotNetSdkAvailable(moduleRoot);
+
         var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
         var outputRoot = Path.Combine(buildRoot, "out");
 
@@ -315,7 +317,6 @@ internal static class ModuleBootstrapperGenerator
             File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetFramework), Encoding.UTF8);
             File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
 
-            EnsureDotNetSdkAvailable(buildRoot);
             log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetFramework}.");
             var result = RunProcess(
                 "dotnet",
@@ -580,6 +581,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
     private Assembly LoadMainModule()
     {{
+        // Called only while LoadModule holds Sync; keep the one-time main assembly load under that lock.
         _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
         return _moduleAssembly;
     }}

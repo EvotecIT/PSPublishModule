@@ -131,6 +131,8 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
+            Assert.Contains("NotSupportedException", bootstrapper);
+            Assert.Contains("cannot be exported from the ALC-loaded module", bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
 
