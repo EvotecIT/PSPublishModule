@@ -27,7 +27,7 @@ public static class WebAgentReadiness
     private static readonly Regex MarkdownTrailingWhitespaceRegex = new(@"[ \t]+\n", RegexOptions.Compiled);
     private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
     private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
-    private static readonly Regex SlugSeparatorRegex = new(@"[-_]+", RegexOptions.Compiled);
+    private static readonly Regex SlugSeparatorRegex = new(@"[-_\s]+", RegexOptions.Compiled);
 
     /// <summary>Writes configured agent-readiness files under the site root.</summary>
     public static WebAgentReadinessResult Prepare(WebAgentReadinessPrepareOptions options)
@@ -582,7 +582,7 @@ public static class WebAgentReadiness
             if (!File.Exists(apiIndexPath))
                 continue;
 
-            var route = $"/projects/{slug}/api/";
+            var route = $"/projects/{Uri.EscapeDataString(slug)}/api/";
             var title = BuildProjectApiTitle(slug, catalog.TryGetValue(slug, out var info) ? info : null);
             var descriptorRoute = File.Exists(Path.Combine(apiDirectory, "index.json"))
                 ? $"{route}index.json"
@@ -610,11 +610,15 @@ public static class WebAgentReadiness
 
         try
         {
-            var catalogPath = ResolveSitePath(siteRoot, configuredPath);
+            var catalogPath = ResolveProjectCatalogPath(siteRoot, configuredPath, warnings);
+            if (catalogPath is null)
+                return catalog;
+
             if (!File.Exists(catalogPath))
                 return catalog;
 
-            using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            using var stream = File.OpenRead(catalogPath);
+            using var doc = JsonDocument.Parse(stream);
             if (!doc.RootElement.TryGetProperty("projects", out var projects) || projects.ValueKind != JsonValueKind.Array)
                 return catalog;
 
@@ -637,6 +641,29 @@ public static class WebAgentReadiness
         }
 
         return catalog;
+    }
+
+    private static string? ResolveProjectCatalogPath(string siteRoot, string configuredPath, List<string> warnings)
+    {
+        var root = Path.GetFullPath(siteRoot.Trim().Trim('"'));
+        var normalized = configuredPath.Trim().Trim('"').Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+        var resolved = Path.GetFullPath(Path.Combine(root, normalized));
+        if (!IsPathInsideRoot(root, resolved))
+        {
+            warnings.Add($"Could not read project catalog '{configuredPath}' for API catalog titles: path resolves outside the site root.");
+            return null;
+        }
+
+        return resolved;
+    }
+
+    private static bool IsPathInsideRoot(string root, string resolvedPath)
+    {
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        return resolvedPath.Equals(root, FileSystemPathComparison) ||
+               resolvedPath.StartsWith(rootWithSeparator, FileSystemPathComparison);
     }
 
     private static string BuildProjectApiTitle(string slug, ProjectApiCatalogInfo? info)
@@ -663,7 +690,7 @@ public static class WebAgentReadiness
             SlugSeparatorRegex
                 .Split(slug.Trim())
                 .Where(static part => !string.IsNullOrWhiteSpace(part))
-                .Select(static part => char.ToUpperInvariant(part[0]) + part.Substring(1)));
+                .Select(static part => char.ToUpperInvariant(part[0]) + part[1..]));
         return string.IsNullOrWhiteSpace(displayName) ? slug.Trim() : displayName;
     }
 

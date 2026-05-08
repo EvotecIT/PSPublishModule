@@ -131,6 +131,10 @@ public class WebAgentReadinessTests
             Directory.CreateDirectory(numericApiRoot);
             File.WriteAllText(Path.Combine(numericApiRoot, "index.html"), "<!doctype html><title>Numeric API</title>");
 
+            var encodedApiRoot = Path.Combine(root, "projects", "space module", "api");
+            Directory.CreateDirectory(encodedApiRoot);
+            File.WriteAllText(Path.Combine(encodedApiRoot, "index.html"), "<!doctype html><title>Encoded API</title>");
+
             var duplicateApiRoot = Path.Combine(root, "projects", "duplicate-project", "api");
             Directory.CreateDirectory(duplicateApiRoot);
             File.WriteAllText(Path.Combine(duplicateApiRoot, "index.html"), "<!doctype html><title>Duplicate API</title>");
@@ -194,6 +198,7 @@ public class WebAgentReadinessTests
             Assert.Contains("https://example.test/projects/plain-project/api/", anchors);
             Assert.Contains("https://example.test/projects/unknown-module/api/", anchors);
             Assert.Contains("https://example.test/projects/123-module/api/", anchors);
+            Assert.Contains("https://example.test/projects/space%20module/api/", anchors);
             Assert.DoesNotContain("https://officeimo.com/api/powershell/", anchors);
             Assert.Single(anchors, static anchor => anchor == "https://example.test/projects/duplicate-project/api/");
 
@@ -209,6 +214,9 @@ public class WebAgentReadinessTests
 
             var numeric = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/123-module/api/");
             Assert.Equal("123 Module API reference", numeric.GetProperty("service-doc")[0].GetProperty("title").GetString());
+
+            var encoded = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/space%20module/api/");
+            Assert.Equal("Space Module API reference", encoded.GetProperty("service-doc")[0].GetProperty("title").GetString());
 
             var duplicate = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/duplicate-project/api/");
             Assert.Equal("Explicit duplicate API", duplicate.GetProperty("service-doc")[0].GetProperty("title").GetString());
