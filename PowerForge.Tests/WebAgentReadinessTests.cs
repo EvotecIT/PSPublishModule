@@ -123,6 +123,10 @@ public class WebAgentReadinessTests
             Directory.CreateDirectory(plainApiRoot);
             File.WriteAllText(Path.Combine(plainApiRoot, "index.html"), "<!doctype html><title>Plain API</title>");
 
+            var unknownApiRoot = Path.Combine(root, "projects", "unknown-module", "api");
+            Directory.CreateDirectory(unknownApiRoot);
+            File.WriteAllText(Path.Combine(unknownApiRoot, "index.html"), "<!doctype html><title>Unknown API</title>");
+
             var catalogRoot = Path.Combine(root, "data", "projects");
             Directory.CreateDirectory(catalogRoot);
             File.WriteAllText(Path.Combine(catalogRoot, "catalog.json"),
@@ -174,6 +178,7 @@ public class WebAgentReadinessTests
             Assert.Contains("https://example.test/projects/api-suite/", anchors);
             Assert.Contains("https://example.test/projects/gpozaurr/api/", anchors);
             Assert.Contains("https://example.test/projects/plain-project/api/", anchors);
+            Assert.Contains("https://example.test/projects/unknown-module/api/", anchors);
             Assert.DoesNotContain("https://officeimo.com/api/powershell/", anchors);
 
             var gpo = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/gpozaurr/api/");
@@ -182,6 +187,9 @@ public class WebAgentReadinessTests
 
             var plain = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/plain-project/api/");
             Assert.False(plain.TryGetProperty("service-desc", out _));
+
+            var unknown = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/unknown-module/api/");
+            Assert.Equal("Unknown Module API reference", unknown.GetProperty("service-doc")[0].GetProperty("title").GetString());
         }
         finally
         {

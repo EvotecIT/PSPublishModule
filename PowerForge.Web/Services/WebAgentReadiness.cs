@@ -26,6 +26,8 @@ public static class WebAgentReadiness
     private static readonly Regex MarkdownTrailingWhitespaceRegex = new(@"[ \t]+\n", RegexOptions.Compiled);
     private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
     private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
+    private static readonly Regex SlugSeparatorRegex = new(@"[-_]+", RegexOptions.Compiled);
+    private static readonly Regex SlugWordBoundaryRegex = new(@"\b\p{Ll}", RegexOptions.Compiled);
 
     /// <summary>Writes configured agent-readiness files under the site root.</summary>
     public static WebAgentReadinessResult Prepare(WebAgentReadinessPrepareOptions options)
@@ -557,22 +559,20 @@ public static class WebAgentReadiness
             yield break;
 
         var catalog = ReadProjectApiCatalogInfo(siteRoot, spec.ProjectCatalogPath, warnings);
-        foreach (var apiIndexPath in Directory.EnumerateFiles(projectsRoot, "index.html", SearchOption.AllDirectories).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (var projectDirectory in Directory.EnumerateDirectories(projectsRoot).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
         {
-            var apiDirectory = Directory.GetParent(apiIndexPath);
-            var projectDirectory = apiDirectory?.Parent;
-            if (apiDirectory is null ||
-                projectDirectory is null ||
-                !apiDirectory.Name.Equals("api", StringComparison.OrdinalIgnoreCase) ||
-                !Path.GetFullPath(projectDirectory.Parent?.FullName ?? string.Empty).Equals(Path.GetFullPath(projectsRoot), FileSystemPathComparison))
-            {
+            var slug = Path.GetFileName(projectDirectory);
+            if (string.IsNullOrWhiteSpace(slug))
                 continue;
-            }
 
-            var slug = projectDirectory.Name;
+            var apiDirectory = Path.Combine(projectDirectory, "api");
+            var apiIndexPath = Path.Combine(apiDirectory, "index.html");
+            if (!File.Exists(apiIndexPath))
+                continue;
+
             var route = $"/projects/{slug}/api/";
             var title = BuildProjectApiTitle(slug, catalog.TryGetValue(slug, out var info) ? info : null);
-            var descriptorRoute = File.Exists(Path.Combine(apiDirectory.FullName, "index.json"))
+            var descriptorRoute = File.Exists(Path.Combine(apiDirectory, "index.json"))
                 ? $"{route}index.json"
                 : null;
 
@@ -639,8 +639,8 @@ public static class WebAgentReadiness
 
     private static string ToDisplayNameFromSlug(string slug)
     {
-        var normalized = Regex.Replace(slug.Trim(), @"[-_]+", " ");
-        return Regex.Replace(normalized, @"\b\p{Ll}", static match => match.Value.ToUpperInvariant());
+        var normalized = SlugSeparatorRegex.Replace(slug.Trim(), " ");
+        return SlugWordBoundaryRegex.Replace(normalized, static match => match.Value.ToUpperInvariant());
     }
 
     private static bool IsLocalProjectApiRoute(string? value)
