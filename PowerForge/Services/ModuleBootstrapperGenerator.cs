@@ -18,7 +18,9 @@ internal static class ModuleBootstrapperGenerator
         IReadOnlyList<string>? exportAssemblies,
         bool handleRuntimes,
         bool useAssemblyLoadContext = false,
-        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
+        IReadOnlyList<string>? targetFrameworks = null,
+        Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
@@ -40,7 +42,7 @@ internal static class ModuleBootstrapperGenerator
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
         if (hasLib && useAssemblyLoadContext)
-            BuildAssemblyLoadContextLoader(root, moduleName);
+            BuildAssemblyLoadContextLoader(root, moduleName, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
 
         if (hasLib)
         {
@@ -261,7 +263,7 @@ internal static class ModuleBootstrapperGenerator
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
     }
 
-    private static void BuildAssemblyLoadContextLoader(string moduleRoot, string moduleName)
+    private static void BuildAssemblyLoadContextLoader(string moduleRoot, string moduleName, string targetFramework, Action<string>? log)
     {
         var libRoot = Path.Combine(moduleRoot, "Lib");
         if (!Directory.Exists(libRoot)) return;
@@ -281,9 +283,10 @@ internal static class ModuleBootstrapperGenerator
             Directory.CreateDirectory(outputRoot);
 
             var projectPath = Path.Combine(buildRoot, identity.AssemblyName + ".csproj");
-            File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity), Encoding.UTF8);
+            File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetFramework), Encoding.UTF8);
             File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
 
+            log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetFramework}.");
             var result = RunProcess(
                 "dotnet",
                 buildRoot,
@@ -359,10 +362,57 @@ internal static class ModuleBootstrapperGenerator
         return sb.ToString();
     }
 
-    private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity)
+    internal static string ResolveAssemblyLoadContextTargetFramework(IReadOnlyList<string>? targetFrameworks)
+    {
+        var candidates = (targetFrameworks ?? Array.Empty<string>())
+            .Select(static framework => NormalizeAssemblyLoadContextTargetFramework(framework))
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static framework => GetNetTfmVersion(framework!), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
+            .ToArray();
+
+        return candidates.FirstOrDefault() ?? "net8.0";
+    }
+
+    private static string? NormalizeAssemblyLoadContextTargetFramework(string? framework)
+    {
+        if (string.IsNullOrWhiteSpace(framework))
+            return null;
+
+        var normalized = framework.Trim();
+        var platformIndex = normalized.IndexOf('-', StringComparison.Ordinal);
+        if (platformIndex >= 0)
+            normalized = normalized[..platformIndex];
+
+        return TryGetNetTfmVersion(normalized, out _) ? normalized : null;
+    }
+
+    private static Version GetNetTfmVersion(string framework)
+        => TryGetNetTfmVersion(framework, out var version) ? version : new Version(int.MaxValue, 0);
+
+    private static bool TryGetNetTfmVersion(string framework, out Version version)
+    {
+        version = new Version(0, 0);
+        if (string.IsNullOrWhiteSpace(framework) ||
+            !framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) ||
+            framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase) ||
+            framework.Length < 5 ||
+            !char.IsDigit(framework[3]))
+        {
+            return false;
+        }
+
+        if (!Version.TryParse(framework[3..], out var parsed))
+            return false;
+
+        version = parsed;
+        return true;
+    }
+
+    private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity, string targetFramework)
         => $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AssemblyName>{EscapeXml(identity.AssemblyName)}</AssemblyName>

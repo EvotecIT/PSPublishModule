@@ -3,7 +3,8 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
+$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
 $Core = $false
@@ -55,19 +56,18 @@ if ($PSEdition -eq 'Core') {
 
     if ($PSEdition -eq 'Core') {
         $LoaderAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, '{{LoaderAssemblyName}}.dll')
-        $IsReload = $true
         if (-not ('{{LoaderTypeName}}' -as [type])) {
-            $IsReload = $false
             Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
         }
 
         $ModuleAssembly = [{{LoaderTypeName}}]::LoadModule($ModuleAssemblyPath, '{{ModuleName}}')
-        $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru:$IsReload -ErrorAction Stop
+        $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
         if ($InnerModule) {
             # Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
             # public API to copy those exported cmdlets back to the script-module wrapper, so this uses the same
-            # private PSModuleInfo hook used by community ALC loaders. Keep this isolated to Core ALC imports.
+            # private PSModuleInfo hook used by community ALC loaders. This runs on first load and reloads so the
+            # outer script module always re-exports cmdlets from the ALC-loaded binary module.
             $AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
                 'AddExportedCmdlet',
                 [System.Reflection.BindingFlags]'Instance, NonPublic'

@@ -161,7 +161,9 @@ public sealed class ModuleBuildPipeline
                 exports,
                 spec.ExportAssemblies,
                 spec.HandleRuntimes,
-                spec.UseAssemblyLoadContext);
+                spec.UseAssemblyLoadContext,
+                targetFrameworks: spec.Frameworks,
+                log: message => _logger.Info(message));
         }
         else
         {

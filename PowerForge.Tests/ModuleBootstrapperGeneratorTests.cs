@@ -66,6 +66,22 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_UsesLowestModernModuleFramework()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "net8.0", "net6.0-windows" });
+
+        Assert.Equal("net6.0", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_DefaultsToNet8WhenNoModernFrameworkIsKnown()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.0" });
+
+        Assert.Equal("net8.0", framework);
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {
@@ -91,6 +107,7 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
             Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
+            Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
