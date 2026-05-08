@@ -16,7 +16,7 @@ public static class WebAgentReadiness
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
     private const string AgentSkillsSchema = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
-    private const string DefaultProjectCatalogPath = "data/projects/catalog.json";
+    internal const string DefaultProjectCatalogPath = "data/projects/catalog.json";
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -626,9 +626,8 @@ public static class WebAgentReadiness
 
                 var name = GetJsonString(project, "name");
                 var apiPowerShell = project.TryGetProperty("links", out var links) ? GetJsonString(links, "apiPowerShell") : null;
-                var slugKey = slug;
-                catalog[slugKey] = new ProjectApiCatalogInfo(
-                    string.IsNullOrWhiteSpace(name) ? ToDisplayNameFromSlug(slugKey) : name!,
+                catalog[slug] = new ProjectApiCatalogInfo(
+                    string.IsNullOrWhiteSpace(name) ? ToDisplayNameFromSlug(slug) : name!,
                     IsLocalProjectApiRoute(apiPowerShell));
             }
         }
@@ -653,17 +652,19 @@ public static class WebAgentReadiness
         var normalized = Uri.TryCreate(value, UriKind.Absolute, out var uri)
             ? uri.AbsoluteUri
             : NormalizeRoute(value);
+        // Treat /api and /api/ as the same catalog anchor for explicit-vs-inferred de-duplication.
         return normalized.EndsWith("/", StringComparison.Ordinal) ? normalized : normalized + "/";
     }
 
     private static string ToDisplayNameFromSlug(string slug)
     {
-        return string.Join(
+        var displayName = string.Join(
             " ",
             SlugSeparatorRegex
                 .Split(slug.Trim())
                 .Where(static part => !string.IsNullOrWhiteSpace(part))
                 .Select(static part => char.ToUpperInvariant(part[0]) + part.Substring(1)));
+        return string.IsNullOrWhiteSpace(displayName) ? slug.Trim() : displayName;
     }
 
     private static bool IsLocalProjectApiRoute(string? value)
