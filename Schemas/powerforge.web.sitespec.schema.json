@@ -947,6 +947,10 @@
         "enabled": { "type": "boolean" },
         "OutputPath": { "type": "string" },
         "outputPath": { "type": "string" },
+        "IncludeProjectApiReferences": { "type": "boolean" },
+        "includeProjectApiReferences": { "type": "boolean" },
+        "ProjectCatalogPath": { "type": "string" },
+        "projectCatalogPath": { "type": "string" },
         "Entries": { "type": "array", "items": { "$ref": "#/$defs/AgentApiCatalogEntrySpec" } },
         "entries": { "type": "array", "items": { "$ref": "#/$defs/AgentApiCatalogEntrySpec" } }
       }
