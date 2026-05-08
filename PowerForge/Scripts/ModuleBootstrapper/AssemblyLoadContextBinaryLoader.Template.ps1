@@ -40,6 +40,7 @@ if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
 } else {
     Write-Error -Message 'No assemblies found'
+    return
 }
 
 if ($PSEdition -eq 'Core') {
@@ -71,8 +72,12 @@ if ($PSEdition -eq 'Core') {
                 'AddExportedCmdlet',
                 [System.Reflection.BindingFlags]'Instance, NonPublic'
             )
-            foreach ($Cmd in $InnerModule.ExportedCmdlets.Values) {
-                $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
+            if ($null -ne $AddExportedCmdlet) {
+                foreach ($Cmd in $InnerModule.ExportedCmdlets.Values) {
+                    $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
+                }
+            } else {
+                Write-Warning -Message "AddExportedCmdlet is not available on this PowerShell version; cmdlets from $LibraryName may not be exported."
             }
         }
     } elseif (-not ($Class -as [type])) {
@@ -90,6 +95,8 @@ if ($PSEdition -eq 'Core') {
 }
 
 if ($PSEdition -ne 'Core') {
+    # Core loads dependencies through the module-scoped AssemblyLoadContext above. Dot-sourcing the libraries script
+    # there would load dependency DLLs into the default context and undo the isolation this template exists to provide.
     $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         . $LibrariesScript

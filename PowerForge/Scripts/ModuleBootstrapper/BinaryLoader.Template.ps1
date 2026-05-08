@@ -40,6 +40,7 @@ if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
 } else {
     Write-Error -Message 'No assemblies found'
+    return
 }
 
 if ($PSEdition -eq 'Core') {
