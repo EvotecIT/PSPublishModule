@@ -64,6 +64,9 @@ if ($PSEdition -eq 'Core') {
         $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru:$IsReload -ErrorAction Stop
 
         if ($InnerModule) {
+            # Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
+            # public API to copy those exported cmdlets back to the script-module wrapper, so this uses the same
+            # private PSModuleInfo hook used by community ALC loaders. Keep this isolated to Core ALC imports.
             $AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
                 'AddExportedCmdlet',
                 [System.Reflection.BindingFlags]'Instance, NonPublic'
@@ -83,5 +86,12 @@ if ($PSEdition -eq 'Core') {
         throw
     } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
+    }
+}
+
+if ($PSEdition -ne 'Core') {
+    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
+    if (Test-Path -LiteralPath $LibrariesScript) {
+        . $LibrariesScript
     }
 }

@@ -265,7 +265,10 @@ public sealed partial class ModulePipelineRunner
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
-                    if (bl.UseAssemblyLoadContext.HasValue) useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
+                    if (bl.UseAssemblyLoadContext.HasValue)
+                        useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
+                    else if (bl.NETAssemblyLoadContext.HasValue)
+                        useAssemblyLoadContextFromSegments = bl.NETAssemblyLoadContext.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;

@@ -67,6 +67,9 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Load the binary module and its dependencies through a custom AssemblyLoadContext on PowerShell Core.</summary>
     public bool? UseAssemblyLoadContext { get; set; }
 
+    /// <summary>Legacy alias for <see cref="UseAssemblyLoadContext"/>.</summary>
+    public bool? NETAssemblyLoadContext { get; set; }
+
     /// <summary>Do not copy libraries recursively (legacy).</summary>
     public bool? NETDoNotCopyLibrariesRecursively { get; set; }
 }

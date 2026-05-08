@@ -66,7 +66,8 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndSkipsLibrariesScript()
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
@@ -91,11 +92,12 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
             Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
-            Assert.DoesNotContain("$LibrariesScript =", bootstrapper);
+            Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
+            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
 
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
             Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
-            Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
+            Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
         }
         finally
         {

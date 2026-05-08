@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -399,6 +401,52 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             var plan = runner.Plan(spec);
 
             Assert.Equal(new[] { "NETFramework", "NETBinaryModule" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DeserializesLegacyNetAssemblyLoadContextAlias_IntoBuildSpec()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var json = $$"""
+            {
+              "Build": {
+                "Name": "PSParseHTML",
+                "SourcePath": "{{projectRoot.FullName.Replace("\\", "\\\\")}}",
+                "Version": "1.0.0"
+              },
+              "Segments": [
+                {
+                  "Type": "BuildLibraries",
+                  "BuildLibraries": {
+                    "NETAssemblyLoadContext": true
+                  }
+                }
+              ],
+              "Install": {
+                "Enabled": false
+              }
+            }
+            """;
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+            var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+            Assert.NotNull(spec);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec!);
+
+            Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
         }
         finally
         {

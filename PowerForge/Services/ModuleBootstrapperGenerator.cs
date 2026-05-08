@@ -9,6 +9,7 @@ namespace PowerForge;
 internal static class ModuleBootstrapperGenerator
 {
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
+    private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(5);
 
     internal static void Generate(
         string moduleRoot,
@@ -39,10 +40,9 @@ internal static class ModuleBootstrapperGenerator
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
         if (hasLib && useAssemblyLoadContext)
-        {
             BuildAssemblyLoadContextLoader(root, moduleName);
-        }
-        else if (hasLib)
+
+        if (hasLib)
         {
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
             var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames);
@@ -219,6 +219,10 @@ internal static class ModuleBootstrapperGenerator
         bool useAssemblyLoadContext,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
     {
+        var loaderIdentity = useAssemblyLoadContext
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            : null;
+
         var binaryLoaderBlock = includeBinaryLoader
             ? RenderModuleBootstrapperTemplate(
                 useAssemblyLoadContext ? "AssemblyLoadContextBinaryLoader" : "BinaryLoader",
@@ -229,8 +233,8 @@ internal static class ModuleBootstrapperGenerator
                 {
                     ["LibraryName"] = EscapePsSingleQuoted(libraryName),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
-                    ["LoaderAssemblyName"] = EscapePsSingleQuoted(CreateAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName),
-                    ["LoaderTypeName"] = CreateAssemblyLoadContextLoaderIdentity(moduleName).TypeName,
+                    ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
+                    ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty
                 })
             : string.Empty;
@@ -284,7 +288,7 @@ internal static class ModuleBootstrapperGenerator
                 "dotnet",
                 buildRoot,
                 new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal" },
-                TimeSpan.FromMinutes(2));
+                AssemblyLoadContextLoaderBuildTimeout);
             if (result.ExitCode != 0)
             {
                 var message = string.Join(
@@ -352,16 +356,13 @@ internal static class ModuleBootstrapperGenerator
             sb.Append(valid ? ch : '_');
         }
 
-        if (sb.Length == 0 || !(char.IsLetter(sb[0]) || sb[0] == '_'))
-            sb.Insert(0, '_');
-
         return sb.ToString();
     }
 
     private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity)
         => $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AssemblyName>{EscapeXml(identity.AssemblyName)}</AssemblyName>
