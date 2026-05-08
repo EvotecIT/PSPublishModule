@@ -92,6 +92,104 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void Prepare_IncludesHostedProjectApiReferencesWhenEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-project-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var gpoApiRoot = Path.Combine(root, "projects", "gpozaurr", "api");
+            Directory.CreateDirectory(gpoApiRoot);
+            File.WriteAllText(Path.Combine(gpoApiRoot, "index.html"), "<!doctype html><title>GPOZaurr API</title>");
+            File.WriteAllText(Path.Combine(gpoApiRoot, "index.json"), "{}");
+
+            var plainApiRoot = Path.Combine(root, "projects", "plain-project", "api");
+            Directory.CreateDirectory(plainApiRoot);
+            File.WriteAllText(Path.Combine(plainApiRoot, "index.html"), "<!doctype html><title>Plain API</title>");
+
+            var catalogRoot = Path.Combine(root, "data", "projects");
+            Directory.CreateDirectory(catalogRoot);
+            File.WriteAllText(Path.Combine(catalogRoot, "catalog.json"),
+                """
+                {
+                  "projects": [
+                    { "slug": "gpozaurr", "name": "GPOZaurr", "links": { "apiPowerShell": "/projects/gpozaurr/api/" } },
+                    { "slug": "plain-project", "name": "Plain Project", "links": { "apiPowerShell": null } },
+                    { "slug": "officeimo", "name": "OfficeIMO", "links": { "apiPowerShell": "https://officeimo.com/api/powershell/" } }
+                  ]
+                }
+                """);
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec
+                    {
+                        Enabled = true,
+                        IncludeProjectApiReferences = true,
+                        Entries = new[]
+                        {
+                            new AgentApiCatalogEntrySpec
+                            {
+                                Anchor = "/projects/api-suite/",
+                                ServiceDoc = "/projects/api-suite/",
+                                Title = "API suite"
+                            }
+                        }
+                    },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "api-catalog")));
+            var linkset = apiCatalog.RootElement.GetProperty("linkset").EnumerateArray().ToArray();
+            var anchors = linkset.Select(static item => item.GetProperty("anchor").GetString()).ToArray();
+
+            Assert.Contains("https://example.test/projects/api-suite/", anchors);
+            Assert.Contains("https://example.test/projects/gpozaurr/api/", anchors);
+            Assert.Contains("https://example.test/projects/plain-project/api/", anchors);
+            Assert.DoesNotContain("https://officeimo.com/api/powershell/", anchors);
+
+            var gpo = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/gpozaurr/api/");
+            Assert.Equal("https://example.test/projects/gpozaurr/api/index.json", gpo.GetProperty("service-desc")[0].GetProperty("href").GetString());
+            Assert.Equal("GPOZaurr PowerShell API reference", gpo.GetProperty("service-doc")[0].GetProperty("title").GetString());
+
+            var plain = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/plain-project/api/");
+            Assert.False(plain.TryGetProperty("service-desc", out _));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Prepare_WritesSecurityHeadersWhenLinkHeadersAreDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-security-headers-" + Guid.NewGuid().ToString("N"));

@@ -493,7 +493,23 @@ public static class WebAgentReadiness
     {
         var output = string.IsNullOrWhiteSpace(spec.OutputPath) ? ".well-known/api-catalog" : spec.OutputPath!;
         var outputPath = ResolveSitePath(siteRoot, output);
-        var entries = spec.Entries?.Where(static e => !string.IsNullOrWhiteSpace(e.Anchor)).ToList() ?? new List<AgentApiCatalogEntrySpec>();
+        var entries = new List<AgentApiCatalogEntrySpec>();
+        var anchors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in spec.Entries?.Where(static e => !string.IsNullOrWhiteSpace(e.Anchor)) ?? Array.Empty<AgentApiCatalogEntrySpec>())
+        {
+            if (anchors.Add(NormalizeApiCatalogAnchorKey(entry.Anchor)))
+                entries.Add(entry);
+        }
+
+        if (spec.IncludeProjectApiReferences)
+        {
+            foreach (var entry in InferProjectApiReferenceEntries(siteRoot, spec, warnings))
+            {
+                if (anchors.Add(NormalizeApiCatalogAnchorKey(entry.Anchor)))
+                    entries.Add(entry);
+            }
+        }
+
         if (entries.Count == 0)
         {
             var apiIndex = Path.Combine(siteRoot, "api", "index.json");
@@ -533,6 +549,109 @@ public static class WebAgentReadiness
         File.WriteAllText(outputPath, root.ToJsonString(WebJson.Options));
         return outputPath;
     }
+
+    private static IEnumerable<AgentApiCatalogEntrySpec> InferProjectApiReferenceEntries(string siteRoot, AgentApiCatalogSpec spec, List<string> warnings)
+    {
+        var projectsRoot = Path.Combine(siteRoot, "projects");
+        if (!Directory.Exists(projectsRoot))
+            yield break;
+
+        var catalog = ReadProjectApiCatalogInfo(siteRoot, spec.ProjectCatalogPath, warnings);
+        foreach (var apiIndexPath in Directory.EnumerateFiles(projectsRoot, "index.html", SearchOption.AllDirectories).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var apiDirectory = Directory.GetParent(apiIndexPath);
+            var projectDirectory = apiDirectory?.Parent;
+            if (apiDirectory is null ||
+                projectDirectory is null ||
+                !apiDirectory.Name.Equals("api", StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFullPath(projectDirectory.Parent?.FullName ?? string.Empty).Equals(Path.GetFullPath(projectsRoot), FileSystemPathComparison))
+            {
+                continue;
+            }
+
+            var slug = projectDirectory.Name;
+            var route = $"/projects/{slug}/api/";
+            var title = BuildProjectApiTitle(slug, catalog.TryGetValue(slug, out var info) ? info : null);
+            var descriptorRoute = File.Exists(Path.Combine(apiDirectory.FullName, "index.json"))
+                ? $"{route}index.json"
+                : null;
+
+            yield return new AgentApiCatalogEntrySpec
+            {
+                Anchor = route,
+                ServiceDesc = descriptorRoute,
+                ServiceDoc = route,
+                Title = title
+            };
+        }
+    }
+
+    private static Dictionary<string, ProjectApiCatalogInfo> ReadProjectApiCatalogInfo(string siteRoot, string? projectCatalogPath, List<string> warnings)
+    {
+        var catalog = new Dictionary<string, ProjectApiCatalogInfo>(StringComparer.OrdinalIgnoreCase);
+        var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? "data/projects/catalog.json" : projectCatalogPath!;
+        var catalogPath = ResolveSitePath(siteRoot, configuredPath);
+        if (!File.Exists(catalogPath))
+            return catalog;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            if (!doc.RootElement.TryGetProperty("projects", out var projects) || projects.ValueKind != JsonValueKind.Array)
+                return catalog;
+
+            foreach (var project in projects.EnumerateArray())
+            {
+                var slug = GetJsonString(project, "slug");
+                if (string.IsNullOrWhiteSpace(slug))
+                    continue;
+
+                var name = GetJsonString(project, "name");
+                var apiPowerShell = project.TryGetProperty("links", out var links) ? GetJsonString(links, "apiPowerShell") : null;
+                catalog[slug!] = new ProjectApiCatalogInfo(
+                    string.IsNullOrWhiteSpace(name) ? ToDisplayNameFromSlug(slug!) : name!,
+                    IsLocalProjectApiRoute(apiPowerShell));
+            }
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Could not read project catalog '{configuredPath}' for API catalog titles: {ex.Message}");
+        }
+
+        return catalog;
+    }
+
+    private static string BuildProjectApiTitle(string slug, ProjectApiCatalogInfo? info)
+    {
+        var name = string.IsNullOrWhiteSpace(info?.Name) ? ToDisplayNameFromSlug(slug) : info!.Name;
+        return info?.IsPowerShellApi == true
+            ? $"{name} PowerShell API reference"
+            : $"{name} API reference";
+    }
+
+    private static string NormalizeApiCatalogAnchorKey(string value)
+    {
+        var normalized = Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            ? uri.AbsoluteUri
+            : NormalizeRoute(value);
+        return normalized.EndsWith("/", StringComparison.Ordinal) ? normalized : normalized + "/";
+    }
+
+    private static string ToDisplayNameFromSlug(string slug)
+    {
+        var normalized = Regex.Replace(slug.Trim(), @"[-_]+", " ");
+        return Regex.Replace(normalized, @"\b\p{Ll}", static match => match.Value.ToUpperInvariant());
+    }
+
+    private static bool IsLocalProjectApiRoute(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           !Uri.TryCreate(value, UriKind.Absolute, out _) &&
+           NormalizeRoute(value!).StartsWith("/projects/", StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetJsonString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
 
     private static string? WriteAgentSkills(string siteRoot, string? baseUrl, string siteName, AgentSkillsDiscoverySpec spec, List<string> warnings)
     {
@@ -2093,6 +2212,7 @@ public static class WebAgentReadiness
     private sealed record OpenApiScanResult(bool Success, string? Url);
     private sealed record HttpTextResult(bool Success, string Message, string Text, HttpResponseMessage? Response);
     private sealed record HttpResponseResult(bool Success, string Message, HttpResponseMessage? Response);
+    private sealed record ProjectApiCatalogInfo(string Name, bool IsPowerShellApi);
 }
 
 /// <summary>Options for preparing local agent-readiness artifacts.</summary>
