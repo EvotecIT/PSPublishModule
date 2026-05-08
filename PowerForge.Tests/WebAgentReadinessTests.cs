@@ -348,6 +348,68 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void Prepare_WithProjectCatalogTraversalPath_WarnsAndStillInfersProjectApi()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-project-api-traversal-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":["WebSite","Organization"],"name":"Example","sameAs":["https://example.test"],"publisher":{"@type":"Organization","name":"Example"},"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var apiRoot = Path.Combine(root, "projects", "traversal-module", "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"), "<!doctype html><title>Traversal API</title>");
+
+            var result = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                SiteName = "Example",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec
+                    {
+                        Enabled = true,
+                        IncludeProjectApiReferences = true,
+                        ProjectCatalogPath = "../outside-project-catalog.json"
+                    },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false }
+                }
+            });
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            Assert.Contains(result.Warnings, warning => warning.Contains("resolves outside the site root", StringComparison.OrdinalIgnoreCase));
+            using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "api-catalog")));
+            var linkset = apiCatalog.RootElement.GetProperty("linkset").EnumerateArray().ToArray();
+            var entry = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/traversal-module/api/");
+            Assert.Equal("Traversal Module API reference", entry.GetProperty("service-doc")[0].GetProperty("title").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Prepare_DoesNotInferHostedProjectApiReferencesWhenDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-project-api-disabled-" + Guid.NewGuid().ToString("N"));

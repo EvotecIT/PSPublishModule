@@ -136,7 +136,7 @@ public sealed class AgentApiCatalogSpec
     /// <summary>When true, infer entries from generated /projects/{slug}/api/ pages hosted by this site.</summary>
     public bool IncludeProjectApiReferences { get; set; }
     /// <summary>Optional project catalog path relative to site root. Null or blank uses the default project catalog path.</summary>
-    public string? ProjectCatalogPath { get; set; } = WebAgentReadiness.DefaultProjectCatalogPath;
+    public string? ProjectCatalogPath { get; set; }
     /// <summary>API catalog entries.</summary>
     public AgentApiCatalogEntrySpec[] Entries { get; set; } = Array.Empty<AgentApiCatalogEntrySpec>();
 }
