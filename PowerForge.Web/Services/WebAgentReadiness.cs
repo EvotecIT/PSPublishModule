@@ -16,6 +16,7 @@ public static class WebAgentReadiness
     private const string AgentBlockStart = "# BEGIN PowerForge Agent Readiness";
     private const string AgentBlockEnd = "# END PowerForge Agent Readiness";
     private const string AgentSkillsSchema = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
+    private const string DefaultProjectCatalogPath = "data/projects/catalog.json";
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -518,7 +519,7 @@ public static class WebAgentReadiness
                 }
                 else
                 {
-                    warnings.Add($"Inferred project API catalog anchor '{entry.Anchor}' was ignored because an explicit entry already exists.");
+                    warnings.Add($"Inferred project API catalog anchor '{entry.Anchor}' was ignored because a duplicate entry already exists.");
                 }
             }
         }
@@ -600,7 +601,7 @@ public static class WebAgentReadiness
     private static Dictionary<string, ProjectApiCatalogInfo> ReadProjectApiCatalogInfo(string siteRoot, string? projectCatalogPath, List<string> warnings)
     {
         var catalog = new Dictionary<string, ProjectApiCatalogInfo>(StringComparer.OrdinalIgnoreCase);
-        var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? AgentApiCatalogSpec.DefaultProjectCatalogPath : projectCatalogPath!;
+        var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? DefaultProjectCatalogPath : projectCatalogPath!;
         if (Path.IsPathFullyQualified(configuredPath))
         {
             warnings.Add($"Could not read project catalog '{configuredPath}' for API catalog titles: path must be relative to the site root.");
@@ -625,8 +626,9 @@ public static class WebAgentReadiness
 
                 var name = GetJsonString(project, "name");
                 var apiPowerShell = project.TryGetProperty("links", out var links) ? GetJsonString(links, "apiPowerShell") : null;
-                catalog[slug!] = new ProjectApiCatalogInfo(
-                    string.IsNullOrWhiteSpace(name) ? ToDisplayNameFromSlug(slug!) : name!,
+                var slugKey = slug;
+                catalog[slugKey] = new ProjectApiCatalogInfo(
+                    string.IsNullOrWhiteSpace(name) ? ToDisplayNameFromSlug(slugKey) : name!,
                     IsLocalProjectApiRoute(apiPowerShell));
             }
         }

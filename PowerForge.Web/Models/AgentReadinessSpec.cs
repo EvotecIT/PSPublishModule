@@ -129,7 +129,7 @@ public sealed class AgentBotRuleSpec
 /// <summary>API catalog output settings.</summary>
 public sealed class AgentApiCatalogSpec
 {
-    internal const string DefaultProjectCatalogPath = "data/projects/catalog.json";
+    private const string DefaultProjectCatalogPath = "data/projects/catalog.json";
 
     /// <summary>Enable /.well-known/api-catalog generation.</summary>
     public bool Enabled { get; set; } = true;

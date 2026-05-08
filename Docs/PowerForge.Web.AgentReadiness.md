@@ -172,8 +172,10 @@ If `apiCatalog.includeProjectApiReferences` is true, PowerForge also scans the
 rendered site for local `/projects/{slug}/api/index.html` pages and adds those
 hosted API reference surfaces to the linkset. It uses
 `data/projects/catalog.json` only to improve titles and classify local
-PowerShell API references; external project sites must publish their own API
-catalogs instead of being claimed by the hub. A generated
+PowerShell API references; set `projectCatalogPath` to a different relative
+site-root path when needed, or leave it blank to use the default catalog.
+External project sites must publish their own API catalogs instead of being
+claimed by the hub. A generated
 `/projects/{slug}/api/index.json` is used as `service-desc` when present.
 
 If `markdownArtifacts.enabled` is true, `agent-ready prepare` converts rendered
