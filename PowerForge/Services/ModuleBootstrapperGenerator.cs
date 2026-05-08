@@ -376,13 +376,14 @@ internal static class ModuleBootstrapperGenerator
 
     private static string? NormalizeAssemblyLoadContextTargetFramework(string? framework)
     {
+        framework ??= string.Empty;
         if (string.IsNullOrWhiteSpace(framework))
             return null;
 
         var normalized = framework.Trim();
-        var platformIndex = normalized.IndexOf('-', StringComparison.Ordinal);
+        var platformIndex = normalized.IndexOf('-');
         if (platformIndex >= 0)
-            normalized = normalized[..platformIndex];
+            normalized = normalized.Substring(0, platformIndex);
 
         return TryGetNetTfmVersion(normalized, out _) ? normalized : null;
     }
@@ -402,7 +403,7 @@ internal static class ModuleBootstrapperGenerator
             return false;
         }
 
-        if (!Version.TryParse(framework[3..], out var parsed))
+        if (!Version.TryParse(framework.Substring(3), out var parsed))
             return false;
 
         version = parsed;
