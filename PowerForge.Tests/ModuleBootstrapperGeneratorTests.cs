@@ -66,6 +66,45 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndSkipsLibrariesScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
+            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
+            Assert.Contains("AddExportedCmdlet", bootstrapper);
+            Assert.DoesNotContain("$LibrariesScript =", bootstrapper);
+
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithScriptLayoutOnly_WritesScriptLoaderWithoutBinaryLoader()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-script-" + Guid.NewGuid().ToString("N"));

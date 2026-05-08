@@ -71,6 +71,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments = null;
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
+        bool? useAssemblyLoadContextFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
         bool? binaryModuleDocumentationRequested = null;
@@ -264,6 +265,7 @@ public sealed partial class ModulePipelineRunner
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
+                    if (bl.UseAssemblyLoadContext.HasValue) useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;
@@ -537,6 +539,7 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
+            UseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             CsprojRequiredReasons = string.IsNullOrWhiteSpace(csproj) ? csprojRequiredReasons : Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = requiredModulesDraft

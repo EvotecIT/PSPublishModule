@@ -368,6 +368,7 @@ public sealed partial class ModulePipelineRunner
                 exports,
                 exportAssemblies,
                 handleRuntimes,
+                plan?.BuildSpec.UseAssemblyLoadContext ?? false,
                 conditionalExportDependencies);
         }
         catch (Exception ex)

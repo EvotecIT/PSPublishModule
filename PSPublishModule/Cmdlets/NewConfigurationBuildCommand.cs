@@ -266,6 +266,11 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Handle runtimes folder when copying libraries.</summary>
     [Parameter] public SwitchParameter NETHandleRuntimes { get; set; }
 
+    /// <summary>Load the binary module through a custom AssemblyLoadContext on PowerShell Core.</summary>
+    [Parameter]
+    [Alias("UseAssemblyLoadContext")]
+    public SwitchParameter NETAssemblyLoadContext { get; set; }
+
     /// <summary>Kill locking processes before install.</summary>
     [Parameter] public SwitchParameter KillLockersBeforeInstall { get; set; }
 
@@ -379,6 +384,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETSearchClass = NETSearchClass,
             NETHandleRuntimesSpecified = bound.ContainsKey(nameof(NETHandleRuntimes)),
             NETHandleRuntimes = NETHandleRuntimes.IsPresent,
+            NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),
+            NETAssemblyLoadContext = NETAssemblyLoadContext.IsPresent,
             KillLockersBeforeInstallSpecified = bound.ContainsKey(nameof(KillLockersBeforeInstall)),
             KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent,
             KillLockersForceSpecified = bound.ContainsKey(nameof(KillLockersForce)),

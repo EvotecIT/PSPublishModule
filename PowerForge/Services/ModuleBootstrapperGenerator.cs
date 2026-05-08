@@ -16,6 +16,7 @@ internal static class ModuleBootstrapperGenerator
         ExportSet exports,
         IReadOnlyList<string>? exportAssemblies,
         bool handleRuntimes,
+        bool useAssemblyLoadContext = false,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
@@ -37,7 +38,11 @@ internal static class ModuleBootstrapperGenerator
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
-        if (hasLib)
+        if (hasLib && useAssemblyLoadContext)
+        {
+            BuildAssemblyLoadContextLoader(root, moduleName);
+        }
+        else if (hasLib)
         {
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
             var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames);
@@ -52,6 +57,7 @@ internal static class ModuleBootstrapperGenerator
             includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
             handleRuntimes: handleRuntimes,
+            useAssemblyLoadContext: useAssemblyLoadContext,
             conditionalFunctionDependencies: conditionalFunctionDependencies);
         WritePowerShellFile(psm1Path, psm1Content);
     }
@@ -210,16 +216,21 @@ internal static class ModuleBootstrapperGenerator
         bool includeBinaryLoader,
         bool includeScriptLoader,
         bool handleRuntimes,
+        bool useAssemblyLoadContext,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
     {
         var binaryLoaderBlock = includeBinaryLoader
             ? RenderModuleBootstrapperTemplate(
-                "BinaryLoader",
-                "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
+                useAssemblyLoadContext ? "AssemblyLoadContextBinaryLoader" : "BinaryLoader",
+                useAssemblyLoadContext
+                    ? "Scripts/ModuleBootstrapper/AssemblyLoadContextBinaryLoader.Template.ps1"
+                    : "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["LibraryName"] = EscapePsSingleQuoted(libraryName),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
+                    ["LoaderAssemblyName"] = EscapePsSingleQuoted(CreateAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName),
+                    ["LoaderTypeName"] = CreateAssemblyLoadContextLoaderIdentity(moduleName).TypeName,
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty
                 })
             : string.Empty;
@@ -244,6 +255,226 @@ internal static class ModuleBootstrapperGenerator
 
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Bootstrapper.Template.ps1");
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
+    }
+
+    private static void BuildAssemblyLoadContextLoader(string moduleRoot, string moduleName)
+    {
+        var libRoot = Path.Combine(moduleRoot, "Lib");
+        if (!Directory.Exists(libRoot)) return;
+
+        var targetDirectories = Directory.EnumerateDirectories(libRoot)
+            .Where(directory => !string.Equals(Path.GetFileName(directory), "Default", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (targetDirectories.Length == 0) return;
+
+        var identity = CreateAssemblyLoadContextLoaderIdentity(moduleName);
+        var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
+        var outputRoot = Path.Combine(buildRoot, "out");
+
+        try
+        {
+            Directory.CreateDirectory(buildRoot);
+            Directory.CreateDirectory(outputRoot);
+
+            var projectPath = Path.Combine(buildRoot, identity.AssemblyName + ".csproj");
+            File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
+
+            var result = RunProcess(
+                "dotnet",
+                buildRoot,
+                new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal" },
+                TimeSpan.FromMinutes(2));
+            if (result.ExitCode != 0)
+            {
+                var message = string.Join(
+                    Environment.NewLine,
+                    new[]
+                    {
+                        $"Failed to build module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' (exit {result.ExitCode}).",
+                        result.StdOut,
+                        result.StdErr
+                    }.Where(static line => !string.IsNullOrWhiteSpace(line)));
+                throw new InvalidOperationException(message);
+            }
+
+            var loaderPath = Path.Combine(outputRoot, identity.AssemblyName + ".dll");
+            if (!File.Exists(loaderPath))
+                throw new FileNotFoundException("Module-scoped AssemblyLoadContext loader build did not produce the expected DLL.", loaderPath);
+
+            foreach (var directory in targetDirectories)
+                File.Copy(loaderPath, Path.Combine(directory, identity.AssemblyName + ".dll"), overwrite: true);
+        }
+        finally
+        {
+            try { if (Directory.Exists(buildRoot)) Directory.Delete(buildRoot, recursive: true); }
+            catch { /* best effort */ }
+        }
+    }
+
+    private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
+    {
+        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext";
+        var ns = safeNamespaceRoot + ".ModuleLoadContext";
+        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
+    }
+
+    private static string SanitizeAssemblyName(string value)
+    {
+        var chars = (value ?? string.Empty).Select(ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '_').ToArray();
+        var sanitized = new string(chars).Trim('.', '-', '_');
+        return string.IsNullOrWhiteSpace(sanitized) ? "Module" : sanitized;
+    }
+
+    private static string ToCSharpIdentifierPath(string value)
+    {
+        var parts = (value ?? string.Empty)
+            .Split(new[] { '.', '-' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(ToCSharpIdentifier)
+            .Where(static part => !string.IsNullOrWhiteSpace(part))
+            .ToArray();
+
+        return parts.Length == 0 ? "Module" : string.Join(".", parts);
+    }
+
+    private static string ToCSharpIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+        var sb = new StringBuilder(value.Length + 1);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var ch = value[i];
+            var valid = i == 0
+                ? char.IsLetter(ch) || ch == '_'
+                : char.IsLetterOrDigit(ch) || ch == '_';
+            sb.Append(valid ? ch : '_');
+        }
+
+        if (sb.Length == 0 || !(char.IsLetter(sb[0]) || sb[0] == '_'))
+            sb.Insert(0, '_');
+
+        return sb.ToString();
+    }
+
+    private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity)
+        => $@"<Project Sdk=""Microsoft.NET.Sdk"">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>{EscapeXml(identity.AssemblyName)}</AssemblyName>
+    <RootNamespace>{EscapeXml(identity.Namespace)}</RootNamespace>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+  </PropertyGroup>
+</Project>
+";
+
+    private static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
+        => $@"using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
+
+namespace {identity.Namespace};
+
+public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
+{{
+    private static readonly object Sync = new();
+    private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly string _assemblyDirectory;
+    private readonly string _moduleAssemblyPath;
+    private readonly AssemblyDependencyResolver _resolver;
+    private Assembly? _moduleAssembly;
+
+    private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
+        : base(contextName, isCollectible: false)
+    {{
+        _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
+        _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
+        _resolver = new AssemblyDependencyResolver(_moduleAssemblyPath);
+    }}
+
+    public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
+    {{
+        if (string.IsNullOrWhiteSpace(moduleAssemblyPath))
+            throw new ArgumentException(""Module assembly path is required."", nameof(moduleAssemblyPath));
+
+        var fullPath = Path.GetFullPath(moduleAssemblyPath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException(""Module assembly was not found."", fullPath);
+
+        lock (Sync)
+        {{
+            if (!Contexts.TryGetValue(fullPath, out var context))
+            {{
+                context = new ModuleAssemblyLoadContext(fullPath, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPath) : contextName);
+                Contexts[fullPath] = context;
+            }}
+
+            return context.LoadMainModule();
+        }}
+    }}
+
+    protected override Assembly? Load(AssemblyName assemblyName)
+    {{
+        if (assemblyName is null || string.IsNullOrWhiteSpace(assemblyName.Name))
+            return null;
+
+        var loaderAssembly = typeof(ModuleAssemblyLoadContext).Assembly.GetName();
+        if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
+            return typeof(ModuleAssemblyLoadContext).Assembly;
+
+        var resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadFromAssemblyPath(resolvedPath);
+
+        var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
+        return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
+    }}
+
+    protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+    {{
+        var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+        return !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath)
+            ? LoadUnmanagedDllFromPath(resolvedPath)
+            : IntPtr.Zero;
+    }}
+
+    private Assembly LoadMainModule()
+    {{
+        _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
+        return _moduleAssembly;
+    }}
+}}
+";
+
+    private static string EscapeXml(string value)
+        => System.Security.SecurityElement.Escape(value) ?? string.Empty;
+
+    private static ProcessRunResult RunProcess(string fileName, string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout)
+        => new ProcessRunner()
+            .RunAsync(new ProcessRunRequest(fileName, workingDirectory, arguments, timeout))
+            .GetAwaiter()
+            .GetResult();
+
+    private sealed class AssemblyLoadContextLoaderIdentity
+    {
+        public AssemblyLoadContextLoaderIdentity(string assemblyName, string ns, string typeName)
+        {
+            AssemblyName = assemblyName;
+            Namespace = ns;
+            TypeName = typeName;
+        }
+
+        public string AssemblyName { get; }
+        public string Namespace { get; }
+        public string TypeName { get; }
     }
 
     private static string BuildRuntimeHandlerBlock()

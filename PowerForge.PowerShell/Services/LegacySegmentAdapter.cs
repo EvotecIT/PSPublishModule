@@ -126,6 +126,11 @@ public static class LegacySegmentAdapter
                         NETProjectPath = GetString(buildLibraries, "NETProjectPath"),
                         ExcludeLibraryFilter = GetStringArray(buildLibraries, "ExcludeLibraryFilter") ?? GetStringArray(buildLibraries, "NETExcludeLibraryFilter"),
                         IgnoreLibraryOnLoad = GetStringArray(buildLibraries, "IgnoreLibraryOnLoad") ?? GetStringArray(buildLibraries, "NETIgnoreLibraryOnLoad"),
+                        UseAssemblyLoadContext = HasKey(buildLibraries, "UseAssemblyLoadContext")
+                            ? GetBool(buildLibraries, "UseAssemblyLoadContext")
+                            : HasKey(buildLibraries, "NETAssemblyLoadContext")
+                                ? GetBool(buildLibraries, "NETAssemblyLoadContext")
+                                : null,
                         NETDoNotCopyLibrariesRecursively = HasKey(buildLibraries, "NETDoNotCopyLibrariesRecursively")
                             ? GetBool(buildLibraries, "NETDoNotCopyLibrariesRecursively")
                             : null
@@ -198,6 +203,11 @@ public static class LegacySegmentAdapter
                     NETProjectPath = GetString(conf, "NETProjectPath"),
                     ExcludeLibraryFilter = GetStringArray(conf, "ExcludeLibraryFilter") ?? GetStringArray(conf, "NETExcludeLibraryFilter"),
                     IgnoreLibraryOnLoad = GetStringArray(conf, "IgnoreLibraryOnLoad") ?? GetStringArray(conf, "NETIgnoreLibraryOnLoad"),
+                    UseAssemblyLoadContext = HasKey(conf, "UseAssemblyLoadContext")
+                        ? GetBool(conf, "UseAssemblyLoadContext")
+                        : HasKey(conf, "NETAssemblyLoadContext")
+                            ? GetBool(conf, "NETAssemblyLoadContext")
+                            : null,
                     NETDoNotCopyLibrariesRecursively = HasKey(conf, "NETDoNotCopyLibrariesRecursively")
                         ? GetBool(conf, "NETDoNotCopyLibrariesRecursively")
                         : null

@@ -177,6 +177,7 @@ internal sealed class BuildConfigurationFactory
         if (request.NETSearchClassSpecified) { EnsureBuildLibraries(); buildLibraries!.SearchClass = request.NETSearchClass; }
         if (request.NETBinaryModuleDocumentationSpecified) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = request.NETBinaryModuleDocumentation; }
         if (request.NETHandleRuntimesSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = request.NETHandleRuntimes; }
+        if (request.NETAssemblyLoadContextSpecified) { EnsureBuildLibraries(); buildLibraries!.UseAssemblyLoadContext = request.NETAssemblyLoadContext; }
         if (request.NETDoNotCopyLibrariesRecursivelySpecified) { EnsureBuildLibraries(); buildLibraries!.NETDoNotCopyLibrariesRecursively = request.NETDoNotCopyLibrariesRecursively; }
 
         if (buildLibraries is null)

@@ -91,6 +91,8 @@
         "SearchClass": { "type": ["string", "null"] },
         "NETBinaryModuleDocumentation": { "type": ["boolean", "null"] },
         "HandleRuntimes": { "type": ["boolean", "null"] },
+        "UseAssemblyLoadContext": { "type": ["boolean", "null"] },
+        "NETAssemblyLoadContext": { "type": ["boolean", "null"] },
         "NETDoNotCopyLibrariesRecursively": { "type": ["boolean", "null"] }
       }
     },
