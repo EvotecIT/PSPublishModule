@@ -447,6 +447,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             var plan = runner.Plan(spec!);
 
             Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(new[] { "NETAssemblyLoadContext" }, plan.BuildSpec.CsprojRequiredReasons);
         }
         finally
         {

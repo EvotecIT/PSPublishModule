@@ -8,6 +8,8 @@ namespace PowerForge;
 
 internal static class ModuleBootstrapperGenerator
 {
+    // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
+    private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
     private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(5);
 
@@ -41,13 +43,17 @@ internal static class ModuleBootstrapperGenerator
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
-        if (hasLib && useAssemblyLoadContext)
-            BuildAssemblyLoadContextLoader(root, moduleName, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
+        var assemblyLoadContextLoaderIdentity = useAssemblyLoadContext
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            : null;
+
+        if (hasLib && useAssemblyLoadContext && assemblyLoadContextLoaderIdentity is not null)
+            BuildAssemblyLoadContextLoader(root, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
 
         if (hasLib)
         {
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames);
+            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity?.AssemblyName);
             WritePowerShellFile(librariesPath, librariesContent);
         }
 
@@ -106,15 +112,19 @@ internal static class ModuleBootstrapperGenerator
         return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
     }
 
-    private static string BuildLibrariesScript(string moduleRoot, string moduleName, IReadOnlyList<string> exportAssemblyFileNames)
+    private static string BuildLibrariesScript(
+        string moduleRoot,
+        string moduleName,
+        IReadOnlyList<string> exportAssemblyFileNames,
+        string? assemblyLoadContextLoaderAssemblyName)
     {
         // Generate a deterministic list of DLLs to Add-Type for each Lib/<Folder>.
         var libRoot = Path.Combine(moduleRoot, "Lib");
         var byFolder = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames);
-        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames);
-        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames);
-        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames);
+        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
 
         var map = BuildLibrariesByFolderMap(byFolder);
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
@@ -162,7 +172,11 @@ internal static class ModuleBootstrapperGenerator
         return sb.ToString();
     }
 
-    private static List<string> EnumerateDllRelativePaths(string libRoot, string? folderName, IReadOnlyList<string> exportAssemblyFileNames)
+    private static List<string> EnumerateDllRelativePaths(
+        string libRoot,
+        string? folderName,
+        IReadOnlyList<string> exportAssemblyFileNames,
+        string? assemblyLoadContextLoaderAssemblyName)
     {
         var list = new List<string>();
 
@@ -183,16 +197,22 @@ internal static class ModuleBootstrapperGenerator
             return list;
         }
 
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(assemblyLoadContextLoaderAssemblyName))
+            excluded.Add(assemblyLoadContextLoaderAssemblyName + ".dll");
+
         var exportFirst = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var name in exportAssemblyFileNames ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
+            if (excluded.Contains(name)) continue;
             if (!dllFiles.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
             list.Add(RelativeLibPath(folderName, name));
         }
 
         foreach (var name in dllFiles.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
         {
+            if (excluded.Contains(name)) continue;
             if (exportFirst.Contains(name)) continue;
             list.Add(RelativeLibPath(folderName, name));
         }
@@ -263,17 +283,26 @@ internal static class ModuleBootstrapperGenerator
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
     }
 
-    private static void BuildAssemblyLoadContextLoader(string moduleRoot, string moduleName, string targetFramework, Action<string>? log)
+    private static void BuildAssemblyLoadContextLoader(
+        string moduleRoot,
+        AssemblyLoadContextLoaderIdentity identity,
+        string targetFramework,
+        Action<string>? log)
     {
         var libRoot = Path.Combine(moduleRoot, "Lib");
-        if (!Directory.Exists(libRoot)) return;
+        if (!Directory.Exists(libRoot))
+        {
+            log?.Invoke("UseAssemblyLoadContext is set but no Lib directory was found; skipping ALC loader generation.");
+            return;
+        }
 
-        var targetDirectories = Directory.EnumerateDirectories(libRoot)
-            .Where(directory => !string.Equals(Path.GetFileName(directory), "Default", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (targetDirectories.Length == 0) return;
+        var targetDirectories = ResolveAssemblyLoadContextTargetDirectories(libRoot);
+        if (targetDirectories.Length == 0)
+        {
+            log?.Invoke("UseAssemblyLoadContext is set but no compatible Lib directory was found; skipping ALC loader generation.");
+            return;
+        }
 
-        var identity = CreateAssemblyLoadContextLoaderIdentity(moduleName);
         var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
         var outputRoot = Path.Combine(buildRoot, "out");
 
@@ -286,6 +315,7 @@ internal static class ModuleBootstrapperGenerator
             File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetFramework), Encoding.UTF8);
             File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
 
+            EnsureDotNetSdkAvailable(buildRoot);
             log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetFramework}.");
             var result = RunProcess(
                 "dotnet",
@@ -317,6 +347,54 @@ internal static class ModuleBootstrapperGenerator
             try { if (Directory.Exists(buildRoot)) Directory.Delete(buildRoot, recursive: true); }
             catch { /* best effort */ }
         }
+    }
+
+    private static void EnsureDotNetSdkAvailable(string workingDirectory)
+    {
+        ProcessRunResult result;
+        try
+        {
+            result = RunProcess("dotnet", workingDirectory, new[] { "--version" }, TimeSpan.FromSeconds(30));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.", ex);
+        }
+
+        if (result.ExitCode != 0)
+        {
+            var message = string.Join(
+                Environment.NewLine,
+                new[]
+                {
+                    "UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.",
+                    result.StdOut,
+                    result.StdErr
+                }.Where(static line => !string.IsNullOrWhiteSpace(line)));
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    private static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
+    {
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in Directory.EnumerateDirectories(libRoot))
+        {
+            var name = Path.GetFileName(directory);
+            if (!string.IsNullOrWhiteSpace(name))
+                byName[name] = directory;
+        }
+
+        if (byName.TryGetValue("Standard", out var standard))
+            return new[] { standard };
+
+        if (byName.TryGetValue("Core", out var core))
+            return new[] { core };
+
+        if (byName.TryGetValue("Default", out var @default))
+            return new[] { @default };
+
+        return Array.Empty<string>();
     }
 
     private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
@@ -371,7 +449,7 @@ internal static class ModuleBootstrapperGenerator
             .OrderBy(static framework => GetNetTfmVersion(framework!), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
             .ToArray();
 
-        return candidates.FirstOrDefault() ?? "net8.0";
+        return candidates.FirstOrDefault() ?? DefaultAssemblyLoadContextTargetFramework;
     }
 
     private static string? NormalizeAssemblyLoadContextTargetFramework(string? framework)
@@ -437,6 +515,7 @@ namespace {identity.Namespace};
 public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 {{
     private static readonly object Sync = new();
+    // Module contexts are intentionally non-collectible. A process restart is required to load a replaced DLL at the same path.
     private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _assemblyDirectory;
@@ -461,6 +540,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (!File.Exists(fullPath))
             throw new FileNotFoundException(""Module assembly was not found."", fullPath);
 
+        // The global lock keeps context creation and the first main assembly load single-shot for each module path.
         lock (Sync)
         {{
             if (!Contexts.TryGetValue(fullPath, out var context))

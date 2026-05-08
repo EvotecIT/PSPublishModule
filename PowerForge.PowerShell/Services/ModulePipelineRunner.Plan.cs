@@ -518,6 +518,7 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 handleRuntimesFromSegments,
+                useAssemblyLoadContextFromSegments,
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true);
 
@@ -794,6 +795,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
         bool? handleRuntimesFromSegments,
+        bool? useAssemblyLoadContextFromSegments,
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested)
     {
@@ -806,6 +808,8 @@ public sealed partial class ModulePipelineRunner
             doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
         var effectiveHandleRuntimes =
             handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
+        var effectiveUseAssemblyLoadContext =
+            useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
@@ -814,6 +818,7 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
             || effectiveHandleRuntimes
+            || effectiveUseAssemblyLoadContext
             || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
@@ -836,6 +841,9 @@ public sealed partial class ModulePipelineRunner
 
         if (effectiveHandleRuntimes)
             reasons.Add("NETHandleRuntimes");
+
+        if (effectiveUseAssemblyLoadContext)
+            reasons.Add("NETAssemblyLoadContext");
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");

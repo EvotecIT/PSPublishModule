@@ -37,7 +37,7 @@ if ($Standard -and $Core -and $Default) {
     $Framework = 'Core'
     $FrameworkNet = ''
 } elseif ($Default) {
-    $Framework = ''
+    $Framework = 'Default'
     $FrameworkNet = 'Default'
 } else {
     Write-Error -Message 'No assemblies found'
