@@ -129,6 +129,8 @@ public sealed class AgentBotRuleSpec
 /// <summary>API catalog output settings.</summary>
 public sealed class AgentApiCatalogSpec
 {
+    internal const string DefaultProjectCatalogPath = "data/projects/catalog.json";
+
     /// <summary>Enable /.well-known/api-catalog generation.</summary>
     public bool Enabled { get; set; } = true;
     /// <summary>Output path relative to site root.</summary>
@@ -136,7 +138,7 @@ public sealed class AgentApiCatalogSpec
     /// <summary>When true, infer entries from generated /projects/{slug}/api/ pages hosted by this site.</summary>
     public bool IncludeProjectApiReferences { get; set; }
     /// <summary>Optional project catalog path relative to site root. Used for inferred project API entry titles.</summary>
-    public string? ProjectCatalogPath { get; set; } = "data/projects/catalog.json";
+    public string? ProjectCatalogPath { get; set; } = DefaultProjectCatalogPath;
     /// <summary>API catalog entries.</summary>
     public AgentApiCatalogEntrySpec[] Entries { get; set; } = Array.Empty<AgentApiCatalogEntrySpec>();
 }

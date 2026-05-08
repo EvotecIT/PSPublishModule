@@ -600,7 +600,12 @@ public static class WebAgentReadiness
     private static Dictionary<string, ProjectApiCatalogInfo> ReadProjectApiCatalogInfo(string siteRoot, string? projectCatalogPath, List<string> warnings)
     {
         var catalog = new Dictionary<string, ProjectApiCatalogInfo>(StringComparer.OrdinalIgnoreCase);
-        var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? "data/projects/catalog.json" : projectCatalogPath!;
+        var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? AgentApiCatalogSpec.DefaultProjectCatalogPath : projectCatalogPath!;
+        if (Path.IsPathFullyQualified(configuredPath))
+        {
+            warnings.Add($"Could not read project catalog '{configuredPath}' for API catalog titles: path must be relative to the site root.");
+            return catalog;
+        }
 
         try
         {

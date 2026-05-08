@@ -221,7 +221,7 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
-    public void Prepare_WithProjectCatalogPathOutsideSiteRoot_WarnsAndStillInfersProjectApi()
+    public void Prepare_WithAbsoluteProjectCatalogPath_WarnsAndStillInfersProjectApi()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-project-api-catalog-path-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -270,7 +270,7 @@ public class WebAgentReadinessTests
             });
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
-            Assert.Contains(result.Warnings, warning => warning.Contains("resolves outside the site root", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("relative to the site root", StringComparison.OrdinalIgnoreCase));
             using var apiCatalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".well-known", "api-catalog")));
             var linkset = apiCatalog.RootElement.GetProperty("linkset").EnumerateArray().ToArray();
             var entry = linkset.Single(static item => item.GetProperty("anchor").GetString() == "https://example.test/projects/safe-module/api/");
