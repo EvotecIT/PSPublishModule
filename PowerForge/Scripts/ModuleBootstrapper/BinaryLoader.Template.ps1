@@ -3,7 +3,8 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
+$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
 $Core = $false
@@ -40,6 +41,7 @@ if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
 } else {
     Write-Error -Message 'No assemblies found'
+    return
 }
 
 if ($PSEdition -eq 'Core') {

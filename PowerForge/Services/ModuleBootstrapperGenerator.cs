@@ -8,7 +8,10 @@ namespace PowerForge;
 
 internal static class ModuleBootstrapperGenerator
 {
+    // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
+    private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
     private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
+    private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(10);
 
     internal static void Generate(
         string moduleRoot,
@@ -16,7 +19,10 @@ internal static class ModuleBootstrapperGenerator
         ExportSet exports,
         IReadOnlyList<string>? exportAssemblies,
         bool handleRuntimes,
-        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null)
+        bool useAssemblyLoadContext = false,
+        IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
+        IReadOnlyList<string>? targetFrameworks = null,
+        Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
@@ -37,10 +43,17 @@ internal static class ModuleBootstrapperGenerator
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
+        var assemblyLoadContextLoaderIdentity = useAssemblyLoadContext
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            : null;
+
+        if (hasLib && useAssemblyLoadContext && assemblyLoadContextLoaderIdentity is not null)
+            BuildAssemblyLoadContextLoader(root, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
+
         if (hasLib)
         {
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames);
+            var librariesContent = BuildLibrariesScript(root, moduleName, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity?.AssemblyName);
             WritePowerShellFile(librariesPath, librariesContent);
         }
 
@@ -52,6 +65,7 @@ internal static class ModuleBootstrapperGenerator
             includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
             handleRuntimes: handleRuntimes,
+            useAssemblyLoadContext: useAssemblyLoadContext,
             conditionalFunctionDependencies: conditionalFunctionDependencies);
         WritePowerShellFile(psm1Path, psm1Content);
     }
@@ -98,15 +112,19 @@ internal static class ModuleBootstrapperGenerator
         return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
     }
 
-    private static string BuildLibrariesScript(string moduleRoot, string moduleName, IReadOnlyList<string> exportAssemblyFileNames)
+    private static string BuildLibrariesScript(
+        string moduleRoot,
+        string moduleName,
+        IReadOnlyList<string> exportAssemblyFileNames,
+        string? assemblyLoadContextLoaderAssemblyName)
     {
         // Generate a deterministic list of DLLs to Add-Type for each Lib/<Folder>.
         var libRoot = Path.Combine(moduleRoot, "Lib");
         var byFolder = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames);
-        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames);
-        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames);
-        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames);
+        byFolder["Core"] = EnumerateDllRelativePaths(libRoot, "Core", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder["Default"] = EnumerateDllRelativePaths(libRoot, "Default", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder["Standard"] = EnumerateDllRelativePaths(libRoot, "Standard", exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
+        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName);
 
         var map = BuildLibrariesByFolderMap(byFolder);
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
@@ -154,7 +172,11 @@ internal static class ModuleBootstrapperGenerator
         return sb.ToString();
     }
 
-    private static List<string> EnumerateDllRelativePaths(string libRoot, string? folderName, IReadOnlyList<string> exportAssemblyFileNames)
+    private static List<string> EnumerateDllRelativePaths(
+        string libRoot,
+        string? folderName,
+        IReadOnlyList<string> exportAssemblyFileNames,
+        string? assemblyLoadContextLoaderAssemblyName)
     {
         var list = new List<string>();
 
@@ -175,16 +197,22 @@ internal static class ModuleBootstrapperGenerator
             return list;
         }
 
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(assemblyLoadContextLoaderAssemblyName))
+            excluded.Add(assemblyLoadContextLoaderAssemblyName + ".dll");
+
         var exportFirst = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var name in exportAssemblyFileNames ?? Array.Empty<string>())
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
+            if (excluded.Contains(name)) continue;
             if (!dllFiles.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
             list.Add(RelativeLibPath(folderName, name));
         }
 
         foreach (var name in dllFiles.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
         {
+            if (excluded.Contains(name)) continue;
             if (exportFirst.Contains(name)) continue;
             list.Add(RelativeLibPath(folderName, name));
         }
@@ -210,16 +238,25 @@ internal static class ModuleBootstrapperGenerator
         bool includeBinaryLoader,
         bool includeScriptLoader,
         bool handleRuntimes,
+        bool useAssemblyLoadContext,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
     {
+        var loaderIdentity = useAssemblyLoadContext
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            : null;
+
         var binaryLoaderBlock = includeBinaryLoader
             ? RenderModuleBootstrapperTemplate(
-                "BinaryLoader",
-                "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
+                useAssemblyLoadContext ? "AssemblyLoadContextBinaryLoader" : "BinaryLoader",
+                useAssemblyLoadContext
+                    ? "Scripts/ModuleBootstrapper/AssemblyLoadContextBinaryLoader.Template.ps1"
+                    : "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["LibraryName"] = EscapePsSingleQuoted(libraryName),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
+                    ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
+                    ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty
                 })
             : string.Empty;
@@ -244,6 +281,333 @@ internal static class ModuleBootstrapperGenerator
 
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Bootstrapper.Template.ps1");
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
+    }
+
+    private static void BuildAssemblyLoadContextLoader(
+        string moduleRoot,
+        AssemblyLoadContextLoaderIdentity identity,
+        string targetFramework,
+        Action<string>? log)
+    {
+        var libRoot = Path.Combine(moduleRoot, "Lib");
+        if (!Directory.Exists(libRoot))
+        {
+            log?.Invoke("UseAssemblyLoadContext is set but no Lib directory was found; skipping ALC loader generation.");
+            return;
+        }
+
+        var targetDirectories = ResolveAssemblyLoadContextTargetDirectories(libRoot);
+        if (targetDirectories.Length == 0)
+        {
+            log?.Invoke("UseAssemblyLoadContext is set but no compatible Lib directory was found; skipping ALC loader generation.");
+            return;
+        }
+
+        EnsureDotNetSdkAvailable(moduleRoot);
+
+        var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
+        var outputRoot = Path.Combine(buildRoot, "out");
+
+        try
+        {
+            Directory.CreateDirectory(buildRoot);
+            Directory.CreateDirectory(outputRoot);
+
+            var projectPath = Path.Combine(buildRoot, identity.AssemblyName + ".csproj");
+            File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetFramework), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
+
+            log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetFramework}.");
+            var result = RunProcess(
+                "dotnet",
+                buildRoot,
+                new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal" },
+                AssemblyLoadContextLoaderBuildTimeout);
+            if (result.ExitCode != 0)
+            {
+                var message = string.Join(
+                    Environment.NewLine,
+                    new[]
+                    {
+                        $"Failed to build module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' (exit {result.ExitCode}).",
+                        result.StdOut,
+                        result.StdErr
+                    }.Where(static line => !string.IsNullOrWhiteSpace(line)));
+                throw new InvalidOperationException(message);
+            }
+
+            var loaderPath = Path.Combine(outputRoot, identity.AssemblyName + ".dll");
+            if (!File.Exists(loaderPath))
+                throw new FileNotFoundException("Module-scoped AssemblyLoadContext loader build did not produce the expected DLL.", loaderPath);
+
+            foreach (var directory in targetDirectories)
+                File.Copy(loaderPath, Path.Combine(directory, identity.AssemblyName + ".dll"), overwrite: true);
+        }
+        finally
+        {
+            try { if (Directory.Exists(buildRoot)) Directory.Delete(buildRoot, recursive: true); }
+            catch { /* best effort */ }
+        }
+    }
+
+    private static void EnsureDotNetSdkAvailable(string workingDirectory)
+    {
+        ProcessRunResult result;
+        try
+        {
+            result = RunProcess("dotnet", workingDirectory, new[] { "--version" }, TimeSpan.FromSeconds(30));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.", ex);
+        }
+
+        if (result.ExitCode != 0)
+        {
+            var message = string.Join(
+                Environment.NewLine,
+                new[]
+                {
+                    "UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.",
+                    result.StdOut,
+                    result.StdErr
+                }.Where(static line => !string.IsNullOrWhiteSpace(line)));
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    internal static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
+    {
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in Directory.EnumerateDirectories(libRoot))
+        {
+            var name = Path.GetFileName(directory);
+            if (!string.IsNullOrWhiteSpace(name))
+                byName[name] = directory;
+        }
+
+        if (byName.TryGetValue("Standard", out var standard))
+            return new[] { standard };
+
+        if (byName.TryGetValue("Core", out var core))
+            return new[] { core };
+
+        if (byName.TryGetValue("Default", out var @default))
+            return new[] { @default };
+
+        return Array.Empty<string>();
+    }
+
+    private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
+    {
+        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext";
+        var ns = safeNamespaceRoot + ".ModuleLoadContext";
+        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
+    }
+
+    private static string SanitizeAssemblyName(string value)
+    {
+        var chars = (value ?? string.Empty).Select(ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '_').ToArray();
+        var sanitized = new string(chars).Trim('.', '-', '_');
+        return string.IsNullOrWhiteSpace(sanitized) ? "Module" : sanitized;
+    }
+
+    private static string ToCSharpIdentifierPath(string value)
+    {
+        var parts = (value ?? string.Empty)
+            .Split(new[] { '.', '-' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(ToCSharpIdentifier)
+            .Where(static part => !string.IsNullOrWhiteSpace(part))
+            .ToArray();
+
+        return parts.Length == 0 ? "Module" : string.Join(".", parts);
+    }
+
+    private static string ToCSharpIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+        var sb = new StringBuilder(value.Length + 1);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var ch = value[i];
+            var valid = i == 0
+                ? char.IsLetter(ch) || ch == '_'
+                : char.IsLetterOrDigit(ch) || ch == '_';
+            sb.Append(valid ? ch : '_');
+        }
+
+        return sb.ToString();
+    }
+
+    internal static string ResolveAssemblyLoadContextTargetFramework(IReadOnlyList<string>? targetFrameworks)
+    {
+        var candidates = (targetFrameworks ?? Array.Empty<string>())
+            .Select(static framework => NormalizeAssemblyLoadContextTargetFramework(framework))
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static framework => GetNetTfmVersion(framework!), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
+            .ToArray();
+
+        return candidates.FirstOrDefault() ?? DefaultAssemblyLoadContextTargetFramework;
+    }
+
+    private static string? NormalizeAssemblyLoadContextTargetFramework(string? framework)
+    {
+        framework ??= string.Empty;
+        if (string.IsNullOrWhiteSpace(framework))
+            return null;
+
+        var normalized = framework.Trim();
+        var platformIndex = normalized.IndexOf('-');
+        if (platformIndex >= 0)
+            normalized = normalized.Substring(0, platformIndex);
+
+        return TryGetNetTfmVersion(normalized, out _) ? normalized : null;
+    }
+
+    private static Version GetNetTfmVersion(string framework)
+        => TryGetNetTfmVersion(framework, out var version) ? version : new Version(int.MaxValue, 0);
+
+    private static bool TryGetNetTfmVersion(string framework, out Version version)
+    {
+        version = new Version(0, 0);
+        if (string.IsNullOrWhiteSpace(framework) ||
+            !framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) ||
+            framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase) ||
+            framework.Length < 5 ||
+            !char.IsDigit(framework[3]))
+        {
+            return false;
+        }
+
+        if (!Version.TryParse(framework.Substring(3), out var parsed))
+            return false;
+
+        version = parsed;
+        return true;
+    }
+
+    private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity, string targetFramework)
+        => $@"<Project Sdk=""Microsoft.NET.Sdk"">
+  <PropertyGroup>
+    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>{EscapeXml(identity.AssemblyName)}</AssemblyName>
+    <RootNamespace>{EscapeXml(identity.Namespace)}</RootNamespace>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+  </PropertyGroup>
+</Project>
+";
+
+    private static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
+        => $@"using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
+
+namespace {identity.Namespace};
+
+public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
+{{
+    private static readonly object Sync = new();
+    // Module contexts are intentionally non-collectible. A process restart is required to load a replaced DLL at the same path.
+    private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly string _assemblyDirectory;
+    private readonly string _moduleAssemblyPath;
+    private readonly AssemblyDependencyResolver _resolver;
+    private Assembly? _moduleAssembly;
+
+    private ModuleAssemblyLoadContext(string moduleAssemblyPath, string contextName)
+        : base(contextName, isCollectible: false)
+    {{
+        _moduleAssemblyPath = Path.GetFullPath(moduleAssemblyPath);
+        _assemblyDirectory = Path.GetDirectoryName(_moduleAssemblyPath) ?? string.Empty;
+        _resolver = new AssemblyDependencyResolver(_moduleAssemblyPath);
+    }}
+
+    public static Assembly LoadModule(string moduleAssemblyPath, string? contextName)
+    {{
+        if (string.IsNullOrWhiteSpace(moduleAssemblyPath))
+            throw new ArgumentException(""Module assembly path is required."", nameof(moduleAssemblyPath));
+
+        var fullPath = Path.GetFullPath(moduleAssemblyPath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException(""Module assembly was not found."", fullPath);
+
+        // The global lock keeps context creation and the first main assembly load single-shot for each module path.
+        lock (Sync)
+        {{
+            if (!Contexts.TryGetValue(fullPath, out var context))
+            {{
+                context = new ModuleAssemblyLoadContext(fullPath, string.IsNullOrWhiteSpace(contextName) ? Path.GetFileNameWithoutExtension(fullPath) : contextName);
+                Contexts[fullPath] = context;
+            }}
+
+            return context.LoadMainModule();
+        }}
+    }}
+
+    protected override Assembly? Load(AssemblyName assemblyName)
+    {{
+        if (assemblyName is null || string.IsNullOrWhiteSpace(assemblyName.Name))
+            return null;
+
+        var loaderAssembly = typeof(ModuleAssemblyLoadContext).Assembly.GetName();
+        if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
+            return typeof(ModuleAssemblyLoadContext).Assembly;
+
+        var resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadFromAssemblyPath(resolvedPath);
+
+        var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
+        return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
+    }}
+
+    protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+    {{
+        var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+        return !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath)
+            ? LoadUnmanagedDllFromPath(resolvedPath)
+            : IntPtr.Zero;
+    }}
+
+    private Assembly LoadMainModule()
+    {{
+        // Called only while LoadModule holds Sync; keep the one-time main assembly load under that lock.
+        _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
+        return _moduleAssembly;
+    }}
+}}
+";
+
+    private static string EscapeXml(string value)
+        => System.Security.SecurityElement.Escape(value) ?? string.Empty;
+
+    private static ProcessRunResult RunProcess(string fileName, string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout)
+        => Task.Run(() => new ProcessRunner().RunAsync(new ProcessRunRequest(fileName, workingDirectory, arguments, timeout)))
+            .GetAwaiter()
+            .GetResult();
+
+    private sealed class AssemblyLoadContextLoaderIdentity
+    {
+        public AssemblyLoadContextLoaderIdentity(string assemblyName, string ns, string typeName)
+        {
+            AssemblyName = assemblyName;
+            Namespace = ns;
+            TypeName = typeName;
+        }
+
+        public string AssemblyName { get; }
+        public string Namespace { get; }
+        public string TypeName { get; }
     }
 
     private static string BuildRuntimeHandlerBlock()

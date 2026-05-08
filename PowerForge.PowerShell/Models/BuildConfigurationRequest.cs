@@ -100,6 +100,8 @@ internal sealed class BuildConfigurationRequest
     public string? NETSearchClass { get; set; }
     public bool NETHandleRuntimesSpecified { get; set; }
     public bool NETHandleRuntimes { get; set; }
+    public bool NETAssemblyLoadContextSpecified { get; set; }
+    public bool NETAssemblyLoadContext { get; set; }
     public bool KillLockersBeforeInstallSpecified { get; set; }
     public bool KillLockersBeforeInstall { get; set; }
     public bool KillLockersForceSpecified { get; set; }

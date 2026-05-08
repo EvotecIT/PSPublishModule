@@ -106,6 +106,12 @@ public sealed class ModuleBuildSpec
     public bool HandleRuntimes { get; set; }
 
     /// <summary>
+    /// When true, the generated binary bootstrapper loads the binary module through a custom AssemblyLoadContext on
+    /// PowerShell Core, isolating the module's managed dependency graph from other modules in the session.
+    /// </summary>
+    public bool UseAssemblyLoadContext { get; set; }
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }

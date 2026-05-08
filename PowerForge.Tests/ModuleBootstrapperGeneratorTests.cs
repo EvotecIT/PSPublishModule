@@ -66,6 +66,124 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_UsesLowestModernModuleFramework()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "net8.0", "net6.0-windows" });
+
+        Assert.Equal("net6.0", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_DefaultsToNet8WhenNoModernFrameworkIsKnown()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.0" });
+
+        Assert.Equal("net8.0", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_PrefersStandardWhenAllLibLayoutsExist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Path.Combine(root, "Lib");
+        Directory.CreateDirectory(Path.Combine(libRoot, "Standard"));
+        Directory.CreateDirectory(Path.Combine(libRoot, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot, "Default"));
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
+
+            Assert.Equal(new[] { Path.Combine(libRoot, "Standard") }, directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
+            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
+            Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
+            Assert.Contains("AddExportedCmdlet", bootstrapper);
+            Assert.Contains("Falling back to direct Import-Module", bootstrapper);
+            Assert.Contains("will load from the default context", bootstrapper);
+            Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
+            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
+
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.DoesNotContain("DemoModule.ModuleLoadContext.dll", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContextAndDefaultOnlyLib_WritesLoaderBesideDefaultAssembly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-default-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$Framework = 'Default'", bootstrapper);
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.DoesNotContain("DemoModule.ModuleLoadContext.dll", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithScriptLayoutOnly_WritesScriptLoaderWithoutBinaryLoader()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-script-" + Guid.NewGuid().ToString("N"));

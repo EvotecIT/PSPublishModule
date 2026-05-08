@@ -71,6 +71,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments = null;
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
+        bool? useAssemblyLoadContextFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
         bool? binaryModuleDocumentationRequested = null;
@@ -264,6 +265,10 @@ public sealed partial class ModulePipelineRunner
                     if (bl.ExcludeLibraryFilter is { Length: > 0 }) excludeLibraryFilterFromSegments = bl.ExcludeLibraryFilter;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
+                    if (bl.UseAssemblyLoadContext.HasValue)
+                        useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
+                    else if (bl.NETAssemblyLoadContext.HasValue)
+                        useAssemblyLoadContextFromSegments = bl.NETAssemblyLoadContext.Value;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;
@@ -513,6 +518,7 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 handleRuntimesFromSegments,
+                useAssemblyLoadContextFromSegments,
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true);
 
@@ -537,6 +543,7 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
+            UseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             CsprojRequiredReasons = string.IsNullOrWhiteSpace(csproj) ? csprojRequiredReasons : Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = requiredModulesDraft
@@ -788,6 +795,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
         bool? handleRuntimesFromSegments,
+        bool? useAssemblyLoadContextFromSegments,
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested)
     {
@@ -800,6 +808,8 @@ public sealed partial class ModulePipelineRunner
             doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
         var effectiveHandleRuntimes =
             handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
+        var effectiveUseAssemblyLoadContext =
+            useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
@@ -808,6 +818,7 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
             || effectiveHandleRuntimes
+            || effectiveUseAssemblyLoadContext
             || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
@@ -830,6 +841,9 @@ public sealed partial class ModulePipelineRunner
 
         if (effectiveHandleRuntimes)
             reasons.Add("NETHandleRuntimes");
+
+        if (effectiveUseAssemblyLoadContext)
+            reasons.Add("UseAssemblyLoadContext");
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");

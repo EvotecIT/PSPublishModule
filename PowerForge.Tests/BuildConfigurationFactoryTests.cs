@@ -27,6 +27,8 @@ public sealed class BuildConfigurationFactoryTests
             NETConfiguration = "Release",
             NETProjectPathSpecified = true,
             NETProjectPath = "src/Sample.csproj",
+            NETAssemblyLoadContextSpecified = true,
+            NETAssemblyLoadContext = true,
             SkipBuiltinReplacementsSpecified = true,
             SkipBuiltinReplacements = true
         });
@@ -48,6 +50,7 @@ public sealed class BuildConfigurationFactoryTests
         Assert.True(libraries.BuildLibraries.Enable);
         Assert.Equal("Release", libraries.BuildLibraries.Configuration);
         Assert.Equal("src/Sample.csproj", libraries.BuildLibraries.NETProjectPath);
+        Assert.True(libraries.BuildLibraries.UseAssemblyLoadContext);
 
         var placeholder = Assert.IsType<ConfigurationPlaceHolderOptionSegment>(segments[3]);
         Assert.True(placeholder.PlaceHolderOption.SkipBuiltinReplacements);
