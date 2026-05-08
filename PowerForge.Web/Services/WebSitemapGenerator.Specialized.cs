@@ -24,7 +24,7 @@ public static partial class WebSitemapGenerator
             .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+        var sitemapNs = SitemapNs;
         var newsNs = XNamespace.Get("http://www.google.com/schemas/sitemap-news/0.9");
         var publicationName = ResolveNewsPublicationName(baseUrl, options.PublicationName);
         var publicationLanguage = string.IsNullOrWhiteSpace(options.PublicationLanguage)
@@ -35,6 +35,7 @@ public static partial class WebSitemapGenerator
             browserStylesheetHref,
             new XElement(
                 sitemapNs + "urlset",
+                CreateSchemaAttributes(SitemapSchemaLocation),
                 new XAttribute(XNamespace.Xmlns + "news", newsNs.NamespaceName),
                 selectedEntries.Select(entry =>
                 {
@@ -85,11 +86,12 @@ public static partial class WebSitemapGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+        var sitemapNs = SitemapNs;
         var doc = CreateSitemapDocument(
             browserStylesheetHref,
             new XElement(
                 sitemapNs + "sitemapindex",
+                CreateSchemaAttributes(SitemapIndexSchemaLocation),
                 normalizedPaths.Select(path =>
                 {
                     var loc = ResolveSitemapOutputUrl(siteRoot, baseUrl, path);
@@ -120,12 +122,13 @@ public static partial class WebSitemapGenerator
             .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+        var sitemapNs = SitemapNs;
         var imageNs = XNamespace.Get("http://www.google.com/schemas/sitemap-image/1.1");
         var doc = CreateSitemapDocument(
             browserStylesheetHref,
             new XElement(
                 sitemapNs + "urlset",
+                CreateSchemaAttributes(SitemapSchemaLocation),
                 new XAttribute(XNamespace.Xmlns + "image", imageNs.NamespaceName),
                 selectedEntries.Select(entry =>
                 {
@@ -168,12 +171,13 @@ public static partial class WebSitemapGenerator
             .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+        var sitemapNs = SitemapNs;
         var videoNs = XNamespace.Get("http://www.google.com/schemas/sitemap-video/1.1");
         var doc = CreateSitemapDocument(
             browserStylesheetHref,
             new XElement(
                 sitemapNs + "urlset",
+                CreateSchemaAttributes(SitemapSchemaLocation),
                 new XAttribute(XNamespace.Xmlns + "video", videoNs.NamespaceName),
                 selectedEntries.Select(entry =>
                 {

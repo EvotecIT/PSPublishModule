@@ -114,6 +114,43 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
+    public void Generate_EmitsOfficialSchemaLocationHeaders()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-schema-location-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                GenerateBrowserStylesheet = false,
+                SitemapIndexPath = string.Empty
+            });
+
+            var xsiNs = XNamespace.Get("http://www.w3.org/2001/XMLSchema-instance");
+            var sitemapDoc = XDocument.Load(result.OutputPath);
+            Assert.Equal(
+                "http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd",
+                sitemapDoc.Root?.Attribute(xsiNs + "schemaLocation")?.Value);
+
+            var indexDoc = XDocument.Load(result.IndexOutputPath!);
+            Assert.Equal(
+                "http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd",
+                indexDoc.Root?.Attribute(xsiNs + "schemaLocation")?.Value);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_CanUseCustomBrowserStylesheetHref()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-custom-" + Guid.NewGuid().ToString("N"));

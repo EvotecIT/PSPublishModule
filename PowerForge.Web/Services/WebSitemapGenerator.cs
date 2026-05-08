@@ -147,7 +147,15 @@ public sealed class WebSitemapAlternate
 public static partial class WebSitemapGenerator
 {
     private const string DefaultSitemapStylesheetHref = "/sitemap.css";
+    private const string SitemapNamespaceUri = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    private const string XhtmlNamespaceUri = "http://www.w3.org/1999/xhtml";
+    private const string XsiNamespaceUri = "http://www.w3.org/2001/XMLSchema-instance";
+    private const string SitemapSchemaLocation = SitemapNamespaceUri + " http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd";
+    private const string SitemapIndexSchemaLocation = SitemapNamespaceUri + " http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd";
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly XNamespace SitemapNs = SitemapNamespaceUri;
+    private static readonly XNamespace XhtmlNs = XhtmlNamespaceUri;
+    private static readonly XNamespace XsiNs = XsiNamespaceUri;
 
     private static readonly string[] DefaultExcludedHtmlPatterns =
     {
@@ -314,8 +322,8 @@ public static partial class WebSitemapGenerator
             ApplyLanguageAlternates(entries, htmlRoutes, localization, baseUrl);
 
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
-        var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
-        var xhtmlNs = XNamespace.Get("http://www.w3.org/1999/xhtml");
+        var ns = SitemapNs;
+        var xhtmlNs = XhtmlNs;
         var orderedEntries = entries.Values
             .OrderBy(u => u.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -323,12 +331,15 @@ public static partial class WebSitemapGenerator
             .Select(u => BuildEntry(baseUrl, u, today, ns, xhtmlNs))
             .ToArray();
         var browserStylesheetHref = ResolveSitemapBrowserStylesheetHref(options);
+        var rootAttributes = new List<object>(CreateSchemaAttributes(SitemapSchemaLocation));
+        if (entriesXml.Any(entry => entry.Descendants(xhtmlNs + "link").Any()))
+            rootAttributes.Add(new XAttribute(XNamespace.Xmlns + "xhtml", xhtmlNs.NamespaceName));
 
         var doc = CreateSitemapDocument(
             browserStylesheetHref,
             new XElement(
                 ns + "urlset",
-                new XAttribute(XNamespace.Xmlns + "xhtml", xhtmlNs.NamespaceName),
+                rootAttributes,
                 entriesXml));
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
@@ -442,6 +453,15 @@ public static partial class WebSitemapGenerator
                     "xml-stylesheet",
                     $"type=\"text/css\" href=\"{browserStylesheetHref}\""),
                 root);
+    }
+
+    private static XAttribute[] CreateSchemaAttributes(string schemaLocation)
+    {
+        return new[]
+        {
+            new XAttribute(XNamespace.Xmlns + "xsi", XsiNs.NamespaceName),
+            new XAttribute(XsiNs + "schemaLocation", schemaLocation)
+        };
     }
 
     private static void WriteSitemapBrowserStylesheet(string siteRoot, string? browserStylesheetHref)
