@@ -27,7 +27,6 @@ public static class WebAgentReadiness
     private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
     private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
     private static readonly Regex SlugSeparatorRegex = new(@"[-_]+", RegexOptions.Compiled);
-    private static readonly Regex SlugWordBoundaryRegex = new(@"\b\p{Ll}", RegexOptions.Compiled);
 
     /// <summary>Writes configured agent-readiness files under the site root.</summary>
     public static WebAgentReadinessResult Prepare(WebAgentReadinessPrepareOptions options)
@@ -500,7 +499,13 @@ public static class WebAgentReadiness
         foreach (var entry in spec.Entries?.Where(static e => !string.IsNullOrWhiteSpace(e.Anchor)) ?? Array.Empty<AgentApiCatalogEntrySpec>())
         {
             if (anchors.Add(NormalizeApiCatalogAnchorKey(entry.Anchor)))
+            {
                 entries.Add(entry);
+            }
+            else
+            {
+                warnings.Add($"Duplicate API catalog anchor '{entry.Anchor}' was ignored.");
+            }
         }
 
         if (spec.IncludeProjectApiReferences)
@@ -508,7 +513,13 @@ public static class WebAgentReadiness
             foreach (var entry in InferProjectApiReferenceEntries(siteRoot, spec, warnings))
             {
                 if (anchors.Add(NormalizeApiCatalogAnchorKey(entry.Anchor)))
+                {
                     entries.Add(entry);
+                }
+                else
+                {
+                    warnings.Add($"Inferred project API catalog anchor '{entry.Anchor}' was ignored because an explicit entry already exists.");
+                }
             }
         }
 
@@ -590,12 +601,13 @@ public static class WebAgentReadiness
     {
         var catalog = new Dictionary<string, ProjectApiCatalogInfo>(StringComparer.OrdinalIgnoreCase);
         var configuredPath = string.IsNullOrWhiteSpace(projectCatalogPath) ? "data/projects/catalog.json" : projectCatalogPath!;
-        var catalogPath = ResolveSitePath(siteRoot, configuredPath);
-        if (!File.Exists(catalogPath))
-            return catalog;
 
         try
         {
+            var catalogPath = ResolveSitePath(siteRoot, configuredPath);
+            if (!File.Exists(catalogPath))
+                return catalog;
+
             using var doc = JsonDocument.Parse(File.ReadAllText(catalogPath));
             if (!doc.RootElement.TryGetProperty("projects", out var projects) || projects.ValueKind != JsonValueKind.Array)
                 return catalog;
@@ -639,8 +651,12 @@ public static class WebAgentReadiness
 
     private static string ToDisplayNameFromSlug(string slug)
     {
-        var normalized = SlugSeparatorRegex.Replace(slug.Trim(), " ");
-        return SlugWordBoundaryRegex.Replace(normalized, static match => match.Value.ToUpperInvariant());
+        return string.Join(
+            " ",
+            SlugSeparatorRegex
+                .Split(slug.Trim())
+                .Where(static part => !string.IsNullOrWhiteSpace(part))
+                .Select(static part => char.ToUpperInvariant(part[0]) + part.Substring(1)));
     }
 
     private static bool IsLocalProjectApiRoute(string? value)
