@@ -195,6 +195,59 @@ public class WebPipelineRunnerSitemapTests
     }
 
     [Fact]
+    public void RunPipeline_Sitemap_CanDisableBrowserStylesheet()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sitemap-browser-style-off-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            Directory.CreateDirectory(siteRoot);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "sitemap",
+                      "siteRoot": "./site",
+                      "baseUrl": "https://example.test",
+                      "includeHtmlFiles": false,
+                      "includeTextFiles": false,
+                      "generateBrowserStylesheet": false,
+                      "entries": [
+                        { "path": "/" }
+                      ],
+                      "sitemapIndex": "./site/sitemap-index.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+
+            var sitemapPath = Path.Combine(siteRoot, "sitemap.xml");
+            var indexPath = Path.Combine(siteRoot, "sitemap-index.xml");
+            Assert.True(File.Exists(sitemapPath));
+            Assert.True(File.Exists(indexPath));
+            Assert.False(File.Exists(Path.Combine(siteRoot, "sitemap.css")));
+
+            var sitemapDoc = XDocument.Load(sitemapPath);
+            var indexDoc = XDocument.Load(indexPath);
+            Assert.DoesNotContain(sitemapDoc.Nodes().OfType<XProcessingInstruction>(), node => node.Target == "xml-stylesheet");
+            Assert.DoesNotContain(indexDoc.Nodes().OfType<XProcessingInstruction>(), node => node.Target == "xml-stylesheet");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_Sitemap_HyphenAliases_CanGenerateNewsMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sitemap-news-alias-" + Guid.NewGuid().ToString("N"));

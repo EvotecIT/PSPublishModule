@@ -1801,6 +1801,14 @@ internal static partial class WebPipelineRunner
         var noDefaultExclude = GetBool(step, "noDefaultExclude") ?? GetBool(step, "no-default-exclude");
         var excludePatterns = GetArrayOfStrings(step, "excludePatterns") ?? GetArrayOfStrings(step, "exclude-patterns");
         var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
+        var generateBrowserStylesheet =
+            GetBool(step, "generateBrowserStylesheet") ??
+            GetBool(step, "generate-browser-stylesheet") ??
+            GetBool(step, "browserStylesheet") ??
+            GetBool(step, "browser-stylesheet");
+        var browserStylesheetHref =
+            GetString(step, "browserStylesheetHref") ??
+            GetString(step, "browser-stylesheet-href");
         var includeGeneratedHtmlRouteInXml =
             GetBool(step, "includeGeneratedHtmlRouteInXml") ??
             GetBool(step, "include-generated-html-route-in-xml") ??
@@ -1881,6 +1889,8 @@ internal static partial class WebPipelineRunner
             HtmlCssHref = htmlCss,
             HtmlTitle = htmlTitle,
             IncludeGeneratedHtmlRouteInXml = includeGeneratedHtmlRouteInXml,
+            GenerateBrowserStylesheet = generateBrowserStylesheet ?? true,
+            BrowserStylesheetHref = browserStylesheetHref,
             SitemapIndexPath = sitemapIndex,
             NewsSitemap = !newsEnabled
                 ? null

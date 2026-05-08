@@ -683,6 +683,7 @@ Generates `sitemap.xml` and (optionally) JSON/HTML outputs, `sitemap-news.xml`, 
   "extraPaths": ["/robots.txt"],
   "json": true,
   "jsonOut": "./Artifacts/site/sitemap/index.json",
+  "generateBrowserStylesheet": false,
   "html": true,
   "htmlTemplate": "./themes/nova/templates/sitemap.html",
   "htmlTitle": "Sitemap",
@@ -704,6 +705,8 @@ Notes:
 - `sitemapIndex` emits a sitemap index file that references generated XML sitemap outputs.
 - image/video URL discovery is automatic for rendered HTML (`<img src>`, `<video src>`, `<source src>`, `<iframe src>`), and can also be provided via `entries[].images` / `entries[].videos`.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
+- `generateBrowserStylesheet` controls whether XML sitemap files include an `xml-stylesheet` processing instruction and write `/sitemap.css` for browser-friendly viewing. It defaults to `true`; set it to `false` when you want raw XML browser rendering.
+- `browserStylesheetHref` overrides the default `/sitemap.css` href when browser styling is enabled.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - Set `includeNoIndexHtml: true` to include noindex pages anyway.
 - Set `noDefaultExclude: true` to include utility pages (or pass `excludePatterns` for custom exclusions).

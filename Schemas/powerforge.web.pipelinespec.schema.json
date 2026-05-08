@@ -3460,6 +3460,12 @@
         "htmlTemplate": { "type": "string" },
         "htmlCss": { "type": "string" },
         "htmlTitle": { "type": "string" },
+        "generateBrowserStylesheet": { "type": "boolean" },
+        "generate-browser-stylesheet": { "type": "boolean" },
+        "browserStylesheet": { "type": "boolean" },
+        "browser-stylesheet": { "type": "boolean" },
+        "browserStylesheetHref": { "type": "string" },
+        "browser-stylesheet-href": { "type": "string" },
         "includeGeneratedHtmlRouteInXml": { "type": "boolean" },
         "include-generated-html-route-in-xml": { "type": "boolean" }
       },
