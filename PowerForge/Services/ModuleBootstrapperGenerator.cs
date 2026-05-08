@@ -375,7 +375,7 @@ internal static class ModuleBootstrapperGenerator
         }
     }
 
-    private static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
+    internal static string[] ResolveAssemblyLoadContextTargetDirectories(string libRoot)
     {
         var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var directory in Directory.EnumerateDirectories(libRoot))

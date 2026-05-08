@@ -1,5 +1,9 @@
 ﻿# PSPublishModule Changelog
 
+## Unreleased
+### What's Changed
+- Added opt-in module-scoped `UseAssemblyLoadContext` / `NETAssemblyLoadContext` loading for binary modules. The PowerShell Core export bridge uses the private `PSModuleInfo.AddExportedCmdlet` method when available and falls back to a warning if a future PowerShell version removes it.
+
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32

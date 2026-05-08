@@ -843,7 +843,7 @@ public sealed partial class ModulePipelineRunner
             reasons.Add("NETHandleRuntimes");
 
         if (effectiveUseAssemblyLoadContext)
-            reasons.Add("NETAssemblyLoadContext");
+            reasons.Add("UseAssemblyLoadContext");
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");

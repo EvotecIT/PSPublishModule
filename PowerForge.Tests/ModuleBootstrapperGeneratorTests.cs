@@ -82,6 +82,28 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_PrefersStandardWhenAllLibLayoutsExist()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Path.Combine(root, "Lib");
+        Directory.CreateDirectory(Path.Combine(libRoot, "Standard"));
+        Directory.CreateDirectory(Path.Combine(libRoot, "Core"));
+        Directory.CreateDirectory(Path.Combine(libRoot, "Default"));
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
+
+            Assert.Equal(new[] { Path.Combine(libRoot, "Standard") }, directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public void Generate_WithAssemblyLoadContext_WritesAlcBootstrapperAndKeepsDesktopLibrariesScript()
     {
