@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,6 +25,8 @@ public sealed class WebSitemapOptions
     public WebSitemapEntry[]? Entries { get; set; }
     /// <summary>Optional JSON file containing sitemap entries (array or object with entries[]).</summary>
     public string? EntriesJsonPath { get; set; }
+    /// <summary>When true, merge sitemap metadata emitted by the PowerForge site build under _powerforge/sitemap-entries.json.</summary>
+    public bool UseGeneratedSitemapMetadata { get; set; } = true;
     /// <summary>When true, include HTML files.</summary>
     public bool IncludeHtmlFiles { get; set; } = true;
     /// <summary>When true, include HTML files that declare robots noindex.</summary>
@@ -281,6 +284,15 @@ public static partial class WebSitemapGenerator
                 AddOrUpdate(entries, NormalizeRoute(path), null);
         }
 
+        if (options.UseGeneratedSitemapMetadata)
+        {
+            foreach (var entry in LoadDefaultGeneratedSitemapEntries(siteRoot))
+            {
+                if (entry is null || string.IsNullOrWhiteSpace(entry.Path)) continue;
+                AddOrUpdate(entries, NormalizeRoute(entry.Path), entry);
+            }
+        }
+
         if (options.Entries is not null)
         {
             foreach (var entry in options.Entries)
@@ -321,14 +333,15 @@ public static partial class WebSitemapGenerator
         if (options.IncludeLanguageAlternates && localization is not null)
             ApplyLanguageAlternates(entries, htmlRoutes, localization, baseUrl);
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var ns = SitemapNs;
         var xhtmlNs = XhtmlNs;
         var orderedEntries = entries.Values
             .OrderBy(u => u.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var warnings = AnalyzeLastModifiedSignals(orderedEntries, today);
         var entriesXml = orderedEntries
-            .Select(u => BuildEntry(baseUrl, u, today, ns, xhtmlNs))
+            .Select(u => BuildEntry(baseUrl, u, ns, xhtmlNs))
             .ToArray();
         var browserStylesheetHref = ResolveSitemapBrowserStylesheetHref(options);
         var rootAttributes = new List<object>(CreateSchemaAttributes(SitemapSchemaLocation));
@@ -414,7 +427,9 @@ public static partial class WebSitemapGenerator
             IndexOutputPath = indexOutputPath,
             JsonOutputPath = jsonOutputPath,
             HtmlOutputPath = htmlOutputPath,
-            UrlCount = entriesXml.Length
+            UrlCount = entriesXml.Length,
+            LastModifiedCount = orderedEntries.Count(static entry => !string.IsNullOrWhiteSpace(entry.LastModified)),
+            Warnings = warnings
         };
     }
 
@@ -909,22 +924,25 @@ public static partial class WebSitemapGenerator
         return normalizedBase + normalizedPath;
     }
 
-    private static XElement BuildEntry(string baseUrl, WebSitemapEntry entry, string defaultLastmod, XNamespace sitemapNs, XNamespace xhtmlNs)
+    private static XElement BuildEntry(string baseUrl, WebSitemapEntry entry, XNamespace sitemapNs, XNamespace xhtmlNs)
     {
         var path = string.IsNullOrWhiteSpace(entry.Path) ? "/" : entry.Path;
         var loc = baseUrl + (path.StartsWith("/") ? path : "/" + path);
-        var lastmod = string.IsNullOrWhiteSpace(entry.LastModified) ? defaultLastmod : entry.LastModified;
         var changefreq = string.IsNullOrWhiteSpace(entry.ChangeFrequency) ? "monthly" : entry.ChangeFrequency;
         var priority = string.IsNullOrWhiteSpace(entry.Priority)
             ? (path == "/" ? "1.0" : "0.5")
             : entry.Priority;
 
-        var urlElement = new XElement(
-            sitemapNs + "url",
-            new XElement(sitemapNs + "loc", loc),
-            new XElement(sitemapNs + "lastmod", lastmod),
-            new XElement(sitemapNs + "changefreq", changefreq),
-            new XElement(sitemapNs + "priority", priority));
+        var children = new List<object>
+        {
+            new XElement(sitemapNs + "loc", loc)
+        };
+        if (!string.IsNullOrWhiteSpace(entry.LastModified))
+            children.Add(new XElement(sitemapNs + "lastmod", entry.LastModified));
+        children.Add(new XElement(sitemapNs + "changefreq", changefreq));
+        children.Add(new XElement(sitemapNs + "priority", priority));
+
+        var urlElement = new XElement(sitemapNs + "url", children);
 
         if (entry.Alternates is { Length: > 0 })
         {
@@ -963,17 +981,23 @@ public static partial class WebSitemapGenerator
                 var loc = url.Element(ns + "loc")?.Value;
                 if (string.IsNullOrWhiteSpace(loc)) continue;
                 var normalized = ReplaceHost(loc, baseUrl);
+                var merged = new WebSitemapEntry
+                {
+                    LastModified = url.Element(ns + "lastmod")?.Value,
+                    ChangeFrequency = url.Element(ns + "changefreq")?.Value,
+                    Priority = url.Element(ns + "priority")?.Value
+                };
                 if (normalized.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
                 {
                     var path = normalized.Substring(baseUrl.Length);
-                    AddOrUpdate(entries, string.IsNullOrWhiteSpace(path) ? "/" : path, null);
+                    AddOrUpdate(entries, string.IsNullOrWhiteSpace(path) ? "/" : path, merged);
                 }
                 else
                 {
                     if (normalized.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                         normalized.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                         continue;
-                    AddOrUpdate(entries, normalized, null);
+                    AddOrUpdate(entries, normalized, merged);
                 }
             }
         }
@@ -995,6 +1019,68 @@ public static partial class WebSitemapGenerator
         };
         using var reader = XmlReader.Create(stream, settings);
         return XDocument.Load(reader, LoadOptions.None);
+    }
+
+    private static IEnumerable<WebSitemapEntry> LoadDefaultGeneratedSitemapEntries(string siteRoot)
+    {
+        var path = Path.Combine(siteRoot, "_powerforge", "sitemap-entries.json");
+        if (!File.Exists(path))
+            return Array.Empty<WebSitemapEntry>();
+
+        try
+        {
+            return LoadEntriesFromJsonPath(path).ToArray();
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Failed to load generated sitemap metadata {path}: {ex.GetType().Name}: {ex.Message}");
+            return Array.Empty<WebSitemapEntry>();
+        }
+    }
+
+    private static string[] AnalyzeLastModifiedSignals(IReadOnlyList<WebSitemapEntry> entries, string today)
+    {
+        if (entries.Count < 10)
+            return Array.Empty<string>();
+
+        var values = entries
+            .Select(static entry => entry.LastModified)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => ExtractSitemapDate(value!))
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+        if (values.Length == 0)
+            return Array.Empty<string>();
+
+        var warnings = new List<string>();
+        var groups = values
+            .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => new { Date = group.Key, Count = group.Count() })
+            .OrderByDescending(static group => group.Count)
+            .ToArray();
+        var dominant = groups[0];
+        var ratio = (double)dominant.Count / entries.Count;
+        if (dominant.Date.Equals(today, StringComparison.OrdinalIgnoreCase) && ratio >= 0.80)
+        {
+            warnings.Add(
+                $"sitemap lastmod freshness looks suspicious: {dominant.Count}/{entries.Count} URLs are stamped with build date {today}. Use content metadata, source git dates, or omit lastmod for unknown pages.");
+        }
+
+        if (dominant.Count == values.Length && values.Length == entries.Count)
+        {
+            warnings.Add(
+                $"sitemap lastmod freshness has one value for all {entries.Count} URLs ({dominant.Date}); verify these are real content modification dates.");
+        }
+
+        return warnings.ToArray();
+    }
+
+    private static string ExtractSitemapDate(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length >= 10)
+            return trimmed[..10];
+        return trimmed;
     }
 
     private static void AddOrUpdate(Dictionary<string, WebSitemapEntry> entries, string path, WebSitemapEntry? update)

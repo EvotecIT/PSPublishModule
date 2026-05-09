@@ -60,6 +60,8 @@ public sealed class ContentItem
     public string Description { get; set; } = string.Empty;
     /// <summary>Publication date.</summary>
     public DateTime? Date { get; set; }
+    /// <summary>Best known content modification timestamp.</summary>
+    public DateTimeOffset? LastModifiedUtc { get; set; }
     /// <summary>Ordering hint within a collection.</summary>
     public int? Order { get; set; }
     /// <summary>URL slug.</summary>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge.Tests;
@@ -60,21 +61,43 @@ public sealed class PowerForgeCliProjectReleaseTests
                 }
             };
 
+            var stdoutBuffer = new StringBuilder();
+            var stderrBuffer = new StringBuilder();
+            var stdoutClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var stderrClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stdoutClosed.TrySetResult();
+                else
+                    stdoutBuffer.AppendLine(e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stderrClosed.TrySetResult();
+                else
+                    stderrBuffer.AppendLine(e.Data);
+            };
+
             process.Start();
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             if (!process.WaitForExit(120_000))
             {
                 try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
                 throw new TimeoutException("PowerForge CLI project release plan test timed out.");
             }
 
-            var drainTask = Task.WhenAll(stdoutTask, stderrTask);
+            var drainTask = Task.WhenAll(stdoutClosed.Task, stderrClosed.Task);
             if (await Task.WhenAny(drainTask, Task.Delay(TimeSpan.FromSeconds(10))) != drainTask)
-                throw new TimeoutException("PowerForge CLI project release plan output drain timed out.");
+            {
+                try { process.CancelOutputRead(); } catch { /* best effort */ }
+                try { process.CancelErrorRead(); } catch { /* best effort */ }
+            }
 
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
+            var stdout = stdoutBuffer.ToString();
+            var stderr = stderrBuffer.ToString();
 
             Assert.True(process.ExitCode == 0, $"CLI exit code {process.ExitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
 

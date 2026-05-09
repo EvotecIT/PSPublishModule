@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -53,6 +54,7 @@ public static partial class WebSiteBuilder
 
         var localization = ResolveLocalizationConfig(spec);
         var contentRoots = BuildContentRoots(plan);
+        var gitLastModifiedCache = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var collection in spec.Collections)
         {
@@ -216,6 +218,7 @@ public static partial class WebSiteBuilder
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
+                    LastModifiedUtc = ResolveContentLastModifiedUtc(plan.RootPath, file, matter, meta, gitLastModifiedCache),
                     Order = matter?.Order,
                     Slug = slugPath,
                     Tags = matter?.Tags ?? Array.Empty<string>(),
@@ -355,6 +358,7 @@ public static partial class WebSiteBuilder
             Title = source.Title,
             Description = source.Description,
             Date = source.Date,
+            LastModifiedUtc = source.LastModifiedUtc,
             Order = source.Order,
             Slug = source.Slug,
             Tags = source.Tags?.ToArray() ?? Array.Empty<string>(),
@@ -468,6 +472,9 @@ public static partial class WebSiteBuilder
                         : $"{collection.Name}:{projectSlug}/_index",
                     Title = generatedTitle,
                     Description = generatedDescription,
+                    LastModifiedUtc = MaxLastModifiedUtc(projectGroup
+                        .Where(item => ResolveEffectiveLanguageCode(localization, item.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+                        .Select(static item => item.LastModifiedUtc)),
                     Slug = "index",
                     Kind = PageKind.Section,
                     Layout = string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout,
@@ -537,6 +544,9 @@ public static partial class WebSiteBuilder
                     TranslationKey = $"taxonomy:{taxonomy.Name}",
                     Title = HumanizeSegment(taxonomy.Name),
                     Description = string.Empty,
+                    LastModifiedUtc = MaxLastModifiedUtc(languageTerms
+                        .SelectMany(static term => term.Value)
+                        .Select(static item => item.LastModifiedUtc)),
                     Kind = PageKind.Taxonomy,
                     Layout = taxonomy.ListLayout ?? "taxonomy",
                     Outputs = taxonomy.Outputs,
@@ -559,6 +569,8 @@ public static partial class WebSiteBuilder
                         TranslationKey = $"taxonomy:{taxonomy.Name}:term:{slug}",
                         Title = term,
                         Description = string.Empty,
+                        LastModifiedUtc = MaxLastModifiedUtc(languageTerms[term]
+                            .Select(static item => item.LastModifiedUtc)),
                         Kind = PageKind.Term,
                         Layout = taxonomy.TermLayout ?? "term",
                         Outputs = taxonomy.Outputs,
@@ -985,6 +997,179 @@ public static partial class WebSiteBuilder
             return new[] { s };
 
         return Array.Empty<string>();
+    }
+
+    private static DateTimeOffset? ResolveContentLastModifiedUtc(
+        string rootPath,
+        string sourcePath,
+        FrontMatter? matter,
+        IReadOnlyDictionary<string, object?>? meta,
+        Dictionary<string, DateTimeOffset?> gitLastModifiedCache)
+    {
+        if (TryReadMetaDateOffset(meta, out var explicitLastModified,
+                "lastmod",
+                "last_modified",
+                "lastModified",
+                "modified",
+                "updated",
+                "updated_at",
+                "updatedAt",
+                "dateModified",
+                "date_modified",
+                "seo.lastmod",
+                "sitemap.lastmod",
+                "sitemap.lastModified"))
+        {
+            return explicitLastModified.ToUniversalTime();
+        }
+
+        if (matter?.Date is DateTime published)
+            return NormalizeDateTimeOffset(published);
+
+        if (TryGetGitLastModifiedUtc(rootPath, sourcePath, gitLastModifiedCache, out var gitLastModified))
+            return gitLastModified;
+
+        return null;
+    }
+
+    private static DateTimeOffset? MaxLastModifiedUtc(IEnumerable<DateTimeOffset?> values)
+    {
+        DateTimeOffset? max = null;
+        foreach (var value in values)
+        {
+            if (!value.HasValue)
+                continue;
+            if (!max.HasValue || value.Value > max.Value)
+                max = value.Value;
+        }
+
+        return max;
+    }
+
+    private static bool TryReadMetaDateOffset(
+        IReadOnlyDictionary<string, object?>? meta,
+        out DateTimeOffset value,
+        params string[] keys)
+    {
+        value = default;
+        if (meta is null || meta.Count == 0)
+            return false;
+
+        var dictionary = meta as Dictionary<string, object?> ??
+                         meta.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        foreach (var key in keys)
+        {
+            if (!TryGetMetaValue(dictionary, key, out var raw) || raw is null)
+                continue;
+            if (TryConvertToDateTimeOffset(raw, out value))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToDateTimeOffset(object value, out DateTimeOffset date)
+    {
+        date = default;
+        switch (value)
+        {
+            case DateTimeOffset dto:
+                date = dto;
+                return true;
+            case DateTime dt:
+                date = NormalizeDateTimeOffset(dt);
+                return true;
+            default:
+                var text = value.ToString();
+                if (string.IsNullOrWhiteSpace(text))
+                    return false;
+                if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+                {
+                    date = parsed;
+                    return true;
+                }
+
+                return false;
+        }
+    }
+
+    private static DateTimeOffset NormalizeDateTimeOffset(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Unspecified)
+            return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+        return new DateTimeOffset(value).ToUniversalTime();
+    }
+
+    private static bool TryGetGitLastModifiedUtc(
+        string rootPath,
+        string sourcePath,
+        Dictionary<string, DateTimeOffset?> cache,
+        out DateTimeOffset value)
+    {
+        value = default;
+        if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(sourcePath))
+            return false;
+        if (!File.Exists(sourcePath))
+            return false;
+
+        var fullSource = Path.GetFullPath(sourcePath);
+        if (cache.TryGetValue(fullSource, out var cached))
+        {
+            if (cached.HasValue)
+                value = cached.Value;
+            return cached.HasValue;
+        }
+
+        try
+        {
+            var fullRoot = Path.GetFullPath(rootPath);
+            var relative = Path.GetRelativePath(fullRoot, fullSource).Replace('\\', '/');
+            if (relative.StartsWith("../", StringComparison.Ordinal) ||
+                relative.Equals("..", StringComparison.Ordinal) ||
+                Path.IsPathRooted(relative))
+            {
+                cache[fullSource] = null;
+                return false;
+            }
+
+            using var process = new Process();
+            process.StartInfo.FileName = "git";
+            process.StartInfo.WorkingDirectory = fullRoot;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.ArgumentList.Add("-C");
+            process.StartInfo.ArgumentList.Add(fullRoot);
+            process.StartInfo.ArgumentList.Add("log");
+            process.StartInfo.ArgumentList.Add("-1");
+            process.StartInfo.ArgumentList.Add("--format=%cI");
+            process.StartInfo.ArgumentList.Add("--");
+            process.StartInfo.ArgumentList.Add(relative);
+            process.Start();
+            if (!process.WaitForExit(2000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                cache[fullSource] = null;
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            if (process.ExitCode == 0 &&
+                DateTimeOffset.TryParse(output, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            {
+                value = parsed.ToUniversalTime();
+                cache[fullSource] = value;
+                return true;
+            }
+        }
+        catch
+        {
+            // Git freshness is optional; fall back to other signals.
+        }
+
+        cache[fullSource] = null;
+        return false;
     }
 
     private static string? ResolveCacheRoot(SiteSpec spec, string rootPath)

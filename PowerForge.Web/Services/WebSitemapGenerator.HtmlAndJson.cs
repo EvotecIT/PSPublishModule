@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -17,6 +18,8 @@ public static partial class WebSitemapGenerator
     private static readonly Regex VideoTagRegex = new("<video\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex SourceTagRegex = new("<source\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex IframeTagRegex = new("<iframe\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex JsonLdDateRegex = new("\"(?<name>dateModified|datePublished|uploadDate)\"\\s*:\\s*\"(?<value>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex TimeTagRegex = new("<time\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
 
     private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
@@ -31,6 +34,7 @@ public static partial class WebSitemapGenerator
             Path = route,
             Title = title,
             Section = section,
+            LastModified = string.IsNullOrWhiteSpace(content) ? null : TryReadLastModifiedFromHtml(content!),
             NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!),
             ImageUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractImageUrls(content!),
             VideoUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractVideoUrls(content!)
@@ -62,6 +66,70 @@ public static partial class WebSitemapGenerator
         return string.IsNullOrWhiteSpace(raw)
             ? null
             : System.Net.WebUtility.HtmlDecode(raw);
+    }
+
+    private static string? TryReadLastModifiedFromHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return null;
+
+        foreach (Match tagMatch in MetaTagRegex.Matches(html))
+        {
+            var tag = tagMatch.Value;
+            var name = ReadHtmlAttribute(tag, "name");
+            var property = ReadHtmlAttribute(tag, "property");
+            if (!IsFreshnessMetaName(name) && !IsFreshnessMetaName(property))
+                continue;
+
+            var content = ReadHtmlAttribute(tag, "content");
+            if (TryFormatSitemapDateTime(content, out var formatted))
+                return formatted;
+        }
+
+        foreach (Match match in JsonLdDateRegex.Matches(html))
+        {
+            var value = match.Groups["value"].Value;
+            if (TryFormatSitemapDateTime(value, out var formatted))
+                return formatted;
+        }
+
+        foreach (Match tagMatch in TimeTagRegex.Matches(html))
+        {
+            var datetime = ReadHtmlAttribute(tagMatch.Value, "datetime");
+            if (TryFormatSitemapDateTime(datetime, out var formatted))
+                return formatted;
+        }
+
+        return null;
+    }
+
+    private static bool IsFreshnessMetaName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.Equals("dateModified", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("datePublished", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("article:modified_time", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("article:published_time", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("og:updated_time", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("lastmod", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("last-modified", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryFormatSitemapDateTime(string? value, out string formatted)
+    {
+        formatted = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            return false;
+
+        formatted = parsed
+            .ToUniversalTime()
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+        return true;
     }
 
     private static bool HasNoIndexRobots(string html)
@@ -209,7 +277,15 @@ public static partial class WebSitemapGenerator
                 Section = GetString(item, "section"),
                 Priority = GetString(item, "priority"),
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
-                LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified"),
+                LastModified = GetString(item, "lastmod") ??
+                               GetString(item, "lastModified") ??
+                               GetString(item, "last_modified") ??
+                               GetString(item, "modified") ??
+                               GetString(item, "updated") ??
+                               GetString(item, "updatedAt") ??
+                               GetString(item, "updated_at") ??
+                               GetString(item, "dateModified") ??
+                               GetString(item, "date_modified"),
                 Alternates = alternates.ToArray(),
                 ImageUrls = GetArrayStrings(item, "images") ?? Array.Empty<string>(),
                 VideoUrls = GetArrayStrings(item, "videos") ?? Array.Empty<string>()

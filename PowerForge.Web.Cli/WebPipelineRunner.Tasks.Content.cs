@@ -1801,6 +1801,12 @@ internal static partial class WebPipelineRunner
         var noDefaultExclude = GetBool(step, "noDefaultExclude") ?? GetBool(step, "no-default-exclude");
         var excludePatterns = GetArrayOfStrings(step, "excludePatterns") ?? GetArrayOfStrings(step, "exclude-patterns");
         var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
+        var useGeneratedSitemapMetadata =
+            GetBool(step, "useGeneratedSitemapMetadata") ??
+            GetBool(step, "use-generated-sitemap-metadata") ??
+            (!(GetBool(step, "noGeneratedSitemapMetadata") ??
+               GetBool(step, "no-generated-sitemap-metadata") ??
+               false));
         var generateBrowserStylesheet =
             GetBool(step, "generateBrowserStylesheet") ??
             GetBool(step, "generate-browser-stylesheet") ??
@@ -1874,6 +1880,7 @@ internal static partial class WebPipelineRunner
             ExtraPaths = GetArrayOfStrings(step, "extraPaths") ?? GetArrayOfStrings(step, "extra-paths"),
             Entries = entries.Length == 0 ? null : entries,
             EntriesJsonPath = entriesJson,
+            UseGeneratedSitemapMetadata = useGeneratedSitemapMetadata,
             IncludeHtmlFiles = includeHtml ?? true,
             IncludeNoIndexHtml = includeNoIndexHtml ?? false,
             UseDefaultExcludePatterns = !(noDefaultExclude ?? false),
@@ -1921,7 +1928,7 @@ internal static partial class WebPipelineRunner
         });
 
         stepResult.Success = true;
-        var details = new List<string> { $"{res.UrlCount} urls" };
+        var details = new List<string> { $"{res.UrlCount} urls", $"{res.LastModifiedCount} lastmod" };
         if (!string.IsNullOrWhiteSpace(res.NewsOutputPath))
             details.Add("news");
         if (!string.IsNullOrWhiteSpace(res.ImageOutputPath))
@@ -1931,6 +1938,8 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(res.IndexOutputPath))
             details.Add("index");
         stepResult.Message = $"Sitemap {string.Join(", ", details)}";
+        if (res.Warnings is { Length: > 0 })
+            stepResult.Message += $"; warnings: {string.Join(" | ", res.Warnings)}";
     }
 
     private static string ResolveSitemapBaseUrl(SiteSpec spec, string? language)

@@ -643,6 +643,7 @@ internal static partial class WebCliCommandHandlers
         var includeTextFiles = !HasOption(subArgs, "--no-text-files");
         var includeLanguageAlternates = !HasOption(subArgs, "--no-language-alternates");
         var useDefaultExcludes = !HasOption(subArgs, "--no-default-excludes");
+        var useGeneratedSitemapMetadata = !HasOption(subArgs, "--no-generated-sitemap-metadata");
         var includeHtmlSitemapRoute = HasOption(subArgs, "--include-html-sitemap-route");
         var generateHtml = HasOption(subArgs, "--html") ||
                            !string.IsNullOrWhiteSpace(htmlOutput) ||
@@ -663,6 +664,7 @@ internal static partial class WebCliCommandHandlers
             ApiSitemapPath = apiSitemap,
             Entries = LoadSitemapEntries(entriesPath),
             EntriesJsonPath = entriesJsonPath,
+            UseGeneratedSitemapMetadata = useGeneratedSitemapMetadata,
             IncludeHtmlFiles = includeHtmlFiles,
             IncludeNoIndexHtml = includeNoIndexHtml,
             UseDefaultExcludePatterns = useDefaultExcludes,
@@ -694,6 +696,9 @@ internal static partial class WebCliCommandHandlers
 
         logger.Success($"Sitemap generated: {result.OutputPath}");
         logger.Info($"URL count: {result.UrlCount}");
+        logger.Info($"Lastmod count: {result.LastModifiedCount}");
+        foreach (var warning in result.Warnings)
+            logger.Warn(warning);
         if (!string.IsNullOrWhiteSpace(result.JsonOutputPath))
             logger.Info($"Sitemap JSON: {result.JsonOutputPath}");
         if (!string.IsNullOrWhiteSpace(result.HtmlOutputPath))

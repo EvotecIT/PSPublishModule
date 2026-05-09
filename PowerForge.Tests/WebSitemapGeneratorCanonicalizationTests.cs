@@ -85,6 +85,120 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
+    public void Generate_UsesHtmlFreshnessSignals_AndOmitsUnknownLastmod()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-html-freshness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "about"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <title>home</title>
+                <script type="application/ld+json">{"dateModified":"2024-03-04T05:06:07Z"}</script>
+                """);
+            File.WriteAllText(Path.Combine(root, "about", "index.html"), "<!doctype html><title>about</title>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var urls = doc.Descendants(ns + "url")
+                .ToDictionary(
+                    url => url.Element(ns + "loc")?.Value ?? string.Empty,
+                    url => url,
+                    StringComparer.OrdinalIgnoreCase);
+
+            Assert.Equal("2024-03-04T05:06:07.000Z", urls["https://example.test/"].Element(ns + "lastmod")?.Value);
+            Assert.Null(urls["https://example.test/about/"].Element(ns + "lastmod"));
+            Assert.Equal(1, result.LastModifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_MergesPowerForgeSitemapMetadata_ByDefault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(
+                Path.Combine(root, "_powerforge", "sitemap-entries.json"),
+                """
+                {
+                  "entries": [
+                    { "path": "/", "lastModified": "2021-02-03T04:05:06.000Z" }
+                  ]
+                }
+                """);
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var home = doc.Descendants(ns + "url")
+                .Single(url => string.Equals(url.Element(ns + "loc")?.Value, "https://example.test/", StringComparison.OrdinalIgnoreCase));
+
+            Assert.Equal("2021-02-03T04:05:06.000Z", home.Element(ns + "lastmod")?.Value);
+            Assert.Equal(1, result.LastModifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_Warns_WhenMostLastmodValuesAreBuildDate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-lastmod-warning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                Entries = Enumerable.Range(1, 10)
+                    .Select(i => new WebSitemapEntry { Path = $"/page-{i}/", LastModified = today })
+                    .ToArray()
+            });
+
+            Assert.Equal(10, result.LastModifiedCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("suspicious", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_CanDisableBrowserStylesheet()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-browser-style-off-" + Guid.NewGuid().ToString("N"));
