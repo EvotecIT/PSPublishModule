@@ -1269,6 +1269,8 @@ public static partial class WebSitemapGenerator
             return false;
         if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
             return false;
+        // Re-check the rendered HTML because metadata files from older engine
+        // versions did not carry NoIndex, and stale/custom metadata may omit it.
         if (!TryResolveHtmlFileForRoute(siteRoot, route, out var htmlPath))
             return false;
         if (!options.IncludeNoIndexHtml &&

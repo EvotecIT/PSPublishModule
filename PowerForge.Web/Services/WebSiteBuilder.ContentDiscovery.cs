@@ -13,6 +13,8 @@ namespace PowerForge.Web;
 /// <summary>Content discovery and item construction helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    // The git freshness cache maps full source paths to author dates; this marker
+    // records that the one-shot bulk git query already ran for the current build.
     private const string GitLastModifiedCacheLoadedKey = "\0powerforge-git-lastmod-loaded";
 
     private static IEnumerable<ProjectSpec> LoadProjectSpecs(string? projectsRoot, JsonSerializerOptions options)

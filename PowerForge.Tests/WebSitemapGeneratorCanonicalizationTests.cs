@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -196,7 +197,7 @@ public class WebSitemapGeneratorCanonicalizationTests
 
         try
         {
-            var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var result = WebSitemapGenerator.Generate(new WebSitemapOptions
             {
                 SiteRoot = root,
