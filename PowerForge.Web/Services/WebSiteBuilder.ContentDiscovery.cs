@@ -13,6 +13,8 @@ namespace PowerForge.Web;
 /// <summary>Content discovery and item construction helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    private const string GitLastModifiedCacheLoadedKey = "\0powerforge-git-lastmod-loaded";
+
     private static IEnumerable<ProjectSpec> LoadProjectSpecs(string? projectsRoot, JsonSerializerOptions options)
     {
         if (string.IsNullOrWhiteSpace(projectsRoot) || !Directory.Exists(projectsRoot))
@@ -1109,8 +1111,6 @@ public static partial class WebSiteBuilder
         value = default;
         if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(sourcePath))
             return false;
-        if (!File.Exists(sourcePath))
-            return false;
 
         var fullSource = Path.GetFullPath(sourcePath);
         if (cache.TryGetValue(fullSource, out var cached))
@@ -1132,34 +1132,10 @@ public static partial class WebSiteBuilder
                 return false;
             }
 
-            using var process = new Process();
-            process.StartInfo.FileName = "git";
-            process.StartInfo.WorkingDirectory = fullRoot;
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.RedirectStandardError = true;
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.CreateNoWindow = true;
-            process.StartInfo.ArgumentList.Add("-C");
-            process.StartInfo.ArgumentList.Add(fullRoot);
-            process.StartInfo.ArgumentList.Add("log");
-            process.StartInfo.ArgumentList.Add("-1");
-            process.StartInfo.ArgumentList.Add("--format=%cI");
-            process.StartInfo.ArgumentList.Add("--");
-            process.StartInfo.ArgumentList.Add(relative);
-            process.Start();
-            if (!process.WaitForExit(2000))
+            EnsureGitLastModifiedCache(fullRoot, cache);
+            if (cache.TryGetValue(fullSource, out cached) && cached.HasValue)
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
-                cache[fullSource] = null;
-                return false;
-            }
-
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            if (process.ExitCode == 0 &&
-                DateTimeOffset.TryParse(output, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
-            {
-                value = parsed.ToUniversalTime();
-                cache[fullSource] = value;
+                value = cached.Value;
                 return true;
             }
         }
@@ -1170,6 +1146,85 @@ public static partial class WebSiteBuilder
 
         cache[fullSource] = null;
         return false;
+    }
+
+    private static void EnsureGitLastModifiedCache(string rootPath, Dictionary<string, DateTimeOffset?> cache)
+    {
+        if (cache.ContainsKey(GitLastModifiedCacheLoadedKey))
+            return;
+
+        cache[GitLastModifiedCacheLoadedKey] = null;
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            return;
+
+        try
+        {
+            using var process = new Process();
+            process.StartInfo.FileName = "git";
+            process.StartInfo.WorkingDirectory = rootPath;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.ArgumentList.Add("-C");
+            process.StartInfo.ArgumentList.Add(rootPath);
+            process.StartInfo.ArgumentList.Add("log");
+            process.StartInfo.ArgumentList.Add("--format=@@POWERFORGE_DATE@@%aI");
+            process.StartInfo.ArgumentList.Add("--name-only");
+            process.StartInfo.ArgumentList.Add("--diff-filter=AMR");
+            process.StartInfo.ArgumentList.Add("--");
+            process.StartInfo.ArgumentList.Add(".");
+            process.Start();
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(15000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return;
+            }
+
+            if (process.ExitCode != 0)
+                return;
+
+            var output = outputTask.GetAwaiter().GetResult();
+            DateTimeOffset? currentCommitDate = null;
+            foreach (var rawLine in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0)
+                    continue;
+
+                if (line.StartsWith("@@POWERFORGE_DATE@@", StringComparison.Ordinal))
+                {
+                    var rawDate = line["@@POWERFORGE_DATE@@".Length..];
+                    currentCommitDate = DateTimeOffset.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
+                        ? parsed.ToUniversalTime()
+                        : null;
+                    continue;
+                }
+
+                if (!currentCommitDate.HasValue)
+                    continue;
+
+                var fullPath = Path.GetFullPath(Path.Combine(rootPath, line.Replace('/', Path.DirectorySeparatorChar)));
+                if (!IsPathInsideRoot(rootPath, fullPath) || cache.ContainsKey(fullPath))
+                    continue;
+
+                cache[fullPath] = currentCommitDate.Value;
+            }
+        }
+        catch
+        {
+            // Git freshness is optional; fall back to explicit page metadata or no lastmod.
+        }
+    }
+
+    private static bool IsPathInsideRoot(string rootPath, string fullPath)
+    {
+        var fullRoot = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = Path.GetFullPath(fullPath);
+        return normalizedPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolveCacheRoot(SiteSpec spec, string rootPath)

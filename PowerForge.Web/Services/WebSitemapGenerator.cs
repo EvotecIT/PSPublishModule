@@ -289,7 +289,11 @@ public static partial class WebSitemapGenerator
             foreach (var entry in LoadDefaultGeneratedSitemapEntries(siteRoot))
             {
                 if (entry is null || string.IsNullOrWhiteSpace(entry.Path)) continue;
-                AddOrUpdate(entries, NormalizeRoute(entry.Path), entry);
+                var route = NormalizeRoute(entry.Path);
+                if (!ShouldIncludeGeneratedSitemapEntry(siteRoot, route, entry, options))
+                    continue;
+                AddOrUpdate(entries, route, entry);
+                htmlRoutes.Add(route);
             }
         }
 
@@ -1031,7 +1035,7 @@ public static partial class WebSitemapGenerator
         {
             return LoadEntriesFromJsonPath(path).ToArray();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or JsonException or FormatException)
         {
             Trace.TraceWarning($"Failed to load generated sitemap metadata {path}: {ex.GetType().Name}: {ex.Message}");
             return Array.Empty<WebSitemapEntry>();
@@ -1066,7 +1070,9 @@ public static partial class WebSitemapGenerator
                 $"sitemap lastmod freshness looks suspicious: {dominant.Count}/{entries.Count} URLs are stamped with build date {today}. Use content metadata, source git dates, or omit lastmod for unknown pages.");
         }
 
-        if (dominant.Count == values.Length && values.Length == entries.Count)
+        if (dominant.Count == values.Length &&
+            values.Length == entries.Count &&
+            !dominant.Date.Equals(today, StringComparison.OrdinalIgnoreCase))
         {
             warnings.Add(
                 $"sitemap lastmod freshness has one value for all {entries.Count} URLs ({dominant.Date}); verify these are real content modification dates.");
@@ -1108,6 +1114,8 @@ public static partial class WebSitemapGenerator
                 existing.ImageUrls = update.ImageUrls;
             if (update.VideoUrls is { Length: > 0 })
                 existing.VideoUrls = update.VideoUrls;
+            if (update.NoIndex)
+                existing.NoIndex = true;
             return;
         }
 
@@ -1128,7 +1136,8 @@ public static partial class WebSitemapGenerator
             LastModified = update.LastModified,
             Alternates = update.Alternates,
             ImageUrls = update.ImageUrls,
-            VideoUrls = update.VideoUrls
+            VideoUrls = update.VideoUrls,
+            NoIndex = update.NoIndex
         };
     }
 
@@ -1254,6 +1263,51 @@ public static partial class WebSitemapGenerator
         {
             destination.VideoUrls = source.VideoUrls;
         }
+        if (source.NoIndex)
+            destination.NoIndex = true;
+    }
+
+    private static bool ShouldIncludeGeneratedSitemapEntry(
+        string siteRoot,
+        string route,
+        WebSitemapEntry entry,
+        WebSitemapOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+        if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
+            return false;
+        if (!TryResolveHtmlFileForRoute(siteRoot, route, out var htmlPath))
+            return false;
+        if (!options.IncludeNoIndexHtml &&
+            !options.IncludeNoIndexPages &&
+            HtmlDeclaresNoIndex(htmlPath))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveHtmlFileForRoute(string siteRoot, string route, out string htmlPath)
+    {
+        htmlPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(route))
+            return false;
+
+        var trimmed = NormalizeRoute(route).Trim('/');
+        var relative = string.IsNullOrWhiteSpace(trimmed)
+            ? "index.html"
+            : trimmed.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                ? trimmed
+                : Path.Combine(trimmed.Replace('/', Path.DirectorySeparatorChar), "index.html");
+
+        var fullPath = Path.GetFullPath(Path.Combine(siteRoot, relative));
+        if (!IsUnderRoot(siteRoot, fullPath) || !File.Exists(fullPath))
+            return false;
+
+        htmlPath = fullPath;
+        return true;
     }
 
     private static string ReplaceHost(string input, string baseUrl)
