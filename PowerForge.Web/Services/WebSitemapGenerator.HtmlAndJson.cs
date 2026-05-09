@@ -185,20 +185,7 @@ public static partial class WebSitemapGenerator
     {
         return IsFreshnessMetaName(ReadHtmlAttribute(tag, "itemprop"), modifiedOnly: true) ||
                IsFreshnessMetaName(ReadHtmlAttribute(tag, "property"), modifiedOnly: true) ||
-               IsFreshnessMetaName(ReadHtmlAttribute(tag, "name"), modifiedOnly: true) ||
-               ContainsFreshnessToken(ReadHtmlAttribute(tag, "class"));
-    }
-
-    private static bool ContainsFreshnessToken(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        return value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(static token =>
-                token.Equals("modified", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("updated", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("lastmod", StringComparison.OrdinalIgnoreCase));
+               IsFreshnessMetaName(ReadHtmlAttribute(tag, "name"), modifiedOnly: true);
     }
 
     private static bool TryFormatSitemapDateTime(string? value, out string formatted)

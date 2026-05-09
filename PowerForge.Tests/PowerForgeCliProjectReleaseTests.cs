@@ -89,9 +89,11 @@ public sealed class PowerForgeCliProjectReleaseTests
                 throw new TimeoutException("PowerForge CLI project release plan test timed out.");
             }
 
+            var outputDrainTimedOut = false;
             var drainTask = Task.WhenAll(stdoutClosed.Task, stderrClosed.Task);
             if (await Task.WhenAny(drainTask, Task.Delay(TimeSpan.FromSeconds(10))) != drainTask)
             {
+                outputDrainTimedOut = true;
                 try { process.CancelOutputRead(); } catch { /* best effort */ }
                 try { process.CancelErrorRead(); } catch { /* best effort */ }
             }
@@ -99,6 +101,7 @@ public sealed class PowerForgeCliProjectReleaseTests
             var stdout = stdoutBuffer.ToString();
             var stderr = stderrBuffer.ToString();
 
+            Assert.False(outputDrainTimedOut, $"PowerForge CLI project release plan output drain timed out.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             Assert.True(process.ExitCode == 0, $"CLI exit code {process.ExitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
 
             using var doc = JsonDocument.Parse(stdout);

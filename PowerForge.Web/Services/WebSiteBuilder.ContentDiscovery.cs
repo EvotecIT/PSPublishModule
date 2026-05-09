@@ -1178,10 +1178,12 @@ public static partial class WebSiteBuilder
             var outputTask = process.StandardOutput.ReadToEndAsync();
             if (!process.WaitForExit(15000))
             {
+                Trace.TraceWarning($"Timed out while reading git history for sitemap freshness under '{rootPath}'. Sitemap lastmod values will use explicit metadata or be omitted.");
                 try { process.Kill(entireProcessTree: true); } catch { }
                 return;
             }
 
+            process.WaitForExit();
             if (process.ExitCode != 0)
                 return;
 

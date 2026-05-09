@@ -1070,14 +1070,6 @@ public static partial class WebSitemapGenerator
                 $"sitemap lastmod freshness looks suspicious: {dominant.Count}/{entries.Count} URLs are stamped with build date {today}. Use content metadata, source git dates, or omit lastmod for unknown pages.");
         }
 
-        if (dominant.Count == values.Length &&
-            values.Length == entries.Count &&
-            !dominant.Date.Equals(today, StringComparison.OrdinalIgnoreCase))
-        {
-            warnings.Add(
-                $"sitemap lastmod freshness has one value for all {entries.Count} URLs ({dominant.Date}); verify these are real content modification dates.");
-        }
-
         return warnings.ToArray();
     }
 
