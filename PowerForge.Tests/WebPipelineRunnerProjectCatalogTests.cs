@@ -235,7 +235,22 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("meta.project_link_psgallery: \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_github_last_pushed_at_display: \"2026-02-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_release_latest_published_at_display: \"2025-12-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("meta.project_sitemap_fingerprint:", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("sitemap.lastmod: \"2026-02-14T21:19:34.0000000+00:00\"", projectPage, StringComparison.OrdinalIgnoreCase);
+            var firstLastModified = ReadFrontMatterValue(projectPage, "sitemap.lastmod:");
+            Assert.False(string.IsNullOrWhiteSpace(firstLastModified));
+
+            File.WriteAllText(catalogPath, catalogText
+                .Replace("\"stars\": 987", "\"stars\": 988", StringComparison.Ordinal)
+                .Replace("\"totalDownloads\": 7374604", "\"totalDownloads\": 7374605", StringComparison.Ordinal));
+
+            var counterOnlyResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(counterOnlyResult.Success);
+            var counterOnlyProjectPage = File.ReadAllText(projectPagePath);
+            Assert.Contains("meta.project_github_stars: 988", counterOnlyProjectPage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("meta.project_psgallery_downloads: 7374605", counterOnlyProjectPage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(firstLastModified, ReadFrontMatterValue(counterOnlyProjectPage, "sitemap.lastmod:"));
         }
         finally
         {
@@ -616,5 +631,26 @@ public class WebPipelineRunnerProjectCatalogTests
         {
             // ignore cleanup failures in tests
         }
+    }
+
+    private static string? ReadFrontMatterValue(string markdown, string key)
+    {
+        foreach (var rawLine in markdown.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var value = line[key.Length..].Trim();
+            if ((value.StartsWith("\"", StringComparison.Ordinal) && value.EndsWith("\"", StringComparison.Ordinal)) ||
+                (value.StartsWith("'", StringComparison.Ordinal) && value.EndsWith("'", StringComparison.Ordinal)))
+            {
+                value = value[1..^1];
+            }
+
+            return value;
+        }
+
+        return null;
     }
 }

@@ -184,9 +184,18 @@ internal static class CollectionPresetDefaults
                 return true;
         }
 
-        return !string.IsNullOrWhiteSpace(output) &&
-               (output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase) ||
-                output.StartsWith("/news", StringComparison.OrdinalIgnoreCase) ||
-                output.StartsWith("/changelog", StringComparison.OrdinalIgnoreCase));
+        return IsRouteOrChild(output, "/blog") ||
+               IsRouteOrChild(output, "/news") ||
+               IsRouteOrChild(output, "/changelog");
+    }
+
+    private static bool IsRouteOrChild(string? route, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+
+        var normalized = route.Trim().TrimEnd('/');
+        return normalized.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+               normalized.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
     }
 }

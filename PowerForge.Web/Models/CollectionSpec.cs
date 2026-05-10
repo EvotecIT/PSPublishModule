@@ -93,7 +93,7 @@ public sealed class SitemapLastModifiedPolicyJsonConverter : JsonStringEnumConve
 {
     /// <summary>Initializes a camelCase sitemap freshness policy converter.</summary>
     public SitemapLastModifiedPolicyJsonConverter()
-        : base(JsonNamingPolicy.CamelCase)
+        : base(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
     {
     }
 }

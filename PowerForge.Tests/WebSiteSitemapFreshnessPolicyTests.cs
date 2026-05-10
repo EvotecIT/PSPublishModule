@@ -34,6 +34,27 @@ public class WebSiteSitemapFreshnessPolicyTests
     }
 
     [Fact]
+    public void CollectionSpec_SitemapLastmodPolicy_RejectsNumericEnumValues()
+    {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<SiteSpec>(
+            """
+            {
+              "name": "Freshness Test",
+              "baseUrl": "https://example.test",
+              "collections": [
+                {
+                  "name": "docs",
+                  "input": "content/docs",
+                  "output": "/docs",
+                  "sitemapLastModified": 2
+                }
+              ]
+            }
+            """,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
+    }
+
+    [Fact]
     public void Build_AutoSitemapLastmod_PreservesEditorialPublishDate()
     {
         var root = CreateTempRoot("pf-web-sitemap-editorial-freshness-");
@@ -102,6 +123,42 @@ public class WebSiteSitemapFreshnessPolicyTests
 
             var lastmod = ReadSitemapMetadataLastModified(root, "/about/");
             Assert.Equal("2026-01-15T12:34:56.000Z", lastmod);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_AutoSitemapLastmod_DoesNotTreatBlogPrefixedReferenceRoutesAsEditorial()
+    {
+        var root = CreateTempRoot("pf-web-sitemap-blog-tools-freshness-");
+        try
+        {
+            WriteMarkdown(root, "content/blog-tools/reference.md",
+                """
+                ---
+                title: Reference Tooling
+                slug: reference
+                date: 2020-01-02
+                ---
+
+                Reference content.
+                """);
+            CommitAll(root, "2026-01-15T12:34:56Z");
+
+            Build(root, new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "tools",
+                    Input = "content/blog-tools",
+                    Output = "/blog-tools"
+                }
+            });
+
+            Assert.Equal("2026-01-15T12:34:56.000Z", ReadSitemapMetadataLastModified(root, "/blog-tools/reference/"));
         }
         finally
         {
