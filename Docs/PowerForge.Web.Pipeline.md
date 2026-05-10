@@ -48,7 +48,7 @@ With local additions:
   "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
   "extends": "./config/presets/pipeline.web-quality.json",
   "steps": [
-    { "task": "indexnow", "modes": ["ci"], "baseUrl": "https://example.com", "keyEnv": "INDEXNOW_KEY", "sitemap": "./_site/sitemap.xml" }
+    { "task": "indexnow", "modes": ["ci"], "baseUrl": "https://example.com", "siteRoot": "./_site", "sitemap": "./_site/sitemap.xml" }
   ]
 }
 ```
@@ -1582,7 +1582,6 @@ Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
   "baseUrl": "https://docs.example.com",
   "siteRoot": "./_site",
   "scopeFromBuildUpdated": true,
-  "keyEnv": "INDEXNOW_KEY",
   "keyLocation": "https://docs.example.com/your-indexnow-key.txt",
   "batchSize": 500,
   "retryCount": 2,
@@ -1597,7 +1596,6 @@ Explicit URL/path mode:
 {
   "task": "indexnow",
   "baseUrl": "https://api.example.com",
-  "keyEnv": "INDEXNOW_KEY",
   "paths": "/,/docs/,/api/,/blog/",
   "sitemap": "./_site/sitemap.xml",
   "dryRun": true
@@ -1612,8 +1610,9 @@ Notes:
   - `sitemap` (`<loc>` entries from sitemap XML)
   - `scopeFromBuildUpdated` (`--fast` defaults this behavior on) when a preceding `build` step updated HTML files.
 - Auth/key options:
-  - `key` (inline), `keyPath` (file), or `keyEnv` (recommended; defaults to `INDEXNOW_KEY`).
-  - `optionalKey:true` (aliases: `optional-key`, `skipIfMissingKey`) turns missing key into a non-failing skip.
+  - `key` (inline), `keyPath` (file), or `keyEnv` (defaults to `INDEXNOW_KEY`) can override discovery when needed.
+  - When no explicit key is provided, the runner discovers the public verification file from `siteRoot/indexnow.txt`, `./indexnow.txt`, or `./static/indexnow.txt`. If `keyLocation` names another safe relative path, matching files under `siteRoot`, the pipeline root, or `static` are considered instead.
+  - `optionalKey:true` (aliases: `optional-key`, `skipIfMissingKey`) turns a missing explicit/discovered key into a non-failing skip.
   - `keyLocation` can be explicit, otherwise defaults to `https://<host>/<key>.txt`.
 - Endpoint options:
   - default endpoint is `https://api.indexnow.org/indexnow`

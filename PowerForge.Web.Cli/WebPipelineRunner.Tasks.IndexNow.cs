@@ -121,22 +121,34 @@ internal static partial class WebPipelineRunner
         }
 
         var keyEnv = GetString(step, "keyEnv") ?? GetString(step, "key-env") ?? "INDEXNOW_KEY";
+        var keyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location");
         var optionalKey = GetBool(step, "optionalKey") ??
                           GetBool(step, "optional-key") ??
                           GetBool(step, "skipIfMissingKey") ??
                           GetBool(step, "skip-if-missing-key") ??
                           false;
+        string? keySource = null;
         if (string.IsNullOrWhiteSpace(key))
+        {
             key = Environment.GetEnvironmentVariable(keyEnv);
+            if (!string.IsNullOrWhiteSpace(key))
+                keySource = $"env '{keyEnv}'";
+        }
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            key = TryReadIndexNowVerificationKey(baseDir, siteRoot, keyLocation, out keySource);
+        }
+
         if (string.IsNullOrWhiteSpace(key))
         {
             if (optionalKey)
             {
                 stepResult.Success = true;
-                stepResult.Message = $"indexnow: skipped (missing key env '{keyEnv}')";
+                stepResult.Message = $"indexnow: skipped (missing key env '{keyEnv}' and verification file)";
                 return;
             }
-            throw new InvalidOperationException($"indexnow: missing key (set env '{keyEnv}' or provide key/keyPath).");
+            throw new InvalidOperationException($"indexnow: missing key (set env '{keyEnv}', provide key/keyPath, or publish indexnow.txt).");
         }
 
         var endpointValues = new List<string>();
@@ -149,7 +161,7 @@ internal static partial class WebPipelineRunner
             Urls = normalizedUrls,
             Endpoints = endpointValues,
             Key = key,
-            KeyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location"),
+            KeyLocation = keyLocation,
             Host = GetString(step, "host"),
             DryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false,
             FailOnRequestError = failOnRequestError,
@@ -185,8 +197,133 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = submissionResult.Success;
         stepResult.Message = BuildIndexNowSummary(submissionResult);
+        if (!string.IsNullOrWhiteSpace(keySource))
+            stepResult.Message += $", key={keySource}";
         if (!submissionResult.Success)
             throw new InvalidOperationException(stepResult.Message);
+    }
+
+    private static string? TryReadIndexNowVerificationKey(string baseDir, string? siteRoot, string? keyLocation, out string? source)
+    {
+        source = null;
+        foreach (var candidate in EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation))
+        {
+            if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
+                continue;
+
+            var key = File.ReadLines(candidate)
+                .Select(static line => line.Trim())
+                .FirstOrDefault(static line => !string.IsNullOrWhiteSpace(line));
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            source = FormatIndexNowKeySource(baseDir, candidate);
+            return key;
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateIndexNowKeyCandidates(string baseDir, string? siteRoot, string? keyLocation)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keyLocationRelativePaths = EnumerateIndexNowKeyRelativePaths(keyLocation).ToArray();
+
+        foreach (var relative in keyLocationRelativePaths)
+        {
+            if (!string.IsNullOrWhiteSpace(siteRoot))
+            {
+                foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, relative)))
+                    yield return candidate;
+            }
+
+            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, relative)))
+                yield return candidate;
+
+            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", relative)))
+                yield return candidate;
+        }
+
+        if (keyLocationRelativePaths.Length > 0 &&
+            !keyLocationRelativePaths.Any(IsRootIndexNowVerificationPath))
+        {
+            yield break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(siteRoot))
+        {
+            foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, "indexnow.txt")))
+                yield return candidate;
+        }
+
+        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "indexnow.txt")))
+            yield return candidate;
+        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", "indexnow.txt")))
+            yield return candidate;
+
+        IEnumerable<string> AddCandidateIterator(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                yield break;
+
+            var full = Path.GetFullPath(path);
+            if (seen.Add(full))
+                yield return full;
+        }
+    }
+
+    private static bool IsRootIndexNowVerificationPath(string relativePath)
+        => relativePath
+            .Replace('\\', '/')
+            .Trim('/')
+            .Equals("indexnow.txt", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatIndexNowKeySource(string baseDir, string path)
+    {
+        var full = Path.GetFullPath(path);
+        try
+        {
+            var relative = Path.GetRelativePath(Path.GetFullPath(baseDir), full);
+            if (!string.IsNullOrWhiteSpace(relative) &&
+                !relative.StartsWith("..", StringComparison.Ordinal) &&
+                !Path.IsPathRooted(relative))
+            {
+                return relative;
+            }
+        }
+        catch
+        {
+            // Fall back to the full path when the platform cannot compute a relative display path.
+        }
+
+        return full;
+    }
+
+    private static IEnumerable<string> EnumerateIndexNowKeyRelativePaths(string? keyLocation)
+    {
+        if (string.IsNullOrWhiteSpace(keyLocation))
+            yield break;
+
+        var trimmed = keyLocation.Trim();
+        string? path = null;
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            path = uri.AbsolutePath;
+        else
+            path = trimmed;
+
+        if (string.IsNullOrWhiteSpace(path))
+            yield break;
+
+        path = Uri.UnescapeDataString(path.TrimStart('/').Replace('\\', '/'));
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (string.IsNullOrWhiteSpace(path) ||
+            segments.Any(static segment => segment.Equals("..", StringComparison.Ordinal)) ||
+            Path.IsPathRooted(path))
+        {
+            yield break;
+        }
+
+        yield return path;
     }
 
     private static IEnumerable<string> ReadIndexNowStringList(JsonElement step, params string[] names)
