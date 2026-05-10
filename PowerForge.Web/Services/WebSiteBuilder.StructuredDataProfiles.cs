@@ -60,7 +60,7 @@ public static partial class WebSiteBuilder
 
         if (item.LastModifiedUtc.HasValue)
         {
-            articleModel["dateModified"] = item.LastModifiedUtc.Value.ToUniversalTime().ToString("O");
+            articleModel["dateModified"] = item.LastModifiedUtc.Value.ToString("O");
         }
         else if (item.Date.HasValue)
         {

@@ -2573,7 +2573,7 @@ internal static partial class WebPipelineRunner
             if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
                 return;
 
-            var utc = parsed.ToUniversalTime();
+            var utc = parsed;
             if (latest is null || utc > latest.Value)
                 latest = utc;
         }

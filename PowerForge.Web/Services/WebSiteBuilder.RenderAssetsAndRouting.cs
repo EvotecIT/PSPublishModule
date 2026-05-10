@@ -452,7 +452,7 @@ public static partial class WebSiteBuilder
             imageAlt = title;
         var isArticle = IsArticleLikePage(item);
         var publishedTime = item.Date?.ToUniversalTime().ToString("O");
-        var modifiedTime = item.LastModifiedUtc?.ToUniversalTime().ToString("O");
+        var modifiedTime = item.LastModifiedUtc?.ToString("O");
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<!-- Open Graph -->");

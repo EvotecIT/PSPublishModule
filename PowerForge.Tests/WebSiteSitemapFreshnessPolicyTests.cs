@@ -28,6 +28,9 @@ public class WebSiteSitemapFreshnessPolicyTests
 
         Assert.NotNull(spec);
         Assert.Equal(SitemapLastModifiedPolicy.ExplicitOnly, spec!.Collections[0].SitemapLastModified);
+
+        var json = JsonSerializer.Serialize(spec.Collections[0], new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        Assert.Contains("\"sitemapLastModified\":\"explicitOnly\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,6 +110,119 @@ public class WebSiteSitemapFreshnessPolicyTests
     }
 
     [Fact]
+    public void Build_ExplicitOnlySitemapLastmod_LeavesLastmodUnsetWithoutExplicitMetadata()
+    {
+        var root = CreateTempRoot("pf-web-sitemap-explicit-only-");
+        try
+        {
+            WriteMarkdown(root, "content/pages/about.md",
+                """
+                ---
+                title: About
+                slug: about
+                date: 2020-01-02
+                ---
+
+                Reference content.
+                """);
+            CommitAll(root, "2026-01-15T12:34:56Z");
+
+            Build(root, new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "pages",
+                    Preset = "pages",
+                    Input = "content/pages",
+                    Output = "/",
+                    SitemapLastModified = SitemapLastModifiedPolicy.ExplicitOnly
+                }
+            });
+
+            Assert.Null(ReadSitemapMetadataLastModified(root, "/about/"));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_SourceDateSitemapLastmod_UsesGitDateForEditorialCollections()
+    {
+        var root = CreateTempRoot("pf-web-sitemap-explicit-source-");
+        try
+        {
+            WriteMarkdown(root, "content/blog/ship-log.md",
+                """
+                ---
+                title: Ship Log
+                slug: ship-log
+                date: 2020-01-02
+                ---
+
+                Editorial content.
+                """);
+            CommitAll(root, "2026-01-15T12:34:56Z");
+
+            Build(root, new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Preset = "blog",
+                    Input = "content/blog",
+                    Output = "/blog",
+                    SitemapLastModified = SitemapLastModifiedPolicy.SourceDate
+                }
+            });
+
+            Assert.Equal("2026-01-15T12:34:56.000Z", ReadSitemapMetadataLastModified(root, "/blog/ship-log/"));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_PublishedDateSitemapLastmod_FallsBackToGitWhenDateMissing()
+    {
+        var root = CreateTempRoot("pf-web-sitemap-published-fallback-");
+        try
+        {
+            WriteMarkdown(root, "content/blog/undated.md",
+                """
+                ---
+                title: Undated Post
+                slug: undated
+                ---
+
+                Editorial content without a publish date.
+                """);
+            CommitAll(root, "2026-01-15T12:34:56Z");
+
+            Build(root, new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Preset = "blog",
+                    Input = "content/blog",
+                    Output = "/blog",
+                    SitemapLastModified = SitemapLastModifiedPolicy.PublishedDate
+                }
+            });
+
+            Assert.Equal("2026-01-15T12:34:56.000Z", ReadSitemapMetadataLastModified(root, "/blog/undated/"));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_ExplicitLastmod_DrivesSitemapAndArticleStructuredData()
     {
         var root = CreateTempRoot("pf-web-sitemap-explicit-freshness-");
@@ -156,6 +272,7 @@ public class WebSiteSitemapFreshnessPolicyTests
 
             var html = File.ReadAllText(Path.Combine(root, "_site", "blog", "updated", "index.html"));
             Assert.Contains("\"datePublished\":\"2020-01-02T00:00:00.0000000Z\"", html, StringComparison.Ordinal);
+            // Offset formatting can differ between date parsers; this assertion is about the chosen instant.
             Assert.Contains("\"dateModified\":\"2026-02-03T04:05:06", html, StringComparison.Ordinal);
             Assert.Contains("property=\"article:published_time\" content=\"2020-01-02T00:00:00.0000000Z\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"article:modified_time\" content=\"2026-02-03T04:05:06", html, StringComparison.Ordinal);
@@ -193,7 +310,9 @@ public class WebSiteSitemapFreshnessPolicyTests
         {
             var entryPath = entry.GetProperty("path").GetString();
             if (entryPath?.TrimEnd('/').Equals(normalizedPath, StringComparison.OrdinalIgnoreCase) == true)
-                return entry.GetProperty("lastModified").GetString();
+                return entry.TryGetProperty("lastModified", out var lastModified)
+                    ? lastModified.GetString()
+                    : null;
         }
 
         return null;
