@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -28,16 +29,16 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             var hours = (int)duration.TotalHours;
             var minutes = duration.TotalMinutes - (hours * 60);
-            return $"{hours}h {minutes:0.0}m";
+            return $"{hours}h {minutes.ToString("0.0", CultureInfo.InvariantCulture)}m";
         }
 
         if (duration.TotalMinutes >= 1)
-            return $"{duration.TotalMinutes:0.0}m";
+            return $"{duration.TotalMinutes.ToString("0.0", CultureInfo.InvariantCulture)}m";
 
         if (duration.TotalSeconds >= 1)
-            return $"{duration.TotalSeconds:0.0}s";
+            return $"{duration.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)}s";
 
-        return $"{duration.TotalMilliseconds:0}ms";
+        return $"{duration.TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture)}ms";
     }
 
     internal static string FormatBytes(long bytes)
@@ -47,13 +48,13 @@ public sealed partial class DotNetRepositoryReleaseService
         const double gb = mb * 1024d;
 
         if (bytes >= gb)
-            return $"{bytes / gb:0.##} GB";
+            return $"{(bytes / gb).ToString("0.##", CultureInfo.InvariantCulture)} GB";
 
         if (bytes >= mb)
-            return $"{bytes / mb:0.##} MB";
+            return $"{(bytes / mb).ToString("0.##", CultureInfo.InvariantCulture)} MB";
 
         if (bytes >= kb)
-            return $"{bytes / kb:0.##} KB";
+            return $"{(bytes / kb).ToString("0.##", CultureInfo.InvariantCulture)} KB";
 
         return $"{bytes} B";
     }

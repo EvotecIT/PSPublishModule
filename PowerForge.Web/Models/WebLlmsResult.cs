@@ -38,6 +38,10 @@ public sealed class WebSitemapResult
     public string? HtmlOutputPath { get; set; }
     /// <summary>Number of URLs emitted.</summary>
     public int UrlCount { get; set; }
+    /// <summary>Number of URLs with a lastmod value.</summary>
+    public int LastModifiedCount { get; set; }
+    /// <summary>Warnings emitted during sitemap generation.</summary>
+    public string[] Warnings { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Result payload for API documentation generation.</summary>

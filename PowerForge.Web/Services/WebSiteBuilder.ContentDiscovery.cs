@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -12,6 +14,10 @@ namespace PowerForge.Web;
 /// <summary>Content discovery and item construction helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    // The git freshness cache maps full source paths to author dates; this marker
+    // records that the one-shot bulk git query already ran for the current build.
+    private const string GitLastModifiedCacheLoadedKey = "\0powerforge-git-lastmod-loaded";
+
     private static IEnumerable<ProjectSpec> LoadProjectSpecs(string? projectsRoot, JsonSerializerOptions options)
     {
         if (string.IsNullOrWhiteSpace(projectsRoot) || !Directory.Exists(projectsRoot))
@@ -53,6 +59,7 @@ public static partial class WebSiteBuilder
 
         var localization = ResolveLocalizationConfig(spec);
         var contentRoots = BuildContentRoots(plan);
+        var gitLastModifiedCache = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var collection in spec.Collections)
         {
@@ -216,6 +223,7 @@ public static partial class WebSiteBuilder
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
+                    LastModifiedUtc = ResolveContentLastModifiedUtc(plan.RootPath, file, matter, meta, gitLastModifiedCache),
                     Order = matter?.Order,
                     Slug = slugPath,
                     Tags = matter?.Tags ?? Array.Empty<string>(),
@@ -355,6 +363,7 @@ public static partial class WebSiteBuilder
             Title = source.Title,
             Description = source.Description,
             Date = source.Date,
+            LastModifiedUtc = source.LastModifiedUtc,
             Order = source.Order,
             Slug = source.Slug,
             Tags = source.Tags?.ToArray() ?? Array.Empty<string>(),
@@ -468,6 +477,9 @@ public static partial class WebSiteBuilder
                         : $"{collection.Name}:{projectSlug}/_index",
                     Title = generatedTitle,
                     Description = generatedDescription,
+                    LastModifiedUtc = MaxLastModifiedUtc(projectGroup
+                        .Where(item => ResolveEffectiveLanguageCode(localization, item.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+                        .Select(static item => item.LastModifiedUtc)),
                     Slug = "index",
                     Kind = PageKind.Section,
                     Layout = string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout,
@@ -537,6 +549,9 @@ public static partial class WebSiteBuilder
                     TranslationKey = $"taxonomy:{taxonomy.Name}",
                     Title = HumanizeSegment(taxonomy.Name),
                     Description = string.Empty,
+                    LastModifiedUtc = MaxLastModifiedUtc(languageTerms
+                        .SelectMany(static term => term.Value)
+                        .Select(static item => item.LastModifiedUtc)),
                     Kind = PageKind.Taxonomy,
                     Layout = taxonomy.ListLayout ?? "taxonomy",
                     Outputs = taxonomy.Outputs,
@@ -559,6 +574,8 @@ public static partial class WebSiteBuilder
                         TranslationKey = $"taxonomy:{taxonomy.Name}:term:{slug}",
                         Title = term,
                         Description = string.Empty,
+                        LastModifiedUtc = MaxLastModifiedUtc(languageTerms[term]
+                            .Select(static item => item.LastModifiedUtc)),
                         Kind = PageKind.Term,
                         Layout = taxonomy.TermLayout ?? "term",
                         Outputs = taxonomy.Outputs,
@@ -985,6 +1002,260 @@ public static partial class WebSiteBuilder
             return new[] { s };
 
         return Array.Empty<string>();
+    }
+
+    private static DateTimeOffset? ResolveContentLastModifiedUtc(
+        string rootPath,
+        string sourcePath,
+        FrontMatter? matter,
+        IReadOnlyDictionary<string, object?>? meta,
+        Dictionary<string, DateTimeOffset?> gitLastModifiedCache)
+    {
+        if (TryReadMetaDateOffset(meta, out var explicitLastModified,
+                "lastmod",
+                "last_modified",
+                "lastModified",
+                "modified",
+                "updated",
+                "updated_at",
+                "updatedAt",
+                "dateModified",
+                "date_modified",
+                "seo.lastmod",
+                "sitemap.lastmod",
+                "sitemap.lastModified"))
+        {
+            return explicitLastModified.ToUniversalTime();
+        }
+
+        if (matter?.Date is DateTime published)
+            return NormalizeDateTimeOffset(published);
+
+        if (TryGetGitLastModifiedUtc(rootPath, sourcePath, gitLastModifiedCache, out var gitLastModified))
+            return gitLastModified;
+
+        return null;
+    }
+
+    private static DateTimeOffset? MaxLastModifiedUtc(IEnumerable<DateTimeOffset?> values)
+    {
+        DateTimeOffset? max = null;
+        foreach (var value in values)
+        {
+            if (!value.HasValue)
+                continue;
+            if (!max.HasValue || value.Value > max.Value)
+                max = value.Value;
+        }
+
+        return max;
+    }
+
+    private static bool TryReadMetaDateOffset(
+        IReadOnlyDictionary<string, object?>? meta,
+        out DateTimeOffset value,
+        params string[] keys)
+    {
+        value = default;
+        if (meta is null || meta.Count == 0)
+            return false;
+
+        var dictionary = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in meta)
+        {
+            if (!dictionary.ContainsKey(pair.Key))
+                dictionary[pair.Key] = pair.Value;
+        }
+
+        foreach (var key in keys)
+        {
+            if (!TryGetMetaValue(dictionary, key, out var raw) || raw is null)
+                continue;
+            if (TryConvertToDateTimeOffset(raw, out value))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToDateTimeOffset(object value, out DateTimeOffset date)
+    {
+        date = default;
+        switch (value)
+        {
+            case DateTimeOffset dto:
+                date = dto;
+                return true;
+            case DateTime dt:
+                date = NormalizeDateTimeOffset(dt);
+                return true;
+            default:
+                var text = value.ToString();
+                if (string.IsNullOrWhiteSpace(text))
+                    return false;
+                if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+                {
+                    date = parsed;
+                    return true;
+                }
+
+                return false;
+        }
+    }
+
+    private static DateTimeOffset NormalizeDateTimeOffset(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Unspecified)
+            return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+        return new DateTimeOffset(value).ToUniversalTime();
+    }
+
+    private static bool TryGetGitLastModifiedUtc(
+        string rootPath,
+        string sourcePath,
+        Dictionary<string, DateTimeOffset?> cache,
+        out DateTimeOffset value)
+    {
+        value = default;
+        if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(sourcePath))
+            return false;
+
+        var fullSource = Path.GetFullPath(sourcePath);
+        if (cache.TryGetValue(fullSource, out var cached))
+        {
+            if (cached.HasValue)
+                value = cached.Value;
+            return cached.HasValue;
+        }
+
+        try
+        {
+            var fullRoot = Path.GetFullPath(rootPath);
+            var relative = Path.GetRelativePath(fullRoot, fullSource).Replace('\\', '/');
+            if (relative.StartsWith("../", StringComparison.Ordinal) ||
+                relative.Equals("..", StringComparison.Ordinal) ||
+                Path.IsPathRooted(relative))
+            {
+                cache[fullSource] = null;
+                return false;
+            }
+
+            EnsureGitLastModifiedCache(fullRoot, cache);
+            if (cache.TryGetValue(fullSource, out cached) && cached.HasValue)
+            {
+                value = cached.Value;
+                return true;
+            }
+        }
+        catch
+        {
+            // Git freshness is optional; fall back to other signals.
+        }
+
+        cache[fullSource] = null;
+        return false;
+    }
+
+    private static void EnsureGitLastModifiedCache(string rootPath, Dictionary<string, DateTimeOffset?> cache)
+    {
+        if (cache.ContainsKey(GitLastModifiedCacheLoadedKey))
+            return;
+
+        cache[GitLastModifiedCacheLoadedKey] = null;
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            return;
+
+        try
+        {
+            using var process = new Process();
+            var outputBuffer = new StringBuilder();
+            var stdoutClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var stderrClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stdoutClosed.TrySetResult();
+                else
+                    outputBuffer.AppendLine(e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stderrClosed.TrySetResult();
+            };
+            process.StartInfo.FileName = "git";
+            process.StartInfo.WorkingDirectory = rootPath;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+            process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.ArgumentList.Add("-c");
+            process.StartInfo.ArgumentList.Add("core.quotePath=false");
+            process.StartInfo.ArgumentList.Add("log");
+            process.StartInfo.ArgumentList.Add("--format=@@POWERFORGE_DATE@@%aI");
+            process.StartInfo.ArgumentList.Add("--name-only");
+            process.StartInfo.ArgumentList.Add("--diff-filter=AMR");
+            process.StartInfo.ArgumentList.Add("--");
+            process.StartInfo.ArgumentList.Add(".");
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (!process.WaitForExit(15000))
+            {
+                Trace.TraceWarning($"Timed out while reading git history for sitemap freshness under '{rootPath}'. Sitemap lastmod values will use explicit metadata or be omitted.");
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return;
+            }
+
+            var drainTask = Task.WhenAll(stdoutClosed.Task, stderrClosed.Task);
+            if (Task.WhenAny(drainTask, Task.Delay(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult() != drainTask)
+                Trace.TraceWarning($"Timed out while draining git history output for sitemap freshness under '{rootPath}'. Sitemap lastmod values may be incomplete.");
+
+            if (process.ExitCode != 0)
+                return;
+
+            var output = outputBuffer.ToString();
+            DateTimeOffset? currentCommitDate = null;
+            foreach (var rawLine in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0)
+                    continue;
+
+                if (line.StartsWith("@@POWERFORGE_DATE@@", StringComparison.Ordinal))
+                {
+                    var rawDate = line["@@POWERFORGE_DATE@@".Length..];
+                    currentCommitDate = DateTimeOffset.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
+                        ? parsed.ToUniversalTime()
+                        : null;
+                    continue;
+                }
+
+                if (!currentCommitDate.HasValue)
+                    continue;
+
+                var fullPath = Path.GetFullPath(Path.Combine(rootPath, line.Replace('/', Path.DirectorySeparatorChar)));
+                if (!IsPathInsideRoot(rootPath, fullPath) || cache.ContainsKey(fullPath))
+                    continue;
+
+                cache[fullPath] = currentCommitDate.Value;
+            }
+        }
+        catch
+        {
+            // Git freshness is optional; fall back to explicit page metadata or no lastmod.
+        }
+    }
+
+    private static bool IsPathInsideRoot(string rootPath, string fullPath)
+    {
+        var fullRoot = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = Path.GetFullPath(fullPath);
+        return normalizedPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolveCacheRoot(SiteSpec spec, string rootPath)

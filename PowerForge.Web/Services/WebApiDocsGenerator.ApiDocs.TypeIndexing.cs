@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -528,14 +529,14 @@ public static partial class WebApiDocsGenerator
     {
         var sb = new StringBuilder();
         var baseTrim = baseUrl.TrimEnd('/');
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
         foreach (var type in types)
         {
             sb.AppendLine("  <url>");
             sb.AppendLine($"    <loc>{baseTrim}/types/{type.Slug}.html</loc>");
-            sb.AppendLine($"    <lastmod>{today}</lastmod>");
+            if (type.Freshness is not null && type.Freshness.LastModifiedUtc != default)
+                sb.AppendLine($"    <lastmod>{type.Freshness.LastModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)}</lastmod>");
             sb.AppendLine("    <changefreq>monthly</changefreq>");
             sb.AppendLine("    <priority>0.5</priority>");
             sb.AppendLine("  </url>");
@@ -548,14 +549,14 @@ public static partial class WebApiDocsGenerator
     {
         var sb = new StringBuilder();
         var baseTrim = baseUrl.TrimEnd('/');
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
         foreach (var type in types)
         {
             sb.AppendLine("  <url>");
             sb.AppendLine($"    <loc>{baseTrim}/{type.Slug}/</loc>");
-            sb.AppendLine($"    <lastmod>{today}</lastmod>");
+            if (type.Freshness is not null && type.Freshness.LastModifiedUtc != default)
+                sb.AppendLine($"    <lastmod>{type.Freshness.LastModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)}</lastmod>");
             sb.AppendLine("    <changefreq>monthly</changefreq>");
             sb.AppendLine("    <priority>0.5</priority>");
             sb.AppendLine("  </url>");

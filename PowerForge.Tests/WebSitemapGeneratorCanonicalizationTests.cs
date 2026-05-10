@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -76,6 +77,180 @@ public class WebSitemapGeneratorCanonicalizationTests
             Assert.Contains("urlset::before", css, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("counter(sitemap-entry)", css, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("link::before", css, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesHtmlFreshnessSignals_AndOmitsUnknownLastmod()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-html-freshness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "about"));
+        Directory.CreateDirectory(Path.Combine(root, "timeline"));
+        Directory.CreateDirectory(Path.Combine(root, "semantic-time"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <title>home</title>
+                <meta property="article:published_time" content="2020-01-01T00:00:00Z" />
+                <meta property="article:modified_time" content="2024-03-04T05:06:07Z" />
+                <script>window.example = {"dateModified":"2099-01-01T00:00:00Z"};</script>
+                """);
+            File.WriteAllText(Path.Combine(root, "about", "index.html"), "<!doctype html><title>about</title>");
+            File.WriteAllText(Path.Combine(root, "timeline", "index.html"), "<!doctype html><title>timeline</title><time datetime=\"2030-01-01T00:00:00Z\">event</time>");
+            File.WriteAllText(Path.Combine(root, "semantic-time", "index.html"), "<!doctype html><title>semantic</title><time itemprop=\"dateModified\" datetime=\"2024-04-05T06:07:08Z\">updated</time>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var urls = doc.Descendants(ns + "url")
+                .ToDictionary(
+                    url => url.Element(ns + "loc")?.Value ?? string.Empty,
+                    url => url,
+                    StringComparer.OrdinalIgnoreCase);
+
+            Assert.Equal("2024-03-04T05:06:07.000Z", urls["https://example.test/"].Element(ns + "lastmod")?.Value);
+            Assert.Null(urls["https://example.test/about/"].Element(ns + "lastmod"));
+            Assert.Null(urls["https://example.test/timeline/"].Element(ns + "lastmod"));
+            Assert.Equal("2024-04-05T06:07:08.000Z", urls["https://example.test/semantic-time/"].Element(ns + "lastmod")?.Value);
+            Assert.Equal(2, result.LastModifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_MergesPowerForgeSitemapMetadata_ByDefault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+        Directory.CreateDirectory(Path.Combine(root, "secret"));
+        Directory.CreateDirectory(Path.Combine(root, "flagged"));
+        Directory.CreateDirectory(Path.Combine(root, "custom"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "secret", "index.html"), "<!doctype html><meta name=\"robots\" content=\"noindex,follow\"><title>secret</title>");
+            File.WriteAllText(Path.Combine(root, "flagged", "index.html"), "<!doctype html><title>flagged</title>");
+            File.WriteAllText(Path.Combine(root, "custom", "index.htm"), "<!doctype html><title>custom suffix</title>");
+            File.WriteAllText(
+                Path.Combine(root, "_powerforge", "sitemap-entries.json"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "noIndexTrusted": true,
+                  "htmlRoutesTrusted": true,
+                  "entries": [
+                    { "path": "/", "lastModified": "2021-02-03T04:05:06.000Z" },
+                    { "path": "/secret/", "lastModified": "2022-02-03T04:05:06.000Z" },
+                    { "path": "/flagged/", "lastModified": "2022-03-03T04:05:06.000Z", "noIndex": true },
+                    { "path": "/custom/", "lastModified": "2022-04-03T04:05:06.000Z" }
+                  ]
+                }
+                """);
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var locs = doc.Descendants(ns + "url")
+                .Select(url => url.Element(ns + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+            var home = doc.Descendants(ns + "url")
+                .Single(url => string.Equals(url.Element(ns + "loc")?.Value, "https://example.test/", StringComparison.OrdinalIgnoreCase));
+
+            Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/secret/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/flagged/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/custom/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal("2021-02-03T04:05:06.000Z", home.Element(ns + "lastmod")?.Value);
+            Assert.Equal(3, result.LastModifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_IgnoresMalformedGeneratedSitemapMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-bad-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "_powerforge", "sitemap-entries.json"), """{ "entries": "not an array" }""");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            Assert.Contains(
+                doc.Descendants(ns + "loc").Select(static loc => loc.Value),
+                loc => string.Equals(loc, "https://example.test/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_Warns_WhenMostLastmodValuesAreBuildDate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-lastmod-warning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                Entries = Enumerable.Range(1, 10)
+                    .Select(i => new WebSitemapEntry { Path = $"/page-{i}/", LastModified = today })
+                    .ToArray()
+            });
+
+            Assert.Equal(10, result.LastModifiedCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("suspicious", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

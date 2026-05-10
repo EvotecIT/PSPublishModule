@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace PowerForge;
@@ -57,7 +58,8 @@ internal sealed class ProjectCleanupDisplayService
             throw new ArgumentNullException(nameof(output));
 
         var summary = output.Summary;
-        var totalSizeMb = Math.Round(output.Results.Where(r => r.Type == ProjectCleanupItemType.File).Sum(r => r.Size) / (1024d * 1024d), 2);
+        var totalSizeMb = FormatMegabytes(Math.Round(output.Results.Where(r => r.Type == ProjectCleanupItemType.File).Sum(r => r.Size) / (1024d * 1024d), 2));
+        var spaceFreedMb = FormatMegabytes(summary.SpaceFreedMB);
         var lines = new List<ProjectCleanupDisplayLine>();
 
         if (internalMode)
@@ -75,7 +77,7 @@ internal sealed class ProjectCleanupDisplayService
             {
                 lines.Add(Line($"Successfully removed: {summary.Removed}"));
                 lines.Add(Line($"Errors: {summary.Errors}"));
-                lines.Add(Line($"Space freed: {summary.SpaceFreedMB} MB"));
+                lines.Add(Line($"Space freed: {spaceFreedMb} MB"));
                 if (!string.IsNullOrWhiteSpace(summary.BackupDirectory))
                     lines.Add(Line($"Backups created in: {summary.BackupDirectory}"));
             }
@@ -99,7 +101,7 @@ internal sealed class ProjectCleanupDisplayService
         {
             lines.Add(Line($"  Successfully removed: {summary.Removed}", ConsoleColor.Green));
             lines.Add(Line($"  Errors: {summary.Errors}", ConsoleColor.Red));
-            lines.Add(Line($"  Space freed: {summary.SpaceFreedMB} MB", ConsoleColor.Green));
+            lines.Add(Line($"  Space freed: {spaceFreedMb} MB", ConsoleColor.Green));
             if (!string.IsNullOrWhiteSpace(summary.BackupDirectory))
                 lines.Add(Line($"  Backups created in: {summary.BackupDirectory}", ConsoleColor.Blue));
         }
@@ -112,4 +114,7 @@ internal sealed class ProjectCleanupDisplayService
 
     private static ProjectCleanupDisplayLine Warning(string text)
         => new() { Text = text, IsWarning = true };
+
+    private static string FormatMegabytes(double value)
+        => value.ToString("0.##", CultureInfo.InvariantCulture);
 }

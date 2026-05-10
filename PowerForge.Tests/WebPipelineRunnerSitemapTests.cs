@@ -19,6 +19,7 @@ public class WebPipelineRunnerSitemapTests
                 """
                 ---
                 title: Home
+                date: 2020-01-02
                 ---
 
                 Hello
@@ -64,6 +65,11 @@ public class WebPipelineRunnerSitemapTests
             Assert.True(File.Exists(sitemapPath));
             var content = File.ReadAllText(sitemapPath);
             Assert.Contains("https://example.test/", content, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<lastmod>2020-01-02T00:00:00.000Z</lastmod>", content, StringComparison.OrdinalIgnoreCase);
+
+            var metadataPath = Path.Combine(root, "site", "_powerforge", "sitemap-entries.json");
+            Assert.True(File.Exists(metadataPath));
+            Assert.Contains("2020-01-02T00:00:00.000Z", File.ReadAllText(metadataPath), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

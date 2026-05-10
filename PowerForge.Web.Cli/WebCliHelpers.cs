@@ -129,7 +129,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>] [--entries-json <file>]");
         Console.WriteLine("                     [--sitemap-json] [--sitemap-json-out <file>] [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
         Console.WriteLine("                     [--no-html-files] [--include-noindex-html] [--exclude <glob[,glob...]>] [--no-default-excludes]");
-        Console.WriteLine("                     [--no-text-files] [--no-language-alternates] [--include-html-sitemap-route]");
+        Console.WriteLine("                     [--no-text-files] [--no-language-alternates] [--no-generated-sitemap-metadata] [--include-html-sitemap-route]");
         Console.WriteLine("  powerforge-web agent-ready prepare --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready verify --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready scan --url <url> [--timeout-ms <n>] [--fail-on-failures] [--output json]");
