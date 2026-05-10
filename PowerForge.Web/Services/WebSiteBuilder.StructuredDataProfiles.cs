@@ -55,9 +55,16 @@ public static partial class WebSiteBuilder
 
         if (item.Date.HasValue)
         {
-            var iso = item.Date.Value.ToUniversalTime().ToString("O");
-            articleModel["datePublished"] = iso;
-            articleModel["dateModified"] = iso;
+            articleModel["datePublished"] = item.Date.Value.ToUniversalTime().ToString("O");
+        }
+
+        if (item.LastModifiedUtc.HasValue)
+        {
+            articleModel["dateModified"] = item.LastModifiedUtc.Value.ToString("O");
+        }
+        else if (item.Date.HasValue)
+        {
+            articleModel["dateModified"] = item.Date.Value.ToUniversalTime().ToString("O");
         }
 
         var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image");

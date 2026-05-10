@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -26,6 +28,11 @@ internal static partial class WebPipelineRunner
     private static readonly string[] AllowedProjectStatuses = { "active", "archived", "deprecated", "experimental" };
     private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads" };
     private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "blog" };
+    private static readonly JsonSerializerOptions ProjectSitemapFingerprintJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     private static void ExecuteProjectCatalog(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
@@ -1573,6 +1580,11 @@ internal static partial class WebPipelineRunner
                 lines.Add($"meta.project_manifest_generated_at: {YamlQuote(project.ManifestGeneratedAt)}");
             if (!string.IsNullOrWhiteSpace(project.ManifestCommit))
                 lines.Add($"meta.project_manifest_commit: {YamlQuote(project.ManifestCommit)}");
+            var projectFingerprint = ComputeProjectSitemapFingerprint(project, "overview");
+            lines.Add($"meta.project_sitemap_fingerprint: {YamlQuote(projectFingerprint)}");
+            var projectLastModified = ResolveProjectSitemapLastModified(project, outputPath, projectFingerprint);
+            if (!string.IsNullOrWhiteSpace(projectLastModified))
+                lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
             AppendProjectFrontMatterExtensions(lines, project);
             lines.Add("meta.generated_by: powerforge.project-catalog");
             lines.Add("---");
@@ -1802,6 +1814,11 @@ internal static partial class WebPipelineRunner
                     lines.Add($"meta.project_github_repo: {YamlQuote(project.GitHubRepo)}");
                 if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     lines.Add($"meta.project_external_url: {YamlQuote(project.ExternalUrl)}");
+                var projectFingerprint = ComputeProjectSitemapFingerprint(project, section);
+                lines.Add($"meta.project_sitemap_fingerprint: {YamlQuote(projectFingerprint)}");
+                var projectLastModified = ResolveProjectSitemapLastModified(project, outputPath, projectFingerprint);
+                if (!string.IsNullOrWhiteSpace(projectLastModified))
+                    lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
                 AppendProjectFrontMatterExtensions(lines, project);
                 var externalCanonical = contentMode.Equals("external", StringComparison.OrdinalIgnoreCase)
                     ? GetProjectExternalSectionCanonicalLink(project, section)
@@ -2549,6 +2566,218 @@ internal static partial class WebPipelineRunner
         return value.Trim();
     }
 
+    private static string? ResolveProjectSitemapLastModified(ProjectCatalogEntry project, string outputPath, string fingerprint)
+    {
+        var activityLastModified = ResolveProjectActivityLastModified(project);
+        var previous = ReadPreviousProjectSitemapState(outputPath);
+        if (previous is not null &&
+            string.Equals(previous.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase) &&
+            previous.LastModified.HasValue)
+        {
+            return previous.LastModified.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        if (previous?.Fingerprint is not null &&
+            !string.Equals(previous.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+        {
+            var contentChangedAt = DateTimeOffset.UtcNow;
+            if (activityLastModified.HasValue && activityLastModified.Value > contentChangedAt)
+                contentChangedAt = activityLastModified.Value;
+            return contentChangedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        return activityLastModified?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    }
+
+    private static DateTimeOffset? ResolveProjectActivityLastModified(ProjectCatalogEntry project)
+    {
+        DateTimeOffset? latest = null;
+
+        Add(project.Metrics?.GitHub?.LastPushedAt);
+        Add(project.Metrics?.Release?.LatestPublishedAt);
+
+        return latest;
+
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+                return;
+
+            var utc = parsed;
+            if (latest is null || utc > latest.Value)
+                latest = utc;
+        }
+    }
+
+    private static string ComputeProjectSitemapFingerprint(ProjectCatalogEntry project, string section)
+    {
+        var payload = new
+        {
+            Section = NormalizeOptionalString(section),
+            Slug = NormalizeOptionalString(project.Slug),
+            Name = NormalizeOptionalString(project.Name),
+            Mode = NormalizeOptionalString(project.Mode),
+            ContentMode = NormalizeOptionalString(project.ContentMode),
+            HubPath = NormalizeOptionalString(project.HubPath),
+            GitHubRepo = NormalizeOptionalString(project.GitHubRepo),
+            Description = NormalizeOptionalString(project.Description),
+            Status = NormalizeOptionalString(project.Status),
+            Listed = project.Listed,
+            ExternalUrl = NormalizeOptionalString(project.ExternalUrl),
+            Version = NormalizeOptionalString(project.Version),
+            ManifestCommit = NormalizeOptionalString(project.ManifestCommit),
+            Aliases = NormalizeStringArray(project.Aliases),
+            Links = NormalizeStringDictionary(project.Links),
+            Surfaces = NormalizeBoolDictionary(project.Surfaces),
+            Artifacts = project.Artifacts is null
+                ? null
+                : new
+                {
+                    Docs = NormalizeOptionalString(project.Artifacts.Docs),
+                    Api = NormalizeOptionalString(project.Artifacts.Api),
+                    Examples = NormalizeOptionalString(project.Artifacts.Examples)
+                },
+            Metrics = project.Metrics is null
+                ? null
+                : new
+                {
+                    GitHub = project.Metrics.GitHub is null
+                        ? null
+                        : new
+                        {
+                            Repository = NormalizeOptionalString(project.Metrics.GitHub.Repository),
+                            Url = NormalizeOptionalString(project.Metrics.GitHub.Url),
+                            Language = NormalizeOptionalString(project.Metrics.GitHub.Language),
+                            Archived = project.Metrics.GitHub.Archived,
+                            LastPushedAt = NormalizeOptionalString(project.Metrics.GitHub.LastPushedAt)
+                        },
+                    NuGet = project.Metrics.NuGet is null
+                        ? null
+                        : new
+                        {
+                            Id = NormalizeOptionalString(project.Metrics.NuGet.Id),
+                            Version = NormalizeOptionalString(project.Metrics.NuGet.Version),
+                            PackageUrl = NormalizeOptionalString(project.Metrics.NuGet.PackageUrl),
+                            ProjectUrl = NormalizeOptionalString(project.Metrics.NuGet.ProjectUrl)
+                        },
+                    PowerShellGallery = project.Metrics.PowerShellGallery is null
+                        ? null
+                        : new
+                        {
+                            Id = NormalizeOptionalString(project.Metrics.PowerShellGallery.Id),
+                            Version = NormalizeOptionalString(project.Metrics.PowerShellGallery.Version),
+                            GalleryUrl = NormalizeOptionalString(project.Metrics.PowerShellGallery.GalleryUrl),
+                            ProjectUrl = NormalizeOptionalString(project.Metrics.PowerShellGallery.ProjectUrl)
+                        },
+                    Release = project.Metrics.Release is null
+                        ? null
+                        : new
+                        {
+                            LatestTag = NormalizeOptionalString(project.Metrics.Release.LatestTag),
+                            LatestName = NormalizeOptionalString(project.Metrics.Release.LatestName),
+                            LatestUrl = NormalizeOptionalString(project.Metrics.Release.LatestUrl),
+                            LatestPublishedAt = NormalizeOptionalString(project.Metrics.Release.LatestPublishedAt),
+                            IsPrerelease = project.Metrics.Release.IsPrerelease,
+                            IsDraft = project.Metrics.Release.IsDraft
+                        }
+                }
+        };
+        var json = JsonSerializer.Serialize(payload, ProjectSitemapFingerprintJsonOptions);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
+    }
+
+    private static string[] NormalizeStringArray(string[]? values) =>
+        values is null
+            ? Array.Empty<string>()
+            : values
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+    private static SortedDictionary<string, string?>? NormalizeStringDictionary(Dictionary<string, string?>? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var normalized = new SortedDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in values)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+                continue;
+            normalized[pair.Key.Trim()] = NormalizeOptionalString(pair.Value);
+        }
+
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static SortedDictionary<string, bool>? NormalizeBoolDictionary(Dictionary<string, bool>? values)
+    {
+        if (values is null || values.Count == 0)
+            return null;
+
+        var normalized = new SortedDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in values)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+                continue;
+            normalized[pair.Key.Trim()] = pair.Value;
+        }
+
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static ProjectSitemapState? ReadPreviousProjectSitemapState(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        string? fingerprint = null;
+        DateTimeOffset? lastModified = null;
+
+        foreach (var line in File.ReadLines(path))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Equals("---", StringComparison.Ordinal) && fingerprint is not null)
+                break;
+
+            if (TryReadFrontMatterString(trimmed, "meta.project_sitemap_fingerprint:", out var parsedFingerprint))
+            {
+                fingerprint = parsedFingerprint;
+                continue;
+            }
+
+            if (TryReadFrontMatterString(trimmed, "sitemap.lastmod:", out var parsedLastModified) &&
+                DateTimeOffset.TryParse(parsedLastModified, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            {
+                lastModified = parsed;
+            }
+        }
+
+        return fingerprint is null && !lastModified.HasValue
+            ? null
+            : new ProjectSitemapState(fingerprint, lastModified);
+    }
+
+    private static bool TryReadFrontMatterString(string line, string key, out string? value)
+    {
+        value = null;
+        if (!line.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        value = line[key.Length..].Trim();
+        if ((value.StartsWith("\"", StringComparison.Ordinal) && value.EndsWith("\"", StringComparison.Ordinal)) ||
+            (value.StartsWith("'", StringComparison.Ordinal) && value.EndsWith("'", StringComparison.Ordinal)))
+        {
+            value = value[1..^1];
+        }
+
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
     private static string? TryGetDictionaryValue(Dictionary<string, string?> dictionary, string key)
     {
         if (dictionary.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
@@ -2719,6 +2948,8 @@ internal static partial class WebPipelineRunner
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
+
+    private sealed record ProjectSitemapState(string? Fingerprint, DateTimeOffset? LastModified);
 
     private sealed class ProjectCatalogEntry
     {

@@ -452,6 +452,7 @@ public static partial class WebSiteBuilder
             imageAlt = title;
         var isArticle = IsArticleLikePage(item);
         var publishedTime = item.Date?.ToUniversalTime().ToString("O");
+        var modifiedTime = item.LastModifiedUtc?.ToString("O");
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<!-- Open Graph -->");
@@ -473,6 +474,8 @@ public static partial class WebSiteBuilder
             sb.AppendLine($@"<meta property=""og:site_name"" content=""{System.Web.HttpUtility.HtmlEncode(siteName)}"" />");
         if (isArticle && !string.IsNullOrWhiteSpace(publishedTime))
             sb.AppendLine($@"<meta property=""article:published_time"" content=""{System.Web.HttpUtility.HtmlEncode(publishedTime)}"" />");
+        if (isArticle && !string.IsNullOrWhiteSpace(modifiedTime))
+            sb.AppendLine($@"<meta property=""article:modified_time"" content=""{System.Web.HttpUtility.HtmlEncode(modifiedTime)}"" />");
         if (isArticle)
         {
             foreach (var authorUrl in ResolveContentAuthorUrls(item).Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))

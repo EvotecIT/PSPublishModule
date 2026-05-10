@@ -223,7 +223,7 @@ public static partial class WebSiteBuilder
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
-                    LastModifiedUtc = ResolveContentLastModifiedUtc(plan.RootPath, file, matter, meta, gitLastModifiedCache),
+                    LastModifiedUtc = ResolveContentLastModifiedUtc(plan.RootPath, file, matter, meta, resolvedCollection, gitLastModifiedCache),
                     Order = matter?.Order,
                     Slug = slugPath,
                     Tags = matter?.Tags ?? Array.Empty<string>(),
@@ -1009,6 +1009,7 @@ public static partial class WebSiteBuilder
         string sourcePath,
         FrontMatter? matter,
         IReadOnlyDictionary<string, object?>? meta,
+        CollectionSpec? collection,
         Dictionary<string, DateTimeOffset?> gitLastModifiedCache)
     {
         if (TryReadMetaDateOffset(meta, out var explicitLastModified,
@@ -1028,13 +1029,37 @@ public static partial class WebSiteBuilder
             return explicitLastModified.ToUniversalTime();
         }
 
-        if (matter?.Date is DateTime published)
-            return NormalizeDateTimeOffset(published);
+        var published = matter?.Date is DateTime date
+            ? NormalizeDateTimeOffset(date)
+            : (DateTimeOffset?)null;
+
+        var policy = ResolveSitemapLastModifiedPolicy(collection);
+        if (policy == SitemapLastModifiedPolicy.Auto &&
+            CollectionPresetDefaults.IsEditorialCollection(collection, collection?.Name))
+        {
+            policy = SitemapLastModifiedPolicy.PublishedDate;
+        }
+        else if (policy == SitemapLastModifiedPolicy.Auto)
+        {
+            policy = SitemapLastModifiedPolicy.SourceDate;
+        }
+
+        if (policy == SitemapLastModifiedPolicy.ExplicitOnly)
+            return null;
+
+        if (policy == SitemapLastModifiedPolicy.PublishedDate)
+        {
+            if (published.HasValue)
+                return published.Value;
+            if (TryGetGitLastModifiedUtc(rootPath, sourcePath, gitLastModifiedCache, out var fallbackGitLastModified))
+                return fallbackGitLastModified;
+            return null;
+        }
 
         if (TryGetGitLastModifiedUtc(rootPath, sourcePath, gitLastModifiedCache, out var gitLastModified))
             return gitLastModified;
 
-        return null;
+        return published;
     }
 
     private static DateTimeOffset? MaxLastModifiedUtc(IEnumerable<DateTimeOffset?> values)
@@ -1050,6 +1075,9 @@ public static partial class WebSiteBuilder
 
         return max;
     }
+
+    private static SitemapLastModifiedPolicy ResolveSitemapLastModifiedPolicy(CollectionSpec? collection) =>
+        collection?.SitemapLastModified ?? SitemapLastModifiedPolicy.Auto;
 
     private static bool TryReadMetaDateOffset(
         IReadOnlyDictionary<string, object?>? meta,
