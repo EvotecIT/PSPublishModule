@@ -24,12 +24,27 @@ public class WebPipelineRunnerSitemapTests
 
                 Hello
                 """);
+            File.WriteAllText(Path.Combine(contentRoot, "search.md"),
+                """
+                ---
+                title: Search
+                slug: search
+                layout: search
+                date: 2020-01-03
+                ---
+
+                Search page
+                """);
 
             var themeRoot = Path.Combine(root, "themes", "base", "layouts");
             Directory.CreateDirectory(themeRoot);
             File.WriteAllText(Path.Combine(themeRoot, "page.html"),
                 """
                 <!doctype html><html><head><title>{{TITLE}}</title></head><body>{{CONTENT}}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "search.html"),
+                """
+                <!doctype html><html><head><title>{{TITLE}}</title><meta name="robots" content="noindex,follow" /></head><body>{{CONTENT}}</body></html>
                 """);
 
             File.WriteAllText(Path.Combine(root, "site.json"),
@@ -66,10 +81,14 @@ public class WebPipelineRunnerSitemapTests
             var content = File.ReadAllText(sitemapPath);
             Assert.Contains("https://example.test/", content, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<lastmod>2020-01-02T00:00:00.000Z</lastmod>", content, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/search", content, StringComparison.OrdinalIgnoreCase);
 
             var metadataPath = Path.Combine(root, "site", "_powerforge", "sitemap-entries.json");
             Assert.True(File.Exists(metadataPath));
-            Assert.Contains("2020-01-02T00:00:00.000Z", File.ReadAllText(metadataPath), StringComparison.OrdinalIgnoreCase);
+            var metadata = File.ReadAllText(metadataPath);
+            Assert.Contains("2020-01-02T00:00:00.000Z", metadata, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"path\": \"/search\"", metadata, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"noIndex\": true", metadata, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

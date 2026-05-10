@@ -212,7 +212,7 @@ public static partial class WebSiteBuilder
             WriteSearchIndex(spec, outDir, renderItems);
             WriteLinkCheckReport(spec, renderItems, metaDir);
             WriteSeoPreviewReport(spec, renderItems, metaDir);
-            WriteSitemapEntriesReport(spec, renderItems, metaDir);
+            WriteSitemapEntriesReport(spec, renderItems, metaDir, outDir);
             WriteCrawlPolicyReport(spec, renderItems, metaDir);
 
             var redirectsPayload = new
