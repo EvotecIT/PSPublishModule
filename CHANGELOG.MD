@@ -3,6 +3,8 @@
 ## Unreleased
 ### What's Changed
 - Added opt-in module-scoped `UseAssemblyLoadContext` / `NETAssemblyLoadContext` loading for binary modules. The PowerShell Core export bridge uses the private `PSModuleInfo.AddExportedCmdlet` method when available and falls back to a warning if a future PowerShell version removes it.
+- Preserved binary module aliases in the module-scoped AssemblyLoadContext export bridge so forced re-imports keep DSL aliases available.
+- Updated core PSPublishModule/PowerForge package references used by the release build.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed

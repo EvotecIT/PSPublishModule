@@ -515,8 +515,16 @@
       },
       "Spectre.Console": {
         "type": "Transitive",
-        "resolved": "0.54.0",
-        "contentHash": "StDXCFayfy0yB1xzUHT2tgEpV1/HFTiS4JgsAQS49EYTfMixSwwucaQs/bIOCwXjWwIQTMuxjUIxcB5XsJkFJA=="
+        "resolved": "0.55.2",
+        "contentHash": "yc0g12YJpmZHofGJLTQX02/uqfzJ6XHRx6pe9rANNjleQptXMHPxD9KI2/DWkXiJWddc+4oizEdGox15c89hhw==",
+        "dependencies": {
+          "Spectre.Console.Ansi": "0.55.2"
+        }
+      },
+      "Spectre.Console.Ansi": {
+        "type": "Transitive",
+        "resolved": "0.55.2",
+        "contentHash": "tN3KEJQQZwLW9HJnG5YTSAxfBwxsmg1wVuGvhGG2rM+pbl+NGaHU8pDcNofPlOXlgpkbpBMxI5t9o9qPfy3sHQ=="
       },
       "System.CodeDom": {
         "type": "Transitive",
@@ -616,8 +624,8 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "KGS+cdplxa0R6cRQdVMRQRdnU8aY5UcUwDLyRJVHgOAstUnpF726xOYeaW3OxtkHcnfsijO0LfDjT4kDgvYn9A=="
+        "resolved": "10.0.7",
+        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
       },
       "System.IO.Ports": {
         "type": "Transitive",
@@ -676,8 +684,8 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+        "resolved": "10.0.7",
+        "contentHash": "XDkKntYPUaANhLVdo7AHbrJ+QbUAY5u/T7lG5rHSx5kLxeHceoc3JcIMVAc/vZT+3rbwFYlrdnikxdi6G+2nvA=="
       },
       "System.Runtime.Caching": {
         "type": "Transitive",
@@ -689,8 +697,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.6",
-        "contentHash": "88tquaGJ1htm4DHWS6x9jwER7sFET2SVRN7HqO1FYZwE0diDcUmz0ajhVa8ZD2HGhDJBueSPjP/gqyP3gXtT2A=="
+        "resolved": "10.0.7",
+        "contentHash": "dbdKfF3eA5l+CXiAbDxiCxdezoxeanbue1ck8m49ih1L9uZG6ry8Ul8On6vpragyMDJJP4rQHUY/SWgk66tCYA=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -699,10 +707,10 @@
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
-        "resolved": "10.0.6",
-        "contentHash": "71yFkEElPZKZ9jbZQTe1CWeHYXEtnCXwZnHnfeA8pP47tCXBUoWk+6zSIZ7RXO90nZjXgPNil6BFGWb1OBqA5w==",
+        "resolved": "10.0.7",
+        "contentHash": "wG/+ospsC2oR6j7INYh2V5/CWR6Cpt1Zjkxbo0lfovoi/2RpIcGZPVXOPBNVrI5fmrrji0mdNgez+FClDsIuYA==",
         "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.6"
+          "System.Security.Cryptography.Pkcs": "10.0.7"
         }
       },
       "System.Security.Permissions": {
@@ -833,8 +841,8 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
-          "System.IO.Packaging": "[10.0.1, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "System.IO.Packaging": "[10.0.7, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.7, )"
         }
       },
       "powerforge.powershell": {
@@ -842,7 +850,7 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "PowerForge": "[1.0.0, )",
-          "System.Security.Cryptography.Xml": "[10.0.6, )"
+          "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       },
       "powerforge.web": {
@@ -870,9 +878,9 @@
         "dependencies": {
           "PowerForge": "[1.0.0, )",
           "PowerForge.PowerShell": "[1.0.0, )",
-          "Spectre.Console": "[0.54.0, )",
-          "System.IO.Packaging": "[10.0.1, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+          "Spectre.Console": "[0.55.2, )",
+          "System.IO.Packaging": "[10.0.7, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.7, )"
         }
       }
     }

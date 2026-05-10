@@ -76,6 +76,29 @@ if ($PSEdition -eq 'Core') {
                 foreach ($Cmd in $InnerModule.ExportedCmdlets.Values) {
                     $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
                 }
+                $AddExportedAlias = [System.Management.Automation.PSModuleInfo].GetMethod(
+                    'AddExportedAlias',
+                    [System.Reflection.BindingFlags]'Instance, NonPublic'
+                )
+                if ($null -ne $AddExportedAlias) {
+                    foreach ($Alias in $InnerModule.ExportedAliases.Values) {
+                        $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) { $Alias.ResolvedCommandName } else { $Alias.Definition }
+                        try {
+                            # The alias must exist in this module scope before the private export table can reference it.
+                            Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop
+                            $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
+                            if ($null -ne $ExportedAlias) {
+                                $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
+                            } else {
+                                Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName was created but could not be resolved for export."
+                            }
+                        } catch {
+                            Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName could not be re-exported: $($_.Exception.Message)"
+                        }
+                    }
+                } else {
+                    Write-Warning -Message "AddExportedAlias is not available on this PowerShell version. Aliases from $LibraryName will not be re-exported to the module scope."
+                }
             } else {
                 Write-Warning -Message "AddExportedCmdlet is not available on this PowerShell version. Falling back to direct Import-Module; cmdlets from $LibraryName will load from the default context."
                 & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
