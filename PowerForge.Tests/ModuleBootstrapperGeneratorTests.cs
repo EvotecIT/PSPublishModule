@@ -131,6 +131,14 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
+            Assert.Contains("AddExportedAlias", bootstrapper);
+            Assert.Contains("ExportedAliases.Values", bootstrapper);
+            Assert.Contains("Aliases from $LibraryName will not be re-exported to the module scope.", bootstrapper);
+            Assert.Contains("before the private export table can reference it", bootstrapper);
+            Assert.Contains("if ([string]::IsNullOrWhiteSpace($Alias.Definition)) { $Alias.ResolvedCommandName } else { $Alias.Definition }", bootstrapper);
+            Assert.Contains("Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop", bootstrapper);
+            Assert.Contains("GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)", bootstrapper);
+            Assert.Contains("could not be re-exported", bootstrapper);
             Assert.Contains("Falling back to direct Import-Module", bootstrapper);
             Assert.Contains("will load from the default context", bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);

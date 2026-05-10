@@ -1,4 +1,4 @@
-﻿@{
+@{
     AliasesToExport        = @('Build-Module', 'Invoke-ModuleBuilder', 'New-PrepareModule')
     Author                 = 'Przemyslaw Klys'
     CmdletsToExport        = @('Connect-ModuleRepository', 'Convert-ProjectConsistency', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectVersion', 'Install-PrivateModule', 'Invoke-DotNetPublish', 'Invoke-DotNetReleaseBuild', 'Invoke-DotNetRepositoryRelease', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'Invoke-ProjectBuild', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDelivery', 'New-ConfigurationDocumentation', 'New-ConfigurationDotNetBenchmarkGate', 'New-ConfigurationDotNetBenchmarkMetric', 'New-ConfigurationDotNetConfigBootstrapRule', 'New-ConfigurationDotNetInstaller', 'New-ConfigurationDotNetMatrix', 'New-ConfigurationDotNetMatrixRule', 'New-ConfigurationDotNetProfile', 'New-ConfigurationDotNetProject', 'New-ConfigurationDotNetPublish', 'New-ConfigurationDotNetService', 'New-ConfigurationDotNetServiceLifecycle', 'New-ConfigurationDotNetServiceRecovery', 'New-ConfigurationDotNetSign', 'New-ConfigurationDotNetState', 'New-ConfigurationDotNetStateRule', 'New-ConfigurationDotNetTarget', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'New-ConfigurationValidation', 'New-DotNetPublishConfig', 'New-ModuleAboutTopic', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Register-ModuleRepository', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion', 'Step-Version', 'Update-ModuleRepository', 'Update-PrivateModule')
@@ -9,7 +9,7 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '3.0.4'
+    ModuleVersion          = '3.0.5'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
