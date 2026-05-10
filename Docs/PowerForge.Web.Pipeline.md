@@ -1611,7 +1611,7 @@ Notes:
   - `scopeFromBuildUpdated` (`--fast` defaults this behavior on) when a preceding `build` step updated HTML files.
 - Auth/key options:
   - `key` (inline), `keyPath` (file), or `keyEnv` (defaults to `INDEXNOW_KEY`) can override discovery when needed.
-  - When no explicit key is provided, the runner discovers the public verification file from `siteRoot/indexnow.txt`, `./indexnow.txt`, or `./static/indexnow.txt`. If `keyLocation` names another safe relative path, matching files under `siteRoot`, the pipeline root, or `static` are considered instead.
+  - When no explicit key is provided, the runner discovers the public verification file from `siteRoot/indexnow.txt`, `./indexnow.txt`, or `./static/indexnow.txt` and submits `indexnow.txt` as the public key location. If `keyLocation` names another safe relative path, matching files under `siteRoot`, the pipeline root, or `static` are considered instead.
   - `optionalKey:true` (aliases: `optional-key`, `skipIfMissingKey`) turns a missing explicit/discovered key into a non-failing skip.
   - `keyLocation` can be explicit, otherwise defaults to `https://<host>/<key>.txt`.
 - Endpoint options:

@@ -292,7 +292,6 @@ public class WebPipelineRunnerIndexNowTests
                       "task": "indexnow",
                       "siteRoot": "./_site",
                       "endpoint": "http://127.0.0.1:{{port}}/indexnow/",
-                      "keyLocation": "https://example.com/indexnow.txt",
                       "sitemap": "./_site/sitemap.xml",
                       "batchSize": 10,
                       "retryCount": 0
@@ -386,6 +385,51 @@ public class WebPipelineRunnerIndexNowTests
             Assert.True(result.Success, result.Steps[0].Message);
             Assert.Contains("custom-key.txt", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("indexnow.txt", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_IndexNow_UnsafeKeyLocationDoesNotUseDefaultVerificationFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-unsafe-key-location-" + Guid.NewGuid().ToString("N"));
+        var siteRoot = Path.Combine(root, "_site");
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(siteRoot, "indexnow.txt"), "root-verification-key");
+            File.WriteAllText(Path.Combine(siteRoot, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.com/docs/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "siteRoot": "./_site",
+                      "keyLocation": "https://example.com/%5c..%5ccustom-key.txt",
+                      "sitemap": "./_site/sitemap.xml",
+                      "optionalKey": true,
+                      "dryRun": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+            Assert.Contains("skipped", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
