@@ -286,11 +286,12 @@ public static partial class WebSitemapGenerator
 
         if (options.UseGeneratedSitemapMetadata)
         {
-            foreach (var entry in LoadDefaultGeneratedSitemapEntries(siteRoot))
+            var generatedMetadata = LoadDefaultGeneratedSitemapEntries(siteRoot);
+            foreach (var entry in generatedMetadata.Entries)
             {
                 if (entry is null || string.IsNullOrWhiteSpace(entry.Path)) continue;
                 var route = NormalizeRoute(entry.Path);
-                if (!ShouldIncludeGeneratedSitemapEntry(siteRoot, route, entry, options))
+                if (!ShouldIncludeGeneratedSitemapEntry(siteRoot, route, entry, options, generatedMetadata.NoIndexTrusted, generatedMetadata.HtmlRoutesTrusted))
                     continue;
                 AddOrUpdate(entries, route, entry);
                 htmlRoutes.Add(route);
@@ -1025,20 +1026,38 @@ public static partial class WebSitemapGenerator
         return XDocument.Load(reader, LoadOptions.None);
     }
 
-    private static IEnumerable<WebSitemapEntry> LoadDefaultGeneratedSitemapEntries(string siteRoot)
+    private const double SuspiciousBuildDateLastmodRatio = 0.80d;
+
+    private static (WebSitemapEntry[] Entries, bool NoIndexTrusted, bool HtmlRoutesTrusted) LoadDefaultGeneratedSitemapEntries(string siteRoot)
     {
         var path = Path.Combine(siteRoot, "_powerforge", "sitemap-entries.json");
         if (!File.Exists(path))
-            return Array.Empty<WebSitemapEntry>();
+            return (Array.Empty<WebSitemapEntry>(), false, false);
 
         try
         {
-            return LoadEntriesFromJsonPath(path).ToArray();
+            return (LoadEntriesFromJsonPath(path).ToArray(), ReadGeneratedMetadataTrustFlag(path, "noIndexTrusted"), ReadGeneratedMetadataTrustFlag(path, "htmlRoutesTrusted"));
         }
-        catch (Exception ex) when (ex is IOException or JsonException or FormatException)
+        catch (Exception ex) when (ex is IOException or JsonException or FormatException or InvalidDataException)
         {
             Trace.TraceWarning($"Failed to load generated sitemap metadata {path}: {ex.GetType().Name}: {ex.Message}");
-            return Array.Empty<WebSitemapEntry>();
+            return (Array.Empty<WebSitemapEntry>(), false, false);
+        }
+    }
+
+    private static bool ReadGeneratedMetadataTrustFlag(string path, string propertyName)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty(propertyName, out var value) &&
+                   value.ValueKind == JsonValueKind.True;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException)
+        {
+            Trace.TraceWarning($"Failed to inspect generated sitemap metadata trust flag {propertyName} from {path}: {ex.GetType().Name}: {ex.Message}");
+            return false;
         }
     }
 
@@ -1063,8 +1082,10 @@ public static partial class WebSitemapGenerator
             .OrderByDescending(static group => group.Count)
             .ToArray();
         var dominant = groups[0];
+        // 80% keeps the warning focused on broad build-date stamping instead of a
+        // few legitimately updated pages on a normal publishing day.
         var ratio = (double)dominant.Count / entries.Count;
-        if (dominant.Date.Equals(today, StringComparison.OrdinalIgnoreCase) && ratio >= 0.80)
+        if (dominant.Date.Equals(today, StringComparison.OrdinalIgnoreCase) && ratio >= SuspiciousBuildDateLastmodRatio)
         {
             warnings.Add(
                 $"sitemap lastmod freshness looks suspicious: {dominant.Count}/{entries.Count} URLs are stamped with build date {today}. Use content metadata, source git dates, or omit lastmod for unknown pages.");
@@ -1263,17 +1284,24 @@ public static partial class WebSitemapGenerator
         string siteRoot,
         string route,
         WebSitemapEntry entry,
-        WebSitemapOptions options)
+        WebSitemapOptions options,
+        bool noIndexTrusted,
+        bool htmlRoutesTrusted)
     {
         if (string.IsNullOrWhiteSpace(route))
             return false;
         if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
             return false;
-        // Re-check the rendered HTML because metadata files from older engine
-        // versions did not carry NoIndex, and stale/custom metadata may omit it.
+
+        if (htmlRoutesTrusted && noIndexTrusted)
+            return true;
+
         if (!TryResolveHtmlFileForRoute(siteRoot, route, out var htmlPath))
             return false;
-        if (!options.IncludeNoIndexHtml &&
+        // Re-check older or custom metadata because it may predate trusted
+        // builder-emitted noindex signals.
+        if (!noIndexTrusted &&
+            !options.IncludeNoIndexHtml &&
             !options.IncludeNoIndexPages &&
             HtmlDeclaresNoIndex(htmlPath))
         {
@@ -1290,18 +1318,28 @@ public static partial class WebSitemapGenerator
             return false;
 
         var trimmed = NormalizeRoute(route).Trim('/');
-        var relative = string.IsNullOrWhiteSpace(trimmed)
-            ? "index.html"
-            : trimmed.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
-                ? trimmed
-                : Path.Combine(trimmed.Replace('/', Path.DirectorySeparatorChar), "index.html");
+        var candidates = string.IsNullOrWhiteSpace(trimmed)
+            ? new[] { "index.html", "index.htm" }
+            : trimmed.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+              trimmed.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)
+                ? new[] { trimmed }
+                : new[]
+                {
+                    Path.Combine(trimmed.Replace('/', Path.DirectorySeparatorChar), "index.html"),
+                    Path.Combine(trimmed.Replace('/', Path.DirectorySeparatorChar), "index.htm")
+                };
 
-        var fullPath = Path.GetFullPath(Path.Combine(siteRoot, relative));
-        if (!IsUnderRoot(siteRoot, fullPath) || !File.Exists(fullPath))
-            return false;
+        foreach (var relative in candidates)
+        {
+            var fullPath = Path.GetFullPath(Path.Combine(siteRoot, relative));
+            if (!IsUnderRoot(siteRoot, fullPath) || !File.Exists(fullPath))
+                continue;
 
-        htmlPath = fullPath;
-        return true;
+            htmlPath = fullPath;
+            return true;
+        }
+
+        return false;
     }
 
     private static string ReplaceHost(string input, string baseUrl)

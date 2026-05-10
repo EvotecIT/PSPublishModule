@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PowerForge.Web;
 
-/// <summary>Sitemap metadata export helpers.</summary>
+/// <summary>Exports trusted builder sitemap metadata under _powerforge/sitemap-entries.json.</summary>
 public static partial class WebSiteBuilder
 {
     private static void WriteSitemapEntriesReport(
@@ -29,7 +29,10 @@ public static partial class WebSiteBuilder
 
         var payload = new
         {
+            schemaVersion = 1,
             site = spec.Name,
+            noIndexTrusted = true,
+            htmlRoutesTrusted = true,
             entries
         };
 

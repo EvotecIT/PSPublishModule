@@ -19,6 +19,8 @@ public static partial class WebSitemapGenerator
     private static readonly Regex SourceTagRegex = new("<source\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex IframeTagRegex = new("<iframe\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex ScriptTagRegex = new("<script\\b[^>]*>(?<content>.*?)</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    // Scoped to application/ld+json script blocks; this intentionally handles the
+    // common scalar date fields without treating arbitrary inline scripts as freshness.
     private static readonly Regex JsonLdDateRegex = new("\"(?<name>dateModified|datePublished|uploadDate)\"\\s*:\\s*\"(?<value>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex TimeTagRegex = new("<time\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
@@ -359,9 +361,26 @@ public static partial class WebSitemapGenerator
                                GetString(item, "date_modified"),
                 Alternates = alternates.ToArray(),
                 ImageUrls = GetArrayStrings(item, "images") ?? Array.Empty<string>(),
-                VideoUrls = GetArrayStrings(item, "videos") ?? Array.Empty<string>()
+                VideoUrls = GetArrayStrings(item, "videos") ?? Array.Empty<string>(),
+                NoIndex = GetBool(item, "noIndex") ?? GetBool(item, "noindex") ?? false
             });
         }
+    }
+
+    private static bool? GetBool(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+        if (!element.TryGetProperty(propertyName, out var value))
+            return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => null
+        };
     }
 
     private static string? GetString(JsonElement element, string propertyName)

@@ -142,19 +142,27 @@ public class WebSitemapGeneratorCanonicalizationTests
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
         Directory.CreateDirectory(Path.Combine(root, "secret"));
+        Directory.CreateDirectory(Path.Combine(root, "flagged"));
+        Directory.CreateDirectory(Path.Combine(root, "custom"));
 
         try
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
             File.WriteAllText(Path.Combine(root, "secret", "index.html"), "<!doctype html><meta name=\"robots\" content=\"noindex,follow\"><title>secret</title>");
+            File.WriteAllText(Path.Combine(root, "flagged", "index.html"), "<!doctype html><title>flagged</title>");
+            File.WriteAllText(Path.Combine(root, "custom", "index.htm"), "<!doctype html><title>custom suffix</title>");
             File.WriteAllText(
                 Path.Combine(root, "_powerforge", "sitemap-entries.json"),
                 """
                 {
+                  "schemaVersion": 1,
+                  "noIndexTrusted": true,
+                  "htmlRoutesTrusted": true,
                   "entries": [
                     { "path": "/", "lastModified": "2021-02-03T04:05:06.000Z" },
                     { "path": "/secret/", "lastModified": "2022-02-03T04:05:06.000Z" },
-                    { "path": "/feed-only/", "lastModified": "2023-02-03T04:05:06.000Z" }
+                    { "path": "/flagged/", "lastModified": "2022-03-03T04:05:06.000Z", "noIndex": true },
+                    { "path": "/custom/", "lastModified": "2022-04-03T04:05:06.000Z" }
                   ]
                 }
                 """);
@@ -177,10 +185,42 @@ public class WebSitemapGeneratorCanonicalizationTests
                 .Single(url => string.Equals(url.Element(ns + "loc")?.Value, "https://example.test/", StringComparison.OrdinalIgnoreCase));
 
             Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("https://example.test/secret/", locs, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("https://example.test/feed-only/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/secret/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/flagged/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/custom/", locs, StringComparer.OrdinalIgnoreCase);
             Assert.Equal("2021-02-03T04:05:06.000Z", home.Element(ns + "lastmod")?.Value);
-            Assert.Equal(1, result.LastModifiedCount);
+            Assert.Equal(3, result.LastModifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_IgnoresMalformedGeneratedSitemapMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-bad-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "_powerforge", "sitemap-entries.json"), """{ "entries": "not an array" }""");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            Assert.Contains(
+                doc.Descendants(ns + "loc").Select(static loc => loc.Value),
+                loc => string.Equals(loc, "https://example.test/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

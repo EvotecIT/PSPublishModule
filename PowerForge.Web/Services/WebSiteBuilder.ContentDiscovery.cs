@@ -1060,8 +1060,13 @@ public static partial class WebSiteBuilder
         if (meta is null || meta.Count == 0)
             return false;
 
-        var dictionary = meta as Dictionary<string, object?> ??
-                         meta.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        var dictionary = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in meta)
+        {
+            if (!dictionary.ContainsKey(pair.Key))
+                dictionary[pair.Key] = pair.Value;
+        }
+
         foreach (var key in keys)
         {
             if (!TryGetMetaValue(dictionary, key, out var raw) || raw is null)
@@ -1182,10 +1187,12 @@ public static partial class WebSiteBuilder
             process.StartInfo.WorkingDirectory = rootPath;
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+            process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.CreateNoWindow = true;
-            process.StartInfo.ArgumentList.Add("-C");
-            process.StartInfo.ArgumentList.Add(rootPath);
+            process.StartInfo.ArgumentList.Add("-c");
+            process.StartInfo.ArgumentList.Add("core.quotePath=false");
             process.StartInfo.ArgumentList.Add("log");
             process.StartInfo.ArgumentList.Add("--format=@@POWERFORGE_DATE@@%aI");
             process.StartInfo.ArgumentList.Add("--name-only");
