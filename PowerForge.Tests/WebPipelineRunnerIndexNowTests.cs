@@ -227,6 +227,173 @@ public class WebPipelineRunnerIndexNowTests
     }
 
     [Fact]
+    public async Task RunPipeline_IndexNow_PostsWithVerificationFileKey()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-verification-key-" + Guid.NewGuid().ToString("N"));
+        var siteRoot = Path.Combine(root, "_site");
+        Directory.CreateDirectory(siteRoot);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task<string?>? serverTask = null;
+
+        try
+        {
+            var port = GetFreePort();
+            listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
+            listener.Start();
+
+            cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            serverTask = Task.Run(async () =>
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    HttpListenerContext context;
+                    try
+                    {
+                        context = await listener.GetContextAsync();
+                    }
+                    catch when (cts.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    string body;
+                    using (var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
+                    {
+                        body = await reader.ReadToEndAsync();
+                    }
+
+                    context.Response.StatusCode = 200;
+                    var responseBytes = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    context.Response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
+                    context.Response.Close();
+                    return body;
+                }
+
+                return null;
+            }, cts.Token);
+
+            File.WriteAllText(Path.Combine(siteRoot, "indexnow.txt"), "verification-file-key");
+            File.WriteAllText(Path.Combine(siteRoot, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.com/docs/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "siteRoot": "./_site",
+                      "endpoint": "http://127.0.0.1:{{port}}/indexnow/",
+                      "keyLocation": "https://example.com/indexnow.txt",
+                      "sitemap": "./_site/sitemap.xml",
+                      "batchSize": 10,
+                      "retryCount": 0
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.Contains("indexnow.txt", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            var body = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(string.IsNullOrWhiteSpace(body));
+
+            using var payload = JsonDocument.Parse(body!);
+            Assert.Equal("example.com", payload.RootElement.GetProperty("host").GetString());
+            Assert.Equal("verification-file-key", payload.RootElement.GetProperty("key").GetString());
+            Assert.Equal("https://example.com/indexnow.txt", payload.RootElement.GetProperty("keyLocation").GetString());
+
+            var submittedUrls = payload.RootElement.GetProperty("urlList")
+                .EnumerateArray()
+                .Select(static item => item.GetString())
+                .Where(static item => !string.IsNullOrWhiteSpace(item))
+                .ToArray();
+            Assert.Single(submittedUrls);
+            Assert.Contains("https://example.com/docs/", submittedUrls);
+        }
+        finally
+        {
+            if (cts is not null)
+            {
+                try { cts.Cancel(); } catch { }
+                cts.Dispose();
+            }
+            if (listener is not null)
+            {
+                try { listener.Stop(); } catch { }
+                try { listener.Close(); } catch { }
+            }
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_IndexNow_CustomKeyLocationRequiresMatchingVerificationFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-custom-key-location-" + Guid.NewGuid().ToString("N"));
+        var siteRoot = Path.Combine(root, "_site");
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(siteRoot, "indexnow.txt"), "root-verification-key");
+            File.WriteAllText(Path.Combine(siteRoot, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.com/docs/</loc></url>
+                </urlset>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "siteRoot": "./_site",
+                      "keyLocation": "https://example.com/custom-key.txt",
+                      "sitemap": "./_site/sitemap.xml",
+                      "optionalKey": true,
+                      "dryRun": true
+                    }
+                  ]
+                }
+                """);
+
+            var missingCustomKey = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(missingCustomKey.Steps);
+            Assert.True(missingCustomKey.Steps[0].Success, missingCustomKey.Steps[0].Message);
+            Assert.Contains("skipped", missingCustomKey.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(Path.Combine(siteRoot, "custom-key.txt"), "custom-verification-key");
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.Contains("custom-key.txt", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("indexnow.txt", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_IndexNow_DryRun_FiltersLocalAndPrivateTargetUrls()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-filter-private-" + Guid.NewGuid().ToString("N"));
