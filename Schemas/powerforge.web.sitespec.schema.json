@@ -168,7 +168,15 @@
         "AutoSectionTitle": { "type": "string" },
         "AutoSectionDescription": { "type": "string" },
         "EditorialCards": { "$ref": "#/$defs/EditorialCardsSpec" },
-        "editorialCards": { "$ref": "#/$defs/EditorialCardsSpec" }
+        "editorialCards": { "$ref": "#/$defs/EditorialCardsSpec" },
+        "SitemapLastModified": {
+          "type": "string",
+          "enum": ["auto", "publishedDate", "sourceDate", "explicitOnly"]
+        },
+        "sitemapLastModified": {
+          "type": "string",
+          "enum": ["auto", "publishedDate", "sourceDate", "explicitOnly"]
+        }
       },
       "required": ["Name", "Input", "Output"]
     },

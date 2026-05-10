@@ -235,6 +235,7 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("meta.project_link_psgallery: \"https://www.powershellgallery.com/packages/PSWriteHTML/1.40.0\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_github_last_pushed_at_display: \"2026-02-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_release_latest_published_at_display: \"2025-12-14\"", projectPage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("sitemap.lastmod: \"2026-02-14T21:19:34.0000000+00:00\"", projectPage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

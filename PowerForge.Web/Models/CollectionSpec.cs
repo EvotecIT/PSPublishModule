@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge.Web;
 
 /// <summary>Defines a content collection (pages, docs, blog).</summary>
@@ -63,6 +65,26 @@ public sealed class CollectionSpec
     public string? AutoSectionDescription { get; set; }
     /// <summary>Optional editorial card defaults used by helper-based list layouts.</summary>
     public EditorialCardsSpec? EditorialCards { get; set; }
+    /// <summary>
+    /// Controls how sitemap lastmod is resolved for collection items. Auto preserves
+    /// article publish dates for editorial collections and prefers source freshness
+    /// for docs, pages, project hubs, and other reference-style content.
+    /// </summary>
+    public SitemapLastModifiedPolicy? SitemapLastModified { get; set; }
+}
+
+/// <summary>Collection-level sitemap lastmod resolution policy.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SitemapLastModifiedPolicy>))]
+public enum SitemapLastModifiedPolicy
+{
+    /// <summary>Use preset-aware defaults: editorial uses publish date; reference content uses source date.</summary>
+    Auto,
+    /// <summary>Use explicit lastmod metadata first, then front matter publication date, then source git date.</summary>
+    PublishedDate,
+    /// <summary>Use explicit lastmod metadata first, then source git date, then front matter publication date.</summary>
+    SourceDate,
+    /// <summary>Only emit lastmod when explicit lastmod/update metadata is present.</summary>
+    ExplicitOnly
 }
 
 /// <summary>Collection-level editorial card defaults.</summary>

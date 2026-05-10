@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -1573,6 +1574,9 @@ internal static partial class WebPipelineRunner
                 lines.Add($"meta.project_manifest_generated_at: {YamlQuote(project.ManifestGeneratedAt)}");
             if (!string.IsNullOrWhiteSpace(project.ManifestCommit))
                 lines.Add($"meta.project_manifest_commit: {YamlQuote(project.ManifestCommit)}");
+            var projectLastModified = ResolveProjectSitemapLastModified(project);
+            if (!string.IsNullOrWhiteSpace(projectLastModified))
+                lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
             AppendProjectFrontMatterExtensions(lines, project);
             lines.Add("meta.generated_by: powerforge.project-catalog");
             lines.Add("---");
@@ -1802,6 +1806,9 @@ internal static partial class WebPipelineRunner
                     lines.Add($"meta.project_github_repo: {YamlQuote(project.GitHubRepo)}");
                 if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                     lines.Add($"meta.project_external_url: {YamlQuote(project.ExternalUrl)}");
+                var projectLastModified = ResolveProjectSitemapLastModified(project);
+                if (!string.IsNullOrWhiteSpace(projectLastModified))
+                    lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
                 AppendProjectFrontMatterExtensions(lines, project);
                 var externalCanonical = contentMode.Equals("external", StringComparison.OrdinalIgnoreCase)
                     ? GetProjectExternalSectionCanonicalLink(project, section)
@@ -2547,6 +2554,29 @@ internal static partial class WebPipelineRunner
         if (DateTimeOffset.TryParse(value, out var parsed))
             return parsed.ToString("yyyy-MM-dd");
         return value.Trim();
+    }
+
+    private static string? ResolveProjectSitemapLastModified(ProjectCatalogEntry project)
+    {
+        DateTimeOffset? latest = null;
+
+        Add(project.Metrics?.GitHub?.LastPushedAt);
+        Add(project.Metrics?.Release?.LatestPublishedAt);
+
+        return latest?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+        void Add(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+                return;
+
+            var utc = parsed.ToUniversalTime();
+            if (latest is null || utc > latest.Value)
+                latest = utc;
+        }
     }
 
     private static string? TryGetDictionaryValue(Dictionary<string, string?> dictionary, string key)

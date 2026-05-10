@@ -127,7 +127,8 @@ internal static class CollectionPresetDefaults
             AutoGenerateSectionIndex = collection.AutoGenerateSectionIndex,
             AutoSectionTitle = collection.AutoSectionTitle,
             AutoSectionDescription = collection.AutoSectionDescription,
-            EditorialCards = collection.EditorialCards
+            EditorialCards = collection.EditorialCards,
+            SitemapLastModified = collection.SitemapLastModified
         };
 
         if (string.IsNullOrWhiteSpace(resolved.DefaultLayout))
