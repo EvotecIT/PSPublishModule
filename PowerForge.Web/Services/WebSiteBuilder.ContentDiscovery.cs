@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -1162,6 +1163,21 @@ public static partial class WebSiteBuilder
         try
         {
             using var process = new Process();
+            var outputBuffer = new StringBuilder();
+            var stdoutClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var stderrClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stdoutClosed.TrySetResult();
+                else
+                    outputBuffer.AppendLine(e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is null)
+                    stderrClosed.TrySetResult();
+            };
             process.StartInfo.FileName = "git";
             process.StartInfo.WorkingDirectory = rootPath;
             process.StartInfo.RedirectStandardOutput = true;
@@ -1177,7 +1193,8 @@ public static partial class WebSiteBuilder
             process.StartInfo.ArgumentList.Add("--");
             process.StartInfo.ArgumentList.Add(".");
             process.Start();
-            var outputTask = process.StandardOutput.ReadToEndAsync();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             if (!process.WaitForExit(15000))
             {
                 Trace.TraceWarning($"Timed out while reading git history for sitemap freshness under '{rootPath}'. Sitemap lastmod values will use explicit metadata or be omitted.");
@@ -1185,11 +1202,14 @@ public static partial class WebSiteBuilder
                 return;
             }
 
-            process.WaitForExit();
+            var drainTask = Task.WhenAll(stdoutClosed.Task, stderrClosed.Task);
+            if (Task.WhenAny(drainTask, Task.Delay(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult() != drainTask)
+                Trace.TraceWarning($"Timed out while draining git history output for sitemap freshness under '{rootPath}'. Sitemap lastmod values may be incomplete.");
+
             if (process.ExitCode != 0)
                 return;
 
-            var output = outputTask.GetAwaiter().GetResult();
+            var output = outputBuffer.ToString();
             DateTimeOffset? currentCommitDate = null;
             foreach (var rawLine in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
             {
