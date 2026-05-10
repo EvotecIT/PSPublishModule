@@ -137,7 +137,17 @@ internal static partial class WebPipelineRunner
 
         if (string.IsNullOrWhiteSpace(key))
         {
-            key = TryReadIndexNowVerificationKey(baseDir, siteRoot, keyLocation, out keySource);
+            key = TryReadIndexNowVerificationKey(
+                baseDir,
+                siteRoot,
+                keyLocation,
+                out keySource,
+                out var discoveredKeyLocation);
+            if (string.IsNullOrWhiteSpace(keyLocation) &&
+                !string.IsNullOrWhiteSpace(discoveredKeyLocation))
+            {
+                keyLocation = discoveredKeyLocation;
+            }
         }
 
         if (string.IsNullOrWhiteSpace(key))
@@ -203,44 +213,59 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException(stepResult.Message);
     }
 
-    private static string? TryReadIndexNowVerificationKey(string baseDir, string? siteRoot, string? keyLocation, out string? source)
+    private sealed class IndexNowKeyCandidate
+    {
+        public string Path { get; set; } = string.Empty;
+        public string KeyLocation { get; set; } = "indexnow.txt";
+    }
+
+    private static string? TryReadIndexNowVerificationKey(
+        string baseDir,
+        string? siteRoot,
+        string? keyLocation,
+        out string? source,
+        out string? discoveredKeyLocation)
     {
         source = null;
+        discoveredKeyLocation = null;
         foreach (var candidate in EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation))
         {
-            if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
+            if (string.IsNullOrWhiteSpace(candidate.Path) || !File.Exists(candidate.Path))
                 continue;
 
-            var key = File.ReadLines(candidate)
+            var key = File.ReadLines(candidate.Path)
                 .Select(static line => line.Trim())
                 .FirstOrDefault(static line => !string.IsNullOrWhiteSpace(line));
             if (string.IsNullOrWhiteSpace(key))
                 continue;
 
-            source = FormatIndexNowKeySource(baseDir, candidate);
+            source = FormatIndexNowKeySource(baseDir, candidate.Path);
+            discoveredKeyLocation = candidate.KeyLocation;
             return key;
         }
 
         return null;
     }
 
-    private static IEnumerable<string> EnumerateIndexNowKeyCandidates(string baseDir, string? siteRoot, string? keyLocation)
+    private static IEnumerable<IndexNowKeyCandidate> EnumerateIndexNowKeyCandidates(string baseDir, string? siteRoot, string? keyLocation)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var keyLocationRelativePaths = EnumerateIndexNowKeyRelativePaths(keyLocation).ToArray();
+        if (keyLocationRelativePaths.Length == 0 && !string.IsNullOrWhiteSpace(keyLocation))
+            yield break;
 
         foreach (var relative in keyLocationRelativePaths)
         {
             if (!string.IsNullOrWhiteSpace(siteRoot))
             {
-                foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, relative)))
+                foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, relative), relative))
                     yield return candidate;
             }
 
-            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, relative)))
+            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, relative), relative))
                 yield return candidate;
 
-            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", relative)))
+            foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", relative), relative))
                 yield return candidate;
         }
 
@@ -252,23 +277,29 @@ internal static partial class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(siteRoot))
         {
-            foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, "indexnow.txt")))
+            foreach (var candidate in AddCandidateIterator(Path.Combine(siteRoot, "indexnow.txt"), "indexnow.txt"))
                 yield return candidate;
         }
 
-        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "indexnow.txt")))
+        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "indexnow.txt"), "indexnow.txt"))
             yield return candidate;
-        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", "indexnow.txt")))
+        foreach (var candidate in AddCandidateIterator(Path.Combine(baseDir, "static", "indexnow.txt"), "indexnow.txt"))
             yield return candidate;
 
-        IEnumerable<string> AddCandidateIterator(string? path)
+        IEnumerable<IndexNowKeyCandidate> AddCandidateIterator(string? path, string keyLocationValue)
         {
             if (string.IsNullOrWhiteSpace(path))
                 yield break;
 
             var full = Path.GetFullPath(path);
             if (seen.Add(full))
-                yield return full;
+            {
+                yield return new IndexNowKeyCandidate
+                {
+                    Path = full,
+                    KeyLocation = keyLocationValue
+                };
+            }
         }
     }
 
@@ -291,7 +322,7 @@ internal static partial class WebPipelineRunner
                 return relative;
             }
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or PathTooLongException)
         {
             // Fall back to the full path when the platform cannot compute a relative display path.
         }
@@ -314,7 +345,7 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        path = Uri.UnescapeDataString(path.TrimStart('/').Replace('\\', '/'));
+        path = Uri.UnescapeDataString(path.TrimStart('/')).Replace('\\', '/');
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (string.IsNullOrWhiteSpace(path) ||
             segments.Any(static segment => segment.Equals("..", StringComparison.Ordinal)) ||
