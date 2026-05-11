@@ -9,6 +9,7 @@
 - Add bundle composition primitives for primary subdirectories, copy items, module includes, and generated scripts.
 - Add bundle post-process signing and MSI harvest exclude patterns for package/MSI reuse across projects.
 - DotNet publish CLI overrides (`--target`, `--runtime`, `--framework`, `--style`) are applied before profile resolution so profile-filtered plan/export output matches the executed run.
+- DotNet publish `manifest.json` now emits readable string values for enum fields such as `Category`, `Kind`, and `Style` instead of numeric enum values. Consumers that parse the manifest should treat this as a manifest-contract change.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
