@@ -186,11 +186,28 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             using var doc = JsonDocument.Parse(File.ReadAllText(manifestJson));
             Assert.Equal(2, doc.RootElement.GetArrayLength());
             var json = File.ReadAllText(manifestJson);
+            Assert.Contains("\"Category\": \"Installer\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"Category\": \"StorePackage\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Category\": 2", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Category\": 3", json, StringComparison.Ordinal);
             Assert.Contains("\"InstallerId\": \"app.msi\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StorePackageId\": \"app.store\"", json, StringComparison.Ordinal);
             Assert.Contains("App.msi", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App-symbols.msi", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixupload", json, StringComparison.OrdinalIgnoreCase);
+
+            var installer = FindManifestEntry(doc, "Category", "Installer");
+            Assert.Equal("app.msi", installer.GetProperty("InstallerId").GetString());
+            Assert.Equal("Portable", installer.GetProperty("Style").GetString());
+            Assert.Equal(1, installer.GetProperty("SignedFiles").GetInt32());
+            Assert.False(installer.TryGetProperty("Cleanup", out _));
+
+            var store = FindManifestEntry(doc, "Category", "StorePackage");
+            Assert.Equal("app.store", store.GetProperty("StorePackageId").GetString());
+            Assert.Equal("FrameworkDependent", store.GetProperty("Style").GetString());
+            Assert.False(store.TryGetProperty("SignedFiles", out _));
+            Assert.False(store.TryGetProperty("Cleanup", out _));
+
             foreach (var entry in doc.RootElement.EnumerateArray())
             {
                 if (!entry.TryGetProperty("OutputFiles", out var outputFiles))
@@ -216,6 +233,80 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             Assert.Contains("App-symbols.msi", checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixbundle", checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixupload", checksumText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_UsesReadablePublishEntryContract()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var manifestJson = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.json");
+            var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
+            var publishDir = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Publish", "app")).FullName;
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestJson,
+                    ManifestTextPath = manifestTxt
+                }
+            };
+            var artefacts = new List<DotNetPublishArtefactResult>
+            {
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "app",
+                    Kind = DotNetPublishTargetKind.Service,
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.PortableCompat,
+                    PublishDir = publishDir,
+                    OutputDir = publishDir,
+                    Files = 1,
+                    TotalBytes = 12
+                },
+                new()
+                {
+                    Category = DotNetPublishArtefactCategory.Publish,
+                    Target = "lib",
+                    Kind = DotNetPublishTargetKind.Unknown,
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.FrameworkDependent,
+                    PublishDir = publishDir,
+                    OutputDir = publishDir,
+                    Files = 1,
+                    TotalBytes = 12
+                }
+            };
+
+            InvokeWriteManifests(plan, artefacts, new List<DotNetPublishStorePackageResult>(), new List<DotNetPublishMsiBuildResult>());
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestJson));
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+            var entry = FindManifestEntry(doc, "Target", "app");
+            Assert.Equal("Publish", entry.GetProperty("Category").GetString());
+            Assert.Equal("Service", entry.GetProperty("Kind").GetString());
+            Assert.Equal("PortableCompat", entry.GetProperty("Style").GetString());
+            Assert.False(entry.TryGetProperty("Cleanup", out _));
+            Assert.False(entry.TryGetProperty("OutputFiles", out _));
+
+            var unknownKindEntry = FindManifestEntry(doc, "Target", "lib");
+            Assert.Equal("Publish", unknownKindEntry.GetProperty("Category").GetString());
+            Assert.False(unknownKindEntry.TryGetProperty("Kind", out _));
+
+            var json = File.ReadAllText(manifestJson);
+            Assert.DoesNotContain("\"Kind\": 2", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Style\": 1", json, StringComparison.Ordinal);
         }
         finally
         {
@@ -603,6 +694,20 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         var raw = method!.Invoke(null, new object?[] { plan, artefacts, storePackages, msiBuilds });
         Assert.NotNull(raw);
         return Assert.IsType<(string? ManifestJson, string? ManifestText, string? ChecksumsPath)>(raw);
+    }
+
+    private static JsonElement FindManifestEntry(JsonDocument doc, string propertyName, string value)
+    {
+        foreach (var entry in doc.RootElement.EnumerateArray())
+        {
+            if (entry.TryGetProperty(propertyName, out var property)
+                && string.Equals(property.GetString(), value, StringComparison.Ordinal))
+            {
+                return entry;
+            }
+        }
+
+        throw new InvalidOperationException($"Manifest entry with {propertyName}={value} was not found.");
     }
 
     private static string CreateTempRoot()

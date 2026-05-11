@@ -94,7 +94,7 @@ Depending on config, the run can emit:
 - benchmark gate results
 - manifests and checksums (for example `manifest.json`, `manifest.txt`, and `SHA256SUMS.txt`)
 
-`manifest.json` is an array of produced outputs. Publish and bundle outputs keep their existing entries; MSI and Store/MSIX outputs are also listed as `Installer` / `StorePackage` categories with `OutputFiles` pointing at the final files relative to the project root. `manifest.txt` mirrors those final MSI and Store package paths for quick operator inspection.
+`manifest.json` is an array of produced outputs with readable string values for fields such as `Category`, `Kind`, and `Style`. Publish and bundle outputs keep their existing entries; MSI and Store/MSIX outputs are also listed as `Installer` / `StorePackage` categories with `OutputFiles` pointing at the final files relative to the project root. `manifest.txt` mirrors those final MSI and Store package paths for quick operator inspection.
 
 ## Style Choices
 

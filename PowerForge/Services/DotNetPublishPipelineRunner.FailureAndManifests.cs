@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
@@ -218,7 +219,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(jsonPath))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(jsonPath))!);
-            var json = JsonSerializer.Serialize(manifestEntries, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(manifestEntries, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
             File.WriteAllText(jsonPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
@@ -315,28 +320,53 @@ public sealed partial class DotNetPublishPipelineRunner
         return (jsonPath, txtPath, checksumsPath);
     }
 
-    private static List<DotNetPublishArtefactResult> BuildManifestEntries(
+    private static List<DotNetPublishManifestEntry> BuildManifestEntries(
         string projectRoot,
         IReadOnlyList<DotNetPublishArtefactResult> orderedArtefacts,
         IReadOnlyList<DotNetPublishStorePackageResult> orderedStorePackages,
         IReadOnlyList<DotNetPublishMsiBuildResult> orderedMsiBuilds)
     {
-        var entries = new List<DotNetPublishArtefactResult>(orderedArtefacts);
+        var entries = orderedArtefacts
+            .Select(a => new DotNetPublishManifestEntry
+            {
+                Category = a.Category.ToString(),
+                Target = a.Target,
+                BundleId = EmptyToNull(a.BundleId),
+                InstallerId = EmptyToNull(a.InstallerId),
+                StorePackageId = EmptyToNull(a.StorePackageId),
+                Kind = a.Kind == DotNetPublishTargetKind.Unknown ? null : a.Kind.ToString(),
+                Runtime = a.Runtime,
+                Framework = a.Framework,
+                Style = a.Style.ToString(),
+                PublishDir = a.PublishDir,
+                OutputDir = a.OutputDir,
+                ZipPath = EmptyToNull(a.ZipPath),
+                OutputFiles = ToManifestOutputFiles(projectRoot, a.OutputFiles),
+                Files = a.Files,
+                TotalBytes = a.TotalBytes,
+                ExePath = EmptyToNull(a.ExePath),
+                ExeBytes = a.ExeBytes,
+                Cleanup = HasCleanup(a.Cleanup) ? a.Cleanup : null,
+                ServicePackage = a.ServicePackage,
+                StateTransfer = a.StateTransfer,
+                SignedFiles = a.SignedFiles > 0 ? a.SignedFiles : null
+            })
+            .ToList();
 
         foreach (var store in orderedStorePackages)
         {
             var files = EnumerateStorePackageFiles(store).ToArray();
-            entries.Add(new DotNetPublishArtefactResult
+            entries.Add(new DotNetPublishManifestEntry
             {
-                Category = DotNetPublishArtefactCategory.StorePackage,
+                Category = DotNetPublishArtefactCategory.StorePackage.ToString(),
                 StorePackageId = store.StorePackageId,
                 Target = store.Target,
                 Runtime = store.Runtime,
                 Framework = store.Framework,
-                Style = store.Style,
+                Style = store.Style.ToString(),
                 PublishDir = store.OutputDir,
                 OutputDir = store.OutputDir,
-                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
+                OutputFiles = ToManifestOutputFiles(projectRoot, files),
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files)
             });
@@ -346,24 +376,75 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
             var outputDir = ResolveOutputDirectory(files);
-            entries.Add(new DotNetPublishArtefactResult
+            entries.Add(new DotNetPublishManifestEntry
             {
-                Category = DotNetPublishArtefactCategory.Installer,
+                Category = DotNetPublishArtefactCategory.Installer.ToString(),
                 InstallerId = build.InstallerId,
                 Target = build.Target,
                 Runtime = build.Runtime,
                 Framework = build.Framework,
-                Style = build.Style,
+                Style = build.Style.ToString(),
                 PublishDir = outputDir,
                 OutputDir = outputDir,
-                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
+                OutputFiles = ToManifestOutputFiles(projectRoot, files),
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files),
-                SignedFiles = build.SignedFiles?.Length ?? 0
+                SignedFiles = build.SignedFiles is { Length: > 0 } ? build.SignedFiles.Length : null
             });
         }
 
         return entries;
+    }
+
+    // Disk manifest projection: keep JSON readability/stability separate from runtime result models.
+    private sealed class DotNetPublishManifestEntry
+    {
+        public string Category { get; set; } = string.Empty;
+        public string Target { get; set; } = string.Empty;
+        public string? BundleId { get; set; }
+        public string? InstallerId { get; set; }
+        public string? StorePackageId { get; set; }
+        public string? Kind { get; set; }
+        public string Runtime { get; set; } = string.Empty;
+        public string Framework { get; set; } = string.Empty;
+        public string Style { get; set; } = string.Empty;
+        public string PublishDir { get; set; } = string.Empty;
+        public string OutputDir { get; set; } = string.Empty;
+        public string? ZipPath { get; set; }
+        public string[]? OutputFiles { get; set; }
+        public int Files { get; set; }
+        public long TotalBytes { get; set; }
+        public string? ExePath { get; set; }
+        public long? ExeBytes { get; set; }
+        public DotNetPublishCleanupResult? Cleanup { get; set; }
+        public DotNetPublishServicePackageResult? ServicePackage { get; set; }
+        public DotNetPublishStateTransferResult? StateTransfer { get; set; }
+        public int? SignedFiles { get; set; }
+    }
+
+    private static bool HasCleanup(DotNetPublishCleanupResult? cleanup)
+    {
+        return cleanup is not null
+            && (cleanup.PdbRemoved != 0
+                || cleanup.DocsRemoved != 0
+                || cleanup.RefPruned);
+    }
+
+    private static string? EmptyToNull(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string[]? ToManifestOutputFiles(string projectRoot, IEnumerable<string>? files)
+    {
+        var outputFiles = (files ?? Array.Empty<string>())
+            .Where(file => !string.IsNullOrWhiteSpace(file))
+            .Select(file => Path.IsPathRooted(file)
+                ? ToManifestRelativePath(projectRoot, file)
+                : file.Replace('\\', '/'))
+            .ToArray();
+
+        return outputFiles.Length == 0 ? null : outputFiles;
     }
 
     private static IEnumerable<string> EnumerateStorePackageFiles(DotNetPublishStorePackageResult store)
