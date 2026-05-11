@@ -49,6 +49,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
         var versionResolution = ResolveMsiVersion(plan, installerConfig, step);
         var licenseResolution = ResolveInstallerClientLicense(plan, installerConfig, step);
+        var isGeneratedInstallerProject = IsGeneratedInstallerProject(step, installerConfig);
 
         var installerProjectPath = ResolveOrPrepareInstallerProjectPath(
             plan,
@@ -60,7 +61,14 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new FileNotFoundException($"Installer project path not found: {installerProjectPath}", installerProjectPath);
 
         var projectDir = Path.GetDirectoryName(installerProjectPath)!;
-        var before = SnapshotMsiOutputs(projectDir);
+        var generatedOutputDir = isGeneratedInstallerProject
+            ? ResolveGeneratedInstallerOutputDirectory(plan, installerId, step, prepare)
+            : null;
+        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
+            Directory.CreateDirectory(generatedOutputDir);
+
+        var outputSearchDir = generatedOutputDir ?? projectDir;
+        var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: isGeneratedInstallerProject);
 
         var args = new List<string>
         {
@@ -73,6 +81,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (plan.Restore)
             args.Add("--no-restore");
+        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
+            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(generatedOutputDir!)}");
 
         var installerMsBuildProperties = BuildInstallerMsBuildProperties(
             plan.MsBuildProperties,
@@ -121,9 +131,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
             WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);
 
-        var outputs = FindChangedMsiOutputs(projectDir, before);
+        var outputs = FindChangedMsiOutputs(outputSearchDir, before, skipBinDirectoryFilter: isGeneratedInstallerProject);
         if (outputs.Length == 0)
-            _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{projectDir}'.");
+            _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{outputSearchDir}'.");
         else
             _logger.Info($"MSI build produced {outputs.Length} MSI output(s) for '{installerId}'.");
 
@@ -173,7 +183,7 @@ public sealed partial class DotNetPublishPipelineRunner
             definition.PayloadComponentGroupId = prepare.HarvestComponentGroupId;
         }
 
-        var generatedDir = ResolveGeneratedInstallerProjectDirectory(plan, installerId, step);
+        var generatedDir = ResolveGeneratedInstallerProjectDirectory(plan, installerId, step, prepare);
         var request = new PowerForgeWixInstallerCompileRequest
         {
             WorkingDirectory = generatedDir,
@@ -192,11 +202,54 @@ public sealed partial class DotNetPublishPipelineRunner
         return workspace.ProjectPath;
     }
 
+    private static bool IsGeneratedInstallerProject(
+        DotNetPublishStep step,
+        DotNetPublishInstallerPlan? installer)
+    {
+        return string.IsNullOrWhiteSpace(step.InstallerProjectPath)
+            && string.IsNullOrWhiteSpace(installer?.InstallerProjectPath)
+            && installer?.Authoring is not null;
+    }
+
     private static string ResolveGeneratedInstallerProjectDirectory(
         DotNetPublishPlan plan,
         string installerId,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare)
     {
+        var artifactDir = ResolveGeneratedInstallerArtifactDirectory(plan, installerId, step, prepare);
+        var path = Path.Combine(artifactDir, "generated");
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' generated WiX project path");
+        return path;
+    }
+
+    private static string ResolveGeneratedInstallerOutputDirectory(
+        DotNetPublishPlan plan,
+        string installerId,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare)
+    {
+        var artifactDir = ResolveGeneratedInstallerArtifactDirectory(plan, installerId, step, prepare);
+        var path = Path.Combine(artifactDir, "output");
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' generated MSI output path");
+        return path;
+    }
+
+    private static string ResolveGeneratedInstallerArtifactDirectory(
+        DotNetPublishPlan plan,
+        string installerId,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare)
+    {
+        if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
+        {
+            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(prepare.ManifestPath));
+            if (!string.IsNullOrWhiteSpace(manifestDirectory))
+                return manifestDirectory;
+        }
+
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["installer"] = installerId,
@@ -207,11 +260,9 @@ public sealed partial class DotNetPublishPipelineRunner
             ["configuration"] = plan.Configuration ?? "Release"
         };
         var relativePath = ApplyTemplate(
-            "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/generated",
+            "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}",
             tokens);
         var path = ResolvePath(plan.ProjectRoot, relativePath);
-        if (!plan.AllowOutputOutsideProjectRoot)
-            EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' generated WiX project path");
         return path;
     }
 
@@ -273,10 +324,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return merged;
     }
 
-    private static Dictionary<string, DateTime> SnapshotMsiOutputs(string root)
+    private static Dictionary<string, DateTime> SnapshotMsiOutputs(string root, bool skipBinDirectoryFilter = false)
     {
         var map = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in EnumerateMsiFiles(root))
+        foreach (var file in EnumerateMsiFiles(root, skipBinDirectoryFilter))
         {
             try
             {
@@ -291,10 +342,13 @@ public sealed partial class DotNetPublishPipelineRunner
         return map;
     }
 
-    private static string[] FindChangedMsiOutputs(string root, IReadOnlyDictionary<string, DateTime> before)
+    private static string[] FindChangedMsiOutputs(
+        string root,
+        IReadOnlyDictionary<string, DateTime> before,
+        bool skipBinDirectoryFilter = false)
     {
         var results = new List<string>();
-        foreach (var file in EnumerateMsiFiles(root))
+        foreach (var file in EnumerateMsiFiles(root, skipBinDirectoryFilter))
         {
             try
             {
@@ -314,17 +368,20 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static IEnumerable<string> EnumerateMsiFiles(string root)
+    private static IEnumerable<string> EnumerateMsiFiles(string root, bool skipBinDirectoryFilter = false)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return Array.Empty<string>();
 
         try
         {
-            return Directory.EnumerateFiles(root, "*.msi", SearchOption.AllDirectories)
-                .Where(p =>
-                    p.IndexOf($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0
-                    || p.IndexOf($"{Path.AltDirectorySeparatorChar}bin{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0);
+            var files = Directory.EnumerateFiles(root, "*.msi", SearchOption.AllDirectories);
+            if (skipBinDirectoryFilter)
+                return files;
+
+            return files.Where(p =>
+                p.IndexOf($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf($"{Path.AltDirectorySeparatorChar}bin{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0);
         }
         catch
         {

@@ -9,6 +9,60 @@ namespace PowerForge.Tests;
 public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 {
     [Fact]
+    public void MsiBuildResult_ToString_UsesInstallerAndVersion()
+    {
+        var result = new DotNetPublishMsiBuildResult
+        {
+            InstallerId = "TierBridge.MSI",
+            Version = "4.0.9498",
+            VersionPropertyName = "ProductVersion"
+        };
+
+        Assert.Equal("TierBridge.MSI 4.0.9498", result.ToString());
+    }
+
+    [Fact]
+    public void ResolveGeneratedInstallerOutputDirectory_UsesTemplateFallback_WhenManifestPathMissing()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+            var prepare = new DotNetPublishMsiPrepareResult
+            {
+                InstallerId = "app.msi",
+                Target = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                ManifestPath = string.Empty
+            };
+
+            var outputDir = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepare);
+
+            Assert.Equal(
+                Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "app.msi", "app", "win-x64", "net8.0", "Portable", "output"),
+                outputDir);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_AddsMsiBuildStep_WhenInstallerProjectPathConfigured()
     {
         var root = CreateTempRoot();
@@ -687,6 +741,11 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var projectPath = InvokeResolveOrPrepareInstallerProjectPath(plan, plan.Installers[0], step, prepare, "2.3.4");
 
             Assert.True(File.Exists(projectPath));
+            Assert.Equal(
+                Path.Combine(root, "Artifacts", "generated"),
+                Path.GetDirectoryName(projectPath));
+            var outputDir = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepare);
+            Assert.Equal(Path.Combine(root, "Artifacts", "output"), outputDir);
             var sourcePath = Path.Combine(Path.GetDirectoryName(projectPath)!, "Product.wxs");
             Assert.True(File.Exists(sourcePath));
             Assert.Contains("2.3.4", File.ReadAllText(sourcePath), StringComparison.Ordinal);
@@ -755,6 +814,19 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         Assert.NotNull(method);
 
         var raw = method!.Invoke(runner, new object?[] { plan, step, installer, prepare, productVersion });
+        Assert.NotNull(raw);
+        return Assert.IsType<string>(raw);
+    }
+
+    private static string InvokeResolveGeneratedInstallerOutputDirectory(
+        DotNetPublishPlan plan,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare)
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("ResolveGeneratedInstallerOutputDirectory", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(null, new object?[] { plan, step.InstallerId!, step, prepare });
         Assert.NotNull(raw);
         return Assert.IsType<string>(raw);
     }

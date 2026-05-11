@@ -267,6 +267,15 @@ public sealed class DotNetPublishMsiBuildResult
 
     /// <summary>Resolved client identifier used for license lookup (when configured).</summary>
     public string? ClientId { get; set; }
+
+    /// <summary>Returns a concise display label for PowerShell collection summaries.</summary>
+    public override string ToString()
+    {
+        var name = string.IsNullOrWhiteSpace(InstallerId) ? "MSI" : InstallerId;
+        return string.IsNullOrWhiteSpace(Version)
+            ? name
+            : $"{name} {Version}";
+    }
 }
 
 /// <summary>
