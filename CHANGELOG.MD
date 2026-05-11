@@ -13,6 +13,7 @@
 - Generated WiX installer inputs can now set `Required` to block generated dialog navigation until the value is provided.
 - Generated WiX required-input prompts now list the required field labels for the current dialog.
 - Generated WiX authoring now validates WiX identifiers, product upgrade GUIDs, and public MSI input properties before writing installer source.
+- Generated WiX authoring now enforces the WiX 72-character identifier limit.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
