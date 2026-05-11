@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -10,6 +11,14 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerForgeWixInstallerSourceEmitter
 {
+    private static readonly Regex WixIdentifierPattern = new(
+        "^[A-Za-z_][A-Za-z0-9_.]*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex PublicMsiPropertyPattern = new(
+        "^[A-Z_][A-Z0-9_]*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly XNamespace WixNamespace = "http://wixtoolset.org/schemas/v4/wxs";
     private static readonly XNamespace UtilNamespace = "http://wixtoolset.org/schemas/v4/wxs/util";
     private static readonly XNamespace UiNamespace = "http://wixtoolset.org/schemas/v4/wxs/ui";
@@ -795,10 +804,14 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         Require(definition.Product.Manufacturer, nameof(definition.Product.Manufacturer));
         Require(definition.Product.Version, nameof(definition.Product.Version));
         Require(definition.Product.UpgradeCode, nameof(definition.Product.UpgradeCode));
+        RequireGuid(definition.Product.UpgradeCode, nameof(definition.Product.UpgradeCode));
         Require(definition.InstallDirectoryId, nameof(definition.InstallDirectoryId));
+        RequireWixIdentifier(definition.InstallDirectoryId, nameof(definition.InstallDirectoryId));
         if (definition.UseCompanyFolder)
             Require(definition.CompanyFolderName, nameof(definition.CompanyFolderName));
         Require(definition.InstallDirectoryName, nameof(definition.InstallDirectoryName));
+        if (!string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId))
+            RequireWixIdentifier(definition.PayloadComponentGroupId, nameof(definition.PayloadComponentGroupId));
 
         EnsureUnique(
             definition.Inputs.Select(input => input.Id),
@@ -830,7 +843,9 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         foreach (var input in definition.Inputs)
         {
             Require(input.Id, nameof(input.Id));
+            RequireWixIdentifier(input.Id, $"input '{input.Id}' ID");
             Require(input.PropertyName, nameof(input.PropertyName));
+            RequirePublicMsiProperty(input.PropertyName, $"input '{input.Id}' property");
             if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
                 throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
             if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
@@ -852,6 +867,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         foreach (var dialog in definition.Dialogs)
         {
             Require(dialog.Id, nameof(dialog.Id));
+            RequireWixIdentifier(dialog.Id, $"dialog '{dialog.Id}' ID");
             Require(dialog.Title, nameof(dialog.Title));
             foreach (var inputId in dialog.InputIds)
             {
@@ -866,11 +882,16 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 throw new InvalidOperationException("Installer directory tree requires StandardDirectoryId or DirectoryRefId.");
             if (!string.IsNullOrWhiteSpace(tree.StandardDirectoryId) && !string.IsNullOrWhiteSpace(tree.DirectoryRefId))
                 throw new InvalidOperationException("Installer directory tree cannot set both StandardDirectoryId and DirectoryRefId.");
+            if (!string.IsNullOrWhiteSpace(tree.StandardDirectoryId))
+                RequireWixIdentifier(tree.StandardDirectoryId, "installer directory tree StandardDirectoryId");
+            if (!string.IsNullOrWhiteSpace(tree.DirectoryRefId))
+                RequireWixIdentifier(tree.DirectoryRefId, "installer directory tree DirectoryRefId");
             if (tree.Segments.Count == 0)
                 throw new InvalidOperationException("Installer directory tree requires at least one segment.");
             foreach (var segment in tree.Segments)
             {
                 Require(segment.Id, nameof(segment.Id));
+                RequireWixIdentifier(segment.Id, $"directory segment '{segment.Id}' ID");
                 Require(segment.Name, nameof(segment.Name));
             }
         }
@@ -878,12 +899,35 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         foreach (var component in definition.Components)
         {
             Require(component.Id, nameof(component.Id));
+            RequireWixIdentifier(component.Id, $"component '{component.Id}' ID");
             Require(component.DirectoryRefId, nameof(component.DirectoryRefId));
+            RequireWixIdentifier(component.DirectoryRefId, $"component '{component.Id}' DirectoryRefId");
             if (component is PowerForgeInstallerShortcutComponent shortcut)
             {
+                Require(shortcut.ShortcutId, nameof(shortcut.ShortcutId));
+                RequireWixIdentifier(shortcut.ShortcutId, $"shortcut component '{shortcut.Id}' ShortcutId");
+                Require(shortcut.WorkingDirectoryId, nameof(shortcut.WorkingDirectoryId));
+                RequireWixIdentifier(shortcut.WorkingDirectoryId, $"shortcut component '{shortcut.Id}' WorkingDirectoryId");
+                if (!string.IsNullOrWhiteSpace(shortcut.TargetFileId))
+                    RequireWixIdentifier(shortcut.TargetFileId, $"shortcut component '{shortcut.Id}' TargetFileId");
                 if (string.IsNullOrWhiteSpace(shortcut.TargetFileId) && string.IsNullOrWhiteSpace(shortcut.Target))
                     throw new InvalidOperationException(
                         $"Shortcut component '{shortcut.Id}' requires TargetFileId or Target.");
+            }
+            else if (component is PowerForgeInstallerFileComponent file)
+            {
+                Require(file.FileId, nameof(file.FileId));
+                RequireWixIdentifier(file.FileId, $"file component '{file.Id}' FileId");
+            }
+            else if (component is PowerForgeInstallerServiceComponent service)
+            {
+                Require(service.FileId, nameof(service.FileId));
+                RequireWixIdentifier(service.FileId, $"service component '{service.Id}' FileId");
+            }
+            else if (component is PowerForgeInstallerRemoveFolderComponent removeFolder)
+            {
+                Require(removeFolder.PropertyName, nameof(removeFolder.PropertyName));
+                RequireWixIdentifier(removeFolder.PropertyName, $"remove-folder component '{removeFolder.Id}' PropertyName");
             }
             else if (component is PowerForgeInstallerRegistryValueComponent registryValue)
             {
@@ -891,6 +935,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 Require(registryValue.Key, nameof(registryValue.Key));
                 Require(registryValue.Name, nameof(registryValue.Name));
                 Require(registryValue.ValueType, nameof(registryValue.ValueType));
+                if (!string.IsNullOrWhiteSpace(registryValue.ValueProperty))
+                    RequirePublicMsiProperty(registryValue.ValueProperty, $"registry value component '{registryValue.Id}' ValueProperty");
                 if (string.IsNullOrWhiteSpace(registryValue.Value) && string.IsNullOrWhiteSpace(registryValue.ValueProperty))
                 {
                     throw new InvalidOperationException(
@@ -918,6 +964,30 @@ public sealed class PowerForgeWixInstallerSourceEmitter
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException($"Installer definition requires {name}.");
+    }
+
+    private static void RequireGuid(string? value, string name)
+    {
+        if (!Guid.TryParse(value, out _))
+            throw new InvalidOperationException($"Installer definition requires {name} to be a valid GUID.");
+    }
+
+    private static void RequireWixIdentifier(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !WixIdentifierPattern.IsMatch(value))
+        {
+            throw new InvalidOperationException(
+                $"Installer definition requires {name} to be a valid WiX identifier.");
+        }
+    }
+
+    private static void RequirePublicMsiProperty(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !PublicMsiPropertyPattern.IsMatch(value))
+        {
+            throw new InvalidOperationException(
+                $"Installer definition requires {name} to be an uppercase public MSI property.");
+        }
     }
 }
 

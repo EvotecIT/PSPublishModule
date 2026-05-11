@@ -12,6 +12,7 @@
 - DotNet publish `manifest.json` now emits readable string values for enum fields such as `Category`, `Kind`, and `Style` instead of numeric enum values. Consumers that parse the manifest should treat this as a manifest-contract change.
 - Generated WiX installer inputs can now set `Required` to block generated dialog navigation until the value is provided.
 - Generated WiX required-input prompts now list the required field labels for the current dialog.
+- Generated WiX authoring now validates WiX identifiers, product upgrade GUIDs, and public MSI input properties before writing installer source.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
