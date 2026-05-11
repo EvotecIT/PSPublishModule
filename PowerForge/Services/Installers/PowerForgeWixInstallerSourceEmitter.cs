@@ -13,6 +13,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
     private static readonly XNamespace WixNamespace = "http://wixtoolset.org/schemas/v4/wxs";
     private static readonly XNamespace UtilNamespace = "http://wixtoolset.org/schemas/v4/wxs/util";
     private static readonly XNamespace UiNamespace = "http://wixtoolset.org/schemas/v4/wxs/ui";
+    private const string RequiredInputDialogId = "PowerForgeRequiredInputDlg";
+    private const string RequiredInputMessage = "All required fields must be filled in before continuing.";
 
     /// <summary>
     /// Emits a WiX v4 source document.
@@ -162,6 +164,15 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XElement(UiNamespace + "WixUI", new XAttribute("Id", "WixUI_InstallDir")));
 
         var dialogs = definition.Dialogs.ToArray();
+        var requiredInputIds = definition.Inputs
+            .Where(input => input.Required)
+            .Select(input => input.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (dialogs.Any(dialog => dialog.InputIds.Any(requiredInputIds.Contains)))
+        {
+            ui.Add(EmitRequiredInputDialog());
+        }
+
         for (var i = 0; i < dialogs.Length; i++)
         {
             var previousDialogId = i == 0 ? "InstallDirDlg" : dialogs[i - 1].Id;
@@ -172,6 +183,41 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         ui.Add(EmitDialogSequence(dialogs));
 
         return ui;
+    }
+
+    private static XElement EmitRequiredInputDialog()
+    {
+        return new XElement(
+            WixNamespace + "Dialog",
+            new XAttribute("Id", RequiredInputDialogId),
+            new XAttribute("Width", "260"),
+            new XAttribute("Height", "95"),
+            new XAttribute("Title", "[ProductName]"),
+            new XElement(
+                WixNamespace + "Control",
+                new XAttribute("Id", "Message"),
+                new XAttribute("Type", "Text"),
+                new XAttribute("X", "15"),
+                new XAttribute("Y", "15"),
+                new XAttribute("Width", "230"),
+                new XAttribute("Height", "30"),
+                new XAttribute("Text", RequiredInputMessage)),
+            new XElement(
+                WixNamespace + "Control",
+                new XAttribute("Id", "Ok"),
+                new XAttribute("Type", "PushButton"),
+                new XAttribute("X", "102"),
+                new XAttribute("Y", "65"),
+                new XAttribute("Width", "56"),
+                new XAttribute("Height", "17"),
+                new XAttribute("Default", "yes"),
+                new XAttribute("Cancel", "yes"),
+                new XAttribute("Text", "OK"),
+                new XElement(
+                    WixNamespace + "Publish",
+                    new XAttribute("Event", "EndDialog"),
+                    new XAttribute("Value", "Return"),
+                    new XAttribute("Condition", "1"))));
     }
 
     private static IEnumerable<XElement> EmitDialogSequence(IReadOnlyList<PowerForgeInstallerDialog> dialogs)
@@ -240,6 +286,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Text", dialog.Description!)));
         }
 
+        var dialogInputs = new List<PowerForgeInstallerInput>();
         var y = 60;
         foreach (var inputId in dialog.InputIds)
         {
@@ -247,11 +294,14 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             if (input is null)
                 throw new InvalidOperationException($"Dialog '{dialog.Id}' references unknown input '{inputId}'.");
 
+            dialogInputs.Add(input);
             AddInputControls(element, input, y);
             y += input.Kind == PowerForgeInstallerInputKind.RadioGroup
                 ? Math.Max(36, input.Choices.Count * 18 + 24)
                 : 42;
         }
+
+        var nextPublishes = BuildNextDialogPublishes(dialogInputs, nextDialogId);
 
         element.Add(
             new XElement(
@@ -278,11 +328,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Height", "17"),
                 new XAttribute("Default", "yes"),
                 new XAttribute("Text", "&Next"),
-                new XElement(
-                    WixNamespace + "Publish",
-                    new XAttribute("Event", "NewDialog"),
-                    new XAttribute("Value", nextDialogId),
-                    new XAttribute("Condition", "1"))),
+                nextPublishes),
             new XElement(
                 WixNamespace + "Control",
                 new XAttribute("Id", "Cancel"),
@@ -300,6 +346,56 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                     new XAttribute("Condition", "1"))));
 
         return element;
+    }
+
+    private static IEnumerable<XElement> BuildNextDialogPublishes(
+        IReadOnlyList<PowerForgeInstallerInput> dialogInputs,
+        string nextDialogId)
+    {
+        var requiredInputs = dialogInputs
+            .Where(input => input.Required)
+            .ToArray();
+
+        if (requiredInputs.Length == 0)
+        {
+            return new[]
+            {
+                new XElement(
+                    WixNamespace + "Publish",
+                    new XAttribute("Event", "NewDialog"),
+                    new XAttribute("Value", nextDialogId),
+                    new XAttribute("Condition", "1"))
+            };
+        }
+
+        var missingCondition = string.Join(" OR ", requiredInputs.Select(BuildRequiredInputMissingCondition));
+        var satisfiedCondition = string.Join(" AND ", requiredInputs.Select(BuildRequiredInputPresentCondition));
+
+        return new[]
+        {
+            new XElement(
+                WixNamespace + "Publish",
+                new XAttribute("Event", "SpawnDialog"),
+                new XAttribute("Value", RequiredInputDialogId),
+                new XAttribute("Order", "1"),
+                new XAttribute("Condition", missingCondition)),
+            new XElement(
+                WixNamespace + "Publish",
+                new XAttribute("Event", "NewDialog"),
+                new XAttribute("Value", nextDialogId),
+                new XAttribute("Order", "2"),
+                new XAttribute("Condition", satisfiedCondition))
+        };
+    }
+
+    private static string BuildRequiredInputPresentCondition(PowerForgeInstallerInput input)
+    {
+        return $"{input.PropertyName} <> \"\"";
+    }
+
+    private static string BuildRequiredInputMissingCondition(PowerForgeInstallerInput input)
+    {
+        return $"{input.PropertyName} = \"\"";
     }
 
     private static void AddInputControls(XElement dialog, PowerForgeInstallerInput input, int y)
@@ -657,6 +753,12 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
+        if (definition.Dialogs.Any(dialog => string.Equals(dialog.Id, RequiredInputDialogId, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Installer dialog ID '{RequiredInputDialogId}' is reserved for generated required-input validation.");
+        }
+
         EnsureUnique(
             definition.Directories.SelectMany(tree => tree.Segments).Select(segment => segment.Id)
                 .Concat(new[] { definition.InstallDirectoryId }),
@@ -675,6 +777,20 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             Require(input.PropertyName, nameof(input.PropertyName));
             if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
                 throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
+            if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
+            {
+                if (string.IsNullOrWhiteSpace(input.DefaultValue))
+                {
+                    throw new InvalidOperationException(
+                        $"Input '{input.Id}' is a required radio group but has no default value.");
+                }
+
+                if (!input.Choices.Any(choice => string.Equals(choice.Value, input.DefaultValue, StringComparison.Ordinal)))
+                {
+                    throw new InvalidOperationException(
+                        $"Input '{input.Id}' is a required radio group but its default value does not match any choice.");
+                }
+            }
         }
 
         foreach (var dialog in definition.Dialogs)

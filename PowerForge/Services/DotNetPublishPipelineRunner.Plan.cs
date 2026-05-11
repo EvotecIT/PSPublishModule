@@ -761,7 +761,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Kind = input.Kind,
                 DefaultValue = input.DefaultValue,
                 Secure = input.Secure,
-                Hidden = input.Hidden
+                Hidden = input.Hidden,
+                Required = input.Required
             };
             foreach (var choice in input.Choices)
             {
