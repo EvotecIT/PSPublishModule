@@ -131,11 +131,14 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
             var checksums = Path.Combine(root, "Artifacts", "DotNetPublish", "SHA256SUMS.txt");
             var msiPath = Path.Combine(root, "Artifacts", "Msi", "app", "output", "App.msi");
+            var msiSidecarPath = Path.Combine(root, "Artifacts", "Msi", "app", "symbols", "App-symbols.msi");
             var msixPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixbundle");
             var uploadPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixupload");
             Directory.CreateDirectory(Path.GetDirectoryName(msiPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(msiSidecarPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(msixPath)!);
             File.WriteAllText(msiPath, "msi");
+            File.WriteAllText(msiSidecarPath, "symbols");
             File.WriteAllText(msixPath, "msix");
             File.WriteAllText(uploadPath, "upload");
 
@@ -158,7 +161,7 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                     Framework = "net8.0",
                     Runtime = "win-x64",
                     Style = DotNetPublishStyle.Portable,
-                    OutputFiles = new[] { msiPath },
+                    OutputFiles = new[] { msiPath, msiSidecarPath },
                     SignedFiles = new[] { msiPath },
                     Version = "1.2.3"
                 }
@@ -186,14 +189,31 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             Assert.Contains("\"InstallerId\": \"app.msi\"", json, StringComparison.Ordinal);
             Assert.Contains("\"StorePackageId\": \"app.store\"", json, StringComparison.Ordinal);
             Assert.Contains("App.msi", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixupload", json, StringComparison.OrdinalIgnoreCase);
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("OutputFiles", out var outputFiles))
+                    continue;
+
+                foreach (var file in outputFiles.EnumerateArray())
+                {
+                    var value = file.GetString();
+                    Assert.False(
+                        !string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value),
+                        $"Manifest OutputFiles should be project-relative, but found '{value}'.");
+                }
+            }
 
             var text = File.ReadAllText(manifestTxt);
             Assert.Contains("MSI app.msi", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("->  (", text, StringComparison.Ordinal);
+            Assert.Contains("(2 files version=1.2.3)", text, StringComparison.Ordinal);
             Assert.Contains("Store app.store", text, StringComparison.Ordinal);
 
             var checksumText = File.ReadAllText(checksums);
             Assert.Contains("App.msi", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixbundle", checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("App.msixupload", checksumText, StringComparison.OrdinalIgnoreCase);
         }

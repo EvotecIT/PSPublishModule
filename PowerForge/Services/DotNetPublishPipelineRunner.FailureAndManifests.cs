@@ -199,7 +199,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var manifestEntries = BuildManifestEntries(orderedArtefacts, orderedStorePackages, orderedMsiBuilds);
+        var manifestEntries = BuildManifestEntries(plan.ProjectRoot, orderedArtefacts, orderedStorePackages, orderedMsiBuilds);
 
         var jsonPath = plan.Outputs.ManifestJsonPath;
         var txtPath = plan.Outputs.ManifestTextPath;
@@ -243,7 +243,7 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (var build in orderedMsiBuilds)
             {
                 var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
-                var outputDir = ResolveCommonDirectory(files);
+                var outputDir = ResolveOutputDirectory(files);
                 var version = string.IsNullOrWhiteSpace(build.Version) ? string.Empty : $" version={build.Version}";
                 lines.Add($"MSI {build.InstallerId} from {build.Target} ({build.Framework}, {build.Runtime}, {build.Style}) -> {outputDir} ({files.Length} files{version})");
             }
@@ -316,13 +316,14 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static List<DotNetPublishArtefactResult> BuildManifestEntries(
+        string projectRoot,
         IReadOnlyList<DotNetPublishArtefactResult> orderedArtefacts,
         IReadOnlyList<DotNetPublishStorePackageResult> orderedStorePackages,
         IReadOnlyList<DotNetPublishMsiBuildResult> orderedMsiBuilds)
     {
-        var entries = new List<DotNetPublishArtefactResult>(orderedArtefacts ?? Array.Empty<DotNetPublishArtefactResult>());
+        var entries = new List<DotNetPublishArtefactResult>(orderedArtefacts);
 
-        foreach (var store in orderedStorePackages ?? Array.Empty<DotNetPublishStorePackageResult>())
+        foreach (var store in orderedStorePackages)
         {
             var files = EnumerateStorePackageFiles(store).ToArray();
             entries.Add(new DotNetPublishArtefactResult
@@ -335,15 +336,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 Style = store.Style,
                 PublishDir = store.OutputDir,
                 OutputDir = store.OutputDir,
-                OutputFiles = files,
+                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files)
             });
         }
 
-        foreach (var build in orderedMsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
+        foreach (var build in orderedMsiBuilds)
         {
             var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
+            var outputDir = ResolveOutputDirectory(files);
             entries.Add(new DotNetPublishArtefactResult
             {
                 Category = DotNetPublishArtefactCategory.Installer,
@@ -352,9 +354,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Runtime = build.Runtime,
                 Framework = build.Framework,
                 Style = build.Style,
-                PublishDir = ResolveCommonDirectory(files),
-                OutputDir = ResolveCommonDirectory(files),
-                OutputFiles = files,
+                PublishDir = outputDir,
+                OutputDir = outputDir,
+                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files),
                 SignedFiles = build.SignedFiles?.Length ?? 0
@@ -387,13 +389,17 @@ public sealed partial class DotNetPublishPipelineRunner
     private static long SumFileBytes(IEnumerable<string> files)
     {
         long bytes = 0;
-        foreach (var file in files ?? Array.Empty<string>())
+        foreach (var file in files)
         {
             try
             {
                 bytes += new FileInfo(file).Length;
             }
-            catch
+            catch (IOException)
+            {
+                // best effort for manifest summaries
+            }
+            catch (UnauthorizedAccessException)
             {
                 // best effort for manifest summaries
             }
@@ -402,20 +408,11 @@ public sealed partial class DotNetPublishPipelineRunner
         return bytes;
     }
 
-    private static string ResolveCommonDirectory(IReadOnlyList<string> files)
+    private static string ResolveOutputDirectory(IReadOnlyList<string> files)
     {
-        if (files.Count == 0)
-            return string.Empty;
-
-        var firstDirectory = Path.GetDirectoryName(Path.GetFullPath(files[0])) ?? string.Empty;
-        if (files.Count == 1)
-            return firstDirectory;
-
-        return files
-            .Select(file => Path.GetDirectoryName(Path.GetFullPath(file)) ?? string.Empty)
-            .All(directory => string.Equals(directory, firstDirectory, IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-            ? firstDirectory
-            : string.Empty;
+        return files.Count == 0
+            ? string.Empty
+            : Path.GetDirectoryName(Path.GetFullPath(files[0])) ?? string.Empty;
     }
 
     private static string ToManifestRelativePath(string projectRoot, string fullPath)
