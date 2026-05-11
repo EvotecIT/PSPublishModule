@@ -11,6 +11,7 @@
 - DotNet publish CLI overrides (`--target`, `--runtime`, `--framework`, `--style`) are applied before profile resolution so profile-filtered plan/export output matches the executed run.
 - DotNet publish `manifest.json` now emits readable string values for enum fields such as `Category`, `Kind`, and `Style` instead of numeric enum values. Consumers that parse the manifest should treat this as a manifest-contract change.
 - Generated WiX installer inputs can now set `Required` to block generated dialog navigation until the value is provided.
+- Generated WiX required-input prompts now list the required field labels for the current dialog.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
