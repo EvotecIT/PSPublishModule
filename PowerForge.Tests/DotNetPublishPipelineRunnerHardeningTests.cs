@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -113,6 +114,108 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             Assert.True(lines.Length >= 2);
             Assert.Contains(lines, l => l.Contains("manifest.json", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(lines, l => l.Contains("manifest.txt", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_IncludesInstallerAndStorePackageOutputs()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var manifestJson = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.json");
+            var manifestTxt = Path.Combine(root, "Artifacts", "DotNetPublish", "manifest.txt");
+            var checksums = Path.Combine(root, "Artifacts", "DotNetPublish", "SHA256SUMS.txt");
+            var msiPath = Path.Combine(root, "Artifacts", "Msi", "app", "output", "App.msi");
+            var msiSidecarPath = Path.Combine(root, "Artifacts", "Msi", "app", "symbols", "App-symbols.msi");
+            var msixPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixbundle");
+            var uploadPath = Path.Combine(root, "Artifacts", "Store", "app", "App.msixupload");
+            Directory.CreateDirectory(Path.GetDirectoryName(msiPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(msiSidecarPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(msixPath)!);
+            File.WriteAllText(msiPath, "msi");
+            File.WriteAllText(msiSidecarPath, "symbols");
+            File.WriteAllText(msixPath, "msix");
+            File.WriteAllText(uploadPath, "upload");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs
+                {
+                    ManifestJsonPath = manifestJson,
+                    ManifestTextPath = manifestTxt,
+                    ChecksumsPath = checksums
+                }
+            };
+            var msiBuilds = new List<DotNetPublishMsiBuildResult>
+            {
+                new()
+                {
+                    InstallerId = "app.msi",
+                    Target = "app",
+                    Framework = "net8.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.Portable,
+                    OutputFiles = new[] { msiPath, msiSidecarPath },
+                    SignedFiles = new[] { msiPath },
+                    Version = "1.2.3"
+                }
+            };
+            var storePackages = new List<DotNetPublishStorePackageResult>
+            {
+                new()
+                {
+                    StorePackageId = "app.store",
+                    Target = "app",
+                    Framework = "net8.0-windows10.0.19041.0",
+                    Runtime = "win-x64",
+                    Style = DotNetPublishStyle.FrameworkDependent,
+                    OutputDir = Path.GetDirectoryName(msixPath)!,
+                    OutputFiles = new[] { msixPath },
+                    UploadFiles = new[] { uploadPath }
+                }
+            };
+
+            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), storePackages, msiBuilds);
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestJson));
+            Assert.Equal(2, doc.RootElement.GetArrayLength());
+            var json = File.ReadAllText(manifestJson);
+            Assert.Contains("\"InstallerId\": \"app.msi\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"StorePackageId\": \"app.store\"", json, StringComparison.Ordinal);
+            Assert.Contains("App.msi", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixupload", json, StringComparison.OrdinalIgnoreCase);
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("OutputFiles", out var outputFiles))
+                    continue;
+
+                foreach (var file in outputFiles.EnumerateArray())
+                {
+                    var value = file.GetString();
+                    Assert.False(
+                        !string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value),
+                        $"Manifest OutputFiles should be project-relative, but found '{value}'.");
+                }
+            }
+
+            var text = File.ReadAllText(manifestTxt);
+            Assert.Contains("MSI app.msi", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("->  (", text, StringComparison.Ordinal);
+            Assert.Contains("(2 files version=1.2.3)", text, StringComparison.Ordinal);
+            Assert.Contains("Store app.store", text, StringComparison.Ordinal);
+
+            var checksumText = File.ReadAllText(checksums);
+            Assert.Contains("App.msi", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App-symbols.msi", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixbundle", checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App.msixupload", checksumText, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -484,6 +587,22 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "TrySignOutput private method not found. Was it renamed or made public?");
         return method!;
+    }
+
+    private static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) InvokeWriteManifests(
+        DotNetPublishPlan plan,
+        List<DotNetPublishArtefactResult> artefacts,
+        List<DotNetPublishStorePackageResult> storePackages,
+        List<DotNetPublishMsiBuildResult> msiBuilds)
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "WriteManifests",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(null, new object?[] { plan, artefacts, storePackages, msiBuilds });
+        Assert.NotNull(raw);
+        return Assert.IsType<(string? ManifestJson, string? ManifestText, string? ChecksumsPath)>(raw);
     }
 
     private static string CreateTempRoot()

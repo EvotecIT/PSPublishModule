@@ -205,5 +205,9 @@ public enum DotNetPublishArtefactCategory
     /// <summary>Direct publish output from a target.</summary>
     Publish,
     /// <summary>Composed bundle output derived from one or more published targets.</summary>
-    Bundle
+    Bundle,
+    /// <summary>Installer output such as an MSI package.</summary>
+    Installer,
+    /// <summary>Store package output such as MSIX/AppX artifacts.</summary>
+    StorePackage
 }

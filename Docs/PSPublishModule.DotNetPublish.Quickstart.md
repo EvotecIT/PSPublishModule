@@ -92,7 +92,9 @@ Depending on config, the run can emit:
 - MSI prepare/build outputs
 - Microsoft Store / MSIX package outputs (`*.msix`, `*.msixbundle`, `*.msixupload`, `*.appxsym`)
 - benchmark gate results
-- manifests and checksums (for example `SHA256SUMS.txt`)
+- manifests and checksums (for example `manifest.json`, `manifest.txt`, and `SHA256SUMS.txt`)
+
+`manifest.json` is an array of produced outputs. Publish and bundle outputs keep their existing entries; MSI and Store/MSIX outputs are also listed as `Installer` / `StorePackage` categories with `OutputFiles` pointing at the final files relative to the project root. `manifest.txt` mirrors those final MSI and Store package paths for quick operator inspection.
 
 ## Style Choices
 
@@ -169,7 +171,8 @@ Depending on config, the run can emit:
 ## Generated WiX MSI Authoring
 
 - Use `Installers[].Authoring` when the installer should be generated from the DotNet publish config instead of a hand-authored `*.wixproj`.
-- Leave `InstallerProjectPath` and `InstallerProjectId` empty; `msi.build` writes `Product.wxs` plus a WiX SDK project under `Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/generated`.
+- Leave `InstallerProjectPath` and `InstallerProjectId` empty; `msi.build` writes `Product.wxs` plus a WiX SDK project under the MSI prepare artifact directory, next to `prepare.manifest.json`, in `generated/`.
+- Generated MSI builds place the final `.msi` in the sibling `output/` directory, and that final file is listed in `manifest.json`, `manifest.txt`, and `SHA256SUMS.txt`.
 - Use `Harvest: Auto` with `Authoring.PayloadComponentGroupId` to include the prepared publish payload in the generated MSI feature.
 - Component entries require a `Type` discriminator: `File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, or `Shortcut`.
 - Registry value components can write a literal `Value`, or write an installer property by setting `ValueProperty`, for example persisting `LICENSE_KEY` after the UI collects it.

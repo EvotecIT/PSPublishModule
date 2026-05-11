@@ -192,6 +192,14 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.OutputDir, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var orderedMsiBuilds = (msiBuilds ?? new List<DotNetPublishMsiBuildResult>())
+            .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Framework, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Runtime, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var manifestEntries = BuildManifestEntries(plan.ProjectRoot, orderedArtefacts, orderedStorePackages, orderedMsiBuilds);
 
         var jsonPath = plan.Outputs.ManifestJsonPath;
         var txtPath = plan.Outputs.ManifestTextPath;
@@ -210,7 +218,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(jsonPath))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(jsonPath))!);
-            var json = JsonSerializer.Serialize(orderedArtefacts, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(manifestEntries, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(jsonPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
@@ -228,8 +236,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (var store in orderedStorePackages)
             {
-                var fileCount = (store.OutputFiles?.Length ?? 0) + (store.UploadFiles?.Length ?? 0) + (store.SymbolFiles?.Length ?? 0);
-                lines.Add($"Store {store.StorePackageId} from {store.Target} ({store.Framework}, {store.Runtime}, {store.Style}) -> {store.OutputDir} ({fileCount} files)");
+                var files = EnumerateStorePackageFiles(store).ToArray();
+                lines.Add($"Store {store.StorePackageId} from {store.Target} ({store.Framework}, {store.Runtime}, {store.Style}) -> {store.OutputDir} ({files.Length} files)");
+            }
+
+            foreach (var build in orderedMsiBuilds)
+            {
+                var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
+                var outputDir = ResolveOutputDirectory(files);
+                var version = string.IsNullOrWhiteSpace(build.Version) ? string.Empty : $" version={build.Version}";
+                lines.Add($"MSI {build.InstallerId} from {build.Target} ({build.Framework}, {build.Runtime}, {build.Style}) -> {outputDir} ({files.Length} files{version})");
             }
 
             File.WriteAllLines(txtPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -258,25 +274,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (var store in orderedStorePackages)
             {
-                foreach (var file in (store.OutputFiles ?? Array.Empty<string>())
-                    .Concat(store.UploadFiles ?? Array.Empty<string>())
-                    .Concat(store.SymbolFiles ?? Array.Empty<string>()))
+                foreach (var file in EnumerateStorePackageFiles(store))
                 {
-                    if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
-                        continue;
-
                     var full = Path.GetFullPath(file);
                     filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
                 }
             }
 
-            foreach (var build in msiBuilds ?? new List<DotNetPublishMsiBuildResult>())
+            foreach (var build in orderedMsiBuilds)
             {
-                foreach (var file in build.OutputFiles ?? Array.Empty<string>())
+                foreach (var file in EnumerateExistingFiles(build.OutputFiles))
                 {
-                    if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
-                        continue;
-
                     var full = Path.GetFullPath(file);
                     filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
                 }
@@ -305,6 +313,106 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return (jsonPath, txtPath, checksumsPath);
+    }
+
+    private static List<DotNetPublishArtefactResult> BuildManifestEntries(
+        string projectRoot,
+        IReadOnlyList<DotNetPublishArtefactResult> orderedArtefacts,
+        IReadOnlyList<DotNetPublishStorePackageResult> orderedStorePackages,
+        IReadOnlyList<DotNetPublishMsiBuildResult> orderedMsiBuilds)
+    {
+        var entries = new List<DotNetPublishArtefactResult>(orderedArtefacts);
+
+        foreach (var store in orderedStorePackages)
+        {
+            var files = EnumerateStorePackageFiles(store).ToArray();
+            entries.Add(new DotNetPublishArtefactResult
+            {
+                Category = DotNetPublishArtefactCategory.StorePackage,
+                StorePackageId = store.StorePackageId,
+                Target = store.Target,
+                Runtime = store.Runtime,
+                Framework = store.Framework,
+                Style = store.Style,
+                PublishDir = store.OutputDir,
+                OutputDir = store.OutputDir,
+                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
+                Files = files.Length,
+                TotalBytes = SumFileBytes(files)
+            });
+        }
+
+        foreach (var build in orderedMsiBuilds)
+        {
+            var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
+            var outputDir = ResolveOutputDirectory(files);
+            entries.Add(new DotNetPublishArtefactResult
+            {
+                Category = DotNetPublishArtefactCategory.Installer,
+                InstallerId = build.InstallerId,
+                Target = build.Target,
+                Runtime = build.Runtime,
+                Framework = build.Framework,
+                Style = build.Style,
+                PublishDir = outputDir,
+                OutputDir = outputDir,
+                OutputFiles = files.Select(file => ToManifestRelativePath(projectRoot, file)).ToArray(),
+                Files = files.Length,
+                TotalBytes = SumFileBytes(files),
+                SignedFiles = build.SignedFiles?.Length ?? 0
+            });
+        }
+
+        return entries;
+    }
+
+    private static IEnumerable<string> EnumerateStorePackageFiles(DotNetPublishStorePackageResult store)
+    {
+        return EnumerateExistingFiles((store.OutputFiles ?? Array.Empty<string>())
+            .Concat(store.UploadFiles ?? Array.Empty<string>())
+            .Concat(store.SymbolFiles ?? Array.Empty<string>()));
+    }
+
+    private static IEnumerable<string> EnumerateExistingFiles(IEnumerable<string>? files)
+    {
+        foreach (var file in files ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(file))
+                continue;
+
+            var full = Path.GetFullPath(file);
+            if (File.Exists(full))
+                yield return full;
+        }
+    }
+
+    private static long SumFileBytes(IEnumerable<string> files)
+    {
+        long bytes = 0;
+        foreach (var file in files)
+        {
+            try
+            {
+                bytes += new FileInfo(file).Length;
+            }
+            catch (IOException)
+            {
+                // best effort for manifest summaries
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // best effort for manifest summaries
+            }
+        }
+
+        return bytes;
+    }
+
+    private static string ResolveOutputDirectory(IReadOnlyList<string> files)
+    {
+        return files.Count == 0
+            ? string.Empty
+            : Path.GetDirectoryName(Path.GetFullPath(files[0])) ?? string.Empty;
     }
 
     private static string ToManifestRelativePath(string projectRoot, string fullPath)
