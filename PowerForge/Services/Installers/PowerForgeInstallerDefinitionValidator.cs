@@ -45,6 +45,8 @@ internal static class PowerForgeInstallerDefinitionValidator
         EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
+        // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
+        // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
         if (definition.Dialogs.Any(dialog => dialog.Id.StartsWith(RequiredInputDialogIdPrefix, StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidOperationException(
