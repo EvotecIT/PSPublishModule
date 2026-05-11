@@ -15,6 +15,7 @@
 - Generated WiX authoring now validates WiX identifiers, product upgrade GUIDs, and public MSI input properties before writing installer source.
 - Generated WiX authoring now enforces the WiX 72-character identifier limit.
 - Generated installer inputs now carry validation metadata (`MinLength`, `MaxLength`, `ValidationPattern`, `ValidationMessage`) with authoring-time checks for metadata shape and default values.
+- Generated installer definition validation now lives in a dedicated validator instead of the WiX source emitter.
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
