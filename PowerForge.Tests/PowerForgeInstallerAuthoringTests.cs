@@ -609,6 +609,39 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ThrowsWhenInputIdExceedsWixIdentifierLength()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "A" + new string('B', 72),
+            PropertyName = "LICENSE_KEY",
+            Label = "License key"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("valid WiX identifier", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_AcceptsInputIdAtMaxWixIdentifierLength()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "A" + new string('B', 71),
+            PropertyName = "LICENSE_KEY",
+            Label = "License key"
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Root);
+    }
+
+    [Fact]
     public void EmitSource_ThrowsWhenInputPropertyIsNotPublicMsiProperty()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));

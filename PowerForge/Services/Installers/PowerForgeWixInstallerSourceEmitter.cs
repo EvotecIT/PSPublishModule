@@ -12,7 +12,7 @@ namespace PowerForge;
 public sealed class PowerForgeWixInstallerSourceEmitter
 {
     private static readonly Regex WixIdentifierPattern = new(
-        "^[A-Za-z_][A-Za-z0-9_.]*$",
+        "^[A-Za-z_][A-Za-z0-9_.]{0,71}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex PublicMsiPropertyPattern = new(
