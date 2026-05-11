@@ -54,13 +54,152 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "RemoveData" &&
             (string?)e.Attribute("Type") == "CheckBox" &&
             (string?)e.Attribute("Property") == "REMOVE_DATA"));
-        Assert.NotNull(dialog.Descendants(Wix + "Control").Single(e =>
-                (string?)e.Attribute("Id") == "Next")
-            .Descendants(Wix + "Publish")
+        var next = dialog.Descendants(Wix + "Control").Single(e =>
+            (string?)e.Attribute("Id") == "Next");
+        var newDialogPublish = next.Descendants(Wix + "Publish")
             .SingleOrDefault(e =>
                 (string?)e.Attribute("Event") == "NewDialog" &&
-                (string?)e.Attribute("Value") == "VerifyReadyDlg"));
+                (string?)e.Attribute("Condition") == "LICENSE_KEY <> \"\"" &&
+                (string?)e.Attribute("Value") == "VerifyReadyDlg");
+        var spawnDialogPublish = next.Descendants(Wix + "Publish")
+            .SingleOrDefault(e =>
+                (string?)e.Attribute("Event") == "SpawnDialog" &&
+                (string?)e.Attribute("Value") == "PowerForgeRequiredInputDlg" &&
+                (string?)e.Attribute("Condition") == "LICENSE_KEY = \"\"");
+        Assert.NotNull(newDialogPublish);
+        Assert.Equal("2", (string?)newDialogPublish.Attribute("Order"));
+        Assert.NotNull(spawnDialogPublish);
+        Assert.Equal("1", (string?)spawnDialogPublish.Attribute("Order"));
+        Assert.NotNull(doc.Descendants(Wix + "Dialog").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg"));
         Assert.Equal(2, dialog.Descendants(Wix + "RadioButton").Count());
+    }
+
+    [Fact]
+    public void EmitSource_DoesNotAddPublishOrderWhenDialogHasNoRequiredInputs()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "OptionalSetting",
+            PropertyName = "OPTIONAL_SETTING",
+            Label = "Optional setting"
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "OptionalDlg",
+            Title = "Optional settings",
+            InputIds = { "OptionalSetting" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.DoesNotContain(doc.Descendants(Wix + "Dialog"), e =>
+            (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
+
+        var nextPublish = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "OptionalDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Next")
+            .Descendants(Wix + "Publish")
+            .Single(e => (string?)e.Attribute("Event") == "NewDialog");
+
+        Assert.Equal("1", (string?)nextPublish.Attribute("Condition"));
+        Assert.Null(nextPublish.Attribute("Order"));
+    }
+
+    [Fact]
+    public void EmitSource_RequiresCheckboxInputsWhenConfigured()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Inputs.Single(input => input.Id == "RemoveData").Required = true;
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var next = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "ConfigurationDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Next");
+
+        Assert.NotNull(next.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "SpawnDialog" &&
+            (string?)e.Attribute("Value") == "PowerForgeRequiredInputDlg" &&
+            (string?)e.Attribute("Condition") == "LICENSE_KEY = \"\" OR REMOVE_DATA = \"\""));
+        Assert.NotNull(next.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "NewDialog" &&
+            (string?)e.Attribute("Condition") == "LICENSE_KEY <> \"\" AND REMOVE_DATA <> \"\""));
+    }
+
+    [Fact]
+    public void EmitSource_RejectsReservedRequiredInputDialogId()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "PowerForgeRequiredInputDlg",
+            Title = "Reserved"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("reserved", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EmitSource_RejectsRequiredRadioGroupWithoutDefaultValue()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        var input = new PowerForgeInstallerInput
+        {
+            Id = "Preset",
+            PropertyName = "INIT_PRESET",
+            Label = "Configuration preset",
+            Kind = PowerForgeInstallerInputKind.RadioGroup,
+            Required = true
+        };
+        input.Choices.Add(new PowerForgeInstallerInputChoice { Value = "none", Text = "None" });
+        input.Choices.Add(new PowerForgeInstallerInputChoice { Value = "core", Text = "Core AD" });
+        definition.Inputs.Add(input);
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            InputIds = { "Preset" }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("required radio group", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EmitSource_RejectsRequiredRadioGroupWithUnknownDefaultValue()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        var input = new PowerForgeInstallerInput
+        {
+            Id = "Preset",
+            PropertyName = "INIT_PRESET",
+            Label = "Configuration preset",
+            Kind = PowerForgeInstallerInputKind.RadioGroup,
+            Required = true,
+            DefaultValue = "missing"
+        };
+        input.Choices.Add(new PowerForgeInstallerInputChoice { Value = "none", Text = "None" });
+        input.Choices.Add(new PowerForgeInstallerInputChoice { Value = "core", Text = "Core AD" });
+        definition.Inputs.Add(input);
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ConfigurationDlg",
+            Title = "Configuration",
+            InputIds = { "Preset" }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("default value", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -96,6 +235,8 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Descendants(Wix + "Publish")
             .Single(e => (string?)e.Attribute("Event") == "NewDialog");
         Assert.Equal("AdvancedDlg", (string?)firstDialogNext.Attribute("Value"));
+        Assert.Equal("LICENSE_KEY <> \"\"", (string?)firstDialogNext.Attribute("Condition"));
+        Assert.Equal("2", (string?)firstDialogNext.Attribute("Order"));
 
         var secondDialogBack = doc.Descendants(Wix + "Dialog")
             .Single(e => (string?)e.Attribute("Id") == "AdvancedDlg")
@@ -104,6 +245,18 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Descendants(Wix + "Publish")
             .Single(e => (string?)e.Attribute("Event") == "NewDialog");
         Assert.Equal("ConfigurationDlg", (string?)secondDialogBack.Attribute("Value"));
+
+        var secondDialogNext = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "AdvancedDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Next")
+            .Descendants(Wix + "Publish")
+            .Single(e => (string?)e.Attribute("Event") == "NewDialog");
+        Assert.Equal("VerifyReadyDlg", (string?)secondDialogNext.Attribute("Value"));
+        Assert.Equal("1", (string?)secondDialogNext.Attribute("Condition"));
+        Assert.Null(secondDialogNext.Attribute("Order"));
+        Assert.Single(doc.Descendants(Wix + "Dialog"), e =>
+            (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
     }
 
     [Fact]
@@ -556,7 +709,8 @@ public sealed class PowerForgeInstallerAuthoringTests
                     "Label": "License key",
                     "Kind": "LicenseKey",
                     "Secure": true,
-                    "Hidden": true
+                    "Hidden": true,
+                    "Required": true
                   }
                 ],
                 "Dialogs": [
@@ -615,7 +769,8 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(authoring);
         Assert.Equal("TestimoX Monitoring", authoring!.Product.Name);
         Assert.Equal("ProductFiles", authoring.PayloadComponentGroupId);
-        Assert.Single(authoring.Inputs);
+        var input = Assert.Single(authoring.Inputs);
+        Assert.True(input.Required);
         Assert.Single(authoring.Dialogs);
         Assert.Single(authoring.Directories);
 
@@ -657,7 +812,8 @@ public sealed class PowerForgeInstallerAuthoringTests
             Label = "License key",
             Kind = PowerForgeInstallerInputKind.LicenseKey,
             Secure = true,
-            Hidden = true
+            Hidden = true,
+            Required = true
         });
         definition.Inputs.Add(new PowerForgeInstallerInput
         {

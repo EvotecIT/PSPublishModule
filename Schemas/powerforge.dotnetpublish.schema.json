@@ -166,6 +166,7 @@
         "DefaultValue": { "type": ["string", "null"] },
         "Secure": { "type": "boolean" },
         "Hidden": { "type": "boolean" },
+        "Required": { "type": "boolean" },
         "Choices": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }

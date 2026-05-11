@@ -157,6 +157,12 @@ public sealed class PowerForgeInstallerInput
     public bool Hidden { get; set; }
 
     /// <summary>
+    /// Requires a non-empty value before a generated dialog can continue. Checkbox inputs follow MSI semantics:
+    /// any non-empty property value is treated as checked. Required radio groups must set a default choice.
+    /// </summary>
+    public bool Required { get; set; }
+
+    /// <summary>
     /// Choices for radio or combo style inputs.
     /// </summary>
     public List<PowerForgeInstallerInputChoice> Choices { get; set; } = new();
