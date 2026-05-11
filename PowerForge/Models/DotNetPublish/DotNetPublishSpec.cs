@@ -73,6 +73,11 @@ public sealed class DotNetPublishSpec
     public DotNetPublishBenchmarkGate[] BenchmarkGates { get; set; } = Array.Empty<DotNetPublishBenchmarkGate>();
 
     /// <summary>
+    /// Optional command hooks executed at fixed publish phases.
+    /// </summary>
+    public DotNetPublishCommandHook[] Hooks { get; set; } = Array.Empty<DotNetPublishCommandHook>();
+
+    /// <summary>
     /// Optional manifest output configuration.
     /// </summary>
     public DotNetPublishOutputs Outputs { get; set; } = new();
@@ -193,6 +198,12 @@ public sealed class DotNetPublishInstaller
     /// Supports tokens: <c>{installer}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>.
     /// </summary>
     public string? HarvestComponentGroupId { get; set; }
+
+    /// <summary>
+    /// Optional wildcard patterns excluded from generated WiX harvest output.
+    /// Patterns match paths relative to the MSI staging root using forward slashes.
+    /// </summary>
+    public string[] HarvestExcludePatterns { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Optional MSI versioning policy used by <c>msi.build</c>.
@@ -330,6 +341,12 @@ public sealed class DotNetPublishBundle
     public string? OutputPath { get; set; }
 
     /// <summary>
+    /// Optional subdirectory under the bundle output root where the primary publish target should be copied.
+    /// When omitted, the primary target is copied into the bundle root.
+    /// </summary>
+    public string? PrimarySubdirectory { get; set; }
+
+    /// <summary>
     /// When true, clears the bundle output directory before composing files. Default: true.
     /// </summary>
     public bool ClearOutput { get; set; } = true;
@@ -354,6 +371,21 @@ public sealed class DotNetPublishBundle
     /// Optional additional published targets copied into the bundle.
     /// </summary>
     public DotNetPublishBundleInclude[] Includes { get; set; } = Array.Empty<DotNetPublishBundleInclude>();
+
+    /// <summary>
+    /// Optional file or directory items copied into the bundle after publish-target includes.
+    /// </summary>
+    public DotNetPublishBundleCopyItem[] CopyItems { get; set; } = Array.Empty<DotNetPublishBundleCopyItem>();
+
+    /// <summary>
+    /// Optional built PowerShell module payloads copied into the bundle, usually under <c>Modules/{moduleName}</c>.
+    /// </summary>
+    public DotNetPublishBundleModuleInclude[] ModuleIncludes { get; set; } = Array.Empty<DotNetPublishBundleModuleInclude>();
+
+    /// <summary>
+    /// Optional scripts generated from templates into the bundle after copy operations.
+    /// </summary>
+    public DotNetPublishBundleGeneratedScript[] GeneratedScripts { get; set; } = Array.Empty<DotNetPublishBundleGeneratedScript>();
 
     /// <summary>
     /// Optional PowerShell scripts executed after the bundle contents are copied.
@@ -399,6 +431,75 @@ public sealed class DotNetPublishBundleInclude
     /// When true, missing include artefacts fail the bundle step. Default: true.
     /// </summary>
     public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// File or directory copied into a bundle from a path outside the publish target output.
+/// </summary>
+public sealed class DotNetPublishBundleCopyItem
+{
+    /// <summary>Source file or directory path. Relative paths resolve against project root and support bundle tokens.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>Destination path under the bundle output root. Supports bundle tokens.</summary>
+    public string DestinationPath { get; set; } = string.Empty;
+
+    /// <summary>When true, missing sources fail the bundle step. Default: true.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>When true, clears an existing destination file/directory before copy. Default: true.</summary>
+    public bool ClearDestination { get; set; } = true;
+}
+
+/// <summary>
+/// Built PowerShell module payload copied into a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleModuleInclude
+{
+    /// <summary>Logical module name. Used by default destination and template tokens.</summary>
+    public string ModuleName { get; set; } = string.Empty;
+
+    /// <summary>Source module directory path, preferably a PowerForge module build artefact output.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
+    /// <summary>Optional destination path under the bundle output root. Default: <c>Modules/{moduleName}</c>.</summary>
+    public string? DestinationPath { get; set; }
+
+    /// <summary>When true, missing sources fail the bundle step. Default: true.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>When true, clears an existing destination directory before copy. Default: true.</summary>
+    public bool ClearDestination { get; set; } = true;
+}
+
+/// <summary>
+/// Script generated from inline or file-based template content into a bundle.
+/// </summary>
+public sealed class DotNetPublishBundleGeneratedScript
+{
+    /// <summary>Optional template file path resolved relative to project root. Supports bundle tokens.</summary>
+    public string? TemplatePath { get; set; }
+
+    /// <summary>Optional inline template content. Used when <see cref="TemplatePath"/> is not set.</summary>
+    public string? Template { get; set; }
+
+    /// <summary>Output path under the bundle output root. Supports bundle tokens.</summary>
+    public string OutputPath { get; set; } = string.Empty;
+
+    /// <summary>Template token values. Values support bundle tokens before template rendering.</summary>
+    public Dictionary<string, string>? Tokens { get; set; }
+
+    /// <summary>When true, replaces an existing output file. Default: true.</summary>
+    public bool Overwrite { get; set; } = true;
+
+    /// <summary>Optional named signing profile reference used when <see cref="Sign"/> is not set.</summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>Optional signing options for the generated script.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>Optional partial overrides applied on top of <see cref="SignProfile"/>.</summary>
+    public DotNetPublishSignPatch? SignOverrides { get; set; }
 }
 
 /// <summary>
@@ -453,6 +554,21 @@ public sealed class DotNetPublishBundlePostProcessOptions
     /// Supports <c>*</c>, <c>?</c>, and <c>**</c>.
     /// </summary>
     public string[] DeletePatterns { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional wildcard patterns for files to sign relative to bundle root.
+    /// When omitted and signing is enabled, bundle signing targets executables plus DLLs when <see cref="DotNetPublishSignOptions.IncludeDlls"/> is true.
+    /// </summary>
+    public string[] SignPatterns { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional named signing profile reference used when <see cref="Sign"/> is not set.</summary>
+    public string? SignProfile { get; set; }
+
+    /// <summary>Optional signing options applied to bundle files matched by <see cref="SignPatterns"/>.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
+
+    /// <summary>Optional partial overrides applied on top of <see cref="SignProfile"/>.</summary>
+    public DotNetPublishSignPatch? SignOverrides { get; set; }
 
     /// <summary>
     /// Optional metadata manifest emitted into the bundle after post-processing.
@@ -673,6 +789,51 @@ public sealed class DotNetPublishBenchmarkMetric
 
     /// <summary>When true, missing metric is treated according to gate <c>OnMissingMetric</c> policy.</summary>
     public bool Required { get; set; } = true;
+}
+
+/// <summary>
+/// Command hook executed at a fixed phase of the dotnet publish pipeline.
+/// </summary>
+public sealed class DotNetPublishCommandHook
+{
+    /// <summary>Default command hook timeout in seconds.</summary>
+    public const int DefaultTimeoutSeconds = 600;
+
+    /// <summary>Stable hook identifier used in plan step keys.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Pipeline phase where the hook runs.</summary>
+    public DotNetPublishCommandHookPhase Phase { get; set; }
+
+    /// <summary>Executable or script command. Relative paths resolve against project root and support hook tokens.</summary>
+    public string Command { get; set; } = string.Empty;
+
+    /// <summary>Command arguments. Values support hook tokens.</summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional working directory. Relative paths resolve against project root and support hook tokens.</summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>Optional environment variables. Values support hook tokens.</summary>
+    public Dictionary<string, string>? Environment { get; set; }
+
+    /// <summary>Maximum command execution time in seconds. Default: 600.</summary>
+    public int TimeoutSeconds { get; set; } = DefaultTimeoutSeconds;
+
+    /// <summary>When true, a non-zero exit code fails the publish run. Default: true.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>Optional target-name filter for target/bundle phases.</summary>
+    public string[] Targets { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional runtime filter for target/bundle phases.</summary>
+    public string[] Runtimes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional framework filter for target/bundle phases.</summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional publish-style filter for target/bundle phases.</summary>
+    public DotNetPublishStyle[] Styles { get; set; } = Array.Empty<DotNetPublishStyle>();
 }
 
 /// <summary>

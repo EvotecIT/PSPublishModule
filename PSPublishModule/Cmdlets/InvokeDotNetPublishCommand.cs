@@ -49,6 +49,13 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public string ConfigPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional project root override used to resolve relative publish inputs and outputs.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? ProjectRoot { get; set; }
+
+    /// <summary>
     /// Optional profile override.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
@@ -163,6 +170,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                     ResolvePath = path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path),
                     Settings = Settings,
                     ConfigPath = ConfigPath,
+                    ProjectRoot = ProjectRoot,
                     Profile = Profile,
                     Target = Target,
                     Runtimes = Runtimes,

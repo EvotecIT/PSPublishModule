@@ -16,7 +16,12 @@ internal static class ScriptTemplateRenderer
     {
         var name = string.IsNullOrWhiteSpace(templateName) ? "template" : templateName.Trim();
         var text = template ?? string.Empty;
-        var map = tokens ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in tokens ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+            map[kv.Key] = kv.Value ?? string.Empty;
+        }
 
         var referencedTokens = TokenRegex.Matches(text)
             .Cast<Match>()
@@ -35,24 +40,14 @@ internal static class ScriptTemplateRenderer
                 $"Template '{name}' references missing token(s): {string.Join(", ", missing)}.");
         }
 
-        foreach (var kv in map)
+        text = TokenRegex.Replace(text, match =>
         {
-            if (string.IsNullOrWhiteSpace(kv.Key)) continue;
-            text = text.Replace("{{" + kv.Key + "}}", kv.Value ?? string.Empty);
-        }
+            var token = match.Groups[1].Value;
+            if (!map.TryGetValue(token, out var value))
+                throw new InvalidOperationException($"Template '{name}' references missing token(s): {token}.");
 
-        var unresolved = TokenRegex.Matches(text)
-            .Cast<Match>()
-            .Select(m => m.Groups.Count > 1 ? m.Groups[1].Value : string.Empty)
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (unresolved.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Template '{name}' contains unresolved token(s): {string.Join(", ", unresolved)}.");
-        }
+            return value;
+        });
 
         return text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
     }

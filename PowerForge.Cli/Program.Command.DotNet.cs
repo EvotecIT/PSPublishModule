@@ -82,7 +82,7 @@ internal static partial class Program
                         : CreateCommandLogger(outputJson, cli, logger);
 
                     var loaded = LoadDotNetPublishSpecWithPath(configPath);
-                    var spec = loaded.Value;
+                    var spec = CloneDotNetPublishSpec(loaded.Value);
                     var specPath = loaded.FullPath;
                     var matrixOverrides = ParseDotNetPublishMatrixOverrides(subArgs);
                     var effectiveRids = overrideRids.Length > 0 ? overrideRids : matrixOverrides.Runtimes;
@@ -94,8 +94,10 @@ internal static partial class Program
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
                     if (!string.IsNullOrWhiteSpace(overrideProfile))
                         spec.Profile = overrideProfile.Trim();
+                    if (effectiveStyles.Length > 1 && GetActiveDotNetPublishProfile(spec) is not null)
+                        cmdLogger.Warn("Multiple --style values were provided with an active profile; the single-value profile style filter is ignored and target styles drive matrix expansion.");
+                    ApplyDotNetPublishSpecOverrides(spec, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     var plan = runner.Plan(spec, specPath);
-                    ApplyDotNetPublishPlanOverrides(plan, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
 
                     if (validateOnly)

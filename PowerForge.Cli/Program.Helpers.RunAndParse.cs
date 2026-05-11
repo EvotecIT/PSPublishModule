@@ -422,6 +422,129 @@ internal static partial class Program
         throw new ArgumentException($"Unknown style: {raw}. Expected one of: {string.Join(", ", Enum.GetNames(typeof(DotNetPublishStyle)))}", nameof(value));
     }
 
+    static DotNetPublishSpec CloneDotNetPublishSpec(DotNetPublishSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+        var json = JsonSerializer.Serialize(spec, CliJson.Context.DotNetPublishSpec);
+        return JsonSerializer.Deserialize(json, CliJson.Context.DotNetPublishSpec)
+            ?? throw new InvalidOperationException("Failed to clone dotnet publish spec.");
+    }
+
+    static void ApplyDotNetPublishSpecOverrides(
+        DotNetPublishSpec spec,
+        string[] overrideTargets,
+        string[] overrideRids,
+        string[] overrideFrameworks,
+        DotNetPublishStyle[] overrideStyles)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+        var targets = (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+            .Where(t => t is not null)
+            .ToArray();
+        var selectedTargetNames = NormalizeCliStringSet(overrideTargets);
+        var activeProfile = GetActiveDotNetPublishProfile(spec);
+
+        if (selectedTargetNames.Length > 0)
+        {
+            var missing = selectedTargetNames
+                .Where(n => targets.All(t => !t.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (missing.Length > 0)
+                throw new ArgumentException($"Unknown target(s): {string.Join(", ", missing)}", nameof(overrideTargets));
+
+            if (activeProfile is not null)
+            {
+                activeProfile.Targets = selectedTargetNames;
+            }
+            else
+            {
+                spec.Targets = targets
+                    .Where(t => selectedTargetNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
+                    .ToArray();
+                targets = spec.Targets;
+            }
+        }
+
+        var runtimes = NormalizeCliStringSet(overrideRids);
+        if (runtimes.Length > 0)
+        {
+            // Profile overrides constrain the selected matrix; target overrides drive publish expansion.
+            if (activeProfile is not null)
+                activeProfile.Runtimes = runtimes;
+
+            foreach (var target in targets)
+            {
+                if (target.Publish is null) continue;
+                target.Publish.Runtimes = runtimes;
+            }
+        }
+
+        var frameworks = NormalizeCliStringSet(overrideFrameworks);
+        if (frameworks.Length > 0)
+        {
+            // Keep both layers aligned so plan/export output matches the executed publish run.
+            if (activeProfile is not null)
+                activeProfile.Frameworks = frameworks;
+
+            foreach (var target in targets)
+            {
+                if (target.Publish is null) continue;
+                // Singular Framework is kept for compatibility; Frameworks drives matrix expansion.
+                target.Publish.Framework = frameworks[0];
+                target.Publish.Frameworks = frameworks;
+            }
+        }
+
+        var styles = (overrideStyles ?? Array.Empty<DotNetPublishStyle>())
+            .Distinct()
+            .ToArray();
+        if (styles.Length > 0)
+        {
+            // Profile style is single-valued; multiple CLI styles are represented on targets for planner expansion.
+            if (activeProfile is not null)
+                activeProfile.Style = styles.Length == 1 ? styles[0] : null;
+
+            foreach (var target in targets)
+            {
+                if (target.Publish is null) continue;
+                target.Publish.Style = styles[0];
+                target.Publish.Styles = styles;
+            }
+        }
+    }
+
+    static DotNetPublishProfile? GetActiveDotNetPublishProfile(DotNetPublishSpec spec)
+    {
+        var profiles = (spec.Profiles ?? Array.Empty<DotNetPublishProfile>())
+            .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Name))
+            .ToArray();
+        if (profiles.Length == 0)
+            return null;
+
+        var profileName = !string.IsNullOrWhiteSpace(spec.Profile)
+            ? spec.Profile!.Trim()
+            : profiles.FirstOrDefault(p => p.Default)?.Name;
+        if (string.IsNullOrWhiteSpace(profileName))
+            return null;
+
+        var profile = profiles.FirstOrDefault(p => p.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+        if (profile is null)
+            throw new ArgumentException($"Profile '{profileName}' was not found.", nameof(spec));
+
+        return profile;
+    }
+
+    static string[] NormalizeCliStringSet(IEnumerable<string>? values)
+    {
+        return (values ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     static void ApplyDotNetPublishPlanOverrides(
         DotNetPublishPlan plan,
         string[] overrideTargets,

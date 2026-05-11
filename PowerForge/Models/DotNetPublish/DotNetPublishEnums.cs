@@ -144,10 +144,31 @@ public enum DotNetPublishBaselineMode
 }
 
 /// <summary>
+/// Phase where a configured command hook runs within the dotnet publish pipeline.
+/// </summary>
+public enum DotNetPublishCommandHookPhase
+{
+    /// <summary>Run before restore steps.</summary>
+    BeforeRestore,
+    /// <summary>Run before build steps.</summary>
+    BeforeBuild,
+    /// <summary>Run before each matching target publish step.</summary>
+    BeforeTargetPublish,
+    /// <summary>Run after each matching target publish step.</summary>
+    AfterTargetPublish,
+    /// <summary>Run before each matching bundle step.</summary>
+    BeforeBundle,
+    /// <summary>Run after each matching bundle step.</summary>
+    AfterBundle
+}
+
+/// <summary>
 /// Kind of step executed by the dotnet publish pipeline.
 /// </summary>
 public enum DotNetPublishStepKind
 {
+    /// <summary>Run a configured command hook.</summary>
+    CommandHook,
     /// <summary>Restore NuGet packages.</summary>
     Restore,
     /// <summary>Clean build outputs.</summary>

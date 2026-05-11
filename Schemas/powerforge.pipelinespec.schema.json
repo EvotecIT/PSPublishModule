@@ -22,6 +22,26 @@
         "Roots": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
+    "Diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "BaselinePath": { "type": [ "string", "null" ] },
+        "GenerateBaseline": { "type": "boolean" },
+        "UpdateBaseline": { "type": "boolean" },
+        "FailOnNewDiagnostics": { "type": "boolean" },
+        "FailOnSeverity": {
+          "anyOf": [
+            { "type": "string", "enum": [ "Info", "Warning", "Error" ] },
+            { "type": "null" }
+          ]
+        },
+        "BinaryConflictSearchRoots": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "Segments": {
       "type": "array",
       "items": { "$ref": "powerforge.segments.schema.json#/$defs/ConfigurationSegment" }
