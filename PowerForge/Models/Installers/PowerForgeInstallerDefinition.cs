@@ -163,6 +163,26 @@ public sealed class PowerForgeInstallerInput
     public bool Required { get; set; }
 
     /// <summary>
+    /// Minimum accepted text length for authored validation metadata.
+    /// </summary>
+    public int? MinLength { get; set; }
+
+    /// <summary>
+    /// Maximum accepted text length for authored validation metadata.
+    /// </summary>
+    public int? MaxLength { get; set; }
+
+    /// <summary>
+    /// Optional .NET regular expression used to validate authored default values.
+    /// </summary>
+    public string? ValidationPattern { get; set; }
+
+    /// <summary>
+    /// Message to show when generated runtime validation is added for this input.
+    /// </summary>
+    public string? ValidationMessage { get; set; }
+
+    /// <summary>
     /// Choices for radio or combo style inputs.
     /// </summary>
     public List<PowerForgeInstallerInputChoice> Choices { get; set; } = new();

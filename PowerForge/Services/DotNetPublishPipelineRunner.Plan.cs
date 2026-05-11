@@ -762,7 +762,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 DefaultValue = input.DefaultValue,
                 Secure = input.Secure,
                 Hidden = input.Hidden,
-                Required = input.Required
+                Required = input.Required,
+                MinLength = input.MinLength,
+                MaxLength = input.MaxLength,
+                ValidationPattern = input.ValidationPattern,
+                ValidationMessage = input.ValidationMessage
             };
             foreach (var choice in input.Choices)
             {

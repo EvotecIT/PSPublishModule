@@ -146,6 +146,18 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var app = CreateProject(root, "App/App.csproj");
 
             var spec = CreateBaseSpec(root, app);
+            var authoring = CreateSimpleAuthoring("ProductFiles");
+            authoring.Inputs.Add(new PowerForgeInstallerInput
+            {
+                Id = "LicenseKey",
+                PropertyName = "LICENSE_KEY",
+                Label = "License key",
+                Kind = PowerForgeInstallerInputKind.LicenseKey,
+                MinLength = 16,
+                MaxLength = 128,
+                ValidationPattern = "^[A-Za-z0-9-]+$",
+                ValidationMessage = "Enter a valid license key."
+            });
             spec.Installers = new[]
             {
                 new DotNetPublishInstaller
@@ -153,7 +165,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     Id = "app.msi",
                     PrepareFromTarget = "app",
                     Harvest = DotNetPublishMsiHarvestMode.Auto,
-                    Authoring = CreateSimpleAuthoring("ProductFiles")
+                    Authoring = authoring
                 }
             };
 
@@ -161,6 +173,11 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var installerPlan = Assert.Single(plan.Installers);
             Assert.NotNull(installerPlan.Authoring);
             Assert.Equal("ProductFiles", installerPlan.HarvestComponentGroupId);
+            var input = Assert.Single(installerPlan.Authoring!.Inputs);
+            Assert.Equal(16, input.MinLength);
+            Assert.Equal(128, input.MaxLength);
+            Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);
+            Assert.Equal("Enter a valid license key.", input.ValidationMessage);
 
             var prepareStep = Assert.Single(plan.Steps, s => s.Kind == DotNetPublishStepKind.MsiPrepare);
             Assert.Equal("ProductFiles", prepareStep.HarvestComponentGroupId);

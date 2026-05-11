@@ -176,6 +176,7 @@ Depending on config, the run can emit:
 - Use `Harvest: Auto` with `Authoring.PayloadComponentGroupId` to include the prepared publish payload in the generated MSI feature.
 - Component entries require a `Type` discriminator: `File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, or `Shortcut`.
 - Installer inputs can set `Required: true`; generated dialogs block `Next` until text/license/path inputs have a value, or until required checkbox properties are non-empty. Required prompts list the required field labels for the current dialog. Required radio-group inputs must set `DefaultValue` to one of their choices.
+- Installer inputs can define validation metadata (`MinLength`, `MaxLength`, `ValidationPattern`, `ValidationMessage`) for text, password, path, and license-key inputs. Generated authoring validates metadata shape and authored default values before writing the `.wxs`; runtime UI enforcement beyond `Required` is reserved for the follow-up validation layer.
 - Generated authoring validates WiX identifiers, product upgrade GUIDs, and uppercase public MSI property names for installer inputs before writing the `.wxs` file. WiX identifiers must be 72 characters or fewer.
 - Registry value components can write a literal `Value`, or write an installer property by setting `ValueProperty`, for example persisting `LICENSE_KEY` after the UI collects it.
 - Shortcut components can use `TargetFileId` for an explicitly authored file component, or `Target` such as `[INSTALLFOLDER]MyApp.exe` when the executable comes from harvested payload.

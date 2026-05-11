@@ -24,6 +24,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
     private static readonly XNamespace UiNamespace = "http://wixtoolset.org/schemas/v4/wxs/ui";
     private const string RequiredInputDialogIdPrefix = "PowerForgeRequiredInputDlg";
     private const int MaxRequiredInputLabelsInMessage = 4;
+    private static readonly TimeSpan ValidationPatternMatchTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Emits a WiX v4 source document.
@@ -846,6 +847,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             RequireWixIdentifier(input.Id, $"input '{input.Id}' ID");
             Require(input.PropertyName, nameof(input.PropertyName));
             RequirePublicMsiProperty(input.PropertyName, $"input '{input.Id}' property");
+            ValidateInputValidationMetadata(input);
             if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
                 throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
             if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
@@ -943,6 +945,100 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                         $"Registry value component '{registryValue.Id}' requires Value or ValueProperty.");
                 }
             }
+        }
+    }
+
+    private static void ValidateInputValidationMetadata(PowerForgeInstallerInput input)
+    {
+        var hasValidationRule = input.MinLength.HasValue ||
+                                input.MaxLength.HasValue ||
+                                input.ValidationPattern is not null;
+        var hasValidationMetadata = hasValidationRule || !string.IsNullOrWhiteSpace(input.ValidationMessage);
+        if (hasValidationMetadata && !SupportsInputValidationMetadata(input.Kind))
+        {
+            throw new InvalidOperationException(
+                $"Input '{input.Id}' validation metadata can only be used with text, password, path, or license-key inputs.");
+        }
+
+        if (input.MinLength is < 0)
+            throw new InvalidOperationException($"Input '{input.Id}' MinLength must be greater than or equal to 0.");
+        if (input.MaxLength is < 0)
+            throw new InvalidOperationException($"Input '{input.Id}' MaxLength must be greater than or equal to 0.");
+        if (input.MinLength.HasValue &&
+            input.MaxLength.HasValue &&
+            input.MinLength.Value > input.MaxLength.Value)
+        {
+            throw new InvalidOperationException($"Input '{input.Id}' MinLength cannot be greater than MaxLength.");
+        }
+
+        Regex? validationRegex = null;
+        if (input.ValidationPattern is not null)
+        {
+            if (string.IsNullOrWhiteSpace(input.ValidationPattern))
+            {
+                throw new InvalidOperationException($"Input '{input.Id}' ValidationPattern cannot be empty.");
+            }
+
+            try
+            {
+                validationRegex = new Regex(
+                    input.ValidationPattern,
+                    RegexOptions.CultureInvariant,
+                    ValidationPatternMatchTimeout);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Input '{input.Id}' ValidationPattern must be a valid .NET regular expression.",
+                    ex);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.ValidationMessage) && !hasValidationRule)
+        {
+            throw new InvalidOperationException(
+                $"Input '{input.Id}' ValidationMessage requires MinLength, MaxLength, or ValidationPattern.");
+        }
+
+        if (input.DefaultValue is not null)
+            ValidateInputDefaultValue(input, validationRegex);
+    }
+
+    private static bool SupportsInputValidationMetadata(PowerForgeInstallerInputKind kind)
+        => kind == PowerForgeInstallerInputKind.Text ||
+           kind == PowerForgeInstallerInputKind.Password ||
+           kind == PowerForgeInstallerInputKind.FilePath ||
+           kind == PowerForgeInstallerInputKind.FolderPath ||
+           kind == PowerForgeInstallerInputKind.LicenseKey;
+
+    private static void ValidateInputDefaultValue(PowerForgeInstallerInput input, Regex? validationRegex)
+    {
+        var defaultValue = input.DefaultValue!;
+        if (input.MinLength.HasValue && defaultValue.Length < input.MinLength.Value)
+        {
+            throw new InvalidOperationException(
+                $"Input '{input.Id}' default value is shorter than MinLength.");
+        }
+
+        if (input.MaxLength.HasValue && defaultValue.Length > input.MaxLength.Value)
+        {
+            throw new InvalidOperationException(
+                $"Input '{input.Id}' default value is longer than MaxLength.");
+        }
+
+        try
+        {
+            if (validationRegex is not null && !validationRegex.IsMatch(defaultValue))
+            {
+                throw new InvalidOperationException(
+                    $"Input '{input.Id}' default value does not match ValidationPattern.");
+            }
+        }
+        catch (RegexMatchTimeoutException ex)
+        {
+            throw new InvalidOperationException(
+                $"Input '{input.Id}' default value validation timed out while evaluating ValidationPattern.",
+                ex);
         }
     }
 
