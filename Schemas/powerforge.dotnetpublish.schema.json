@@ -124,6 +124,240 @@
         "OnMissingFile": { "$ref": "#/$defs/DotNetPublishPolicyMode" }
       }
     },
+    "PowerForgeInstallerScope": {
+      "type": "string",
+      "enum": ["PerMachine", "PerUser"]
+    },
+    "PowerForgeInstallerInputKind": {
+      "type": "string",
+      "enum": ["Text", "Password", "FilePath", "FolderPath", "Checkbox", "RadioGroup", "LicenseKey"]
+    },
+    "PowerForgeInstallerProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Manufacturer": { "type": "string", "minLength": 1 },
+        "Version": { "type": "string", "minLength": 1 },
+        "UpgradeCode": { "type": "string", "minLength": 1 },
+        "Scope": { "$ref": "#/$defs/PowerForgeInstallerScope" },
+        "DowngradeErrorMessage": { "type": "string" }
+      },
+      "required": ["Name", "UpgradeCode"]
+    },
+    "PowerForgeInstallerInputChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Value": { "type": "string" },
+        "Text": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Value", "Text"]
+    },
+    "PowerForgeInstallerInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "PropertyName": { "type": "string", "minLength": 1 },
+        "Label": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "Kind": { "$ref": "#/$defs/PowerForgeInstallerInputKind" },
+        "DefaultValue": { "type": ["string", "null"] },
+        "Secure": { "type": "boolean" },
+        "Hidden": { "type": "boolean" },
+        "Choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }
+        }
+      },
+      "required": ["Id", "PropertyName", "Label"]
+    },
+    "PowerForgeInstallerDialog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Title": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "InputIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "required": ["Id", "Title"]
+    },
+    "PowerForgeInstallerDirectorySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "Name"]
+    },
+    "PowerForgeInstallerDirectoryTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "StandardDirectoryId": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDirectorySegment" }
+        }
+      },
+      "required": ["Segments"],
+      "oneOf": [
+        { "required": ["StandardDirectoryId"] },
+        { "required": ["DirectoryRefId"] }
+      ]
+    },
+    "PowerForgeInstallerFileComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "File" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "FileId": { "type": "string", "minLength": 1 },
+        "Source": { "type": "string", "minLength": 1 },
+        "Name": { "type": ["string", "null"] },
+        "KeyPath": { "type": "boolean" },
+        "Permanent": { "type": "boolean" },
+        "NeverOverwrite": { "type": "boolean" }
+      },
+      "required": ["Type", "Id", "FileId", "Source"]
+    },
+    "PowerForgeInstallerFolderComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Folder" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Permanent": { "type": "boolean" }
+      },
+      "required": ["Type", "Id"]
+    },
+    "PowerForgeInstallerRemoveFolderComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "RemoveFolder" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Condition": { "type": "string" },
+        "PropertyName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Type", "Id", "PropertyName"]
+    },
+    "PowerForgeInstallerServiceComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Service" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "FileId": { "type": "string", "minLength": 1 },
+        "Source": { "type": "string", "minLength": 1 },
+        "ServiceName": { "type": "string", "minLength": 1 },
+        "DisplayName": { "type": "string", "minLength": 1 },
+        "Description": { "type": ["string", "null"] },
+        "Arguments": { "type": ["string", "null"] },
+        "Account": { "type": "string" },
+        "Start": { "type": "string" },
+        "DelayedAutoStart": { "type": "boolean" }
+      },
+      "required": ["Type", "Id", "FileId", "Source", "ServiceName", "DisplayName"]
+    },
+    "PowerForgeInstallerShortcutComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Shortcut" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "ShortcutId": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "TargetFileId": { "type": ["string", "null"], "minLength": 1 },
+        "Target": { "type": ["string", "null"], "minLength": 1 },
+        "WorkingDirectoryId": { "type": "string", "minLength": 1 },
+        "RegistryKey": { "type": "string", "minLength": 1 },
+        "RegistryValueName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Type", "Id", "ShortcutId", "Name"],
+      "anyOf": [
+        { "required": ["TargetFileId"] },
+        { "required": ["Target"] }
+      ]
+    },
+    "PowerForgeInstallerRegistryValueComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "RegistryValue" },
+        "Id": { "type": "string", "minLength": 1 },
+        "DirectoryRefId": { "type": "string", "minLength": 1 },
+        "Guid": { "type": "string", "minLength": 1 },
+        "Root": { "type": "string", "minLength": 1 },
+        "Key": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "Value": { "type": ["string", "null"] },
+        "ValueProperty": { "type": ["string", "null"], "minLength": 1 },
+        "ValueType": { "type": "string", "minLength": 1 },
+        "KeyPath": { "type": "boolean" }
+      },
+      "required": ["Type", "Id", "Key", "Name"],
+      "anyOf": [
+        { "required": ["Value"] },
+        { "required": ["ValueProperty"] }
+      ]
+    },
+    "PowerForgeInstallerComponent": {
+      "oneOf": [
+        { "$ref": "#/$defs/PowerForgeInstallerFileComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerFolderComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerRemoveFolderComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerServiceComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerRegistryValueComponent" },
+        { "$ref": "#/$defs/PowerForgeInstallerShortcutComponent" }
+      ]
+    },
+    "PowerForgeInstallerDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Product": { "$ref": "#/$defs/PowerForgeInstallerProduct" },
+        "InstallDirectoryId": { "type": "string", "minLength": 1 },
+        "CompanyFolderName": { "type": "string", "minLength": 1 },
+        "UseCompanyFolder": { "type": "boolean" },
+        "InstallDirectoryName": { "type": "string", "minLength": 1 },
+        "PayloadComponentGroupId": { "type": ["string", "null"] },
+        "Inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerInput" }
+        },
+        "Dialogs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDialog" }
+        },
+        "Directories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerDirectoryTree" }
+        },
+        "Components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PowerForgeInstallerComponent" }
+        }
+      },
+      "required": ["Product"]
+    },
     "DotNetPublishBenchmarkMetric": {
       "type": "object",
       "additionalProperties": false,
@@ -362,6 +596,7 @@
         "ManifestPath": { "type": ["string", "null"] },
         "InstallerProjectId": { "type": ["string", "null"] },
         "InstallerProjectPath": { "type": ["string", "null"] },
+        "Authoring": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerDefinition" }, { "type": "null" }] },
         "Harvest": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiHarvestMode" }, { "type": "null" }] },
         "HarvestPath": { "type": ["string", "null"] },
         "HarvestDirectoryRefId": { "type": ["string", "null"] },

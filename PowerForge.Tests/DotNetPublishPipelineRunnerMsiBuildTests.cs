@@ -84,6 +84,42 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void Plan_AddsMsiBuildStep_WhenInstallerAuthoringConfigured()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+
+            var spec = CreateBaseSpec(root, app);
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Harvest = DotNetPublishMsiHarvestMode.Auto,
+                    Authoring = CreateSimpleAuthoring("ProductFiles")
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var installerPlan = Assert.Single(plan.Installers);
+            Assert.NotNull(installerPlan.Authoring);
+            Assert.Equal("ProductFiles", installerPlan.HarvestComponentGroupId);
+
+            var prepareStep = Assert.Single(plan.Steps, s => s.Kind == DotNetPublishStepKind.MsiPrepare);
+            Assert.Equal("ProductFiles", prepareStep.HarvestComponentGroupId);
+            var buildStep = Assert.Single(plan.Steps, s => s.Kind == DotNetPublishStepKind.MsiBuild);
+            Assert.Null(buildStep.InstallerProjectPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_AddsMsiSignStep_WhenInstallerSignEnabled()
     {
         var root = CreateTempRoot();
@@ -597,6 +633,75 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
+    [Fact]
+    public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var staging = Path.Combine(root, "Artifacts", "payload");
+            Directory.CreateDirectory(staging);
+            File.WriteAllText(Path.Combine(staging, "App.exe"), "payload");
+            var harvestPath = Path.Combine(root, "Artifacts", "harvest.wxs");
+            Directory.CreateDirectory(Path.GetDirectoryName(harvestPath)!);
+            File.WriteAllText(
+                harvestPath,
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\"><Fragment><ComponentGroup Id=\"ProductFiles\" /></Fragment></Wix>");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Debug",
+                Installers = new[]
+                {
+                    new DotNetPublishInstallerPlan
+                    {
+                        Id = "app.msi",
+                        PrepareFromTarget = "app",
+                        Authoring = CreateSimpleAuthoring("ProductFiles")
+                    }
+                }
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+            var prepare = new DotNetPublishMsiPrepareResult
+            {
+                InstallerId = "app.msi",
+                Target = "app",
+                Framework = "net10.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                StagingDir = staging,
+                ManifestPath = Path.Combine(root, "Artifacts", "prepare.manifest.json"),
+                HarvestPath = harvestPath,
+                HarvestDirectoryRefId = "INSTALLFOLDER",
+                HarvestComponentGroupId = "ProductFiles"
+            };
+
+            var projectPath = InvokeResolveOrPrepareInstallerProjectPath(plan, plan.Installers[0], step, prepare, "2.3.4");
+
+            Assert.True(File.Exists(projectPath));
+            var sourcePath = Path.Combine(Path.GetDirectoryName(projectPath)!, "Product.wxs");
+            Assert.True(File.Exists(sourcePath));
+            Assert.Contains("2.3.4", File.ReadAllText(sourcePath), StringComparison.Ordinal);
+            var projectXml = File.ReadAllText(projectPath);
+            Assert.Contains("Product.wxs", projectXml, StringComparison.Ordinal);
+            Assert.Contains(harvestPath, projectXml, StringComparison.Ordinal);
+            Assert.Contains("PayloadDir=", projectXml, StringComparison.Ordinal);
+            Assert.Contains(staging, projectXml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static (string? Version, string? PropertyName, int? Patch, string? StatePath) InvokeResolveMsiVersion(
         DotNetPublishPlan plan,
         DotNetPublishInstallerPlan installer,
@@ -636,6 +741,22 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var clientId = t.GetProperty("ClientId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(raw) as string;
 
         return (path, propertyName, clientId);
+    }
+
+    private static string InvokeResolveOrPrepareInstallerProjectPath(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare,
+        string productVersion)
+    {
+        var runner = new DotNetPublishPipelineRunner(new NullLogger());
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("ResolveOrPrepareInstallerProjectPath", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var raw = method!.Invoke(runner, new object?[] { plan, step, installer, prepare, productVersion });
+        Assert.NotNull(raw);
+        return Assert.IsType<string>(raw);
     }
 
     private static int DaysSince20000101(DateTime utcDate)
@@ -678,6 +799,23 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
         return fullPath;
+    }
+
+    private static PowerForgeInstallerDefinition CreateSimpleAuthoring(string payloadComponentGroupId)
+    {
+        return new PowerForgeInstallerDefinition
+        {
+            Product =
+            {
+                Name = "App",
+                Manufacturer = "Evotec",
+                Version = "1.0.0",
+                UpgradeCode = "{13f69244-93ee-4df9-baf6-ec7afc7ebd32}"
+            },
+            CompanyFolderName = "Evotec",
+            InstallDirectoryName = "App",
+            PayloadComponentGroupId = payloadComponentGroupId
+        };
     }
 
     private static string CreateTempRoot()

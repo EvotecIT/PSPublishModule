@@ -166,6 +166,16 @@ Depending on config, the run can emit:
 - Keep `PrepareFromTarget` set as well; it remains the source combination that installer filters validate against.
 - `HarvestExcludePatterns[]` accepts relative wildcard paths such as `**/*.pdb` and basename globs such as `createdump.exe`; basename globs apply anywhere under the harvested payload.
 
+## Generated WiX MSI Authoring
+
+- Use `Installers[].Authoring` when the installer should be generated from the DotNet publish config instead of a hand-authored `*.wixproj`.
+- Leave `InstallerProjectPath` and `InstallerProjectId` empty; `msi.build` writes `Product.wxs` plus a WiX SDK project under `Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/generated`.
+- Use `Harvest: Auto` with `Authoring.PayloadComponentGroupId` to include the prepared publish payload in the generated MSI feature.
+- Component entries require a `Type` discriminator: `File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, or `Shortcut`.
+- Registry value components can write a literal `Value`, or write an installer property by setting `ValueProperty`, for example persisting `LICENSE_KEY` after the UI collects it.
+- Shortcut components can use `TargetFileId` for an explicitly authored file component, or `Target` such as `[INSTALLFOLDER]MyApp.exe` when the executable comes from harvested payload.
+- WiX still does the compile. The generated project includes `WixToolset.UI.wixext` and `WixToolset.Util.wixext` only when the authoring model needs those extensions.
+
 ## Microsoft Store / MSIX Packaging
 
 - Use `StorePackages[]` when the repo needs first-class Store/MSIX outputs in the same publish workflow as zip, bundle, or MSI artifacts.

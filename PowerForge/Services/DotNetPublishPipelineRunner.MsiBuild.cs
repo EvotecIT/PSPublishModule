@@ -45,14 +45,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 $"installer='{installerId}', target='{target}', framework='{framework}', runtime='{runtime}', style='{style.Value}'.");
         }
 
-        var installerProjectPath = ResolveInstallerProjectPathFromStepOrPlan(plan, step, installerId);
-        if (!File.Exists(installerProjectPath))
-            throw new FileNotFoundException($"Installer project path not found: {installerProjectPath}", installerProjectPath);
-
         var installerConfig = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
         var versionResolution = ResolveMsiVersion(plan, installerConfig, step);
         var licenseResolution = ResolveInstallerClientLicense(plan, installerConfig, step);
+
+        var installerProjectPath = ResolveOrPrepareInstallerProjectPath(
+            plan,
+            step,
+            installerConfig,
+            prepare,
+            versionResolution.Version);
+        if (!File.Exists(installerProjectPath))
+            throw new FileNotFoundException($"Installer project path not found: {installerProjectPath}", installerProjectPath);
 
         var projectDir = Path.GetDirectoryName(installerProjectPath)!;
         var before = SnapshotMsiOutputs(projectDir);
@@ -141,19 +146,92 @@ public sealed partial class DotNetPublishPipelineRunner
         };
     }
 
-    private static string ResolveInstallerProjectPathFromStepOrPlan(
+    private string ResolveOrPrepareInstallerProjectPath(
         DotNetPublishPlan plan,
         DotNetPublishStep step,
-        string installerId)
+        DotNetPublishInstallerPlan? installer,
+        DotNetPublishMsiPrepareResult prepare,
+        string? productVersion)
     {
         if (!string.IsNullOrWhiteSpace(step.InstallerProjectPath))
             return Path.GetFullPath(step.InstallerProjectPath!);
 
-        var installer = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
-            .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
-        if (installer is null || string.IsNullOrWhiteSpace(installer.InstallerProjectPath))
+        var installerId = (step.InstallerId ?? installer?.Id ?? string.Empty).Trim();
+        var configuredProjectPath = installer?.InstallerProjectPath;
+        if (!string.IsNullOrWhiteSpace(configuredProjectPath))
+            return Path.GetFullPath(configuredProjectPath!);
+
+        if (installer?.Authoring is null)
             throw new InvalidOperationException($"Installer project path not configured for installer '{installerId}'.");
-        return Path.GetFullPath(installer.InstallerProjectPath!);
+
+        var definition = CloneInstallerDefinition(installer.Authoring)!;
+        if (!string.IsNullOrWhiteSpace(productVersion))
+            definition.Product.Version = productVersion!;
+        if (string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId) &&
+            !string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
+        {
+            definition.PayloadComponentGroupId = prepare.HarvestComponentGroupId;
+        }
+
+        var generatedDir = ResolveGeneratedInstallerProjectDirectory(plan, installerId, step);
+        var request = new PowerForgeWixInstallerCompileRequest
+        {
+            WorkingDirectory = generatedDir,
+            SourceFileName = "Product.wxs",
+            ProjectFileName = SanitizeWixIdentifier(installerId, "Installer") + ".wixproj",
+            Configuration = plan.Configuration,
+            NoRestore = plan.Restore
+        };
+        AddGeneratedInstallerDefineConstants(request, prepare);
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
+            request.AdditionalSourceFiles.Add(prepare.HarvestPath!);
+
+        var workspace = new PowerForgeWixInstallerCompiler()
+            .PrepareWorkspace(definition, request);
+        _logger.Info($"Generated WiX installer project for '{installerId}' -> {workspace.ProjectPath}");
+        return workspace.ProjectPath;
+    }
+
+    private static string ResolveGeneratedInstallerProjectDirectory(
+        DotNetPublishPlan plan,
+        string installerId,
+        DotNetPublishStep step)
+    {
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installerId,
+            ["target"] = step.TargetName ?? string.Empty,
+            ["rid"] = step.Runtime ?? string.Empty,
+            ["framework"] = step.Framework ?? string.Empty,
+            ["style"] = step.Style?.ToString() ?? string.Empty,
+            ["configuration"] = plan.Configuration ?? "Release"
+        };
+        var relativePath = ApplyTemplate(
+            "Artifacts/DotNetPublish/Msi/{installer}/{target}/{rid}/{framework}/{style}/generated",
+            tokens);
+        var path = ResolvePath(plan.ProjectRoot, relativePath);
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' generated WiX project path");
+        return path;
+    }
+
+    private static void AddGeneratedInstallerDefineConstants(
+        PowerForgeWixInstallerCompileRequest request,
+        DotNetPublishMsiPrepareResult prepare)
+    {
+        request.DefineConstants["PayloadDir"] = prepare.StagingDir;
+        request.DefineConstants["PowerForgeMsiPayloadDir"] = prepare.StagingDir;
+        request.DefineConstants["PowerForgeMsiPrepareManifest"] = prepare.ManifestPath;
+        request.DefineConstants["PowerForgeMsiSourceTarget"] = prepare.Target;
+        request.DefineConstants["PowerForgeMsiSourceFramework"] = prepare.Framework;
+        request.DefineConstants["PowerForgeMsiSourceRuntime"] = prepare.Runtime;
+        request.DefineConstants["PowerForgeMsiSourceStyle"] = prepare.Style.ToString();
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
+            request.DefineConstants["PowerForgeMsiHarvestPath"] = prepare.HarvestPath!;
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestDirectoryRefId))
+            request.DefineConstants["PowerForgeMsiHarvestDirectoryRefId"] = prepare.HarvestDirectoryRefId!;
+        if (!string.IsNullOrWhiteSpace(prepare.HarvestComponentGroupId))
+            request.DefineConstants["PowerForgeMsiHarvestComponentGroupId"] = prepare.HarvestComponentGroupId!;
     }
 
     internal static Dictionary<string, string> BuildInstallerMsBuildProperties(

@@ -178,6 +178,12 @@ public sealed class DotNetPublishInstaller
     public string? InstallerProjectPath { get; set; }
 
     /// <summary>
+    /// Optional PowerForge-owned installer authoring model used to generate a WiX SDK project before <c>msi.build</c>.
+    /// When set, hand-authored <see cref="InstallerProjectPath"/> / <see cref="InstallerProjectId"/> are not required.
+    /// </summary>
+    public PowerForgeInstallerDefinition? Authoring { get; set; }
+
+    /// <summary>
     /// Harvest mode for payload tree processing during <c>msi.prepare</c>.
     /// </summary>
     public DotNetPublishMsiHarvestMode Harvest { get; set; } = DotNetPublishMsiHarvestMode.None;
