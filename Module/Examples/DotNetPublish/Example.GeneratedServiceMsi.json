@@ -1,0 +1,177 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true,
+    "Runtimes": [
+      "win-x64"
+    ]
+  },
+  "Targets": [
+    {
+      "Name": "My.Service",
+      "ProjectPath": "src/My.Service/My.Service.csproj",
+      "Kind": "Service",
+      "Publish": {
+        "Framework": "net10.0-windows",
+        "Runtimes": [
+          "win-x64"
+        ],
+        "Style": "PortableCompat",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "Slim": true,
+        "KeepSymbols": false,
+        "KeepDocs": false,
+        "PruneReferences": true,
+        "Zip": true
+      }
+    }
+  ],
+  "Installers": [
+    {
+      "Id": "my.service.generated.msi",
+      "PrepareFromTarget": "My.Service",
+      "Harvest": "Auto",
+      "Authoring": {
+        "Product": {
+          "Name": "My Service",
+          "Manufacturer": "Evotec",
+          "Version": "1.0.0",
+          "UpgradeCode": "{00000000-0000-0000-0000-000000000000}",
+          "Scope": "PerMachine"
+        },
+        "CompanyFolderName": "Evotec",
+        "InstallDirectoryName": "My Service",
+        "PayloadComponentGroupId": "ProductFiles",
+        "Inputs": [
+          {
+            "Id": "LicenseKey",
+            "PropertyName": "LICENSE_KEY",
+            "Label": "License key",
+            "Kind": "LicenseKey",
+            "Secure": true,
+            "Hidden": true
+          }
+        ],
+        "Dialogs": [
+          {
+            "Id": "ConfigurationDlg",
+            "Title": "Configuration",
+            "Description": "Enter installer configuration.",
+            "InputIds": [
+              "LicenseKey"
+            ]
+          }
+        ],
+        "Directories": [
+          {
+            "StandardDirectoryId": "CommonAppDataFolder",
+            "Segments": [
+              {
+                "Id": "ProgramDataCompany",
+                "Name": "Evotec"
+              },
+              {
+                "Id": "ProgramDataService",
+                "Name": "My Service"
+              }
+            ]
+          },
+          {
+            "StandardDirectoryId": "ProgramMenuFolder",
+            "Segments": [
+              {
+                "Id": "ApplicationProgramsFolder",
+                "Name": "My Service"
+              }
+            ]
+          }
+        ],
+        "Components": [
+          {
+            "Type": "Folder",
+            "Id": "ProgramDataFolder",
+            "DirectoryRefId": "ProgramDataService",
+            "Guid": "*",
+            "Permanent": true
+          },
+          {
+            "Type": "File",
+            "Id": "ProgramDataConfig",
+            "DirectoryRefId": "ProgramDataService",
+            "Guid": "*",
+            "FileId": "ServiceConfig",
+            "Source": "$(var.PayloadDir)\\appsettings.example.json",
+            "Name": "appsettings.json",
+            "Permanent": true,
+            "NeverOverwrite": true
+          },
+          {
+            "Type": "Service",
+            "Id": "ServiceComponent",
+            "FileId": "ServiceExe",
+            "Source": "$(var.PayloadDir)\\My.Service.exe",
+            "ServiceName": "My.Service",
+            "DisplayName": "My Service",
+            "Description": "My Service background worker",
+            "Arguments": "--config \"[ProgramDataService]appsettings.json\"",
+            "DelayedAutoStart": true
+          },
+          {
+            "Type": "Shortcut",
+            "Id": "StartMenuShortcutComponent",
+            "DirectoryRefId": "ApplicationProgramsFolder",
+            "ShortcutId": "StartMenuShortcut",
+            "Name": "My Service",
+            "Target": "[INSTALLFOLDER]My.Service.exe",
+            "RegistryKey": "Software\\Evotec\\My Service"
+          },
+          {
+            "Type": "RegistryValue",
+            "Id": "LicenseRegistry",
+            "Key": "Software\\Evotec\\My Service",
+            "Name": "LicenseKey",
+            "ValueProperty": "LICENSE_KEY",
+            "ValueType": "string"
+          },
+          {
+            "Type": "RemoveFolder",
+            "Id": "RemoveProgramData",
+            "DirectoryRefId": "ProgramDataService",
+            "Guid": "*",
+            "PropertyName": "ProgramDataService",
+            "Condition": "REMOVE_DATA=1"
+          }
+        ]
+      },
+      "Versioning": {
+        "Enabled": true,
+        "Major": 1,
+        "Minor": 0,
+        "FloorDateUtc": "2026-01-01",
+        "Monotonic": true,
+        "StatePath": "Artifacts/DotNetPublish/InstallerState/{installer}.version.json",
+        "PropertyName": "ProductVersion",
+        "PatchCap": 65535
+      },
+      "Sign": {
+        "Enabled": true,
+        "OnMissingTool": "Warn",
+        "OnSignFailure": "Fail",
+        "TimestampUrl": "http://timestamp.digicert.com"
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}

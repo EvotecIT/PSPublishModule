@@ -44,6 +44,12 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
     public string? InstallerProjectPath { get; set; }
 
     /// <summary>
+    /// Optional PowerForge-owned installer authoring model used to generate a WiX SDK project.
+    /// </summary>
+    [Parameter]
+    public PowerForgeInstallerDefinition? Authoring { get; set; }
+
+    /// <summary>
     /// Optional staging path template for MSI payload.
     /// </summary>
     [Parameter]
@@ -114,6 +120,7 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
             PrepareFromTarget = PrepareFromTarget.Trim(),
             InstallerProjectId = NormalizeNullable(InstallerProjectId),
             InstallerProjectPath = NormalizeNullable(InstallerProjectPath),
+            Authoring = Authoring,
             StagingPath = NormalizeNullable(StagingPath),
             ManifestPath = NormalizeNullable(ManifestPath),
             Harvest = Harvest,

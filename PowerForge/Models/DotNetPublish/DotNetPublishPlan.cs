@@ -140,6 +140,9 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Optional resolved installer project path (for example wixproj path).</summary>
     public string? InstallerProjectPath { get; set; }
 
+    /// <summary>Optional PowerForge-owned installer authoring model used to generate a WiX SDK project.</summary>
+    public PowerForgeInstallerDefinition? Authoring { get; set; }
+
     /// <summary>Harvest mode for payload tree processing.</summary>
     public DotNetPublishMsiHarvestMode Harvest { get; set; } = DotNetPublishMsiHarvestMode.None;
 

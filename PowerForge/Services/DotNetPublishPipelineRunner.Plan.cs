@@ -710,6 +710,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ManifestPath = i.ManifestPath,
                 InstallerProjectId = i.InstallerProjectId,
                 InstallerProjectPath = i.InstallerProjectPath,
+                Authoring = CloneInstallerDefinition(i.Authoring),
                 Harvest = i.Harvest,
                 HarvestPath = i.HarvestPath,
                 HarvestDirectoryRefId = i.HarvestDirectoryRefId,
@@ -723,6 +724,164 @@ public sealed partial class DotNetPublishPipelineRunner
                 ClientLicense = CloneMsiClientLicenseOptions(i.ClientLicense)
             })
             .ToArray();
+    }
+
+    private static PowerForgeInstallerDefinition? CloneInstallerDefinition(PowerForgeInstallerDefinition? definition)
+    {
+        if (definition is null)
+            return null;
+
+        var clone = new PowerForgeInstallerDefinition
+        {
+            Product = new PowerForgeInstallerProduct
+            {
+                Name = definition.Product.Name,
+                Manufacturer = definition.Product.Manufacturer,
+                Version = definition.Product.Version,
+                UpgradeCode = definition.Product.UpgradeCode,
+                Scope = definition.Product.Scope,
+                DowngradeErrorMessage = definition.Product.DowngradeErrorMessage
+            },
+            InstallDirectoryId = definition.InstallDirectoryId,
+            CompanyFolderName = definition.CompanyFolderName,
+            UseCompanyFolder = definition.UseCompanyFolder,
+            InstallDirectoryName = definition.InstallDirectoryName,
+            PayloadComponentGroupId = definition.PayloadComponentGroupId
+        };
+
+        foreach (var input in definition.Inputs)
+        {
+            if (input is null) continue;
+            var inputClone = new PowerForgeInstallerInput
+            {
+                Id = input.Id,
+                PropertyName = input.PropertyName,
+                Label = input.Label,
+                Description = input.Description,
+                Kind = input.Kind,
+                DefaultValue = input.DefaultValue,
+                Secure = input.Secure,
+                Hidden = input.Hidden
+            };
+            foreach (var choice in input.Choices)
+            {
+                if (choice is null) continue;
+                inputClone.Choices.Add(new PowerForgeInstallerInputChoice
+                {
+                    Value = choice.Value,
+                    Text = choice.Text
+                });
+            }
+            clone.Inputs.Add(inputClone);
+        }
+
+        foreach (var dialog in definition.Dialogs)
+        {
+            if (dialog is null) continue;
+            var dialogClone = new PowerForgeInstallerDialog
+            {
+                Id = dialog.Id,
+                Title = dialog.Title,
+                Description = dialog.Description
+            };
+            dialogClone.InputIds.AddRange(dialog.InputIds);
+            clone.Dialogs.Add(dialogClone);
+        }
+
+        foreach (var tree in definition.Directories)
+        {
+            if (tree is null) continue;
+            var treeClone = new PowerForgeInstallerDirectoryTree
+            {
+                StandardDirectoryId = tree.StandardDirectoryId,
+                DirectoryRefId = tree.DirectoryRefId
+            };
+            foreach (var segment in tree.Segments)
+            {
+                if (segment is null) continue;
+                treeClone.Segments.Add(new PowerForgeInstallerDirectorySegment
+                {
+                    Id = segment.Id,
+                    Name = segment.Name
+                });
+            }
+            clone.Directories.Add(treeClone);
+        }
+
+        foreach (var component in definition.Components)
+        {
+            var componentClone = CloneInstallerComponent(component);
+            if (componentClone is not null)
+                clone.Components.Add(componentClone);
+        }
+
+        return clone;
+    }
+
+    private static PowerForgeInstallerComponent? CloneInstallerComponent(PowerForgeInstallerComponent? component)
+    {
+        if (component is null)
+            return null;
+
+        PowerForgeInstallerComponent clone = component switch
+        {
+            PowerForgeInstallerFileComponent file => new PowerForgeInstallerFileComponent
+            {
+                FileId = file.FileId,
+                Source = file.Source,
+                Name = file.Name,
+                KeyPath = file.KeyPath,
+                Permanent = file.Permanent,
+                NeverOverwrite = file.NeverOverwrite
+            },
+            PowerForgeInstallerFolderComponent folder => new PowerForgeInstallerFolderComponent
+            {
+                Permanent = folder.Permanent
+            },
+            PowerForgeInstallerRemoveFolderComponent removeFolder => new PowerForgeInstallerRemoveFolderComponent
+            {
+                Condition = removeFolder.Condition,
+                PropertyName = removeFolder.PropertyName
+            },
+            PowerForgeInstallerServiceComponent service => new PowerForgeInstallerServiceComponent
+            {
+                FileId = service.FileId,
+                Source = service.Source,
+                ServiceName = service.ServiceName,
+                DisplayName = service.DisplayName,
+                Description = service.Description,
+                Arguments = service.Arguments,
+                Account = service.Account,
+                Start = service.Start,
+                DelayedAutoStart = service.DelayedAutoStart
+            },
+            PowerForgeInstallerRegistryValueComponent registryValue => new PowerForgeInstallerRegistryValueComponent
+            {
+                Root = registryValue.Root,
+                Key = registryValue.Key,
+                Name = registryValue.Name,
+                Value = registryValue.Value,
+                ValueProperty = registryValue.ValueProperty,
+                ValueType = registryValue.ValueType,
+                KeyPath = registryValue.KeyPath
+            },
+            PowerForgeInstallerShortcutComponent shortcut => new PowerForgeInstallerShortcutComponent
+            {
+                ShortcutId = shortcut.ShortcutId,
+                Name = shortcut.Name,
+                TargetFileId = shortcut.TargetFileId,
+                Target = shortcut.Target,
+                WorkingDirectoryId = shortcut.WorkingDirectoryId,
+                RegistryKey = shortcut.RegistryKey,
+                RegistryValueName = shortcut.RegistryValueName
+            },
+            _ => throw new NotSupportedException($"Unsupported installer component type '{component.GetType().FullName}'.")
+        };
+
+        clone.Id = component.Id;
+        clone.DirectoryRefId = component.DirectoryRefId;
+        clone.Guid = component.Guid;
+        return clone;
     }
 
     private static DotNetPublishStorePackage[] CloneStorePackages(DotNetPublishStorePackage[] storePackages)
@@ -1565,6 +1724,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     $"{BuildInstallerFilterSummary(runtimes, frameworks, styles)}");
             }
 
+            var authoring = CloneInstallerDefinition(installer.Authoring);
+            var harvestComponentGroupId = string.IsNullOrWhiteSpace(installer.HarvestComponentGroupId)
+                && installer.Harvest == DotNetPublishMsiHarvestMode.Auto
+                && !string.IsNullOrWhiteSpace(authoring?.PayloadComponentGroupId)
+                    ? authoring!.PayloadComponentGroupId
+                    : installer.HarvestComponentGroupId;
+
             plans.Add(new DotNetPublishInstallerPlan
             {
                 Id = id,
@@ -1577,10 +1743,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 ManifestPath = installer.ManifestPath,
                 InstallerProjectId = installer.InstallerProjectId,
                 InstallerProjectPath = ResolveInstallerProjectPath(id, installer, projectCatalog, projectRoot),
+                Authoring = authoring,
                 Harvest = installer.Harvest,
                 HarvestPath = installer.HarvestPath,
                 HarvestDirectoryRefId = installer.HarvestDirectoryRefId,
-                HarvestComponentGroupId = installer.HarvestComponentGroupId,
+                HarvestComponentGroupId = harvestComponentGroupId,
                 HarvestExcludePatterns = NormalizeStrings(installer.HarvestExcludePatterns),
                 Versioning = NormalizeInstallerVersioning(id, installer.Versioning),
                 MsBuildProperties = CloneDictionary(installer.MsBuildProperties),
@@ -1906,11 +2073,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 string.IsNullOrWhiteSpace(installer.HarvestDirectoryRefId) ? "INSTALLFOLDER" : installer.HarvestDirectoryRefId!,
                 "INSTALLFOLDER")
             : null;
+        var defaultHarvestComponentGroupId = !string.IsNullOrWhiteSpace(installer.Authoring?.PayloadComponentGroupId)
+            ? installer.Authoring!.PayloadComponentGroupId!
+            : "Harvest_{installer}_{target}_{framework}_{rid}_{style}";
         var harvestComponentGroupId = installer.Harvest == DotNetPublishMsiHarvestMode.Auto
             ? SanitizeWixIdentifier(
                 ApplyTemplate(
                     string.IsNullOrWhiteSpace(installer.HarvestComponentGroupId)
-                        ? "Harvest_{installer}_{target}_{framework}_{rid}_{style}"
+                        ? defaultHarvestComponentGroupId
                         : installer.HarvestComponentGroupId!,
                     tokens),
                 "Harvest")
@@ -1993,7 +2163,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string targetName,
         DotNetPublishTargetCombination combo)
     {
-        if (string.IsNullOrWhiteSpace(installer.InstallerProjectPath))
+        if (string.IsNullOrWhiteSpace(installer.InstallerProjectPath) && installer.Authoring is null)
             return null;
 
         return new DotNetPublishStep
