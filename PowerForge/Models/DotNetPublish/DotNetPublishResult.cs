@@ -106,6 +106,12 @@ public sealed class DotNetPublishArtefactResult
     /// <summary>Optional bundle identifier for bundle artifacts.</summary>
     public string? BundleId { get; set; }
 
+    /// <summary>Optional installer identifier for installer artifacts.</summary>
+    public string? InstallerId { get; set; }
+
+    /// <summary>Optional Store package identifier for Store/MSIX artifacts.</summary>
+    public string? StorePackageId { get; set; }
+
     /// <summary>Target kind.</summary>
     public DotNetPublishTargetKind Kind { get; set; } = DotNetPublishTargetKind.Unknown;
 
@@ -126,6 +132,9 @@ public sealed class DotNetPublishArtefactResult
 
     /// <summary>Optional zip file path.</summary>
     public string? ZipPath { get; set; }
+
+    /// <summary>File artifacts represented by this manifest entry.</summary>
+    public string[] OutputFiles { get; set; } = Array.Empty<string>();
 
     /// <summary>Total number of files in <see cref="OutputDir"/>.</summary>
     public int Files { get; set; }
