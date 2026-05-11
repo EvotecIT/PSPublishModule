@@ -22,6 +22,47 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void ResolveGeneratedInstallerOutputDirectory_UsesTemplateFallback_WhenManifestPathMissing()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+            var prepare = new DotNetPublishMsiPrepareResult
+            {
+                InstallerId = "app.msi",
+                Target = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                ManifestPath = string.Empty
+            };
+
+            var outputDir = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepare);
+
+            Assert.Equal(
+                Path.Combine(root, "Artifacts", "DotNetPublish", "Msi", "app.msi", "app", "win-x64", "net8.0", "Portable", "output"),
+                outputDir);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_AddsMsiBuildStep_WhenInstallerProjectPathConfigured()
     {
         var root = CreateTempRoot();

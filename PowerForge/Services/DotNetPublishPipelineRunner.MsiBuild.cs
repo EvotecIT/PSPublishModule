@@ -65,10 +65,10 @@ public sealed partial class DotNetPublishPipelineRunner
             ? ResolveGeneratedInstallerOutputDirectory(plan, installerId, step, prepare)
             : null;
         if (!string.IsNullOrWhiteSpace(generatedOutputDir))
-            Directory.CreateDirectory(generatedOutputDir!);
+            Directory.CreateDirectory(generatedOutputDir);
 
         var outputSearchDir = generatedOutputDir ?? projectDir;
-        var before = SnapshotMsiOutputs(outputSearchDir, includeAllMsiOutputs: generatedOutputDir is not null);
+        var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: isGeneratedInstallerProject);
 
         var args = new List<string>
         {
@@ -131,7 +131,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
             WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);
 
-        var outputs = FindChangedMsiOutputs(outputSearchDir, before, includeAllMsiOutputs: generatedOutputDir is not null);
+        var outputs = FindChangedMsiOutputs(outputSearchDir, before, skipBinDirectoryFilter: isGeneratedInstallerProject);
         if (outputs.Length == 0)
             _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{outputSearchDir}'.");
         else
@@ -245,9 +245,9 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
         {
-            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(prepare.ManifestPath!));
+            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(prepare.ManifestPath));
             if (!string.IsNullOrWhiteSpace(manifestDirectory))
-                return manifestDirectory!;
+                return manifestDirectory;
         }
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -324,10 +324,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return merged;
     }
 
-    private static Dictionary<string, DateTime> SnapshotMsiOutputs(string root, bool includeAllMsiOutputs = false)
+    private static Dictionary<string, DateTime> SnapshotMsiOutputs(string root, bool skipBinDirectoryFilter = false)
     {
         var map = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in EnumerateMsiFiles(root, includeAllMsiOutputs))
+        foreach (var file in EnumerateMsiFiles(root, skipBinDirectoryFilter))
         {
             try
             {
@@ -345,10 +345,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string[] FindChangedMsiOutputs(
         string root,
         IReadOnlyDictionary<string, DateTime> before,
-        bool includeAllMsiOutputs = false)
+        bool skipBinDirectoryFilter = false)
     {
         var results = new List<string>();
-        foreach (var file in EnumerateMsiFiles(root, includeAllMsiOutputs))
+        foreach (var file in EnumerateMsiFiles(root, skipBinDirectoryFilter))
         {
             try
             {
@@ -368,7 +368,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static IEnumerable<string> EnumerateMsiFiles(string root, bool includeAllMsiOutputs = false)
+    private static IEnumerable<string> EnumerateMsiFiles(string root, bool skipBinDirectoryFilter = false)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return Array.Empty<string>();
@@ -376,7 +376,7 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             var files = Directory.EnumerateFiles(root, "*.msi", SearchOption.AllDirectories);
-            if (includeAllMsiOutputs)
+            if (skipBinDirectoryFilter)
                 return files;
 
             return files.Where(p =>
