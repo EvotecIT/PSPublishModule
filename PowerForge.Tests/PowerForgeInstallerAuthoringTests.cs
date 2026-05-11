@@ -70,8 +70,12 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal("2", (string?)newDialogPublish.Attribute("Order"));
         Assert.NotNull(spawnDialogPublish);
         Assert.Equal("1", (string?)spawnDialogPublish.Attribute("Order"));
-        Assert.NotNull(doc.Descendants(Wix + "Dialog").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg"));
+        var requiredDialog = doc.Descendants(Wix + "Dialog").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
+        Assert.NotNull(requiredDialog);
+        Assert.NotNull(requiredDialog.Descendants(Wix + "Control").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "Message" &&
+            (string?)e.Attribute("Text") == "Fill the required field before continuing: License key."));
         Assert.Equal(2, dialog.Descendants(Wix + "RadioButton").Count());
     }
 
@@ -139,6 +143,21 @@ public sealed class PowerForgeInstallerAuthoringTests
         definition.Dialogs.Add(new PowerForgeInstallerDialog
         {
             Id = "PowerForgeRequiredInputDlg",
+            Title = "Reserved"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("reserved", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EmitSource_RejectsReservedRequiredInputDialogIdPrefix()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "PowerForgeRequiredInputDlg2",
             Title = "Reserved"
         });
 
@@ -257,6 +276,103 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Null(secondDialogNext.Attribute("Order"));
         Assert.Single(doc.Descendants(Wix + "Dialog"), e =>
             (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
+    }
+
+    [Fact]
+    public void EmitSource_UsesDialogSpecificRequiredInputPrompts()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "ApiEndpoint",
+            PropertyName = "API_ENDPOINT",
+            Label = "API endpoint",
+            Required = true
+        });
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "ApiToken",
+            PropertyName = "API_TOKEN",
+            Label = "API token",
+            Kind = PowerForgeInstallerInputKind.Password,
+            Required = true,
+            Secure = true,
+            Hidden = true
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "AdvancedDlg",
+            Title = "Advanced",
+            Description = "Choose advanced options.",
+            InputIds = { "ApiEndpoint", "ApiToken" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var firstNext = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "ConfigurationDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Next");
+        Assert.NotNull(firstNext.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "SpawnDialog" &&
+            (string?)e.Attribute("Value") == "PowerForgeRequiredInputDlg" &&
+            (string?)e.Attribute("Condition") == "LICENSE_KEY = \"\""));
+
+        var secondNext = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "AdvancedDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Next");
+        Assert.NotNull(secondNext.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Event") == "SpawnDialog" &&
+            (string?)e.Attribute("Value") == "PowerForgeRequiredInputDlg2" &&
+            (string?)e.Attribute("Condition") == "API_ENDPOINT = \"\" OR API_TOKEN = \"\""));
+
+        Assert.NotNull(doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg")
+            .Descendants(Wix + "Control")
+            .SingleOrDefault(e =>
+                (string?)e.Attribute("Id") == "Message" &&
+                (string?)e.Attribute("Text") == "Fill the required field before continuing: License key."));
+        Assert.NotNull(doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg2")
+            .Descendants(Wix + "Control")
+            .SingleOrDefault(e =>
+                (string?)e.Attribute("Id") == "Message" &&
+                (string?)e.Attribute("Text") == "Fill required fields before continuing: API endpoint; API token."));
+    }
+
+    [Fact]
+    public void EmitSource_CapsLongRequiredInputPromptLists()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        for (var i = 1; i <= 5; i++)
+        {
+            definition.Inputs.Add(new PowerForgeInstallerInput
+            {
+                Id = "Setting" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                PropertyName = "SETTING_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Label = "Setting " + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Required = true
+            });
+        }
+
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "SettingsDlg",
+            Title = "Settings",
+            InputIds = { "Setting1", "Setting2", "Setting3", "Setting4", "Setting5" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg")
+            .Descendants(Wix + "Control")
+            .SingleOrDefault(e =>
+                (string?)e.Attribute("Id") == "Message" &&
+                (string?)e.Attribute("Text") == "Fill required fields before continuing: Setting 1; Setting 2; Setting 3; Setting 4; and 1 more."));
     }
 
     [Fact]
