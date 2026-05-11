@@ -57,7 +57,11 @@
             "Kind": "LicenseKey",
             "Secure": true,
             "Hidden": true,
-            "Required": true
+            "Required": true,
+            "MinLength": 16,
+            "MaxLength": 128,
+            "ValidationPattern": "^[A-Za-z0-9-]+$",
+            "ValidationMessage": "Enter a valid license key."
           }
         ],
         "Dialogs": [

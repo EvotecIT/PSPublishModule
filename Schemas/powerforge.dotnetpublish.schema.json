@@ -167,6 +167,10 @@
         "Secure": { "type": "boolean" },
         "Hidden": { "type": "boolean" },
         "Required": { "type": "boolean" },
+        "MinLength": { "type": ["integer", "null"], "minimum": 0 },
+        "MaxLength": { "type": ["integer", "null"], "minimum": 0 },
+        "ValidationPattern": { "type": ["string", "null"] },
+        "ValidationMessage": { "type": ["string", "null"] },
         "Choices": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }

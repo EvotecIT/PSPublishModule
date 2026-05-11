@@ -658,6 +658,172 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ThrowsWhenInputValidationLengthRangeIsInvalid()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            MinLength = 20,
+            MaxLength = 10
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("MinLength cannot be greater than MaxLength", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputValidationPatternIsInvalid()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            ValidationPattern = "["
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("valid .NET regular expression", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputDefaultValueViolatesValidationMetadata()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            DefaultValue = "abc",
+            MinLength = 5
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("shorter than MinLength", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputDefaultValueExceedsMaxLength()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            DefaultValue = "ABCDE",
+            MaxLength = 4
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("longer than MaxLength", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputDefaultValueFailsValidationPattern()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            DefaultValue = "abc",
+            ValidationPattern = "^[A-Z0-9-]+$"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("does not match ValidationPattern", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputValidationLengthIsNegative()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            MinLength = -1
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("MinLength must be greater than or equal to 0", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputValidationMaxLengthIsNegative()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            MaxLength = -1
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("MaxLength must be greater than or equal to 0", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenCheckboxUsesInputValidationMetadata()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "RemoveData",
+            PropertyName = "REMOVE_DATA",
+            Label = "Remove data",
+            Kind = PowerForgeInstallerInputKind.Checkbox,
+            MinLength = 1
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("validation metadata", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenCheckboxUsesValidationMessageOnly()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "RemoveData",
+            PropertyName = "REMOVE_DATA",
+            Label = "Remove data",
+            Kind = PowerForgeInstallerInputKind.Checkbox,
+            ValidationMessage = "Choose whether to remove data."
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("validation metadata", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EmitSource_ThrowsWhenComponentFileIdIsNotWixIdentifier()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
@@ -948,7 +1114,11 @@ public sealed class PowerForgeInstallerAuthoringTests
                     "Kind": "LicenseKey",
                     "Secure": true,
                     "Hidden": true,
-                    "Required": true
+                    "Required": true,
+                    "MinLength": 16,
+                    "MaxLength": 128,
+                    "ValidationPattern": "^[A-Za-z0-9-]+$",
+                    "ValidationMessage": "Enter a valid license key."
                   }
                 ],
                 "Dialogs": [
@@ -1009,6 +1179,10 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal("ProductFiles", authoring.PayloadComponentGroupId);
         var input = Assert.Single(authoring.Inputs);
         Assert.True(input.Required);
+        Assert.Equal(16, input.MinLength);
+        Assert.Equal(128, input.MaxLength);
+        Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);
+        Assert.Equal("Enter a valid license key.", input.ValidationMessage);
         Assert.Single(authoring.Dialogs);
         Assert.Single(authoring.Directories);
 
