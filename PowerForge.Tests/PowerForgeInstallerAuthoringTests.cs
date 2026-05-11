@@ -582,6 +582,95 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ThrowsWhenProductUpgradeCodeIsInvalid()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.UpgradeCode = "not-a-guid";
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("valid GUID", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputIdIsNotWixIdentifier()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "License-Key",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("valid WiX identifier", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenInputPropertyIsNotPublicMsiProperty()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "license_key",
+            Label = "License key"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("uppercase public MSI property", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenComponentFileIdIsNotWixIdentifier()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.OfType<PowerForgeInstallerFileComponent>().Single().FileId = "1SmokePayloadFile";
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("valid WiX identifier", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenShortcutWorkingDirectoryIdIsMissing()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Add(new PowerForgeInstallerShortcutComponent
+        {
+            Id = "StartMenuShortcutComponent",
+            ShortcutId = "StartMenuShortcut",
+            Name = "Smoke",
+            Target = "[INSTALLFOLDER]Smoke.exe",
+            WorkingDirectoryId = string.Empty
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("WorkingDirectoryId", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_ThrowsWhenRegistryValuePropertyIsNotPublicMsiProperty()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Add(new PowerForgeInstallerRegistryValueComponent
+        {
+            Id = "LicenseRegistry",
+            Key = @"Software\Evotec\Test",
+            Name = "LicenseKey",
+            ValueProperty = "license_key"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+        Assert.Contains("uppercase public MSI property", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EmitSource_ThrowsWhenDialogReferencesUnknownInput()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
