@@ -543,6 +543,41 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void Plan_ExplicitBuildSpecTypeAcceleratorModeNone_DoesNotInferAllowListFromConfiguredTypes()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                    AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.False(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.None, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_LaterBuildLibrariesSegmentCanClearTypeAcceleratorLists()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -621,6 +656,42 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("$Mode = 'AllowList'", bootstrapper);
             Assert.Contains("$RequestedTypes = @('Dependency.Widget')", bootstrapper);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_DirectBuildSpecExplicitNone_DoesNotEmitTypeAcceleratorBootstrapper()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Path.Combine(tempRoot.FullName, "src");
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            WriteMinimalBinaryModule(source, moduleName);
+
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
+            var result = pipeline.BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source,
+                StagingPath = staging,
+                Version = "1.0.0",
+                Frameworks = new[] { "net8.0" },
+                ExportAssemblies = new[] { moduleName + ".dll" },
+                DisableBinaryCmdletScan = true,
+                AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+                AssemblyTypeAccelerators = new[] { "Dependency.Widget" }
+            });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
+            Assert.DoesNotContain("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.DoesNotContain("$RegisterPowerForgeAssemblyTypeAccelerators", bootstrapper);
+            Assert.DoesNotContain("Dependency.Widget", bootstrapper);
         }
         finally
         {

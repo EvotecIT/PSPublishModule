@@ -334,6 +334,7 @@ internal static class ModuleBootstrapperGenerator
             var result = RunProcess(
                 "dotnet",
                 buildRoot,
+                // Disable MSBuild node reuse so short-lived helper builds exit cleanly in CI and tests.
                 new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal", "-nr:false" },
                 AssemblyLoadContextLoaderBuildTimeout);
             if (result.ExitCode != 0)
@@ -661,7 +662,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                    });
     }
 
-    private static string BuildTypeAcceleratorBlock(
+    internal static string BuildTypeAcceleratorBlock(
         AssemblyTypeAcceleratorExportMode mode,
         IReadOnlyList<string>? typeNames,
         IReadOnlyList<string>? assemblyNames)
@@ -681,9 +682,6 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
     $Mode = '{mode}'
     $RequestedTypes = {BuildPowerShellArrayLiteral(normalizedTypes)}
     $RequestedAssemblies = {BuildPowerShellArrayLiteral(normalizedAssemblies)}
-    if ($Mode -eq 'None') {{
-        return
-    }}
 
     $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
     if ($null -eq $TypeAccelerators) {{
@@ -692,7 +690,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
     }}
 
     $AddTypeAccelerator = $TypeAccelerators.GetMethod('Add', [type[]]@([string], [type]))
-    $GetTypeAccelerators = $TypeAccelerators.GetMethod('Get', [type[]]@())
+    $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
     if ($null -eq $AddTypeAccelerator -or $null -eq $GetTypeAccelerators) {{
         Write-Warning -Message 'PowerShell type accelerator APIs are incomplete. ALC dependency type exposure is disabled.'
         return
@@ -777,10 +775,10 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         }}
 
         $Name = $Type.FullName
-        $Existing = $GetTypeAccelerators.Invoke($null, @())
+        $Existing = $GetTypeAccelerators.GetValue($null)
         if ($Existing.ContainsKey($Name)) {{
             if ([object]::ReferenceEquals($Existing[$Name], $Type)) {{
-                $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
+                return
             }} else {{
                 Write-Warning -Message ""Type accelerator '$Name' already exists. Keeping the existing accelerator and skipping the ALC type from $($Type.Assembly.GetName().Name).""
             }}
@@ -832,13 +830,13 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
                     return
                 }}
 
-                $GetTypeAccelerators = $TypeAccelerators.GetMethod('Get', [type[]]@())
+                $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
                 $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
                 if ($null -eq $GetTypeAccelerators -or $null -eq $RemoveTypeAccelerator) {{
                     return
                 }}
 
-                $Existing = $GetTypeAccelerators.Invoke($null, @())
+                $Existing = $GetTypeAccelerators.GetValue($null)
                 foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {{
                     if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {{
                         $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null

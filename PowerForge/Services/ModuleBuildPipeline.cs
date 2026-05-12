@@ -186,12 +186,12 @@ public sealed class ModuleBuildPipeline
     }
 
     private static AssemblyTypeAcceleratorExportMode ResolveAssemblyTypeAcceleratorMode(
-        AssemblyTypeAcceleratorExportMode mode,
+        AssemblyTypeAcceleratorExportMode? mode,
         IReadOnlyList<string>? typeNames,
         IReadOnlyList<string>? assemblyNames)
     {
-        if (mode != AssemblyTypeAcceleratorExportMode.None)
-            return mode;
+        if (mode.HasValue)
+            return mode.Value;
 
         if (HasAnyConfiguredValue(typeNames))
             return AssemblyTypeAcceleratorExportMode.AllowList;

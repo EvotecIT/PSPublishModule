@@ -114,7 +114,7 @@ public sealed class ModuleBuildSpec
     /// <summary>
     /// Controls optional type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.
     /// </summary>
-    public AssemblyTypeAcceleratorExportMode AssemblyTypeAcceleratorMode { get; set; }
+    public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
 
     /// <summary>
     /// Fully-qualified type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.

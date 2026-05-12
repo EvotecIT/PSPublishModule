@@ -218,14 +218,17 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$Mode = 'AllowList'", bootstrapper);
             Assert.Contains("$RequestedTypes = @('Dependency.Widget')", bootstrapper);
             Assert.Contains("System.Management.Automation.TypeAccelerators", bootstrapper);
+            Assert.Contains("$TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')", bootstrapper);
             Assert.Contains("AssemblyLoadContext]::GetLoadContext($ModuleAssembly)", bootstrapper);
             Assert.Contains("$AddPowerForgeTypeAccelerator = {", bootstrapper);
             Assert.Contains("Type accelerator '$Name' already exists", bootstrapper);
+            Assert.Contains("if ([object]::ReferenceEquals($Existing[$Name], $Type)) {\r\n                return", bootstrapper);
             Assert.Contains("$PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
             Assert.Contains("& $PreviousPowerForgeOnRemove @args", bootstrapper);
             Assert.Contains("OnRemove", bootstrapper);
             Assert.Contains("& $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder", bootstrapper);
             Assert.DoesNotContain("function Register-PowerForgeAssemblyTypeAccelerators", bootstrapper);
+            Assert.DoesNotContain("$Mode -eq 'None'", bootstrapper);
         }
         finally
         {
@@ -237,7 +240,7 @@ public class ModuleBootstrapperGeneratorTests
     [Fact]
     public void Generate_WithAssemblyLoadContextAssemblyTypeAccelerators_WritesAssemblyModeWithEnumerationGuard()
     {
-        var block = BuildTypeAcceleratorBlock(
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
             AssemblyTypeAcceleratorExportMode.Assembly,
             Array.Empty<string>(),
             new[] { "Dependency" });
@@ -252,25 +255,12 @@ public class ModuleBootstrapperGeneratorTests
     [Fact]
     public void Generate_WithTypeAcceleratorModeNone_DoesNotInferFromConfiguredLists()
     {
-        var block = BuildTypeAcceleratorBlock(
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
             AssemblyTypeAcceleratorExportMode.None,
             new[] { "Dependency.Widget" },
             Array.Empty<string>());
 
         Assert.Equal(string.Empty, block);
-    }
-
-    private static string BuildTypeAcceleratorBlock(
-        AssemblyTypeAcceleratorExportMode mode,
-        IReadOnlyList<string>? typeNames,
-        IReadOnlyList<string>? assemblyNames)
-    {
-        var method = typeof(ModuleBootstrapperGenerator).GetMethod(
-            "BuildTypeAcceleratorBlock",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        Assert.NotNull(method);
-
-        return Assert.IsType<string>(method.Invoke(null, new object?[] { mode, typeNames, assemblyNames }));
     }
 
     [Fact]

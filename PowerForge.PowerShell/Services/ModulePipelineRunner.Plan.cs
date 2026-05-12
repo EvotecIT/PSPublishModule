@@ -525,10 +525,12 @@ public sealed partial class ModulePipelineRunner
 
         var assemblyTypeAccelerators = NormalizeStringArray(assemblyTypeAcceleratorsFromSegments ?? spec.Build.AssemblyTypeAccelerators);
         var assemblyTypeAcceleratorAssemblies = NormalizeStringArray(assemblyTypeAcceleratorAssembliesFromSegments ?? spec.Build.AssemblyTypeAcceleratorAssemblies);
-        var assemblyTypeAcceleratorModeSpecified = assemblyTypeAcceleratorModeFromSegments.HasValue;
+        var assemblyTypeAcceleratorModeSpecified = assemblyTypeAcceleratorModeFromSegments.HasValue
+            || spec.Build.AssemblyTypeAcceleratorMode.HasValue;
         var assemblyTypeAcceleratorMode =
             assemblyTypeAcceleratorModeFromSegments
-            ?? spec.Build.AssemblyTypeAcceleratorMode;
+            ?? spec.Build.AssemblyTypeAcceleratorMode
+            ?? AssemblyTypeAcceleratorExportMode.None;
         if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAccelerators.Length > 0)
             assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.AllowList;
         if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAcceleratorAssemblies.Length > 0)
