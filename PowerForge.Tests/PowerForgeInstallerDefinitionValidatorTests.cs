@@ -200,6 +200,40 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
         PowerForgeInstallerDefinitionValidator.Validate(definition);
     }
 
+    [Fact]
+    public void Validate_RejectsRequiredMessageWithoutRequiredInput()
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            RequiredMessage = "Enter a license key before continuing."
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("RequiredMessage can only be set when Required is true", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_AllowsRequiredMessageWithRequiredInput()
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Required = true,
+            RequiredMessage = "Enter a license key before continuing."
+        });
+
+        PowerForgeInstallerDefinitionValidator.Validate(definition);
+    }
+
     private static PowerForgeInstallerDefinition CreateValidDefinition()
     {
         var definition = new PowerForgeInstallerDefinition

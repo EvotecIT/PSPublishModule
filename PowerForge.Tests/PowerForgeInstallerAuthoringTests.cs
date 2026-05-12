@@ -114,6 +114,71 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_UsesRequiredMessageForSingleRequiredInputPrompt()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            Required = true,
+            RequiredMessage = "Enter a license key before continuing."
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "LicenseDlg",
+            Title = "License",
+            InputIds = { "LicenseKey" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var dialog = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
+        var messageControl = dialog
+            .Descendants(Wix + "Control")
+            .SingleOrDefault(e => (string?)e.Attribute("Id") == "Message");
+
+        Assert.NotNull(messageControl);
+        Assert.Equal("Enter a license key before continuing.", (string?)messageControl.Attribute("Text"));
+    }
+
+    [Fact]
+    public void EmitSource_FallsBackToInputLabelForSingleRequiredInputPrompt()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "LicenseKey",
+            PropertyName = "LICENSE_KEY",
+            Label = "License key",
+            Kind = PowerForgeInstallerInputKind.LicenseKey,
+            Required = true
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "LicenseDlg",
+            Title = "License",
+            InputIds = { "LicenseKey" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var dialog = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg");
+        var messageControl = dialog
+            .Descendants(Wix + "Control")
+            .SingleOrDefault(e => (string?)e.Attribute("Id") == "Message");
+
+        Assert.NotNull(messageControl);
+        Assert.Equal("Fill the required field before continuing: License key.", (string?)messageControl.Attribute("Text"));
+    }
+
+    [Fact]
     public void EmitSource_RequiresCheckboxInputsWhenConfigured()
     {
         var definition = CreateMonitoringInstaller();
@@ -1115,6 +1180,7 @@ public sealed class PowerForgeInstallerAuthoringTests
                     "Secure": true,
                     "Hidden": true,
                     "Required": true,
+                    "RequiredMessage": "Enter a license key before continuing.",
                     "MinLength": 16,
                     "MaxLength": 128,
                     "ValidationPattern": "^[A-Za-z0-9-]+$",
@@ -1179,6 +1245,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal("ProductFiles", authoring.PayloadComponentGroupId);
         var input = Assert.Single(authoring.Inputs);
         Assert.True(input.Required);
+        Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);
         Assert.Equal(16, input.MinLength);
         Assert.Equal(128, input.MaxLength);
         Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);

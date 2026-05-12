@@ -71,6 +71,12 @@ internal static class PowerForgeInstallerDefinitionValidator
             RequireWixIdentifier(input.Id, $"input '{input.Id}' ID");
             Require(input.PropertyName, nameof(input.PropertyName));
             RequirePublicMsiProperty(input.PropertyName, $"input '{input.Id}' property");
+            if (!string.IsNullOrWhiteSpace(input.RequiredMessage) && !input.Required)
+            {
+                throw new InvalidOperationException(
+                    $"Input '{input.Id}': RequiredMessage can only be set when Required is true.");
+            }
+
             ValidateInputValidationMetadata(input);
             if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
                 throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");

@@ -242,6 +242,12 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
     private static string BuildRequiredInputMessage(IReadOnlyList<PowerForgeInstallerInput> requiredInputs)
     {
+        if (requiredInputs.Count == 1 &&
+            !string.IsNullOrWhiteSpace(requiredInputs[0].RequiredMessage))
+        {
+            return requiredInputs[0].RequiredMessage!.Trim();
+        }
+
         var labels = requiredInputs
             .Select(input => string.IsNullOrWhiteSpace(input.Label) ? input.Id : input.Label)
             .ToArray();

@@ -58,6 +58,7 @@
             "Secure": true,
             "Hidden": true,
             "Required": true,
+            "RequiredMessage": "Enter a license key before continuing.",
             "MinLength": 16,
             "MaxLength": 128,
             "ValidationPattern": "^[A-Za-z0-9-]+$",
