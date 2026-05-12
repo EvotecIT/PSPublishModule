@@ -286,8 +286,10 @@ public static class LegacySegmentAdapter
 
     private static AssemblyTypeAcceleratorExportMode? TryParseAssemblyTypeAcceleratorExportMode(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        return Enum.TryParse<AssemblyTypeAcceleratorExportMode>(value!.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
+        if (value is null) return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return null;
+        return Enum.TryParse<AssemblyTypeAcceleratorExportMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static IDictionary? GetDictionary(IDictionary dict, string key)

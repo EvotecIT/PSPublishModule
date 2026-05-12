@@ -155,14 +155,23 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
+            var assemblyTypeAcceleratorMode = ResolveAssemblyTypeAcceleratorMode(
+                spec.AssemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies);
+            var useAssemblyLoadContext = spec.UseAssemblyLoadContext
+                || assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+            if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
+                _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
+
             ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
                 exports,
                 spec.ExportAssemblies,
                 spec.HandleRuntimes,
-                spec.UseAssemblyLoadContext,
-                spec.AssemblyTypeAcceleratorMode,
+                useAssemblyLoadContext,
+                assemblyTypeAcceleratorMode,
                 spec.AssemblyTypeAccelerators,
                 spec.AssemblyTypeAcceleratorAssemblies,
                 targetFrameworks: spec.Frameworks,
@@ -175,6 +184,27 @@ public sealed class ModuleBuildPipeline
 
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
+
+    private static AssemblyTypeAcceleratorExportMode ResolveAssemblyTypeAcceleratorMode(
+        AssemblyTypeAcceleratorExportMode mode,
+        IReadOnlyList<string>? typeNames,
+        IReadOnlyList<string>? assemblyNames)
+    {
+        if (mode != AssemblyTypeAcceleratorExportMode.None)
+            return mode;
+
+        if (HasAnyConfiguredValue(typeNames))
+            return AssemblyTypeAcceleratorExportMode.AllowList;
+
+        if (HasAnyConfiguredValue(assemblyNames))
+            return AssemblyTypeAcceleratorExportMode.Assembly;
+
+        return AssemblyTypeAcceleratorExportMode.None;
+    }
+
+    private static bool HasAnyConfiguredValue(IReadOnlyList<string>? values)
+        => values is { Count: > 0 }
+           && values.Any(static value => !string.IsNullOrWhiteSpace(value));
 
     /// <summary>
     /// Installs a staged module to versioned roots, resolving the final version first.

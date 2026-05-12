@@ -276,13 +276,13 @@ public sealed partial class ModulePipelineRunner
                         assemblyTypeAcceleratorModeFromSegments = bl.AssemblyTypeAcceleratorMode.Value;
                     else if (bl.NETAssemblyTypeAcceleratorMode.HasValue)
                         assemblyTypeAcceleratorModeFromSegments = bl.NETAssemblyTypeAcceleratorMode.Value;
-                    if (bl.AssemblyTypeAccelerators is { Length: > 0 })
+                    if (bl.AssemblyTypeAccelerators is not null)
                         assemblyTypeAcceleratorsFromSegments = bl.AssemblyTypeAccelerators;
-                    else if (bl.NETAssemblyTypeAccelerators is { Length: > 0 })
+                    else if (bl.NETAssemblyTypeAccelerators is not null)
                         assemblyTypeAcceleratorsFromSegments = bl.NETAssemblyTypeAccelerators;
-                    if (bl.AssemblyTypeAcceleratorAssemblies is { Length: > 0 })
+                    if (bl.AssemblyTypeAcceleratorAssemblies is not null)
                         assemblyTypeAcceleratorAssembliesFromSegments = bl.AssemblyTypeAcceleratorAssemblies;
-                    else if (bl.NETAssemblyTypeAcceleratorAssemblies is { Length: > 0 })
+                    else if (bl.NETAssemblyTypeAcceleratorAssemblies is not null)
                         assemblyTypeAcceleratorAssembliesFromSegments = bl.NETAssemblyTypeAcceleratorAssemblies;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
@@ -525,19 +525,20 @@ public sealed partial class ModulePipelineRunner
 
         var assemblyTypeAccelerators = NormalizeStringArray(assemblyTypeAcceleratorsFromSegments ?? spec.Build.AssemblyTypeAccelerators);
         var assemblyTypeAcceleratorAssemblies = NormalizeStringArray(assemblyTypeAcceleratorAssembliesFromSegments ?? spec.Build.AssemblyTypeAcceleratorAssemblies);
+        var assemblyTypeAcceleratorModeSpecified = assemblyTypeAcceleratorModeFromSegments.HasValue;
         var assemblyTypeAcceleratorMode =
             assemblyTypeAcceleratorModeFromSegments
             ?? spec.Build.AssemblyTypeAcceleratorMode;
-        if (assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAccelerators.Length > 0)
+        if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAccelerators.Length > 0)
             assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.AllowList;
-        if (assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAcceleratorAssemblies.Length > 0)
+        if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAcceleratorAssemblies.Length > 0)
             assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Assembly;
 
-        var typeAcceleratorsRequireAlc = assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None
-            || assemblyTypeAccelerators.Length > 0
-            || assemblyTypeAcceleratorAssemblies.Length > 0;
-        var effectiveUseAssemblyLoadContext = (useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext)
-            || typeAcceleratorsRequireAlc;
+        var requestedUseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
+        var typeAcceleratorsRequireAlc = assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+        var effectiveUseAssemblyLoadContext = requestedUseAssemblyLoadContext || typeAcceleratorsRequireAlc;
+        if (typeAcceleratorsRequireAlc && !requestedUseAssemblyLoadContext)
+            _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
         var csprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
@@ -549,7 +550,7 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 handleRuntimesFromSegments,
-                effectiveUseAssemblyLoadContext,
+                requestedUseAssemblyLoadContext,
                 typeAcceleratorsRequireAlc,
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true);
@@ -830,7 +831,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
         bool? handleRuntimesFromSegments,
-        bool effectiveUseAssemblyLoadContext,
+        bool useAssemblyLoadContextRequested,
         bool typeAcceleratorsRequireAlc,
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested)
@@ -852,7 +853,7 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
             || effectiveHandleRuntimes
-            || effectiveUseAssemblyLoadContext
+            || useAssemblyLoadContextRequested
             || typeAcceleratorsRequireAlc
             || binaryModuleDocumentationRequested;
 
@@ -877,7 +878,7 @@ public sealed partial class ModulePipelineRunner
         if (effectiveHandleRuntimes)
             reasons.Add("NETHandleRuntimes");
 
-        if (effectiveUseAssemblyLoadContext)
+        if (useAssemblyLoadContextRequested)
             reasons.Add("UseAssemblyLoadContext");
 
         if (typeAcceleratorsRequireAlc)
