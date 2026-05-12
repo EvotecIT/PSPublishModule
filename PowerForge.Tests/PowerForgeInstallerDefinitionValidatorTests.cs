@@ -132,7 +132,7 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
         definition.Inputs.Add(new PowerForgeInstallerInput
         {
             Id = "OtherLicenseKey",
-            PropertyName = "license_key",
+            PropertyName = "LICENSE_KEY",
             Label = "Other license key"
         });
 
@@ -141,6 +141,42 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
 
         Assert.Contains("Duplicate installer input property", ex.Message, StringComparison.Ordinal);
         Assert.Contains("LICENSE_KEY", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_RejectsMissingDialogIdWithoutNullReference()
+    {
+        var definition = CreateValidDefinition();
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = null!,
+            Title = "Configuration"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("requires Id", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RejectsCompanyFolderDirectoryCollision()
+    {
+        var definition = CreateValidDefinition();
+        definition.Directories.Add(new PowerForgeInstallerDirectoryTree
+        {
+            StandardDirectoryId = "CommonAppDataFolder",
+            Segments =
+            {
+                new PowerForgeInstallerDirectorySegment { Id = "CompanyFolder", Name = "Evotec" }
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Duplicate installer directory ID", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("CompanyFolder", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

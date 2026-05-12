@@ -763,10 +763,10 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             Assert.True(File.Exists(projectPath));
             Assert.Equal(
-                Path.Combine(root, "Artifacts", "generated"),
+                Path.Combine(root, "Artifacts", "prepare.manifest", "generated"),
                 Path.GetDirectoryName(projectPath));
             var outputDir = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepare);
-            Assert.Equal(Path.Combine(root, "Artifacts", "output"), outputDir);
+            Assert.Equal(Path.Combine(root, "Artifacts", "prepare.manifest", "output"), outputDir);
             var sourcePath = Path.Combine(Path.GetDirectoryName(projectPath)!, "Product.wxs");
             Assert.True(File.Exists(sourcePath));
             Assert.Contains("2.3.4", File.ReadAllText(sourcePath), StringComparison.Ordinal);
@@ -775,6 +775,57 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Contains(harvestPath, projectXml, StringComparison.Ordinal);
             Assert.Contains("PayloadDir=", projectXml, StringComparison.Ordinal);
             Assert.Contains(staging, projectXml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveGeneratedInstallerOutputDirectory_UsesManifestFileNameForIsolation()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "app.msi",
+                TargetName = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable
+            };
+            var prepareA = new DotNetPublishMsiPrepareResult
+            {
+                InstallerId = "app.msi",
+                Target = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                ManifestPath = Path.Combine(root, "Artifacts", "prepare-a.json")
+            };
+            var prepareB = new DotNetPublishMsiPrepareResult
+            {
+                InstallerId = "app.msi",
+                Target = "app",
+                Framework = "net8.0",
+                Runtime = "win-x64",
+                Style = DotNetPublishStyle.Portable,
+                ManifestPath = Path.Combine(root, "Artifacts", "prepare-b.json")
+            };
+
+            var outputA = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepareA);
+            var outputB = InvokeResolveGeneratedInstallerOutputDirectory(plan, step, prepareB);
+
+            Assert.Equal(Path.Combine(root, "Artifacts", "prepare-a", "output"), outputA);
+            Assert.Equal(Path.Combine(root, "Artifacts", "prepare-b", "output"), outputB);
+            Assert.NotEqual(outputA, outputB, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

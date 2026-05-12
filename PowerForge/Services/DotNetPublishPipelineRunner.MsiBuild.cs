@@ -79,10 +79,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "--nologo"
         };
 
-        if (plan.Restore)
+        if (plan.Restore && !isGeneratedInstallerProject)
             args.Add("--no-restore");
-        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
-            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(generatedOutputDir!)}");
 
         var installerMsBuildProperties = BuildInstallerMsBuildProperties(
             plan.MsBuildProperties,
@@ -92,9 +90,12 @@ public sealed partial class DotNetPublishPipelineRunner
             licenseResolution.PropertyName,
             licenseResolution.Path);
         args.AddRange(BuildMsBuildPropertyArgs(installerMsBuildProperties));
+        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
+            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(generatedOutputDir!)}");
         args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
         args.Add($"/p:PowerForgeMsiPayloadDir={prepare.StagingDir}");
-        args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
+        if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
+            args.Add($"/p:PowerForgeMsiPrepareManifest={prepare.ManifestPath}");
         args.Add($"/p:PowerForgeMsiSourceTarget={prepare.Target}");
         args.Add($"/p:PowerForgeMsiSourceFramework={prepare.Framework}");
         args.Add($"/p:PowerForgeMsiSourceRuntime={prepare.Runtime}");
@@ -182,6 +183,12 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             definition.PayloadComponentGroupId = prepare.HarvestComponentGroupId;
         }
+        if (!string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId) &&
+            string.IsNullOrWhiteSpace(prepare.HarvestPath))
+        {
+            throw new InvalidOperationException(
+                $"Generated installer '{installerId}' references payload component group '{definition.PayloadComponentGroupId}' but no harvested WiX source is available.");
+        }
 
         var generatedDir = ResolveGeneratedInstallerProjectDirectory(plan, installerId, step, prepare);
         var request = new PowerForgeWixInstallerCompileRequest
@@ -245,9 +252,15 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
         {
-            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(prepare.ManifestPath));
+            var manifestPath = Path.GetFullPath(prepare.ManifestPath);
+            var manifestDirectory = Path.GetDirectoryName(manifestPath);
             if (!string.IsNullOrWhiteSpace(manifestDirectory))
-                return manifestDirectory;
+            {
+                var manifestName = ToSafeFileName(
+                    Path.GetFileNameWithoutExtension(manifestPath),
+                    "manifest");
+                return Path.Combine(manifestDirectory, manifestName);
+            }
         }
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -272,7 +285,8 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         request.DefineConstants["PayloadDir"] = prepare.StagingDir;
         request.DefineConstants["PowerForgeMsiPayloadDir"] = prepare.StagingDir;
-        request.DefineConstants["PowerForgeMsiPrepareManifest"] = prepare.ManifestPath;
+        if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
+            request.DefineConstants["PowerForgeMsiPrepareManifest"] = prepare.ManifestPath;
         request.DefineConstants["PowerForgeMsiSourceTarget"] = prepare.Target;
         request.DefineConstants["PowerForgeMsiSourceFramework"] = prepare.Framework;
         request.DefineConstants["PowerForgeMsiSourceRuntime"] = prepare.Runtime;
