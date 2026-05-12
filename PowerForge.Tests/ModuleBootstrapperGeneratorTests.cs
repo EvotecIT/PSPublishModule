@@ -255,6 +255,21 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAssemblyLoadContextAssemblyOnlyTypeAccelerators_WritesEmptyAllowList()
+    {
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
+            AssemblyTypeAcceleratorExportMode.Assembly,
+            Array.Empty<string>(),
+            new[] { "Dependency" });
+
+        Assert.Contains("$Mode = 'Assembly'", block);
+        Assert.Contains("$RequestedTypes = @()", block);
+        Assert.Contains("$RequestedAssemblies = @('Dependency')", block);
+        Assert.Contains("$ExportedTypes = @($Assembly.GetExportedTypes())", block);
+        Assert.Contains("foreach ($TypeName in $RequestedTypes)", block);
+    }
+
+    [Fact]
     public void Generate_WithTypeAcceleratorModeNone_DoesNotInferFromConfiguredLists()
     {
         var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(

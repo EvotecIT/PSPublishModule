@@ -527,14 +527,12 @@ public sealed partial class ModulePipelineRunner
         var assemblyTypeAcceleratorAssemblies = NormalizeStringArray(assemblyTypeAcceleratorAssembliesFromSegments ?? spec.Build.AssemblyTypeAcceleratorAssemblies);
         var assemblyTypeAcceleratorModeSpecified = assemblyTypeAcceleratorModeFromSegments.HasValue
             || spec.Build.AssemblyTypeAcceleratorMode.HasValue;
-        var assemblyTypeAcceleratorMode =
-            assemblyTypeAcceleratorModeFromSegments
-            ?? spec.Build.AssemblyTypeAcceleratorMode
-            ?? AssemblyTypeAcceleratorExportMode.None;
-        if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAcceleratorAssemblies.Length > 0)
-            assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Assembly;
-        if (!assemblyTypeAcceleratorModeSpecified && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None && assemblyTypeAccelerators.Length > 0)
-            assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.AllowList;
+        var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
+            assemblyTypeAcceleratorModeSpecified
+                ? assemblyTypeAcceleratorModeFromSegments ?? spec.Build.AssemblyTypeAcceleratorMode
+                : null,
+            assemblyTypeAccelerators,
+            assemblyTypeAcceleratorAssemblies);
 
         var requestedUseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
         var typeAcceleratorsRequireAlc = assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;

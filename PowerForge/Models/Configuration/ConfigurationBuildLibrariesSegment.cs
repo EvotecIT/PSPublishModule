@@ -103,6 +103,8 @@ public enum AssemblyTypeAcceleratorExportMode
     /// <summary>Register only explicitly configured fully-qualified type names.</summary>
     AllowList = 1,
 
-    /// <summary>Register all public types from explicitly configured assemblies.</summary>
+    /// <summary>
+    /// Register all public types from explicitly configured assemblies, plus any explicitly configured type names.
+    /// </summary>
     Assembly = 2
 }

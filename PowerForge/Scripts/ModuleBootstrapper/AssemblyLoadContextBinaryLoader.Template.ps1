@@ -63,6 +63,7 @@ if ($PSEdition -eq 'Core') {
         $ModuleAssembly = [{{LoaderTypeName}}]::LoadModule($ModuleAssemblyPath, '{{ModuleName}}')
         $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
+        # Type accelerator registration relies on $ModuleAssembly and $LibFolder from this ALC loader scope.
 {{TypeAcceleratorBlock}}
         if ($InnerModule) {
             # Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no

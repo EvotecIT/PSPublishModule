@@ -155,7 +155,7 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
-            var assemblyTypeAcceleratorMode = ResolveAssemblyTypeAcceleratorMode(
+            var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
                 spec.AssemblyTypeAcceleratorMode,
                 spec.AssemblyTypeAccelerators,
                 spec.AssemblyTypeAcceleratorAssemblies);
@@ -184,27 +184,6 @@ public sealed class ModuleBuildPipeline
 
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
-
-    private static AssemblyTypeAcceleratorExportMode ResolveAssemblyTypeAcceleratorMode(
-        AssemblyTypeAcceleratorExportMode? mode,
-        IReadOnlyList<string>? typeNames,
-        IReadOnlyList<string>? assemblyNames)
-    {
-        if (mode.HasValue)
-            return mode.Value;
-
-        if (HasAnyConfiguredValue(assemblyNames))
-            return AssemblyTypeAcceleratorExportMode.Assembly;
-
-        if (HasAnyConfiguredValue(typeNames))
-            return AssemblyTypeAcceleratorExportMode.AllowList;
-
-        return AssemblyTypeAcceleratorExportMode.None;
-    }
-
-    private static bool HasAnyConfiguredValue(IReadOnlyList<string>? values)
-        => values is { Count: > 0 }
-           && values.Any(static value => !string.IsNullOrWhiteSpace(value));
 
     /// <summary>
     /// Installs a staged module to versioned roots, resolving the final version first.
