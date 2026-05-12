@@ -672,8 +672,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (mode == AssemblyTypeAcceleratorExportMode.None)
             return string.Empty;
 
-        return $@"
-$RegisterPowerForgeAssemblyTypeAccelerators = {{
+        return $@"$RegisterPowerForgeAssemblyTypeAccelerators = {{
     param(
         [Parameter(Mandatory = $true)][System.Reflection.Assembly] $ModuleAssembly,
         [Parameter(Mandatory = $true)][string] $LibFolder
@@ -691,6 +690,25 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
     if ([string]::IsNullOrWhiteSpace($LibFolder)) {{
         Write-Warning -Message 'Module library folder was not available. ALC dependency type exposure is disabled.'
         return
+    }}
+
+    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains([IO.Path]::DirectorySeparatorChar) -or $LibFolder.Contains([IO.Path]::AltDirectorySeparatorChar) -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
+        return
+    }}
+
+    if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {{
+        Write-Warning -Message 'AllowList type accelerator mode was configured without type names. No ALC dependency type accelerators will be registered.'
+        return
+    }}
+
+    if ($Mode -eq 'Assembly' -and $RequestedAssemblies.Count -eq 0) {{
+        if ($RequestedTypes.Count -eq 0) {{
+            Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered.'
+            return
+        }}
+
+        Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered.'
     }}
 
     $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
