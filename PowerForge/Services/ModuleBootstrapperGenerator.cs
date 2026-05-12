@@ -693,7 +693,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         return
     }}
 
-    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
         Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
         return
     }}
@@ -887,7 +887,11 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
 }}
 
 # Type accelerator exposure is PowerShell Core-only because it depends on AssemblyLoadContext.
-& $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
+try {{
+    & $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
+}} catch {{
+    Write-Warning -Message ""ALC type accelerator registration failed: $($_.Exception.Message)""
+}}
 ";
     }
 
