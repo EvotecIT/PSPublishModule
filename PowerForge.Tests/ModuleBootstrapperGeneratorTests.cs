@@ -281,6 +281,36 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAssemblyLoadContextTypeAcceleratorModeNone_DoesNotWriteTypeAcceleratorComment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-none-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.None);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.DoesNotContain("Type accelerator registration relies on", bootstrapper);
+            Assert.DoesNotContain("$RegisterPowerForgeAssemblyTypeAccelerators", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithScriptLayoutOnly_WritesScriptLoaderWithoutBinaryLoader()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-script-" + Guid.NewGuid().ToString("N"));

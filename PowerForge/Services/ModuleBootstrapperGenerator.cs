@@ -672,7 +672,8 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (mode == AssemblyTypeAcceleratorExportMode.None)
             return string.Empty;
 
-        return $@"$RegisterPowerForgeAssemblyTypeAccelerators = {{
+        return $@"        # Type accelerator registration relies on $ModuleAssembly and $LibFolder from this ALC loader scope.
+$RegisterPowerForgeAssemblyTypeAccelerators = {{
     param(
         [Parameter(Mandatory = $true)][System.Reflection.Assembly] $ModuleAssembly,
         [Parameter(Mandatory = $true)][string] $LibFolder
@@ -692,7 +693,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         return
     }}
 
-    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains([IO.Path]::DirectorySeparatorChar) -or $LibFolder.Contains([IO.Path]::AltDirectorySeparatorChar) -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
         Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
         return
     }}
@@ -813,7 +814,13 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
             return
         }}
 
-        $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
+        try {{
+            $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
+        }} catch {{
+            Write-Warning -Message ""Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)""
+            return
+        }}
+
         $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
     }}
 

@@ -29,7 +29,7 @@
     "ExportAssemblies": { "type": "array", "items": { "type": "string" } },
     "DisableBinaryCmdletScan": { "type": "boolean" },
     "UseAssemblyLoadContext": { "type": "boolean" },
-    "AssemblyTypeAcceleratorMode": { "type": "string", "enum": ["None", "AllowList", "Assembly"] },
+    "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
     "AssemblyTypeAccelerators": { "type": "array", "items": { "type": "string" } },
     "AssemblyTypeAcceleratorAssemblies": { "type": "array", "items": { "type": "string" } },
     "KeepStaging": { "type": "boolean" }
