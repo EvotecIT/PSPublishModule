@@ -683,6 +683,16 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
     $RequestedTypes = {BuildPowerShellArrayLiteral(normalizedTypes)}
     $RequestedAssemblies = {BuildPowerShellArrayLiteral(normalizedAssemblies)}
 
+    if ($null -eq $ModuleAssembly) {{
+        Write-Warning -Message 'Module assembly was not available. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    if ([string]::IsNullOrWhiteSpace($LibFolder)) {{
+        Write-Warning -Message 'Module library folder was not available. ALC dependency type exposure is disabled.'
+        return
+    }}
+
     $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
     if ($null -eq $TypeAccelerators) {{
         Write-Warning -Message 'PowerShell type accelerator APIs are not available. ALC dependency type exposure is disabled.'

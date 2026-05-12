@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Shared helpers for resolving AssemblyLoadContext type accelerator settings.
 /// </summary>
-public static class AssemblyTypeAcceleratorOptions
+internal static class AssemblyTypeAcceleratorOptions
 {
     /// <summary>
     /// Resolves the effective type accelerator export mode from an optional explicit mode and configured lists.
