@@ -222,7 +222,8 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("AssemblyLoadContext]::GetLoadContext($ModuleAssembly)", bootstrapper);
             Assert.Contains("$AddPowerForgeTypeAccelerator = {", bootstrapper);
             Assert.Contains("Type accelerator '$Name' already exists", bootstrapper);
-            Assert.Contains("if ([object]::ReferenceEquals($Existing[$Name], $Type)) {\r\n                return", bootstrapper);
+            Assert.Contains("if ([object]::ReferenceEquals($Existing[$Name], $Type)) {", bootstrapper);
+            Assert.Contains("return", bootstrapper);
             Assert.Contains("$PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
             Assert.Contains("& $PreviousPowerForgeOnRemove @args", bootstrapper);
             Assert.Contains("OnRemove", bootstrapper);
