@@ -39,7 +39,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XAttribute("Manufacturer", definition.Product.Manufacturer),
             new XAttribute("Version", definition.Product.Version),
             new XAttribute("UpgradeCode", definition.Product.UpgradeCode),
-            new XAttribute("Scope", ToWixScope(definition.Product.Scope)),
+            new XAttribute("Scope", PowerForgeWixInstallerFormatting.ToWixScope(definition.Product.Scope)),
             new XAttribute("Compressed", "yes"),
             new XElement(
                 WixNamespace + "MajorUpgrade",
@@ -57,7 +57,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         root.Add(EmitComponents(definition));
 
         var document = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
-        return document.ToString(SaveOptions.DisableFormatting);
+        return document.ToString(SaveOptions.None);
     }
 
     /// <summary>
@@ -129,7 +129,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             sourceFiles.Select(file => new XElement("Compile", new XAttribute("Include", file)))));
 
         return new XDocument(new XDeclaration("1.0", "utf-8", null), project)
-            .ToString(SaveOptions.DisableFormatting);
+            .ToString(SaveOptions.None);
     }
 
     private static void EmitProperties(XElement package, PowerForgeInstallerDefinition definition)
@@ -245,11 +245,11 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         if (requiredInputs.Count == 1 &&
             !string.IsNullOrWhiteSpace(requiredInputs[0].RequiredMessage))
         {
-            return requiredInputs[0].RequiredMessage!.Trim();
+            return PowerForgeWixInstallerFormatting.EscapeFormattedText(requiredInputs[0].RequiredMessage!.Trim());
         }
 
         var labels = requiredInputs
-            .Select(input => string.IsNullOrWhiteSpace(input.Label) ? input.Id : input.Label)
+            .Select(input => PowerForgeWixInstallerFormatting.EscapeFormattedText(string.IsNullOrWhiteSpace(input.Label) ? input.Id : input.Label))
             .ToArray();
         var visibleLabels = labels.Take(MaxRequiredInputLabelsInMessage).ToArray();
         var remaining = labels.Length - visibleLabels.Length;
@@ -574,7 +574,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 WixNamespace + "Fragment",
                 new XElement(
                     WixNamespace + "StandardDirectory",
-                    new XAttribute("Id", "ProgramFiles64Folder"),
+                    new XAttribute("Id", PowerForgeWixInstallerFormatting.ResolveInstallRootDirectoryId(definition.Product.Scope)),
                     programFilesChild))
         };
 
@@ -678,12 +678,13 @@ public sealed class PowerForgeWixInstallerSourceEmitter
     private static XElement EmitRemoveFolderComponent(PowerForgeInstallerRemoveFolderComponent removeFolder)
     {
         var component = CreateComponent(removeFolder);
-        if (!string.IsNullOrWhiteSpace(removeFolder.Condition))
-            component.Add(new XAttribute("Condition", removeFolder.Condition));
-        component.Add(new XElement(
+        var element = new XElement(
             UtilNamespace + "RemoveFolderEx",
             new XAttribute("On", "uninstall"),
-            new XAttribute("Property", removeFolder.PropertyName)));
+            new XAttribute("Property", removeFolder.PropertyName));
+        if (!string.IsNullOrWhiteSpace(removeFolder.Condition))
+            element.Add(new XAttribute("Condition", removeFolder.Condition));
+        component.Add(element);
         return component;
     }
 
@@ -757,6 +758,9 @@ public sealed class PowerForgeWixInstallerSourceEmitter
     private static XElement EmitShortcutComponent(PowerForgeInstallerShortcutComponent shortcut)
     {
         var component = CreateComponent(shortcut);
+        if (string.IsNullOrWhiteSpace(shortcut.Target) && string.IsNullOrWhiteSpace(shortcut.TargetFileId))
+            throw new InvalidOperationException($"Shortcut component '{shortcut.Id}' requires TargetFileId or Target.");
+
         var target = !string.IsNullOrWhiteSpace(shortcut.Target)
             ? shortcut.Target!
             : "[#" + shortcut.TargetFileId + "]";
@@ -789,8 +793,4 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XAttribute("Guid", component.Guid));
     }
 
-    private static string ToWixScope(PowerForgeInstallerScope scope)
-    {
-        return scope == PowerForgeInstallerScope.PerUser ? "perUser" : "perMachine";
-    }
 }

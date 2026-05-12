@@ -32,7 +32,11 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Key") == @"SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring" &&
             (string?)e.Attribute("Name") == "DelayedAutoStart"));
         Assert.NotNull(doc.Descendants(Util + "RemoveFolderEx").SingleOrDefault(e =>
-            (string?)e.Attribute("Property") == "ProgramDataMonitoring"));
+            (string?)e.Attribute("Property") == "ProgramDataMonitoring" &&
+            (string?)e.Attribute("Condition") == "REMOVE_DATA=1"));
+        Assert.Null(doc.Descendants(Wix + "Component")
+            .Single(e => (string?)e.Attribute("Id") == "RemoveProgramData")
+            .Attribute("Condition"));
         Assert.NotNull(doc.Descendants(Wix + "ComponentGroupRef").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ProductFiles"));
     }
@@ -484,10 +488,54 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Target") == "[#PrimaryExeFile]"));
         Assert.NotNull(doc.Descendants(Wix + "RegistryValue").SingleOrDefault(e =>
             (string?)e.Attribute("KeyPath") == "yes" &&
+            (string?)e.Attribute("Root") == "HKCU" &&
             (string?)e.Attribute("Key") == @"Software\Evotec\IntelligenceX\Chat"));
         Assert.NotNull(doc.Descendants(Wix + "RemoveFolder").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "StartMenuShortcutComponentRemoveFolder" &&
             (string?)e.Attribute("On") == "uninstall"));
+    }
+
+    [Fact]
+    public void EmitSource_UsesPerUserInstallRootForPerUserPackages()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.Scope = PowerForgeInstallerScope.PerUser;
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants(Wix + "StandardDirectory").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "LocalAppDataFolder"));
+        Assert.DoesNotContain(doc.Descendants(Wix + "StandardDirectory"), e =>
+            (string?)e.Attribute("Id") == "ProgramFiles64Folder");
+    }
+
+    [Fact]
+    public void EmitSource_EscapesRequiredPromptFormattedCharacters()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "ApiToken",
+            PropertyName = "API_TOKEN",
+            Label = "API [TOKEN]",
+            Required = true
+        });
+        definition.Dialogs.Add(new PowerForgeInstallerDialog
+        {
+            Id = "ApiDlg",
+            Title = "API",
+            InputIds = { "ApiToken" }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var message = doc.Descendants(Wix + "Dialog")
+            .Single(e => (string?)e.Attribute("Id") == "PowerForgeRequiredInputDlg")
+            .Descendants(Wix + "Control")
+            .Single(e => (string?)e.Attribute("Id") == "Message");
+        Assert.Equal("Fill the required field before continuing: API [\\[]TOKEN[\\]].", (string?)message.Attribute("Text"));
     }
 
     [Fact]

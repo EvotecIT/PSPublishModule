@@ -315,8 +315,18 @@
       },
       "required": ["Type", "Id", "ShortcutId", "Name"],
       "anyOf": [
-        { "required": ["TargetFileId"] },
-        { "required": ["Target"] }
+        {
+          "required": ["TargetFileId"],
+          "properties": {
+            "TargetFileId": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        },
+        {
+          "required": ["Target"],
+          "properties": {
+            "Target": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        }
       ]
     },
     "PowerForgeInstallerRegistryValueComponent": {
@@ -337,8 +347,18 @@
       },
       "required": ["Type", "Id", "Key", "Name"],
       "anyOf": [
-        { "required": ["Value"] },
-        { "required": ["ValueProperty"] }
+        {
+          "required": ["Value"],
+          "properties": {
+            "Value": { "type": "string", "pattern": "\\S" }
+          }
+        },
+        {
+          "required": ["ValueProperty"],
+          "properties": {
+            "ValueProperty": { "type": "string", "minLength": 1, "pattern": "\\S" }
+          }
+        }
       ]
     },
     "PowerForgeInstallerComponent": {

@@ -47,15 +47,22 @@ internal static class PowerForgeInstallerDefinitionValidator
             "installer dialog ID");
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot
         // collide with future generated validation prompts such as PowerForgeRequiredInputDlg2.
-        if (definition.Dialogs.Any(dialog => dialog.Id.StartsWith(RequiredInputDialogIdPrefix, StringComparison.OrdinalIgnoreCase)))
+        if (definition.Dialogs.Any(dialog =>
+            !string.IsNullOrWhiteSpace(dialog.Id) &&
+            dialog.Id.StartsWith(RequiredInputDialogIdPrefix, StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidOperationException(
                 $"Installer dialog IDs starting with '{RequiredInputDialogIdPrefix}' are reserved for generated required-input validation.");
         }
 
+        var directoryIds = definition.Directories
+            .SelectMany(tree => tree.Segments)
+            .Select(segment => segment.Id)
+            .Concat(new[] { definition.InstallDirectoryId });
+        if (definition.UseCompanyFolder)
+            directoryIds = directoryIds.Concat(new[] { "CompanyFolder" });
         EnsureUnique(
-            definition.Directories.SelectMany(tree => tree.Segments).Select(segment => segment.Id)
-                .Concat(new[] { definition.InstallDirectoryId }),
+            directoryIds,
             "installer directory ID");
         EnsureUnique(
             definition.Components.Select(component => component.Id),
@@ -150,11 +157,13 @@ internal static class PowerForgeInstallerDefinitionValidator
             {
                 Require(file.FileId, nameof(file.FileId));
                 RequireWixIdentifier(file.FileId, $"file component '{file.Id}' FileId");
+                Require(file.Source, nameof(file.Source));
             }
             else if (component is PowerForgeInstallerServiceComponent service)
             {
                 Require(service.FileId, nameof(service.FileId));
                 RequireWixIdentifier(service.FileId, $"service component '{service.Id}' FileId");
+                Require(service.Source, nameof(service.Source));
             }
             else if (component is PowerForgeInstallerRemoveFolderComponent removeFolder)
             {
