@@ -40,7 +40,7 @@ jobs:
     with:
       config-path: ./.powerforge/runner-housekeeping.json
       powerforge-ref: main
-      runner-labels: '["self-hosted","ubuntu"]'
+      runner-labels: '["self-hosted","linux"]'
 ```
 
 Minimal config:
@@ -48,22 +48,22 @@ Minimal config:
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
-  "repository": "EvotecIT/YourRepo",
-  "tokenEnvName": "GITHUB_TOKEN",
-  "artifacts": {
-    "enabled": true,
-    "keepLatestPerName": 10,
-    "maxAgeDays": 7,
-    "maxDelete": 200
+  "Repository": "EvotecIT/YourRepo",
+  "TokenEnvName": "GITHUB_TOKEN",
+  "Artifacts": {
+    "Enabled": true,
+    "KeepLatestPerName": 10,
+    "MaxAgeDays": 7,
+    "MaxDelete": 200
   },
-  "caches": {
-    "enabled": true,
-    "keepLatestPerKey": 2,
-    "maxAgeDays": 14,
-    "maxDelete": 200
+  "Caches": {
+    "Enabled": true,
+    "KeepLatestPerKey": 2,
+    "MaxAgeDays": 14,
+    "MaxDelete": 200
   },
-  "runner": {
-    "enabled": false
+  "Runner": {
+    "Enabled": false
   }
 }
 ```
@@ -90,8 +90,14 @@ jobs:
 
 - Cache and artifact deletion need `actions: write`.
 - Set `apply: "false"` to preview without deleting anything.
-- Prefer letting the workflow decide apply vs dry-run; omit `dryRun` from checked-in repo config unless you have a non-workflow caller that truly needs a local default.
+- Prefer letting the workflow decide apply vs dry-run; omit `DryRun` from checked-in repo config unless you have a non-workflow caller that truly needs a local default.
 - A dry-run can still report large cache or artifact totals with `0 eligible` deletes when current keep/latest and age rules retain everything; the Markdown summary explains that breakdown.
-- Hosted-runner repos should usually keep `runner.enabled` set to `false` in config.
+- Hosted-runner repos should usually keep `Runner.Enabled` set to `false` in config.
+- Runner cleanup keeps the active `GITHUB_WORKSPACE` checkout and known internal `_work` folders, then removes old top-level repository workspaces by `Runner.WorkspacesRetentionDays`.
+- Repository workspace cleanup is opt-in for direct API and CLI callers; enable `Runner.CleanWorkspaces` in checked-in housekeeping configs or pass `--clean-workspaces` to the direct runner cleanup command.
+- Workspace age uses the newer timestamp of `_work/<repo>` and `_work/<repo>/<repo>` when the nested checkout directory exists.
+- `Runner.WorkspacesRetentionDays: 0` means repository workspaces can be removed immediately when they are not the active checkout and not a known runner-internal folder.
+- Config deserialization is case-insensitive, so existing camelCase housekeeping files continue to load even though examples use the public model casing.
+- Matrix fan-out with the same runner labels is best-effort. Add unique runner labels when cleanup must target specific physical hosts.
 - The public reusable workflow entrypoint is `powerforge-github-housekeeping.yml`.
 - The composite action exposes `report-path` and `summary-path` outputs for callers that want to publish the generated reports elsewhere.

@@ -13,6 +13,17 @@ namespace PowerForge;
 /// </summary>
 public sealed class RunnerHousekeepingService
 {
+    // Known runner-owned work directories should survive repository workspace cleanup.
+    // _PipelineMapping is kept for cross-runner safety even though it is not created by GitHub Actions.
+    private static readonly string[] RunnerInternalWorkDirectoryNames =
+    {
+        "_actions",
+        "_PipelineMapping",
+        "_temp",
+        "_tool",
+        "_update"
+    };
+
     private readonly ILogger _logger;
 
     /// <summary>
@@ -64,6 +75,17 @@ public sealed class RunnerHousekeepingService
                 title: "Cleanup runner temp",
                 rootPath: normalized.RunnerTempPath,
                 dryRun: normalized.DryRun));
+        }
+
+        if (normalized.CleanWorkspaces)
+        {
+            steps.Add(DeleteWorkspaceDirectoriesOlderThan(
+                id: "workspaces",
+                title: "Cleanup old repository workspaces",
+                rootPath: normalized.WorkRootPath,
+                retentionDays: normalized.WorkspacesRetentionDays,
+                dryRun: normalized.DryRun,
+                allowSudo: normalized.AllowSudo));
         }
 
         if (aggressiveApplied)
@@ -164,12 +186,14 @@ public sealed class RunnerHousekeepingService
         public long? AggressiveThresholdBytes { get; set; }
         public int DiagnosticsRetentionDays { get; set; }
         public int ActionsRetentionDays { get; set; }
+        public int WorkspacesRetentionDays { get; set; }
         public int ToolCacheRetentionDays { get; set; }
         public bool DryRun { get; set; }
         public bool Aggressive { get; set; }
         public bool CleanDiagnostics { get; set; }
         public bool CleanRunnerTemp { get; set; }
         public bool CleanActionsCache { get; set; }
+        public bool CleanWorkspaces { get; set; }
         public bool CleanToolCache { get; set; }
         public bool ClearDotNetCaches { get; set; }
         public bool PruneDocker { get; set; }
@@ -209,12 +233,14 @@ public sealed class RunnerHousekeepingService
             AggressiveThresholdBytes = aggressiveThresholdBytes,
             DiagnosticsRetentionDays = Math.Max(0, spec.DiagnosticsRetentionDays),
             ActionsRetentionDays = Math.Max(0, spec.ActionsRetentionDays),
+            WorkspacesRetentionDays = Math.Max(0, spec.WorkspacesRetentionDays),
             ToolCacheRetentionDays = Math.Max(0, spec.ToolCacheRetentionDays),
             DryRun = spec.DryRun,
             Aggressive = spec.Aggressive,
             CleanDiagnostics = spec.CleanDiagnostics,
             CleanRunnerTemp = spec.CleanRunnerTemp,
             CleanActionsCache = spec.CleanActionsCache,
+            CleanWorkspaces = spec.CleanWorkspaces,
             CleanToolCache = spec.CleanToolCache,
             ClearDotNetCaches = spec.ClearDotNetCaches,
             PruneDocker = spec.PruneDocker,
@@ -303,6 +329,23 @@ public sealed class RunnerHousekeepingService
         return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
     }
 
+    private RunnerHousekeepingStepResult DeleteWorkspaceDirectoriesOlderThan(string id, string title, string? rootPath, int retentionDays, bool dryRun, bool allowSudo)
+    {
+        if (rootPath is null || string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            return SkippedStep(id, title, $"Path not found: {rootPath ?? "(null)"}");
+
+        var currentWorkspaceRoot = ResolveCurrentWorkspaceRoot(rootPath);
+        var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+        var targets = Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => !IsRunnerInternalWorkDirectory(path))
+            .Where(path => !PathsEqual(path, currentWorkspaceRoot))
+            .Where(path => GetWorkspaceLastActivityUtc(path) <= cutoff)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
+    }
+
     private RunnerHousekeepingStepResult DeleteTargets(string id, string title, string[] targets, bool dryRun, bool allowSudo, bool? isDirectory, string? allowedRootPath)
     {
         if (targets.Length == 0)
@@ -360,7 +403,15 @@ public sealed class RunnerHousekeepingService
     {
         try
         {
-            if (isDirectory == true || (isDirectory is null && Directory.Exists(target)))
+            if (isDirectory == true)
+            {
+                if (Directory.Exists(target))
+                    Directory.Delete(target, recursive: true);
+
+                return;
+            }
+
+            if (isDirectory is null && Directory.Exists(target))
             {
                 Directory.Delete(target, recursive: true);
                 return;
@@ -506,7 +557,7 @@ public sealed class RunnerHousekeepingService
 
         var fullRoot = AppendDirectorySeparator(root!);
         var fullTarget = Path.GetFullPath(target);
-        if (!fullTarget.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        if (!fullTarget.StartsWith(fullRoot, GetPathComparison()))
             throw new InvalidOperationException($"Refusing sudo delete for '{target}' because it is outside '{root}'.");
     }
 
@@ -520,6 +571,61 @@ public sealed class RunnerHousekeepingService
             ? path
             : path + Path.DirectorySeparatorChar;
     }
+
+    private static string? ResolveCurrentWorkspaceRoot(string workRootPath)
+    {
+        var workspace = ResolvePathOrNull(Environment.GetEnvironmentVariable("GITHUB_WORKSPACE"));
+        if (string.IsNullOrWhiteSpace(workspace))
+            return null;
+
+        var fullWorkRoot = AppendDirectorySeparator(Path.GetFullPath(workRootPath));
+        var fullWorkspace = Path.GetFullPath(workspace);
+        if (!fullWorkspace.StartsWith(fullWorkRoot, GetPathComparison()))
+            return null;
+
+        var relative = fullWorkspace.Substring(fullWorkRoot.Length);
+        var separatorIndex = relative.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+        if (separatorIndex < 0)
+            return fullWorkspace;
+
+        var topLevelName = relative.Substring(0, separatorIndex);
+        return string.IsNullOrWhiteSpace(topLevelName)
+            ? null
+            : Path.Combine(workRootPath, topLevelName);
+    }
+
+    private static bool IsRunnerInternalWorkDirectory(string path)
+        => RunnerInternalWorkDirectoryNames.Contains(Path.GetFileName(path), GetPathStringComparer());
+
+    private static DateTime GetWorkspaceLastActivityUtc(string workspacePath)
+    {
+        var lastActivity = Directory.GetLastWriteTimeUtc(workspacePath);
+        var checkoutPath = Path.Combine(workspacePath, Path.GetFileName(workspacePath));
+        if (Directory.Exists(checkoutPath))
+        {
+            var checkoutWriteTime = Directory.GetLastWriteTimeUtc(checkoutPath);
+            if (checkoutWriteTime > lastActivity)
+                lastActivity = checkoutWriteTime;
+        }
+
+        return lastActivity;
+    }
+
+    private static bool PathsEqual(string path, string? other)
+        // This is intentionally lexical normalization. It handles relative segments and casing rules,
+        // but does not resolve symlink targets.
+        => !string.IsNullOrWhiteSpace(other)
+           && string.Equals(Path.GetFullPath(path), Path.GetFullPath(other), GetPathComparison());
+
+    private static StringComparison GetPathComparison()
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    private static StringComparer GetPathStringComparer()
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
     {

@@ -2,7 +2,7 @@ name: Runner Housekeeping
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
       apply:
@@ -10,9 +10,9 @@ on:
         required: false
         default: "true"
       min_free_gb:
-        description: "Minimum free disk (GiB) required after cleanup"
+        description: "Minimum free disk (GiB) required after cleanup; default matches current runner headroom."
         required: false
-        default: "20"
+        default: "15"
 
 permissions:
   actions: write
@@ -26,13 +26,18 @@ jobs:
   cleanup-linux-runner:
     # Self-hosted runner cleanup is only relevant for private repos in our current setup.
     if: ${{ github.event.repository.private }}
+    strategy:
+      fail-fast: false
+      # Best-effort spread across idle Linux runners. Add unique runner labels if per-host routing is required.
+      matrix:
+        slot: [1, 2, 3, 4]
     uses: ./.github/workflows/powerforge-github-runner-housekeeping.yml
     with:
       config_path: ./.powerforge/runner-housekeeping.json
       apply: ${{ inputs.apply == 'true' }}
       powerforge_ref: ${{ github.sha }}
-      runner_labels_json: '["self-hosted","ubuntu"]'
-      runner_min_free_gb: ${{ github.event_name == 'workflow_dispatch' && (inputs.min_free_gb != '' && inputs.min_free_gb || '20') || (vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB != '' && vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB || '') }}
-      report_artifact_name: runner-housekeeping-reports
+      runner_labels_json: '["self-hosted","linux"]'
+      runner_min_free_gb: ${{ github.event_name == 'workflow_dispatch' && (inputs.min_free_gb != '' && inputs.min_free_gb || '15') || (vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB != '' && vars.POWERFORGE_RUNNER_HOUSEKEEPING_MIN_FREE_GB || '') }}
+      report_artifact_name: runner-housekeeping-reports-${{ matrix.slot }}
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}

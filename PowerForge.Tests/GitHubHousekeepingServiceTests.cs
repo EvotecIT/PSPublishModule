@@ -79,6 +79,42 @@ public sealed class GitHubHousekeepingServiceTests
         Assert.Contains("token", result.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ConfigDeserialization_AcceptsCamelCaseRunnerSettings()
+    {
+        const string json = """
+        {
+          "repository": "EvotecIT/PSPublishModule",
+          "tokenEnvName": "GITHUB_TOKEN",
+          "artifacts": {
+            "enabled": false
+          },
+          "caches": {
+            "enabled": false
+          },
+          "runner": {
+            "enabled": true,
+            "minFreeGb": 15,
+            "workspacesRetentionDays": 3,
+            "cleanWorkspaces": false
+          }
+        }
+        """;
+
+        var spec = JsonSerializer.Deserialize<GitHubHousekeepingSpec>(
+            json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(spec);
+        Assert.Equal("EvotecIT/PSPublishModule", spec!.Repository);
+        Assert.False(spec.Artifacts.Enabled);
+        Assert.False(spec.Caches.Enabled);
+        Assert.True(spec.Runner.Enabled);
+        Assert.Equal(15, spec.Runner.MinFreeGb);
+        Assert.Equal(3, spec.Runner.WorkspacesRetentionDays);
+        Assert.False(spec.Runner.CleanWorkspaces);
+    }
+
     private static FakeArtifact Artifact(long id, string name, int daysAgo)
     {
         var timestamp = DateTimeOffset.UtcNow.AddDays(-daysAgo);

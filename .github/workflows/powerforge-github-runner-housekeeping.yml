@@ -89,7 +89,7 @@ permissions:
 jobs:
   housekeeping:
     # runs-on is resolved before any steps run, so the fallback must stay inline here.
-    runs-on: ${{ fromJson(inputs.runner_labels_json != '' && inputs.runner_labels_json || (inputs['runner-labels'] != '' && inputs['runner-labels'] || '["self-hosted","ubuntu"]')) }}
+    runs-on: ${{ fromJson(inputs.runner_labels_json != '' && inputs.runner_labels_json || (inputs['runner-labels'] != '' && inputs['runner-labels'] || '["self-hosted","linux"]')) }}
     timeout-minutes: 20
     steps:
       - name: Resolve workflow inputs

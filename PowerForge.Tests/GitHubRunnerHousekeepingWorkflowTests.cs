@@ -19,12 +19,29 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Contains("fromJson(", runsOnLine, StringComparison.Ordinal);
         Assert.Contains("inputs.runner_labels_json != '' && inputs.runner_labels_json", runsOnLine, StringComparison.Ordinal);
         Assert.Contains("inputs['runner-labels'] != '' && inputs['runner-labels']", runsOnLine, StringComparison.Ordinal);
-        Assert.Contains("'[\"self-hosted\",\"ubuntu\"]'", runsOnLine, StringComparison.Ordinal);
+        Assert.Contains("'[\"self-hosted\",\"linux\"]'", runsOnLine, StringComparison.Ordinal);
         Assert.Contains("./.powerforge/pspublishmodule/.github/actions/github-housekeeping", workflowYaml, StringComparison.Ordinal);
         Assert.Contains(".powerforge/runner-housekeeping.json", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-min-free-gb", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("report-artifact-name", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("actions: write", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CallerWorkflow_ShouldFanOutAcrossLinuxRunnerSlots()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "runner-housekeeping.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Runner housekeeping caller workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("cron: \"17 2 * * *\"", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("fail-fast: false", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("slot: [1, 2, 3, 4]", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner_labels_json: '[\"self-hosted\",\"linux\"]'", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner-housekeeping-reports-${{ matrix.slot }}", workflowYaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

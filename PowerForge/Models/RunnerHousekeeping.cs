@@ -54,6 +54,12 @@ public sealed class RunnerHousekeepingSpec
     public int ActionsRetentionDays { get; set; } = 7;
 
     /// <summary>
+    /// Retention window for old repository workspaces under the runner work root. Use <c>0</c> to allow
+    /// any age-qualified workspace that is not the active checkout or a runner-internal directory.
+    /// </summary>
+    public int WorkspacesRetentionDays { get; set; } = 3;
+
+    /// <summary>
     /// Retention window for runner tool cache directories.
     /// </summary>
     public int ToolCacheRetentionDays { get; set; } = 30;
@@ -82,6 +88,12 @@ public sealed class RunnerHousekeepingSpec
     /// When true, GitHub actions working sets under <c>_actions</c> are cleaned during aggressive cleanup.
     /// </summary>
     public bool CleanActionsCache { get; set; } = true;
+
+    /// <summary>
+    /// When true, old top-level repository workspaces under the runner work root are cleaned. This is opt-in
+    /// for direct API and CLI callers; checked-in housekeeping configs can enable it explicitly.
+    /// </summary>
+    public bool CleanWorkspaces { get; set; }
 
     /// <summary>
     /// When true, runner tool cache directories are cleaned during aggressive cleanup.

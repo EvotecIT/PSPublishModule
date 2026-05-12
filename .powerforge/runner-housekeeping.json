@@ -1,18 +1,20 @@
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.housekeeping.schema.json",
-  "repository": "EvotecIT/PSPublishModule",
-  "tokenEnvName": "GITHUB_TOKEN",
-  "artifacts": {
-    "enabled": false
+  "Repository": "EvotecIT/PSPublishModule",
+  "TokenEnvName": "GITHUB_TOKEN",
+  "Artifacts": {
+    "Enabled": false
   },
-  "caches": {
-    "enabled": false
+  "Caches": {
+    "Enabled": false
   },
-  "runner": {
-    "enabled": true,
-    "minFreeGb": 20,
-    "diagnosticsRetentionDays": 14,
-    "actionsRetentionDays": 7,
-    "toolCacheRetentionDays": 30
+  "Runner": {
+    "Enabled": true,
+    "MinFreeGb": 15,
+    "DiagnosticsRetentionDays": 14,
+    "ActionsRetentionDays": 7,
+    "WorkspacesRetentionDays": 3,
+    "CleanWorkspaces": true,
+    "ToolCacheRetentionDays": 30
   }
 }
