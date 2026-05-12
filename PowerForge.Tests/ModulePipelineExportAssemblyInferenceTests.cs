@@ -456,6 +456,49 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void Plan_TypeAccelerators_EnableAssemblyLoadContextAndRecordMissingCsprojReason()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "PSParseHTML",
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            AssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" }
+                        }
+                    }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+
+            Assert.True(plan.BuildSpec.UseAssemblyLoadContext);
+            Assert.Equal(AssemblyTypeAcceleratorExportMode.AllowList, plan.BuildSpec.AssemblyTypeAcceleratorMode);
+            Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, plan.BuildSpec.AssemblyTypeAccelerators);
+            Assert.Equal(new[] { "UseAssemblyLoadContext", "NETAssemblyTypeAccelerators" }, plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_UsesLastBuildLibrariesValue_ForDoNotCopyLibrariesRecursivelyReason()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

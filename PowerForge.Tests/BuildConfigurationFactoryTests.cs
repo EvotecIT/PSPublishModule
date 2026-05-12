@@ -29,6 +29,10 @@ public sealed class BuildConfigurationFactoryTests
             NETProjectPath = "src/Sample.csproj",
             NETAssemblyLoadContextSpecified = true,
             NETAssemblyLoadContext = true,
+            NETAssemblyTypeAcceleratorModeSpecified = true,
+            NETAssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.AllowList,
+            NETAssemblyTypeAcceleratorsSpecified = true,
+            NETAssemblyTypeAccelerators = new[] { "HtmlAgilityPack.HtmlEntity" },
             SkipBuiltinReplacementsSpecified = true,
             SkipBuiltinReplacements = true
         });
@@ -51,6 +55,8 @@ public sealed class BuildConfigurationFactoryTests
         Assert.Equal("Release", libraries.BuildLibraries.Configuration);
         Assert.Equal("src/Sample.csproj", libraries.BuildLibraries.NETProjectPath);
         Assert.True(libraries.BuildLibraries.UseAssemblyLoadContext);
+        Assert.Equal(AssemblyTypeAcceleratorExportMode.AllowList, libraries.BuildLibraries.AssemblyTypeAcceleratorMode);
+        Assert.Equal(new[] { "HtmlAgilityPack.HtmlEntity" }, libraries.BuildLibraries.AssemblyTypeAccelerators);
 
         var placeholder = Assert.IsType<ConfigurationPlaceHolderOptionSegment>(segments[3]);
         Assert.True(placeholder.PlaceHolderOption.SkipBuiltinReplacements);

@@ -93,6 +93,12 @@
         "HandleRuntimes": { "type": ["boolean", "null"] },
         "UseAssemblyLoadContext": { "type": ["boolean", "null"] },
         "NETAssemblyLoadContext": { "type": ["boolean", "null"] },
+        "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
+        "NETAssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
+        "AssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
+        "NETAssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
+        "AssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
+        "NETAssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETDoNotCopyLibrariesRecursively": { "type": ["boolean", "null"] }
       }
     },

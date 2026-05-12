@@ -131,6 +131,12 @@ public static class LegacySegmentAdapter
                             : HasKey(buildLibraries, "NETAssemblyLoadContext")
                                 ? GetBool(buildLibraries, "NETAssemblyLoadContext")
                                 : null,
+                        AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "AssemblyTypeAcceleratorMode"))
+                            ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(buildLibraries, "NETAssemblyTypeAcceleratorMode")),
+                        AssemblyTypeAccelerators = GetStringArray(buildLibraries, "AssemblyTypeAccelerators")
+                            ?? GetStringArray(buildLibraries, "NETAssemblyTypeAccelerators"),
+                        AssemblyTypeAcceleratorAssemblies = GetStringArray(buildLibraries, "AssemblyTypeAcceleratorAssemblies")
+                            ?? GetStringArray(buildLibraries, "NETAssemblyTypeAcceleratorAssemblies"),
                         NETDoNotCopyLibrariesRecursively = HasKey(buildLibraries, "NETDoNotCopyLibrariesRecursively")
                             ? GetBool(buildLibraries, "NETDoNotCopyLibrariesRecursively")
                             : null
@@ -208,6 +214,12 @@ public static class LegacySegmentAdapter
                         : HasKey(conf, "NETAssemblyLoadContext")
                             ? GetBool(conf, "NETAssemblyLoadContext")
                             : null,
+                    AssemblyTypeAcceleratorMode = TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "AssemblyTypeAcceleratorMode"))
+                        ?? TryParseAssemblyTypeAcceleratorExportMode(GetString(conf, "NETAssemblyTypeAcceleratorMode")),
+                    AssemblyTypeAccelerators = GetStringArray(conf, "AssemblyTypeAccelerators")
+                        ?? GetStringArray(conf, "NETAssemblyTypeAccelerators"),
+                    AssemblyTypeAcceleratorAssemblies = GetStringArray(conf, "AssemblyTypeAcceleratorAssemblies")
+                        ?? GetStringArray(conf, "NETAssemblyTypeAcceleratorAssemblies"),
                     NETDoNotCopyLibrariesRecursively = HasKey(conf, "NETDoNotCopyLibrariesRecursively")
                         ? GetBool(conf, "NETDoNotCopyLibrariesRecursively")
                         : null
@@ -270,6 +282,12 @@ public static class LegacySegmentAdapter
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         return Enum.TryParse<InstallationStrategy>(value!.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static AssemblyTypeAcceleratorExportMode? TryParseAssemblyTypeAcceleratorExportMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<AssemblyTypeAcceleratorExportMode>(value!.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static IDictionary? GetDictionary(IDictionary dict, string key)

@@ -102,6 +102,12 @@ internal sealed class BuildConfigurationRequest
     public bool NETHandleRuntimes { get; set; }
     public bool NETAssemblyLoadContextSpecified { get; set; }
     public bool NETAssemblyLoadContext { get; set; }
+    public bool NETAssemblyTypeAcceleratorModeSpecified { get; set; }
+    public AssemblyTypeAcceleratorExportMode? NETAssemblyTypeAcceleratorMode { get; set; }
+    public bool NETAssemblyTypeAcceleratorsSpecified { get; set; }
+    public string[]? NETAssemblyTypeAccelerators { get; set; }
+    public bool NETAssemblyTypeAcceleratorAssembliesSpecified { get; set; }
+    public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
     public bool KillLockersBeforeInstallSpecified { get; set; }
     public bool KillLockersBeforeInstall { get; set; }
     public bool KillLockersForceSpecified { get; set; }

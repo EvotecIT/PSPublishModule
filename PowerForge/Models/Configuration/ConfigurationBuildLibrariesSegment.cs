@@ -70,6 +70,39 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Legacy alias for <see cref="UseAssemblyLoadContext"/>.</summary>
     public bool? NETAssemblyLoadContext { get; set; }
 
+    /// <summary>Controls optional PowerShell type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.</summary>
+    public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="AssemblyTypeAcceleratorMode"/>.</summary>
+    public AssemblyTypeAcceleratorExportMode? NETAssemblyTypeAcceleratorMode { get; set; }
+
+    /// <summary>Fully-qualified type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.</summary>
+    public string[]? AssemblyTypeAccelerators { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="AssemblyTypeAccelerators"/>.</summary>
+    public string[]? NETAssemblyTypeAccelerators { get; set; }
+
+    /// <summary>Assembly simple names whose public types may be exposed as PowerShell type accelerators when assembly mode is enabled.</summary>
+    public string[]? AssemblyTypeAcceleratorAssemblies { get; set; }
+
+    /// <summary>Legacy .NET build alias for <see cref="AssemblyTypeAcceleratorAssemblies"/>.</summary>
+    public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
+
     /// <summary>Do not copy libraries recursively (legacy).</summary>
     public bool? NETDoNotCopyLibrariesRecursively { get; set; }
+}
+
+/// <summary>
+/// Controls how PowerForge exposes types loaded in a module-scoped AssemblyLoadContext to PowerShell callers.
+/// </summary>
+public enum AssemblyTypeAcceleratorExportMode
+{
+    /// <summary>Do not register type accelerators for ALC-loaded dependency types.</summary>
+    None = 0,
+
+    /// <summary>Register only explicitly configured fully-qualified type names.</summary>
+    AllowList = 1,
+
+    /// <summary>Register all public types from explicitly configured assemblies.</summary>
+    Assembly = 2
 }

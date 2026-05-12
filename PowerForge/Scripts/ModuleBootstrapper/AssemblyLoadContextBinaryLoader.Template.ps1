@@ -63,6 +63,7 @@ if ($PSEdition -eq 'Core') {
         $ModuleAssembly = [{{LoaderTypeName}}]::LoadModule($ModuleAssemblyPath, '{{ModuleName}}')
         $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
+{{TypeAcceleratorBlock}}
         if ($InnerModule) {
             # Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
             # public API to copy those exported cmdlets back to the script-module wrapper, so this uses the same

@@ -162,6 +162,9 @@ public sealed class ModuleBuildPipeline
                 spec.ExportAssemblies,
                 spec.HandleRuntimes,
                 spec.UseAssemblyLoadContext,
+                spec.AssemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies,
                 targetFrameworks: spec.Frameworks,
                 log: message => _logger.Info(message));
         }
