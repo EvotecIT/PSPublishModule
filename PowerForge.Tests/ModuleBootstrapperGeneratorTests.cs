@@ -242,14 +242,16 @@ public class ModuleBootstrapperGeneratorTests
     {
         var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
             AssemblyTypeAcceleratorExportMode.Assembly,
-            Array.Empty<string>(),
+            new[] { "Dependency.Widget" },
             new[] { "Dependency" });
 
         Assert.Contains("$Mode = 'Assembly'", block);
+        Assert.Contains("$RequestedTypes = @('Dependency.Widget')", block);
         Assert.Contains("$RequestedAssemblies = @('Dependency')", block);
         Assert.Contains("$ExportedTypes = @($Assembly.GetExportedTypes())", block);
         Assert.Contains("Could not enumerate exported types from assembly '$AssemblyName'", block);
         Assert.Contains("& $AddPowerForgeTypeAccelerator -Type $Type", block);
+        Assert.Contains("foreach ($TypeName in $RequestedTypes)", block);
     }
 
     [Fact]

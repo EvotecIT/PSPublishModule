@@ -193,11 +193,11 @@ public sealed class ModuleBuildPipeline
         if (mode.HasValue)
             return mode.Value;
 
-        if (HasAnyConfiguredValue(typeNames))
-            return AssemblyTypeAcceleratorExportMode.AllowList;
-
         if (HasAnyConfiguredValue(assemblyNames))
             return AssemblyTypeAcceleratorExportMode.Assembly;
+
+        if (HasAnyConfiguredValue(typeNames))
+            return AssemblyTypeAcceleratorExportMode.AllowList;
 
         return AssemblyTypeAcceleratorExportMode.None;
     }
