@@ -763,6 +763,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Secure = input.Secure,
                 Hidden = input.Hidden,
                 Required = input.Required,
+                RequiredMessage = input.RequiredMessage,
                 MinLength = input.MinLength,
                 MaxLength = input.MaxLength,
                 ValidationPattern = input.ValidationPattern,

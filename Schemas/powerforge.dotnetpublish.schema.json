@@ -167,6 +167,7 @@
         "Secure": { "type": "boolean" },
         "Hidden": { "type": "boolean" },
         "Required": { "type": "boolean" },
+        "RequiredMessage": { "type": ["string", "null"] },
         "MinLength": { "type": ["integer", "null"], "minimum": 0 },
         "MaxLength": { "type": ["integer", "null"], "minimum": 0 },
         "ValidationPattern": { "type": ["string", "null"] },
@@ -176,7 +177,23 @@
           "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }
         }
       },
-      "required": ["Id", "PropertyName", "Label"]
+      "required": ["Id", "PropertyName", "Label"],
+      "allOf": [
+        {
+          "if": {
+            "required": ["RequiredMessage"],
+            "properties": {
+              "RequiredMessage": { "type": "string", "pattern": "\\S" }
+            }
+          },
+          "then": {
+            "required": ["Required"],
+            "properties": {
+              "Required": { "const": true }
+            }
+          }
+        }
+      ]
     },
     "PowerForgeInstallerDialog": {
       "type": "object",

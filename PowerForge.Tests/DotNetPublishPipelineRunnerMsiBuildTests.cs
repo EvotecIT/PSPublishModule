@@ -153,6 +153,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 PropertyName = "LICENSE_KEY",
                 Label = "License key",
                 Kind = PowerForgeInstallerInputKind.LicenseKey,
+                Required = true,
+                RequiredMessage = "Enter a license key before continuing.",
                 MinLength = 16,
                 MaxLength = 128,
                 ValidationPattern = "^[A-Za-z0-9-]+$",
@@ -174,6 +176,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.NotNull(installerPlan.Authoring);
             Assert.Equal("ProductFiles", installerPlan.HarvestComponentGroupId);
             var input = Assert.Single(installerPlan.Authoring!.Inputs);
+            Assert.True(input.Required);
+            Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);
             Assert.Equal(16, input.MinLength);
             Assert.Equal(128, input.MaxLength);
             Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);

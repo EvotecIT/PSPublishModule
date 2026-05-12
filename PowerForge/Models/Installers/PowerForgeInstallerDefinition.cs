@@ -163,6 +163,11 @@ public sealed class PowerForgeInstallerInput
     public bool Required { get; set; }
 
     /// <summary>
+    /// Optional message shown by generated dialogs when this is the only missing required input.
+    /// </summary>
+    public string? RequiredMessage { get; set; }
+
+    /// <summary>
     /// Minimum accepted text length for authored validation metadata.
     /// </summary>
     public int? MinLength { get; set; }
