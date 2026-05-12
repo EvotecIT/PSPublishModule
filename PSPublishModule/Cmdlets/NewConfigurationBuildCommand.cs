@@ -271,6 +271,21 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Alias("UseAssemblyLoadContext")]
     public SwitchParameter NETAssemblyLoadContext { get; set; }
 
+    /// <summary>Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.</summary>
+    [Parameter]
+    [Alias("AssemblyTypeAcceleratorMode")]
+    public AssemblyTypeAcceleratorExportMode? NETAssemblyTypeAcceleratorMode { get; set; }
+
+    /// <summary>Fully-qualified dependency type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.</summary>
+    [Parameter]
+    [Alias("AssemblyTypeAccelerators")]
+    public string[]? NETAssemblyTypeAccelerators { get; set; }
+
+    /// <summary>Assembly simple names whose public types may be exposed as PowerShell type accelerators when assembly mode is enabled.</summary>
+    [Parameter]
+    [Alias("AssemblyTypeAcceleratorAssemblies")]
+    public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
+
     /// <summary>Kill locking processes before install.</summary>
     [Parameter] public SwitchParameter KillLockersBeforeInstall { get; set; }
 
@@ -386,6 +401,12 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETHandleRuntimes = NETHandleRuntimes.IsPresent,
             NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),
             NETAssemblyLoadContext = NETAssemblyLoadContext.IsPresent,
+            NETAssemblyTypeAcceleratorModeSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAcceleratorMode)),
+            NETAssemblyTypeAcceleratorMode = NETAssemblyTypeAcceleratorMode,
+            NETAssemblyTypeAcceleratorsSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAccelerators)),
+            NETAssemblyTypeAccelerators = NETAssemblyTypeAccelerators,
+            NETAssemblyTypeAcceleratorAssembliesSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAcceleratorAssemblies)),
+            NETAssemblyTypeAcceleratorAssemblies = NETAssemblyTypeAcceleratorAssemblies,
             KillLockersBeforeInstallSpecified = bound.ContainsKey(nameof(KillLockersBeforeInstall)),
             KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent,
             KillLockersForceSpecified = bound.ContainsKey(nameof(KillLockersForce)),

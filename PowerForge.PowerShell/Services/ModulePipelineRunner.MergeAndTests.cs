@@ -369,6 +369,9 @@ public sealed partial class ModulePipelineRunner
                 exportAssemblies,
                 handleRuntimes,
                 useAssemblyLoadContext: plan?.BuildSpec.UseAssemblyLoadContext ?? false,
+                assemblyTypeAcceleratorMode: plan?.BuildSpec.AssemblyTypeAcceleratorMode ?? AssemblyTypeAcceleratorExportMode.None,
+                assemblyTypeAccelerators: plan?.BuildSpec.AssemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies: plan?.BuildSpec.AssemblyTypeAcceleratorAssemblies,
                 conditionalFunctionDependencies: conditionalExportDependencies,
                 targetFrameworks: plan?.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));

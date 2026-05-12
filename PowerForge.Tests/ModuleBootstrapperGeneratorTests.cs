@@ -192,6 +192,126 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContextTypeAccelerators_WritesAllowListedRegistrationBlock()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-types-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.AllowList,
+                assemblyTypeAccelerators: new[] { "Dependency.Widget" });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$RegisterPowerForgeAssemblyTypeAccelerators = {", bootstrapper);
+            Assert.Contains("$Mode = 'AllowList'", bootstrapper);
+            Assert.Contains("$RequestedTypes = @('Dependency.Widget')", bootstrapper);
+            Assert.Contains("System.Management.Automation.TypeAccelerators", bootstrapper);
+            Assert.Contains("$TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')", bootstrapper);
+            Assert.Contains("AssemblyLoadContext]::GetLoadContext($ModuleAssembly)", bootstrapper);
+            Assert.Contains("$AddPowerForgeTypeAccelerator = {", bootstrapper);
+            Assert.Contains("Type accelerator '$Name' already exists", bootstrapper);
+            Assert.Contains("if ([object]::ReferenceEquals($Existing[$Name], $Type)) {", bootstrapper);
+            Assert.Contains("return", bootstrapper);
+            Assert.Contains("$PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
+            Assert.Contains("& $PreviousPowerForgeOnRemove @args", bootstrapper);
+            Assert.Contains("OnRemove", bootstrapper);
+            Assert.Contains("& $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder", bootstrapper);
+            Assert.DoesNotContain("function Register-PowerForgeAssemblyTypeAccelerators", bootstrapper);
+            Assert.DoesNotContain("$Mode -eq 'None'", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithAssemblyLoadContextAssemblyTypeAccelerators_WritesAssemblyModeWithEnumerationGuard()
+    {
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
+            AssemblyTypeAcceleratorExportMode.Assembly,
+            new[] { "Dependency.Widget" },
+            new[] { "Dependency" });
+
+        Assert.Contains("$Mode = 'Assembly'", block);
+        Assert.Contains("$RequestedTypes = @('Dependency.Widget')", block);
+        Assert.Contains("$RequestedAssemblies = @('Dependency')", block);
+        Assert.Contains("$ExportedTypes = @($Assembly.GetExportedTypes())", block);
+        Assert.Contains("Could not enumerate exported types from assembly '$AssemblyName'", block);
+        Assert.Contains("& $AddPowerForgeTypeAccelerator -Type $Type", block);
+        Assert.Contains("foreach ($TypeName in $RequestedTypes)", block);
+    }
+
+    [Fact]
+    public void Generate_WithAssemblyLoadContextAssemblyOnlyTypeAccelerators_WritesEmptyAllowList()
+    {
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
+            AssemblyTypeAcceleratorExportMode.Assembly,
+            Array.Empty<string>(),
+            new[] { "Dependency" });
+
+        Assert.Contains("$Mode = 'Assembly'", block);
+        Assert.Contains("$RequestedTypes = @()", block);
+        Assert.Contains("$RequestedAssemblies = @('Dependency')", block);
+        Assert.Contains("$ExportedTypes = @($Assembly.GetExportedTypes())", block);
+        Assert.Contains("foreach ($TypeName in $RequestedTypes)", block);
+    }
+
+    [Fact]
+    public void Generate_WithTypeAcceleratorModeNone_DoesNotInferFromConfiguredLists()
+    {
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
+            AssemblyTypeAcceleratorExportMode.None,
+            new[] { "Dependency.Widget" },
+            Array.Empty<string>());
+
+        Assert.Equal(string.Empty, block);
+    }
+
+    [Fact]
+    public void Generate_WithAssemblyLoadContextTypeAcceleratorModeNone_DoesNotWriteTypeAcceleratorComment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-none-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.None);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.DoesNotContain("Type accelerator registration relies on", bootstrapper);
+            Assert.DoesNotContain("$RegisterPowerForgeAssemblyTypeAccelerators", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithScriptLayoutOnly_WritesScriptLoaderWithoutBinaryLoader()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-script-" + Guid.NewGuid().ToString("N"));

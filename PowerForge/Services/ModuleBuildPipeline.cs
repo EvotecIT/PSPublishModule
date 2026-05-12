@@ -155,13 +155,25 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
+            var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
+                spec.AssemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies);
+            var useAssemblyLoadContext = spec.UseAssemblyLoadContext
+                || assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+            if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
+                _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
+
             ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
                 exports,
                 spec.ExportAssemblies,
                 spec.HandleRuntimes,
-                spec.UseAssemblyLoadContext,
+                useAssemblyLoadContext,
+                assemblyTypeAcceleratorMode,
+                spec.AssemblyTypeAccelerators,
+                spec.AssemblyTypeAcceleratorAssemblies,
                 targetFrameworks: spec.Frameworks,
                 log: message => _logger.Info(message));
         }

@@ -112,6 +112,21 @@ public sealed class ModuleBuildSpec
     public bool UseAssemblyLoadContext { get; set; }
 
     /// <summary>
+    /// Controls optional type accelerator exposure for assemblies loaded in the module AssemblyLoadContext.
+    /// </summary>
+    public AssemblyTypeAcceleratorExportMode? AssemblyTypeAcceleratorMode { get; set; }
+
+    /// <summary>
+    /// Fully-qualified type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.
+    /// </summary>
+    public string[] AssemblyTypeAccelerators { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Assembly simple names whose public types may be exposed as PowerShell type accelerators when assembly mode is enabled.
+    /// </summary>
+    public string[] AssemblyTypeAcceleratorAssemblies { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }

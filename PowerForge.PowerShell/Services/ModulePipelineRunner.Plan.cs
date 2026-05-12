@@ -72,6 +72,9 @@ public sealed partial class ModulePipelineRunner
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
         bool? useAssemblyLoadContextFromSegments = null;
+        AssemblyTypeAcceleratorExportMode? assemblyTypeAcceleratorModeFromSegments = null;
+        string[]? assemblyTypeAcceleratorsFromSegments = null;
+        string[]? assemblyTypeAcceleratorAssembliesFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
         string? resolveBinaryConflictsProjectName = null;
         bool? binaryModuleDocumentationRequested = null;
@@ -269,6 +272,18 @@ public sealed partial class ModulePipelineRunner
                         useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
                     else if (bl.NETAssemblyLoadContext.HasValue)
                         useAssemblyLoadContextFromSegments = bl.NETAssemblyLoadContext.Value;
+                    if (bl.AssemblyTypeAcceleratorMode.HasValue)
+                        assemblyTypeAcceleratorModeFromSegments = bl.AssemblyTypeAcceleratorMode.Value;
+                    else if (bl.NETAssemblyTypeAcceleratorMode.HasValue)
+                        assemblyTypeAcceleratorModeFromSegments = bl.NETAssemblyTypeAcceleratorMode.Value;
+                    if (bl.AssemblyTypeAccelerators is not null)
+                        assemblyTypeAcceleratorsFromSegments = bl.AssemblyTypeAccelerators;
+                    else if (bl.NETAssemblyTypeAccelerators is not null)
+                        assemblyTypeAcceleratorsFromSegments = bl.NETAssemblyTypeAccelerators;
+                    if (bl.AssemblyTypeAcceleratorAssemblies is not null)
+                        assemblyTypeAcceleratorAssembliesFromSegments = bl.AssemblyTypeAcceleratorAssemblies;
+                    else if (bl.NETAssemblyTypeAcceleratorAssemblies is not null)
+                        assemblyTypeAcceleratorAssembliesFromSegments = bl.NETAssemblyTypeAcceleratorAssemblies;
                     if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     if (bl.NETBinaryModuleDocumentation.HasValue) binaryModuleDocumentationRequested = bl.NETBinaryModuleDocumentation.Value;
                     break;
@@ -508,6 +523,23 @@ public sealed partial class ModulePipelineRunner
             exportAssemblies = new[] { inferred! };
         }
 
+        var assemblyTypeAccelerators = NormalizeStringArray(assemblyTypeAcceleratorsFromSegments ?? spec.Build.AssemblyTypeAccelerators);
+        var assemblyTypeAcceleratorAssemblies = NormalizeStringArray(assemblyTypeAcceleratorAssembliesFromSegments ?? spec.Build.AssemblyTypeAcceleratorAssemblies);
+        var assemblyTypeAcceleratorModeSpecified = assemblyTypeAcceleratorModeFromSegments.HasValue
+            || spec.Build.AssemblyTypeAcceleratorMode.HasValue;
+        var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
+            assemblyTypeAcceleratorModeSpecified
+                ? assemblyTypeAcceleratorModeFromSegments ?? spec.Build.AssemblyTypeAcceleratorMode
+                : null,
+            assemblyTypeAccelerators,
+            assemblyTypeAcceleratorAssemblies);
+
+        var requestedUseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
+        var typeAcceleratorsRequireAlc = assemblyTypeAcceleratorMode != AssemblyTypeAcceleratorExportMode.None;
+        var effectiveUseAssemblyLoadContext = requestedUseAssemblyLoadContext || typeAcceleratorsRequireAlc;
+        if (typeAcceleratorsRequireAlc && !requestedUseAssemblyLoadContext)
+            _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
+
         var csprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
@@ -518,7 +550,8 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 handleRuntimesFromSegments,
-                useAssemblyLoadContextFromSegments,
+                requestedUseAssemblyLoadContext,
+                typeAcceleratorsRequireAlc,
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true);
 
@@ -543,7 +576,10 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
-            UseAssemblyLoadContext = useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext,
+            UseAssemblyLoadContext = effectiveUseAssemblyLoadContext,
+            AssemblyTypeAcceleratorMode = assemblyTypeAcceleratorMode,
+            AssemblyTypeAccelerators = assemblyTypeAccelerators,
+            AssemblyTypeAcceleratorAssemblies = assemblyTypeAcceleratorAssemblies,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             CsprojRequiredReasons = string.IsNullOrWhiteSpace(csproj) ? csprojRequiredReasons : Array.Empty<string>(),
             BinaryConflictPriorityModuleNames = requiredModulesDraft
@@ -795,7 +831,8 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
         bool? handleRuntimesFromSegments,
-        bool? useAssemblyLoadContextFromSegments,
+        bool useAssemblyLoadContextRequested,
+        bool typeAcceleratorsRequireAlc,
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested)
     {
@@ -808,8 +845,6 @@ public sealed partial class ModulePipelineRunner
             doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively;
         var effectiveHandleRuntimes =
             handleRuntimesFromSegments ?? spec.Build.HandleRuntimes;
-        var effectiveUseAssemblyLoadContext =
-            useAssemblyLoadContextFromSegments ?? spec.Build.UseAssemblyLoadContext;
         var hasExplicitBinaryIntentBeyondFramework =
             syncNETProjectVersion
             || hasBinaryModules
@@ -818,7 +853,8 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
             || effectiveHandleRuntimes
-            || effectiveUseAssemblyLoadContext
+            || useAssemblyLoadContextRequested
+            || typeAcceleratorsRequireAlc
             || binaryModuleDocumentationRequested;
 
         if (syncNETProjectVersion)
@@ -842,8 +878,11 @@ public sealed partial class ModulePipelineRunner
         if (effectiveHandleRuntimes)
             reasons.Add("NETHandleRuntimes");
 
-        if (effectiveUseAssemblyLoadContext)
+        if (useAssemblyLoadContextRequested)
             reasons.Add("UseAssemblyLoadContext");
+
+        if (typeAcceleratorsRequireAlc)
+            reasons.Add("NETAssemblyTypeAccelerators");
 
         if (binaryModuleDocumentationRequested)
             reasons.Add("NETBinaryModuleDocumentation");
@@ -856,6 +895,15 @@ public sealed partial class ModulePipelineRunner
     private static bool HasAnyConfiguredValues(string[]? values)
         => values is { Length: > 0 } &&
            values.Any(static value => !string.IsNullOrWhiteSpace(value));
+
+    private static string[] NormalizeStringArray(string[]? values)
+        => values is { Length: > 0 }
+            ? values
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : Array.Empty<string>();
 
     private bool TryAddExternalModuleDependency(
         string moduleName,

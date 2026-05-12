@@ -20,6 +20,9 @@ internal static class ModuleBootstrapperGenerator
         IReadOnlyList<string>? exportAssemblies,
         bool handleRuntimes,
         bool useAssemblyLoadContext = false,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.None,
+        IReadOnlyList<string>? assemblyTypeAccelerators = null,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies = null,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies = null,
         IReadOnlyList<string>? targetFrameworks = null,
         Action<string>? log = null)
@@ -66,6 +69,9 @@ internal static class ModuleBootstrapperGenerator
             includeScriptLoader: hasScriptFolders,
             handleRuntimes: handleRuntimes,
             useAssemblyLoadContext: useAssemblyLoadContext,
+            assemblyTypeAcceleratorMode: assemblyTypeAcceleratorMode,
+            assemblyTypeAccelerators: assemblyTypeAccelerators,
+            assemblyTypeAcceleratorAssemblies: assemblyTypeAcceleratorAssemblies,
             conditionalFunctionDependencies: conditionalFunctionDependencies);
         WritePowerShellFile(psm1Path, psm1Content);
     }
@@ -239,6 +245,9 @@ internal static class ModuleBootstrapperGenerator
         bool includeScriptLoader,
         bool handleRuntimes,
         bool useAssemblyLoadContext,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
+        IReadOnlyList<string>? assemblyTypeAccelerators,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies)
     {
         var loaderIdentity = useAssemblyLoadContext
@@ -257,7 +266,11 @@ internal static class ModuleBootstrapperGenerator
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
-                    ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty
+                    ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
+                    ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
+                        assemblyTypeAcceleratorMode,
+                        assemblyTypeAccelerators,
+                        assemblyTypeAcceleratorAssemblies)
                 })
             : string.Empty;
 
@@ -321,7 +334,8 @@ internal static class ModuleBootstrapperGenerator
             var result = RunProcess(
                 "dotnet",
                 buildRoot,
-                new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal" },
+                // Disable MSBuild node reuse so short-lived helper builds exit cleanly in CI and tests.
+                new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal", "-nr:false" },
                 AssemblyLoadContextLoaderBuildTimeout);
             if (result.ExitCode != 0)
             {
@@ -646,6 +660,256 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                        "}",
                        string.Empty
                    });
+    }
+
+    internal static string BuildTypeAcceleratorBlock(
+        AssemblyTypeAcceleratorExportMode mode,
+        IReadOnlyList<string>? typeNames,
+        IReadOnlyList<string>? assemblyNames)
+    {
+        var normalizedTypes = NormalizePowerShellStringArray(typeNames);
+        var normalizedAssemblies = NormalizePowerShellStringArray(assemblyNames);
+        if (mode == AssemblyTypeAcceleratorExportMode.None)
+            return string.Empty;
+
+        return $@"        # Type accelerator registration relies on $ModuleAssembly and $LibFolder from this ALC loader scope.
+$RegisterPowerForgeAssemblyTypeAccelerators = {{
+    param(
+        [Parameter(Mandatory = $true)][System.Reflection.Assembly] $ModuleAssembly,
+        [Parameter(Mandatory = $true)][string] $LibFolder
+    )
+
+    $Mode = '{mode}'
+    $RequestedTypes = {BuildPowerShellArrayLiteral(normalizedTypes)}
+    $RequestedAssemblies = {BuildPowerShellArrayLiteral(normalizedAssemblies)}
+
+    if ($null -eq $ModuleAssembly) {{
+        Write-Warning -Message 'Module assembly was not available. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    if ([string]::IsNullOrWhiteSpace($LibFolder)) {{
+        Write-Warning -Message 'Module library folder was not available. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    if ([IO.Path]::IsPathRooted($LibFolder) -or $LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {{
+        Write-Warning -Message ""Module library folder '$LibFolder' must be a simple folder name. ALC dependency type exposure is disabled.""
+        return
+    }}
+
+    if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {{
+        Write-Warning -Message 'AllowList type accelerator mode was configured without type names. No ALC dependency type accelerators will be registered.'
+        return
+    }}
+
+    if ($Mode -eq 'Assembly' -and $RequestedAssemblies.Count -eq 0) {{
+        if ($RequestedTypes.Count -eq 0) {{
+            Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered.'
+            return
+        }}
+
+        Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered.'
+    }}
+
+    $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+    if ($null -eq $TypeAccelerators) {{
+        Write-Warning -Message 'PowerShell type accelerator APIs are not available. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    $AddTypeAccelerator = $TypeAccelerators.GetMethod('Add', [type[]]@([string], [type]))
+    $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
+    if ($null -eq $AddTypeAccelerator -or $null -eq $GetTypeAccelerators) {{
+        Write-Warning -Message 'PowerShell type accelerator APIs are incomplete. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    $ModuleAlc = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ModuleAssembly)
+    if ($null -eq $ModuleAlc) {{
+        Write-Warning -Message 'Unable to resolve the module AssemblyLoadContext. ALC dependency type exposure is disabled.'
+        return
+    }}
+
+    if ($null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {{
+        $script:PowerForgeRegisteredAssemblyTypeAccelerators = @{{}}
+    }}
+
+    $ImportPowerForgeAlcAssembly = {{
+        param([Parameter(Mandatory = $true)][string] $AssemblyName)
+
+        foreach ($Assembly in $ModuleAlc.Assemblies) {{
+            if ($Assembly.GetName().Name -eq $AssemblyName) {{
+                return $Assembly
+            }}
+        }}
+
+        try {{
+            return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
+        }} catch {{
+            $AssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $AssemblyName + '.dll')
+            if (Test-Path -LiteralPath $AssemblyPath) {{
+                try {{
+                    $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
+                    return $ModuleAlc.LoadFromAssemblyName($AssemblyNameObject)
+                }} catch {{
+                    Write-Warning -Message ""Could not load ALC assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)""
+                }}
+            }}
+        }}
+
+        return $null
+    }}
+
+    $FindPowerForgeAlcType = {{
+        param([Parameter(Mandatory = $true)][string] $TypeName)
+
+        foreach ($Assembly in $ModuleAlc.Assemblies) {{
+            $Type = $Assembly.GetType($TypeName, $false, $false)
+            if ($null -ne $Type) {{
+                return $Type
+            }}
+        }}
+
+        $LibDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
+        if (-not (Test-Path -LiteralPath $LibDirectory)) {{
+            return $null
+        }}
+
+        foreach ($File in Get-ChildItem -LiteralPath $LibDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {{
+            try {{
+                $AssemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($File.FullName)
+                $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName.Name
+                if ($null -eq $Assembly) {{
+                    continue
+                }}
+
+                $Type = $Assembly.GetType($TypeName, $false, $false)
+                if ($null -ne $Type) {{
+                    return $Type
+                }}
+            }} catch {{
+                continue
+            }}
+        }}
+
+        return $null
+    }}
+
+    $AddPowerForgeTypeAccelerator = {{
+        param([Parameter(Mandatory = $true)][type] $Type)
+
+        if ([string]::IsNullOrWhiteSpace($Type.FullName)) {{
+            return
+        }}
+
+        $Name = $Type.FullName
+        $Existing = $GetTypeAccelerators.GetValue($null)
+        if ($Existing.ContainsKey($Name)) {{
+            if ([object]::ReferenceEquals($Existing[$Name], $Type)) {{
+                return
+            }} else {{
+                Write-Warning -Message ""Type accelerator '$Name' already exists. Keeping the existing accelerator and skipping the ALC type from $($Type.Assembly.GetName().Name).""
+            }}
+            return
+        }}
+
+        try {{
+            $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
+        }} catch {{
+            Write-Warning -Message ""Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)""
+            return
+        }}
+
+        $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
+    }}
+
+    if ($Mode -eq 'Assembly') {{
+        foreach ($AssemblyName in $RequestedAssemblies) {{
+            $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName
+            if ($null -eq $Assembly) {{
+                Write-Warning -Message ""Assembly '$AssemblyName' was not found in the module AssemblyLoadContext. No type accelerators were registered for it.""
+                continue
+            }}
+
+            try {{
+                $ExportedTypes = @($Assembly.GetExportedTypes())
+            }} catch {{
+                Write-Warning -Message ""Could not enumerate exported types from assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)""
+                continue
+            }}
+
+            foreach ($Type in $ExportedTypes) {{
+                & $AddPowerForgeTypeAccelerator -Type $Type
+            }}
+        }}
+    }}
+
+    foreach ($TypeName in $RequestedTypes) {{
+        $Type = & $FindPowerForgeAlcType -TypeName $TypeName
+        if ($null -eq $Type) {{
+            Write-Warning -Message ""Type '$TypeName' was not found in the module AssemblyLoadContext. No type accelerator was registered.""
+            continue
+        }}
+
+        & $AddPowerForgeTypeAccelerator -Type $Type
+    }}
+
+    if ($script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered -ne $true) {{
+        $script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered = $true
+        $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
+        $ExecutionContext.SessionState.Module.OnRemove = {{
+            try {{
+                $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+                if ($null -eq $TypeAccelerators -or $null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {{
+                    return
+                }}
+
+                $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
+                $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
+                if ($null -eq $GetTypeAccelerators -or $null -eq $RemoveTypeAccelerator) {{
+                    return
+                }}
+
+                $Existing = $GetTypeAccelerators.GetValue($null)
+                foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {{
+                    if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {{
+                        $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
+                    }}
+                }}
+            }} finally {{
+                if ($null -ne $PreviousPowerForgeOnRemove) {{
+                    & $PreviousPowerForgeOnRemove @args
+                }}
+            }}
+        }}.GetNewClosure()
+    }}
+}}
+
+# Type accelerator exposure is PowerShell Core-only because it depends on AssemblyLoadContext.
+try {{
+    & $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
+}} catch {{
+    Write-Warning -Message ""ALC type accelerator registration failed: $($_.Exception.Message)""
+}}
+";
+    }
+
+    private static string[] NormalizePowerShellStringArray(IReadOnlyList<string>? values)
+        => values is { Count: > 0 }
+            ? values
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : Array.Empty<string>();
+
+    private static string BuildPowerShellArrayLiteral(IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+            return "@()";
+
+        return "@(" + string.Join(", ", values.Select(static value => "'" + EscapePsSingleQuoted(value) + "'")) + ")";
     }
 
     private static string RenderModuleBootstrapperTemplate(
