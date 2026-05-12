@@ -31,10 +31,12 @@ tool/app artefacts from one configuration file.
 Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -Plan
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishToolGitHub -ExitCode
 ```
+
 
 ## PARAMETERS
 

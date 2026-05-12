@@ -17,8 +17,6 @@ New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-Inst
 ## DESCRIPTION
 Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
 
-When `Authoring` is set and `InstallerProjectPath` / `InstallerProjectId` are omitted, PowerForge generates a WiX SDK project during `msi.build`. This keeps installer identity, service setup, input properties, shortcuts, and companion folders in the typed DotNet publish configuration while still compiling through the normal WiX toolchain.
-
 ## EXAMPLES
 
 ### EXAMPLE 1
@@ -26,28 +24,17 @@ When `Authoring` is set and `InstallerProjectPath` / `InstallerProjectId` are om
 New-ConfigurationDotNetInstaller -Id 'service.msi' -PrepareFromTarget 'My.Service' -InstallerProjectPath 'Installer/My.Service.wixproj' -Harvest Auto
 ```
 
-### EXAMPLE 2
-```powershell
-$authoring = [PowerForge.PowerForgeInstallerDefinition]::new()
-$authoring.Product.Name = 'My Service'
-$authoring.Product.UpgradeCode = '{00000000-0000-0000-0000-000000000000}'
-$authoring.CompanyFolderName = 'Evotec'
-$authoring.InstallDirectoryName = 'My Service'
-$authoring.PayloadComponentGroupId = 'ProductFiles'
-
-New-ConfigurationDotNetInstaller -Id 'service.msi' -PrepareFromTarget 'My.Service' -Harvest Auto -Authoring $authoring
-```
 
 ## PARAMETERS
 
 ### -Authoring
-Optional typed installer authoring model used to generate a WiX SDK project during `msi.build`.
+Optional PowerForge-owned installer authoring model used to generate a WiX SDK project.
 
 ```yaml
 Type: PowerForgeInstallerDefinition
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -63,7 +50,7 @@ Optional client-license injection policy.
 Type: DotNetPublishMsiClientLicenseOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -95,7 +82,7 @@ Optional WiX component group id template for generated harvest fragment.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -111,7 +98,7 @@ Optional WiX directory reference id for generated harvest fragment.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -127,7 +114,7 @@ Optional harvest output path template.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -143,7 +130,7 @@ Installer identifier.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: True
 Position: named
@@ -159,7 +146,7 @@ Optional installer project catalog identifier.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -175,7 +162,7 @@ Optional path to installer project file (*.wixproj).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -191,7 +178,7 @@ Optional manifest path template for MSI prepare output.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -207,7 +194,7 @@ Optional installer-specific MSBuild properties passed to msi.build.
 Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -223,7 +210,7 @@ Source publish target name used for prepare/build.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: True
 Position: named
@@ -239,7 +226,7 @@ Optional MSI signing policy.
 Type: DotNetPublishSignOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -255,7 +242,7 @@ Optional staging path template for MSI payload.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named
@@ -271,7 +258,7 @@ Optional MSI version policy.
 Type: DotNetPublishMsiVersionOptions
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: 
 
 Required: False
 Position: named

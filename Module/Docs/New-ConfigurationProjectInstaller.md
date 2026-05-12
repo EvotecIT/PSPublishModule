@@ -24,6 +24,7 @@ Creates an installer entry for a PowerShell-authored project build.
 New-ConfigurationProjectInstaller -Id 'Value' -Target 'Value' -InstallerProjectPath 'C:\Path'
 ```
 
+
 ## PARAMETERS
 
 ### -Frameworks

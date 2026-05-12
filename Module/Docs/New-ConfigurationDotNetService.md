@@ -25,6 +25,7 @@ $lifecycle = New-ConfigurationDotNetServiceLifecycle -Enabled
 New-ConfigurationDotNetService -ServiceName 'My.Service' -GenerateInstallScript -GenerateUninstallScript -Lifecycle $lifecycle
 ```
 
+
 ## PARAMETERS
 
 ### -Arguments

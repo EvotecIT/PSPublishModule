@@ -24,6 +24,7 @@ Creates a project catalog entry for DotNet publish DSL.
 New-ConfigurationDotNetProject -Id 'service' -Path 'src/My.Service/My.Service.csproj' -Group 'apps'
 ```
 
+
 ## PARAMETERS
 
 ### -Group

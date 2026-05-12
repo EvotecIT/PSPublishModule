@@ -25,15 +25,18 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
 New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force
 ```
 
+
 ### EXAMPLE 3
 ```powershell
 New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
 ```
+
 
 ## PARAMETERS
 

@@ -25,10 +25,12 @@ updates csproj versions, packs, and optionally publishes packages.
 Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '1.2.X' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '2.0.X' -ExcludeProject 'OfficeIMO.Visio' -NugetSource 'C:\Packages' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
+
 
 ## PARAMETERS
 

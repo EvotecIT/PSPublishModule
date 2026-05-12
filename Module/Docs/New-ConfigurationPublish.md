@@ -40,15 +40,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
 New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled
 ```
 
+
 ### EXAMPLE 3
 ```powershell
 New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -RepositoryCredentialUserName 'user@contoso.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\azdo.pat" -Enabled
 ```
+
 
 ## PARAMETERS
 

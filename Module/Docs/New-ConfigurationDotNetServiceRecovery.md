@@ -24,6 +24,7 @@ Creates service recovery options for DotNet publish service targets.
 New-ConfigurationDotNetServiceRecovery -Enabled -ResetPeriodSeconds 86400 -RestartDelaySeconds 60 -ApplyToNonCrashFailures
 ```
 
+
 ## PARAMETERS
 
 ### -ApplyToNonCrashFailures

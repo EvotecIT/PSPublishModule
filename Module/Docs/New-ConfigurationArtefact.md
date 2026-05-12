@@ -40,10 +40,12 @@ For a broader dependency workflow explanation, see about_ModuleDependencies.
 New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
+
 
 ### EXAMPLE 3
 ```powershell

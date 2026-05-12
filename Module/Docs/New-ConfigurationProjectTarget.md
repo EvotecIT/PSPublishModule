@@ -24,6 +24,7 @@ Creates a high-level target entry for a PowerShell-authored project build.
 New-ConfigurationProjectTarget -Name 'Name' -ProjectPath 'C:\Path'
 ```
 
+
 ## PARAMETERS
 
 ### -ClearOutput

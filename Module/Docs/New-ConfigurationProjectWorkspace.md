@@ -24,6 +24,7 @@ Creates workspace-validation defaults for a PowerShell-authored project build.
 New-ConfigurationProjectWorkspace -ConfigPath 'C:\Path'
 ```
 
+
 ## PARAMETERS
 
 ### -ConfigPath

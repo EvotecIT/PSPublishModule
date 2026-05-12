@@ -1,6 +1,6 @@
 ---
 schema: 1.0.0
-generated: true
+generated: "true"
 ---
 # About Topics
 

@@ -26,6 +26,7 @@ the chosen bootstrap path can actually access the private feed.
 Connect-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -InstallPrerequisites
 ```
 
+
 ## PARAMETERS
 
 ### -AzureArtifactsFeed

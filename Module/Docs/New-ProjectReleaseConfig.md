@@ -24,6 +24,7 @@ Scaffolds a starter project release configuration file for PowerShell-authored p
 New-ProjectReleaseConfig -ProjectRoot '.' -PassThru
 ```
 
+
 ## PARAMETERS
 
 ### -Configuration

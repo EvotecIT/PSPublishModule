@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.4
+Help Version: 3.0.6
 Locale: en-US
 ---
 # PSPublishModule Module

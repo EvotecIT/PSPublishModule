@@ -30,10 +30,12 @@ are provided, the repository registration is refreshed before the update is atte
 Update-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Update-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential
 ```
+
 
 ## PARAMETERS
 

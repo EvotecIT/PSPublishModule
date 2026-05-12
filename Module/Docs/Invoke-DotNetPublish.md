@@ -11,12 +11,12 @@ Executes DotNet publish engine from DSL settings or an existing JSON config.
 ## SYNTAX
 ### Settings (Default)
 ```powershell
-Invoke-DotNetPublish -Settings <scriptblock> [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-DotNetPublish -ConfigPath <string> [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,10 +34,12 @@ Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Sett
 }
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 ```
+
 
 ## PARAMETERS
 
@@ -155,6 +157,22 @@ Accept wildcard characters: True
 
 ### -Profile
 Optional profile override.
+
+```yaml
+Type: String
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectRoot
+Optional project root override used to resolve relative publish inputs and outputs.
 
 ```yaml
 Type: String

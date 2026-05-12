@@ -24,6 +24,7 @@ Creates signing defaults for a PowerShell-authored project build.
 New-ConfigurationProjectSigning -ToolPath 'C:\Path'
 ```
 
+
 ## PARAMETERS
 
 ### -Csp

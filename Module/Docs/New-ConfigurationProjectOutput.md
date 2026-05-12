@@ -24,6 +24,7 @@ Creates output-root and staging defaults for a PowerShell-authored project build
 New-ConfigurationProjectOutput -ChecksumsPath 'C:\Path'
 ```
 
+
 ## PARAMETERS
 
 ### -ChecksumsPath

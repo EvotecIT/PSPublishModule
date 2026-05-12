@@ -25,10 +25,12 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....
 New-DotNetPublishConfig -ProjectRoot '.' -PassThru
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-DotNetPublishConfig -Project '.\src\App\App.csproj' -Runtimes 'win-x64','win-arm64' -Styles PortableCompat,AotSpeed -Force
 ```
+
 
 ## PARAMETERS
 

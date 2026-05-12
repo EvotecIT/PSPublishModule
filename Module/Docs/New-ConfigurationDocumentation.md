@@ -30,15 +30,18 @@ AboutTopicsSourcePath.
 New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples
 ```
 
+
 ### EXAMPLE 3
 ```powershell
 New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'
 ```
+
 
 ## PARAMETERS
 

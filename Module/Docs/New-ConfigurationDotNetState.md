@@ -25,6 +25,7 @@ $rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite
 New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}'
 ```
 
+
 ## PARAMETERS
 
 ### -ClearStorage

@@ -11,7 +11,7 @@ Allows configuring the build process for a module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETAssemblyLoadContext] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -35,10 +35,12 @@ For a broader dependency workflow explanation, see about_ModuleDependencies.
 New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce
 ```
+
 
 ### EXAMPLE 3
 ```powershell
@@ -413,6 +415,70 @@ Merge module on build (combine Private/Public/Classes/Enums into one PSM1).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETAssemblyLoadContext
+Load the binary module through a custom AssemblyLoadContext on PowerShell Core.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: UseAssemblyLoadContext
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETAssemblyTypeAcceleratorAssemblies
+Assembly simple names whose public types may be exposed as PowerShell type accelerators when assembly mode is enabled.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: AssemblyTypeAcceleratorAssemblies
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETAssemblyTypeAcceleratorMode
+Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: AssemblyTypeAcceleratorMode
+Possible values: 
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETAssemblyTypeAccelerators
+Fully-qualified dependency type names to expose as PowerShell type accelerators from the module AssemblyLoadContext.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: AssemblyTypeAccelerators
 Possible values: 
 
 Required: False

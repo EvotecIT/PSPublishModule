@@ -32,6 +32,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
 Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential -Trusted
 ```
 
+
 ## PARAMETERS
 
 ### -AzureArtifactsFeed

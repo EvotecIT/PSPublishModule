@@ -28,20 +28,24 @@ Use -WhatIf to preview the planned outputs without running build/pack/sign opera
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser
 ```
+
 
 ### EXAMPLE 3
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf
 ```
 
+
 ### EXAMPLE 4
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies
 ```
+
 
 ## PARAMETERS
 

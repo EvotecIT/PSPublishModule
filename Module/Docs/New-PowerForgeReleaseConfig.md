@@ -26,10 +26,12 @@ Build/powerforge.dotnetpublish.json.
 New-PowerForgeReleaseConfig -ProjectRoot '.' -PassThru
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 New-PowerForgeReleaseConfig -PackagesConfigPath '.\Build\project.build.json' -DotNetPublishConfigPath '.\Build\powerforge.dotnetpublish.json' -Force
 ```
+
 
 ## PARAMETERS
 

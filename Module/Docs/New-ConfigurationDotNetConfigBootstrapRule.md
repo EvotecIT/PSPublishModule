@@ -24,6 +24,7 @@ Creates config bootstrap copy rules for DotNet publish service packages.
 New-ConfigurationDotNetConfigBootstrapRule -SourcePath 'appsettings.example.json' -DestinationPath 'appsettings.json'
 ```
 
+
 ## PARAMETERS
 
 ### -DestinationPath

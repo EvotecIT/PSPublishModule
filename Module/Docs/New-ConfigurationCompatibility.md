@@ -32,6 +32,7 @@ Enables validation and exports a CSV report when issues are detected.
 PS> New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport
 ```
 
+
 ## PARAMETERS
 
 ### -Enable

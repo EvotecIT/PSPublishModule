@@ -26,10 +26,12 @@ dotnet pack, and can optionally push only the packages produced by the current r
 Invoke-PowerForgePluginPack -Plan
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Invoke-PowerForgePluginPack -ConfigPath '.\Build\powerforge.plugins.json' -Group pack-public -Push -Source https://api.nuget.org/v3/index.json -ApiKey $env:NUGET_API_KEY -ExitCode
 ```
+
 
 ## PARAMETERS
 

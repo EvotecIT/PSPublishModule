@@ -24,6 +24,7 @@ Creates signing options for DotNet publish targets and installers.
 New-ConfigurationDotNetSign -Enabled -Thumbprint '0123456789ABCDEF' -OnMissingTool Fail -OnSignFailure Fail
 ```
 
+
 ## PARAMETERS
 
 ### -Csp

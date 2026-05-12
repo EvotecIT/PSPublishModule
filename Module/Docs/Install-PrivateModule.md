@@ -31,10 +31,12 @@ the requested modules.
 Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
 ```
 
+
 ### EXAMPLE 2
 ```powershell
 Install-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential
 ```
+
 
 ## PARAMETERS
 

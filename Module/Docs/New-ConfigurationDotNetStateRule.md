@@ -24,6 +24,7 @@ Creates a preserve/restore rule for DotNet publish state handling.
 New-ConfigurationDotNetStateRule -SourcePath 'appsettings.json' -DestinationPath 'appsettings.json' -Overwrite
 ```
 
+
 ## PARAMETERS
 
 ### -DestinationPath

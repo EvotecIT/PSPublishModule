@@ -32,6 +32,7 @@ Ensures the pipeline imports the module and required dependencies before running
 PS> New-ConfigurationImportModule -ImportSelf
 ```
 
+
 ## PARAMETERS
 
 ### -ImportRequiredModules

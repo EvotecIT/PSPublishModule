@@ -32,6 +32,7 @@ Prevents build failure when the module is not installed in the environment.
 PS> New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
 ```
 
+
 ## PARAMETERS
 
 ### -FailOnMissingCommands
