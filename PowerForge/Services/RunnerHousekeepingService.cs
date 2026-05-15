@@ -14,7 +14,7 @@ namespace PowerForge;
 public sealed class RunnerHousekeepingService
 {
     // Known runner-owned work directories should survive repository workspace cleanup.
-    // _PipelineMapping is kept for cross-runner safety even though it is not created by GitHub Actions.
+    // _PipelineMapping is kept for hosts that also run Azure Pipelines-style agents.
     private static readonly string[] RunnerInternalWorkDirectoryNames =
     {
         "_actions",
@@ -336,6 +336,8 @@ public sealed class RunnerHousekeepingService
 
         var currentWorkspaceRoot = ResolveCurrentWorkspaceRoot(rootPath);
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+        // This is best-effort: a new job can start after the stale scan and before deletion,
+        // which is why workspace cleanup remains opt-in.
         var targets = Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => !IsRunnerInternalWorkDirectory(path))
             .Where(path => !PathsEqual(path, currentWorkspaceRoot))

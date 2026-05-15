@@ -28,7 +28,8 @@ jobs:
     if: ${{ github.event.repository.private }}
     strategy:
       fail-fast: false
-      # Best-effort spread across idle Linux runners. Add unique runner labels if per-host routing is required.
+      # Nightly best-effort spread across idle Linux runners; workspace buildup is the main disk driver.
+      # Add unique runner labels if per-host routing is required.
       matrix:
         slot: [1, 2, 3, 4]
     uses: ./.github/workflows/powerforge-github-runner-housekeeping.yml
