@@ -297,7 +297,7 @@ public sealed class RunnerHousekeepingService
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var targets = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
             .Where(path => File.GetLastWriteTimeUtc(path) <= cutoff)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, GetPathStringComparer())
             .ToArray();
 
         return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: false, allowedRootPath: rootPath);
@@ -309,7 +309,7 @@ public sealed class RunnerHousekeepingService
             return SkippedStep(id, title, $"Path not found: {rootPath ?? "(null)"}");
 
         var targets = Directory.EnumerateFileSystemEntries(rootPath)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, GetPathStringComparer())
             .ToArray();
 
         return DeleteTargets(id, title, targets, dryRun, allowSudo: false, isDirectory: null, allowedRootPath: rootPath);
@@ -323,7 +323,7 @@ public sealed class RunnerHousekeepingService
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         var targets = Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => Directory.GetLastWriteTimeUtc(path) <= cutoff)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, GetPathStringComparer())
             .ToArray();
 
         return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
@@ -339,8 +339,8 @@ public sealed class RunnerHousekeepingService
         var targets = Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => !IsRunnerInternalWorkDirectory(path))
             .Where(path => !PathsEqual(path, currentWorkspaceRoot))
-            .Where(path => GetWorkspaceLastActivityUtc(path) <= cutoff)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Where(path => IsWorkspaceInactiveSince(path, cutoff))
+            .OrderBy(path => path, GetPathStringComparer())
             .ToArray();
 
         return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
@@ -597,11 +597,19 @@ public sealed class RunnerHousekeepingService
     private static bool IsRunnerInternalWorkDirectory(string path)
         => RunnerInternalWorkDirectoryNames.Contains(Path.GetFileName(path), GetPathStringComparer());
 
-    private static DateTime GetWorkspaceLastActivityUtc(string workspacePath)
+    private static bool IsWorkspaceInactiveSince(string workspacePath, DateTime cutoffUtc)
+    {
+        if (GetWorkspaceDirectoryLastActivityUtc(workspacePath) > cutoffUtc)
+            return false;
+
+        return !HasDescendantActivityAfter(workspacePath, cutoffUtc);
+    }
+
+    private static DateTime GetWorkspaceDirectoryLastActivityUtc(string workspacePath)
     {
         var lastActivity = Directory.GetLastWriteTimeUtc(workspacePath);
-        // GitHub's default checkout layout is _work/<repo>/<repo>. Custom checkout paths
-        // fall back to the top-level workspace timestamp.
+        // GitHub's default checkout layout is _work/<repo>/<repo>. If both directory
+        // timestamps are stale, the caller does a descendant scan for custom paths and file activity.
         var checkoutPath = Path.Combine(workspacePath, Path.GetFileName(workspacePath));
         if (Directory.Exists(checkoutPath))
         {
@@ -612,6 +620,65 @@ public sealed class RunnerHousekeepingService
 
         return lastActivity;
     }
+
+    private static bool HasDescendantActivityAfter(string rootPath, DateTime cutoffUtc)
+    {
+        var pending = new Stack<string>();
+        pending.Push(rootPath);
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            string[] entries;
+            try
+            {
+                entries = Directory.EnumerateFileSystemEntries(current).ToArray();
+            }
+            catch (Exception ex) when (IsFileSystemAccessException(ex))
+            {
+                return true;
+            }
+
+            foreach (var entry in entries)
+            {
+                FileAttributes attributes;
+                try
+                {
+                    attributes = File.GetAttributes(entry);
+                }
+                catch (Exception ex) when (IsFileSystemAccessException(ex))
+                {
+                    return true;
+                }
+
+                var isDirectory = (attributes & FileAttributes.Directory) == FileAttributes.Directory;
+                DateTime lastWriteTime;
+                try
+                {
+                    lastWriteTime = isDirectory
+                        ? Directory.GetLastWriteTimeUtc(entry)
+                        : File.GetLastWriteTimeUtc(entry);
+                }
+                catch (Exception ex) when (IsFileSystemAccessException(ex))
+                {
+                    return true;
+                }
+
+                if (lastWriteTime > cutoffUtc)
+                    return true;
+
+                if (isDirectory && (attributes & FileAttributes.ReparsePoint) != FileAttributes.ReparsePoint)
+                    pending.Push(entry);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsFileSystemAccessException(Exception exception)
+        => exception is UnauthorizedAccessException
+           || exception is IOException
+           || exception is System.Security.SecurityException;
 
     private static bool PathsEqual(string path, string? other)
         // This is intentionally lexical normalization. It handles relative segments and casing rules,

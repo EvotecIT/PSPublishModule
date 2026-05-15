@@ -95,7 +95,7 @@ jobs:
 - Hosted-runner repos should usually keep `Runner.Enabled` set to `false` in config.
 - Runner cleanup keeps the active `GITHUB_WORKSPACE` checkout and known internal `_work` folders, then removes old top-level repository workspaces by `Runner.WorkspacesRetentionDays`.
 - Repository workspace cleanup is opt-in for direct API and CLI callers; enable `Runner.CleanWorkspaces` in checked-in housekeeping configs or pass `--clean-workspaces` to the direct runner cleanup command.
-- Workspace age uses the newer timestamp of `_work/<repo>` and the standard `_work/<repo>/<repo>` checkout directory when that nested directory exists. Workflows that check out into a custom subpath can under-report recency because only the top-level workspace timestamp is available.
+- Workspace age first checks `_work/<repo>` and the standard `_work/<repo>/<repo>` checkout directory, then scans descendants before deleting a stale-looking workspace so custom checkout paths and recent file writes are not under-counted.
 - `Runner.WorkspacesRetentionDays: 0` means repository workspaces can be removed immediately when they are not the active checkout and not a known runner-internal folder.
 - Config deserialization is case-insensitive, so existing camelCase housekeeping files continue to load even though examples use the public model casing.
 - Matrix fan-out with the same runner labels is best-effort: multiple slots can land on the same physical runner while another idle host is skipped. Add unique runner labels when cleanup must target specific physical hosts.

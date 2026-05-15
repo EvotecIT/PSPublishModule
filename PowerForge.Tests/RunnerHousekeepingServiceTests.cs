@@ -123,10 +123,12 @@ public sealed class RunnerHousekeepingServiceTests
             Directory.CreateDirectory(oldWorkspace);
             Directory.CreateDirectory(currentWorkspace);
 
-            File.WriteAllText(Path.Combine(oldWorkspace, "old.txt"), "x");
+            var oldWorkspaceFile = Path.Combine(oldWorkspace, "old.txt");
+            File.WriteAllText(oldWorkspaceFile, "x");
             File.WriteAllText(Path.Combine(currentWorkspace, "current.txt"), "x");
             File.WriteAllText(Path.Combine(actionsRoot, "action.txt"), "x");
             Directory.SetLastWriteTimeUtc(oldWorkspace, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(oldWorkspaceFile, DateTime.UtcNow.AddDays(-10));
             Directory.SetLastWriteTimeUtc(currentWorkspaceRoot, DateTime.UtcNow.AddDays(-10));
             Directory.SetLastWriteTimeUtc(actionsRoot, DateTime.UtcNow.AddDays(-10));
             Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", currentWorkspace);
@@ -175,9 +177,11 @@ public sealed class RunnerHousekeepingServiceTests
             Directory.CreateDirectory(runnerTemp);
             Directory.CreateDirectory(oldWorkspace);
             Directory.CreateDirectory(recentWorkspace);
-            File.WriteAllText(Path.Combine(oldWorkspace, "old.txt"), "x");
+            var oldWorkspaceFile = Path.Combine(oldWorkspace, "old.txt");
+            File.WriteAllText(oldWorkspaceFile, "x");
             File.WriteAllText(Path.Combine(recentWorkspace, "recent.txt"), "x");
             Directory.SetLastWriteTimeUtc(oldWorkspace, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(oldWorkspaceFile, DateTime.UtcNow.AddDays(-10));
             Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", null);
 
             var service = new RunnerHousekeepingService(new NullLogger());
@@ -207,7 +211,7 @@ public sealed class RunnerHousekeepingServiceTests
     }
 
     [Fact]
-    public void Clean_Apply_UsesCheckoutDirectoryTimestampForWorkspaceAge()
+    public void Clean_Apply_UsesDescendantActivityForWorkspaceAge()
     {
         var root = CreateSandbox();
         var previousWorkspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
@@ -222,17 +226,30 @@ public sealed class RunnerHousekeepingServiceTests
             var freshCheckout = Path.Combine(staleParentFreshCheckout, "FreshRepo");
             var staleParentStaleCheckout = Path.Combine(workRoot, "StaleRepo");
             var staleCheckout = Path.Combine(staleParentStaleCheckout, "StaleRepo");
+            var staleParentFreshCustomCheckout = Path.Combine(workRoot, "CustomPathRepo");
+            var customCheckout = Path.Combine(staleParentFreshCustomCheckout, "src", "main");
 
             Directory.CreateDirectory(runnerTemp);
             Directory.CreateDirectory(activeWorkspace);
             Directory.CreateDirectory(freshCheckout);
             Directory.CreateDirectory(staleCheckout);
-            File.WriteAllText(Path.Combine(freshCheckout, "fresh.txt"), "x");
-            File.WriteAllText(Path.Combine(staleCheckout, "stale.txt"), "x");
+            Directory.CreateDirectory(customCheckout);
+            var freshFile = Path.Combine(freshCheckout, "fresh.txt");
+            var customFreshFile = Path.Combine(customCheckout, "fresh.txt");
+            var staleFile = Path.Combine(staleCheckout, "stale.txt");
+            File.WriteAllText(freshFile, "x");
+            File.WriteAllText(customFreshFile, "x");
+            File.WriteAllText(staleFile, "x");
             Directory.SetLastWriteTimeUtc(staleParentFreshCheckout, DateTime.UtcNow.AddDays(-10));
-            Directory.SetLastWriteTimeUtc(freshCheckout, DateTime.UtcNow);
+            Directory.SetLastWriteTimeUtc(freshCheckout, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(freshFile, DateTime.UtcNow);
+            Directory.SetLastWriteTimeUtc(staleParentFreshCustomCheckout, DateTime.UtcNow.AddDays(-10));
+            Directory.SetLastWriteTimeUtc(Path.Combine(staleParentFreshCustomCheckout, "src"), DateTime.UtcNow.AddDays(-10));
+            Directory.SetLastWriteTimeUtc(customCheckout, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(customFreshFile, DateTime.UtcNow);
             Directory.SetLastWriteTimeUtc(staleParentStaleCheckout, DateTime.UtcNow.AddDays(-10));
             Directory.SetLastWriteTimeUtc(staleCheckout, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(staleFile, DateTime.UtcNow.AddDays(-10));
             Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", activeWorkspace);
 
             var service = new RunnerHousekeepingService(new NullLogger());
@@ -252,6 +269,7 @@ public sealed class RunnerHousekeepingServiceTests
 
             Assert.True(result.Success);
             Assert.True(Directory.Exists(staleParentFreshCheckout));
+            Assert.True(Directory.Exists(staleParentFreshCustomCheckout));
             Assert.False(Directory.Exists(staleParentStaleCheckout));
         }
         finally
@@ -321,8 +339,10 @@ public sealed class RunnerHousekeepingServiceTests
             Directory.CreateDirectory(runnerTemp);
             Directory.CreateDirectory(oldWorkspace);
             Directory.CreateDirectory(outsideWorkspace);
-            File.WriteAllText(Path.Combine(oldWorkspace, "old.txt"), "x");
+            var oldWorkspaceFile = Path.Combine(oldWorkspace, "old.txt");
+            File.WriteAllText(oldWorkspaceFile, "x");
             Directory.SetLastWriteTimeUtc(oldWorkspace, DateTime.UtcNow.AddDays(-10));
+            File.SetLastWriteTimeUtc(oldWorkspaceFile, DateTime.UtcNow.AddDays(-10));
             Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", outsideWorkspace);
 
             var service = new RunnerHousekeepingService(new NullLogger());
