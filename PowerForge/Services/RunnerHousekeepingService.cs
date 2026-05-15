@@ -600,6 +600,8 @@ public sealed class RunnerHousekeepingService
     private static DateTime GetWorkspaceLastActivityUtc(string workspacePath)
     {
         var lastActivity = Directory.GetLastWriteTimeUtc(workspacePath);
+        // GitHub's default checkout layout is _work/<repo>/<repo>. Custom checkout paths
+        // fall back to the top-level workspace timestamp.
         var checkoutPath = Path.Combine(workspacePath, Path.GetFileName(workspacePath));
         if (Directory.Exists(checkoutPath))
         {

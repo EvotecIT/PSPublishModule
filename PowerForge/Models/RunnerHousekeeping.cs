@@ -54,8 +54,8 @@ public sealed class RunnerHousekeepingSpec
     public int ActionsRetentionDays { get; set; } = 7;
 
     /// <summary>
-    /// Retention window for old repository workspaces under the runner work root. Use <c>0</c> to allow
-    /// any age-qualified workspace that is not the active checkout or a runner-internal directory.
+    /// Retention window for old repository workspaces under the runner work root. Use <c>0</c> to make
+    /// any non-active, non-internal workspace immediately eligible for cleanup.
     /// </summary>
     public int WorkspacesRetentionDays { get; set; } = 3;
 
