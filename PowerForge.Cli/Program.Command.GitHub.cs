@@ -10,7 +10,7 @@ internal static partial class Program
     private const string GitHubArtifactsPruneUsage = "Usage: powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
     private const string GitHubCachesPruneUsage = "Usage: powerforge github caches prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--key <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
     private const string GitHubHousekeepingUsage = "Usage: powerforge github housekeeping [--config <file>] [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--runner-min-free-gb <N>] [--dry-run|--apply] [--output json]";
-    private const string GitHubRunnerCleanupUsage = "Usage: powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>] [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--diag-retention-days <N>] [--actions-retention-days <N>] [--tool-cache-retention-days <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache] [--skip-docker] [--no-docker-volumes] [--output json]";
+    private const string GitHubRunnerCleanupUsage = "Usage: powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>] [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--diag-retention-days <N>] [--actions-retention-days <N>] [--workspaces-retention-days|--workspace-retention-days <N>] [--tool-cache-retention-days <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo] [--clean-workspaces] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-workspaces] [--skip-tool-cache] [--skip-dotnet-cache] [--skip-docker] [--no-docker-volumes] [--output json] (when conflicting cleanup/skip flags are provided, the later flag wins)";
 
     private static int CommandGitHub(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -637,6 +637,10 @@ internal static partial class Program
                 case "--actions-retention-days":
                     spec.ActionsRetentionDays = ParseRequiredInt(argv, ref i, "--actions-retention-days", minimum: 0);
                     break;
+                case "--workspaces-retention-days":
+                case "--workspace-retention-days":
+                    spec.WorkspacesRetentionDays = ParseRequiredInt(argv, ref i, "--workspaces-retention-days", minimum: 0);
+                    break;
                 case "--tool-cache-retention-days":
                     spec.ToolCacheRetentionDays = ParseRequiredInt(argv, ref i, "--tool-cache-retention-days", minimum: 0);
                     break;
@@ -652,6 +656,9 @@ internal static partial class Program
                 case "--allow-sudo":
                     spec.AllowSudo = true;
                     break;
+                case "--clean-workspaces":
+                    spec.CleanWorkspaces = true;
+                    break;
                 case "--skip-diagnostics":
                     spec.CleanDiagnostics = false;
                     break;
@@ -660,6 +667,10 @@ internal static partial class Program
                     break;
                 case "--skip-actions-cache":
                     spec.CleanActionsCache = false;
+                    break;
+                case "--skip-workspaces":
+                case "--skip-workspace-cleanup":
+                    spec.CleanWorkspaces = false;
                     break;
                 case "--skip-tool-cache":
                     spec.CleanToolCache = false;
