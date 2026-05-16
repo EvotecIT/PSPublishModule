@@ -523,6 +523,7 @@ internal static class ModuleBootstrapperGenerator
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
 namespace {identity.Namespace};
@@ -588,8 +589,12 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {{
         var resolvedPath = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
-        return !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath)
-            ? LoadUnmanagedDllFromPath(resolvedPath)
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+            return LoadUnmanagedDllFromPath(resolvedPath);
+
+        var packagedLibrary = LoadPackagedNativeLibrary(unmanagedDllName);
+        return packagedLibrary != IntPtr.Zero
+            ? packagedLibrary
             : IntPtr.Zero;
     }}
 
@@ -598,6 +603,125 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         // Called only while LoadModule holds Sync; keep the one-time main assembly load under that lock.
         _moduleAssembly ??= LoadFromAssemblyPath(_moduleAssemblyPath);
         return _moduleAssembly;
+    }}
+
+    private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)
+    {{
+        if (string.IsNullOrWhiteSpace(unmanagedDllName))
+            return IntPtr.Zero;
+
+        foreach (var rid in GetRuntimeIdentifiers())
+        {{
+            foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
+            {{
+                var path = Path.Combine(_assemblyDirectory, ""runtimes"", rid, ""native"", fileName);
+                if (File.Exists(path))
+                {{
+                    var loaded = TryLoadPackagedNativeLibrary(path);
+                    if (loaded != IntPtr.Zero)
+                        return loaded;
+                }}
+            }}
+        }}
+
+        foreach (var fileName in GetNativeLibraryFileNames(unmanagedDllName))
+        {{
+            var path = Path.Combine(_assemblyDirectory, fileName);
+            if (File.Exists(path))
+            {{
+                var loaded = TryLoadPackagedNativeLibrary(path);
+                if (loaded != IntPtr.Zero)
+                    return loaded;
+            }}
+        }}
+
+        return IntPtr.Zero;
+    }}
+
+    private IntPtr TryLoadPackagedNativeLibrary(string path)
+    {{
+        try
+        {{
+            return LoadUnmanagedDllFromPath(path);
+        }}
+        catch (Exception ex) when (ex is BadImageFormatException || ex is DllNotFoundException || ex is FileLoadException)
+        {{
+            return IntPtr.Zero;
+        }}
+    }}
+
+    private static IEnumerable<string> GetRuntimeIdentifiers()
+    {{
+        var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+            yield return runtimeIdentifier;
+
+        var arch = RuntimeInformation.ProcessArchitecture switch
+        {{
+            Architecture.X64 => ""x64"",
+            Architecture.X86 => ""x86"",
+            Architecture.Arm64 => ""arm64"",
+            Architecture.Arm => ""arm"",
+            _ => null
+        }};
+        var isMusl = runtimeIdentifier.Contains(""musl"", StringComparison.OrdinalIgnoreCase);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {{
+            if (arch is not null)
+                yield return ""win-"" + arch;
+            yield return ""win"";
+        }}
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {{
+            if (arch is not null)
+                yield return ""osx-"" + arch;
+            yield return ""osx"";
+        }}
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {{
+            if (arch is not null)
+            {{
+                if (isMusl)
+                {{
+                    yield return ""linux-musl-"" + arch;
+                    yield return ""linux-musl"";
+                    yield return ""linux-"" + arch;
+                }}
+                else
+                {{
+                    yield return ""linux-"" + arch;
+                    yield return ""linux-musl-"" + arch;
+                    yield return ""linux-musl"";
+                }}
+            }}
+            yield return ""linux"";
+        }}
+    }}
+
+    private static IEnumerable<string> GetNativeLibraryFileNames(string unmanagedDllName)
+    {{
+        yield return unmanagedDllName;
+
+        if (Path.HasExtension(unmanagedDllName))
+            yield break;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {{
+            yield return unmanagedDllName + "".dll"";
+        }}
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {{
+            yield return unmanagedDllName + "".dylib"";
+            if (!unmanagedDllName.StartsWith(""lib"", StringComparison.Ordinal))
+                yield return ""lib"" + unmanagedDllName + "".dylib"";
+        }}
+        else
+        {{
+            yield return unmanagedDllName + "".so"";
+            if (!unmanagedDllName.StartsWith(""lib"", StringComparison.Ordinal))
+                yield return ""lib"" + unmanagedDllName + "".so"";
+        }}
     }}
 }}
 ";

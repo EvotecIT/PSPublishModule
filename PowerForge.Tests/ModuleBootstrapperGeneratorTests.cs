@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Reflection;
 
 public class ModuleBootstrapperGeneratorTests
 {
@@ -156,6 +157,45 @@ public class ModuleBootstrapperGeneratorTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void BuildAssemblyLoadContextSource_ProbesPackagedRuntimeNativeAssets()
+    {
+        var generatorType = typeof(ModuleBootstrapperGenerator);
+        var identityType = generatorType.GetNestedType("AssemblyLoadContextLoaderIdentity", BindingFlags.NonPublic);
+        Assert.NotNull(identityType);
+
+        var identity = Activator.CreateInstance(
+            identityType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: new object[]
+            {
+                "DemoModule.ModuleLoadContext",
+                "DemoModule.ModuleLoadContext",
+                "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext"
+            },
+            culture: null);
+        Assert.NotNull(identity);
+
+        var method = generatorType.GetMethod("BuildAssemblyLoadContextSource", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var source = Assert.IsType<string>(method.Invoke(null, new[] { identity }));
+
+        Assert.Contains("LoadPackagedNativeLibrary", source);
+        Assert.Contains("TryLoadPackagedNativeLibrary", source);
+        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
+        Assert.Contains("RuntimeInformation.ProcessArchitecture", source);
+        Assert.Contains("RuntimeInformation.RuntimeIdentifier", source);
+        Assert.Contains("LoadUnmanagedDllFromPath(path)", source);
+        Assert.Contains("BadImageFormatException || ex is DllNotFoundException || ex is FileLoadException", source);
+        Assert.Contains("yield return \"win-\" + arch", source);
+        Assert.Contains("yield return \"linux-\" + arch", source);
+        Assert.Contains("yield return \"linux-musl-\" + arch", source);
+        Assert.Contains("yield return \"linux-musl\"", source);
+        Assert.Contains("yield return \"osx\"", source);
     }
 
     [Fact]
