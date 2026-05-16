@@ -1,5 +1,4 @@
 using PowerForge;
-using System.Reflection;
 
 public class ModuleBootstrapperGeneratorTests
 {
@@ -162,27 +161,11 @@ public class ModuleBootstrapperGeneratorTests
     [Fact]
     public void BuildAssemblyLoadContextSource_ProbesPackagedRuntimeNativeAssets()
     {
-        var generatorType = typeof(ModuleBootstrapperGenerator);
-        var identityType = generatorType.GetNestedType("AssemblyLoadContextLoaderIdentity", BindingFlags.NonPublic);
-        Assert.NotNull(identityType);
-
-        var identity = Activator.CreateInstance(
-            identityType,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: new object[]
-            {
-                "DemoModule.ModuleLoadContext",
-                "DemoModule.ModuleLoadContext",
-                "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext"
-            },
-            culture: null);
-        Assert.NotNull(identity);
-
-        var method = generatorType.GetMethod("BuildAssemblyLoadContextSource", BindingFlags.Static | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-
-        var source = Assert.IsType<string>(method.Invoke(null, new[] { identity }));
+        var identity = new ModuleBootstrapperGenerator.AssemblyLoadContextLoaderIdentity(
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext",
+            "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext");
+        var source = ModuleBootstrapperGenerator.BuildAssemblyLoadContextSource(identity);
 
         Assert.Contains("LoadPackagedNativeLibrary", source);
         Assert.Contains("TryLoadPackagedNativeLibrary", source);
@@ -196,6 +179,8 @@ public class ModuleBootstrapperGeneratorTests
         Assert.Contains("yield return \"linux-musl-\" + arch", source);
         Assert.Contains("yield return \"linux-musl\"", source);
         Assert.Contains("yield return \"osx\"", source);
+        Assert.Contains("yield return unmanagedDllName + \".so\";", source);
+        Assert.Contains("yield return \"lib\" + unmanagedDllName + \".so\";", source);
     }
 
     [Fact]

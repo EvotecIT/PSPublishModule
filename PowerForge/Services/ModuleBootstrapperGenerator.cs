@@ -518,7 +518,7 @@ internal static class ModuleBootstrapperGenerator
 </Project>
 ";
 
-    private static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
+    internal static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
         => $@"using System;
 using System.Collections.Generic;
 using System.IO;
@@ -718,6 +718,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         }}
         else
         {{
+            // Most non-Windows, non-macOS PowerShell hosts use ELF shared objects, so .so is the safest portable fallback.
             yield return unmanagedDllName + "".so"";
             if (!unmanagedDllName.StartsWith(""lib"", StringComparison.Ordinal))
                 yield return ""lib"" + unmanagedDllName + "".so"";
@@ -734,7 +735,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
             .GetAwaiter()
             .GetResult();
 
-    private sealed class AssemblyLoadContextLoaderIdentity
+    internal sealed class AssemblyLoadContextLoaderIdentity
     {
         public AssemblyLoadContextLoaderIdentity(string assemblyName, string ns, string typeName)
         {
