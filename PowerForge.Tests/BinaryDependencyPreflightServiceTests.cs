@@ -363,9 +363,29 @@ public sealed class BinaryDependencyPreflightServiceTests
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var hostAssemblies = (System.Collections.Generic.IReadOnlyCollection<string>)method!.Invoke(null, new object[] { "Desktop" })!;
+        var hostAssemblies = (System.Collections.Generic.IReadOnlyCollection<string>)method.Invoke(null, new object[] { "Desktop" })!;
         Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Management.Automation", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Memory", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Collections.Immutable", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Net.ServicePoint", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CoreHostBaseline_IncludesKnownPowerShellRuntimeAssemblies()
+    {
+        var method = typeof(BinaryDependencyPreflightService).GetMethod(
+            "GetHostProvidedAssemblyNames",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var hostAssemblies = (System.Collections.Generic.IReadOnlyCollection<string>)method.Invoke(null, new object[] { "Core" })!;
+
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Memory", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Collections.Immutable", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Net.ServicePoint", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Text.Encoding.CodePages", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Runtime.CompilerServices.Unsafe", StringComparison.OrdinalIgnoreCase));
     }
 
     private static DependencyFixture CreateDependencyFixture(string rootPath)
