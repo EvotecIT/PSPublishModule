@@ -12,17 +12,34 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    private static string RenderPreloads(AssetRegistrySpec? assets)
+    private static readonly HashSet<string> EarlyHeadLinkRels = new(StringComparer.OrdinalIgnoreCase)
     {
-        if (assets?.Preloads is null || assets.Preloads.Length == 0)
-            return string.Empty;
+        "preload",
+        "modulepreload",
+        "preconnect",
+        "dns-prefetch",
+        "prefetch"
+    };
 
-        return string.Join(Environment.NewLine, assets.Preloads.Select(p =>
+    private static string RenderPreloads(AssetRegistrySpec? assets, HeadSpec? head = null)
+    {
+        var parts = new List<string>();
+
+        var headHints = RenderHeadLinks(head, static link => IsEarlyHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headHints))
+            parts.Add(headHints);
+
+        if (assets?.Preloads is { Length: > 0 })
         {
-            var type = string.IsNullOrWhiteSpace(p.Type) ? string.Empty : $" type=\"{p.Type}\"";
-            var cross = string.IsNullOrWhiteSpace(p.Crossorigin) ? string.Empty : $" crossorigin=\"{p.Crossorigin}\"";
-            return $"<link rel=\"preload\" href=\"{p.Href}\" as=\"{p.As}\"{type}{cross} />";
-        }));
+            parts.Add(string.Join(Environment.NewLine, assets.Preloads.Select(p =>
+            {
+                var type = string.IsNullOrWhiteSpace(p.Type) ? string.Empty : $" type=\"{p.Type}\"";
+                var cross = string.IsNullOrWhiteSpace(p.Crossorigin) ? string.Empty : $" crossorigin=\"{p.Crossorigin}\"";
+                return $"<link rel=\"preload\" href=\"{p.Href}\" as=\"{p.As}\"{type}{cross} />";
+            })));
+        }
+
+        return string.Join(Environment.NewLine, parts);
     }
 
     private static string RenderCriticalCss(AssetRegistrySpec? assets, string rootPath, BuildRenderCache? renderCache = null)
@@ -48,19 +65,27 @@ public static partial class WebSiteBuilder
         return sb.ToString();
     }
 
-    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets)
+    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets, HeadSpec? head = null)
     {
+        var parts = new List<string>();
+        var headStyles = RenderHeadLinks(head, static link => IsStylesheetHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headStyles))
+            parts.Add(headStyles);
+
         var links = cssLinks.ToArray();
-        if (links.Length == 0) return string.Empty;
+        if (links.Length == 0) return string.Join(Environment.NewLine, parts);
 
         var strategy = WebAssetCssStrategy.Normalize(assets?.CssStrategy);
         if (strategy.Equals("async", StringComparison.OrdinalIgnoreCase))
-            return string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink));
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink)));
 
-        if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
-            return string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink));
+        else if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink)));
 
-        return string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />"));
+        else
+            parts.Add(string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />")));
+
+        return string.Join(Environment.NewLine, parts);
     }
 
     private static string RenderAsyncCssLink(string href)
@@ -75,13 +100,61 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems, string rootPath)
+    private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
+
+    private static AssetSlotUsage ResolveAssetSlotUsage(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return new AssetSlotUsage(true, true);
+
+        var searchableTemplate = HtmlCommentRegex.Replace(template, string.Empty);
+        var headIndex = FindFirstRenderedTokenIndex(searchableTemplate, "head_html", "HEAD_HTML");
+        var preloadsIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.preloads_html", "PRELOADS");
+        var cssIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.css_html", "ASSET_CSS");
+
+        return new AssetSlotUsage(
+            ShouldUseAssetSlot(preloadsIndex, headIndex),
+            ShouldUseAssetSlot(cssIndex, headIndex));
+    }
+
+    private static bool ShouldUseAssetSlot(int slotIndex, int headIndex) =>
+        slotIndex >= 0 && (headIndex < 0 || slotIndex < headIndex);
+
+    private static int FindFirstRenderedTokenIndex(string template, params string[] tokens)
+    {
+        var index = -1;
+        foreach (var token in tokens)
+        {
+            var match = Regex.Match(
+                template,
+                @"\{\{[-~]?\s*" + Regex.Escape(token) + @"\s*[-~]?\}\}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                RegexTimeout);
+            if (!match.Success)
+                continue;
+
+            if (index < 0 || match.Index < index)
+                index = match.Index;
+        }
+
+        return index;
+    }
+
+    private static string BuildHeadHtml(
+        SiteSpec spec,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        string rootPath,
+        bool includeEarlyHeadLinks = false,
+        bool includeStylesheetHeadLinks = false)
     {
         var parts = new List<string>();
         var head = spec.Head;
         if (head is not null)
         {
-            var links = RenderHeadLinks(head);
+            var links = RenderHeadLinks(
+                head,
+                link => ShouldRenderHeadLinkInHeadHtml(link.Rel, includeEarlyHeadLinks, includeStylesheetHeadLinks));
             if (!string.IsNullOrWhiteSpace(links))
                 parts.Add(links);
 
@@ -283,15 +356,43 @@ public static partial class WebSiteBuilder
             .FirstOrDefault();
     }
 
-    private static string RenderHeadLinks(HeadSpec head)
+    private static bool IsEarlyHeadLink(string? rel)
     {
-        if (head.Links.Length == 0)
+        if (string.IsNullOrWhiteSpace(rel))
+            return false;
+
+        return EarlyHeadLinkRels.Contains(rel.Trim());
+    }
+
+    private static bool IsStylesheetHeadLink(string? rel) =>
+        !string.IsNullOrWhiteSpace(rel) &&
+        rel.Trim().Equals("stylesheet", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAssetSlotHeadLink(string? rel) =>
+        IsEarlyHeadLink(rel) || IsStylesheetHeadLink(rel);
+
+    private static bool ShouldRenderHeadLinkInHeadHtml(string? rel, bool includeEarlyHeadLinks, bool includeStylesheetHeadLinks)
+    {
+        if (IsEarlyHeadLink(rel))
+            return includeEarlyHeadLinks;
+
+        if (IsStylesheetHeadLink(rel))
+            return includeStylesheetHeadLinks;
+
+        return true;
+    }
+
+    private static string RenderHeadLinks(HeadSpec? head, Func<HeadLinkSpec, bool>? predicate = null)
+    {
+        if (head?.Links is null || head.Links.Length == 0)
             return string.Empty;
 
         var sb = new System.Text.StringBuilder();
         foreach (var link in head.Links)
         {
             if (string.IsNullOrWhiteSpace(link.Rel) || string.IsNullOrWhiteSpace(link.Href))
+                continue;
+            if (predicate is not null && !predicate(link))
                 continue;
 
             sb.Append("<link");

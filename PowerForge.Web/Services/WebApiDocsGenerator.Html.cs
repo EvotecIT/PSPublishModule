@@ -36,7 +36,7 @@ public static partial class WebApiDocsGenerator
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
-        var criticalCss = ResolveCriticalCss(options, warnings);
+        var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var codeLanguage = GetDefaultCodeLanguage(options);
         var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
@@ -113,7 +113,7 @@ public static partial class WebApiDocsGenerator
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
-        var criticalCss = ResolveCriticalCss(options, warnings);
+        var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var codeLanguage = GetDefaultCodeLanguage(options);
         var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
@@ -621,6 +621,30 @@ $@"<!doctype html>
 
         return null;
     }
+
+    private const string ApiDocsLayoutStabilityCss = """
+/* PowerForge API docs first-paint control stability. */
+body.pf-api-docs .namespace-select,
+body.pf-api-docs .pf-combobox-trigger{
+  box-sizing:border-box;
+  width:100%;
+  min-height:2.45rem;
+  line-height:1.2;
+}
+body.pf-api-docs .filter-button,
+body.pf-api-docs .sidebar-reset,
+body.pf-api-docs .sidebar-tools button,
+body.pf-api-docs .api-suite-search-filter{
+  box-sizing:border-box;
+  min-height:1.9rem;
+  line-height:1.2;
+}
+""";
+
+    private static string BuildApiDocsCriticalCss(WebApiDocsOptions options, List<string> warnings) =>
+        JoinHtmlFragments(
+            ResolveCriticalCss(options, warnings),
+            WrapStyle(ApiDocsLayoutStabilityCss));
 
     private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)
     {
