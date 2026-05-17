@@ -689,6 +689,61 @@ public class WebPipelineRunnerGitSyncTests
     }
 
     [Fact]
+    public void RunPipeline_GitSync_AuthTypeNone_ResetsStaleExistingCheckoutAuth()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-auth-none-stale-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var checkout = Path.Combine(root, "checkout");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "v1");
+            InitializeRepository(source, "auth-none-v1");
+            RunGit(root, "clone", source, checkout);
+
+            RunGit(checkout, "remote", "set-url", "origin", "https://github.com/EvotecIT/does-not-exist-private.git");
+            RunGit(checkout, "config", "--local", "http.https://github.com/.extraheader", "AUTHORIZATION: basic stale");
+
+            File.WriteAllText(Path.Combine(source, "README.md"), "v2");
+            RunGit(source, "add", ".");
+            RunGit(source, "commit", "-m", "auth-none-v2", "--quiet");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(source)}}",
+                      "destination": "{{EscapeJson(checkout)}}",
+                      "authType": "none"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Equal("v2", File.ReadAllText(Path.Combine(checkout, "README.md")));
+            Assert.Equal(source, RunGit(checkout, "remote", "get-url", "origin").StdOut.Trim());
+            var extraHeader = RunGit(checkout, throwOnError: false, "config", "--local", "--get-all", "http.https://github.com/.extraheader");
+            Assert.NotEqual(0, extraHeader.ExitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_GitSync_AuthTypeSsh_ResolvesShorthandToSshRemote()
     {
         if (!IsGitAvailable())

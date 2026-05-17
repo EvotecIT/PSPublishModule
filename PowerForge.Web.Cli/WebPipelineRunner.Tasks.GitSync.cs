@@ -318,6 +318,8 @@ internal static partial class WebPipelineRunner
         }
         else
         {
+            PrepareExistingGitSyncCheckout(request);
+
             var fetchArgs = new List<string> { "-C", request.DestinationFull, "fetch", "--prune", "origin" };
             if (request.FetchTags)
                 fetchArgs.Add("--tags");
@@ -329,14 +331,14 @@ internal static partial class WebPipelineRunner
                 request.Retry,
                 request.RetryDelayMs);
             if (fetch.ExitCode != 0 &&
-                !string.IsNullOrWhiteSpace(request.AuthHeader) &&
+                ShouldRetryGitSyncFetchWithFreshClone(request, fetch) &&
                 IsGitAuthenticationFailure(fetch))
             {
                 DeleteDirectoryForGitSyncClean(request.DestinationFull);
                 fetch = RunGitCommandWithRetry(
                     request.BaseDirectory,
                     cloneArgs,
-                    null,
+                    request.AuthType.Equals("none", StringComparison.OrdinalIgnoreCase) ? null : request.AuthHeader,
                     request.TimeoutSeconds,
                     request.Retry,
                     request.RetryDelayMs);
@@ -372,6 +374,48 @@ internal static partial class WebPipelineRunner
             DisplayReference = ResolveHeadReference(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs),
             Commit = SelectResolvedCommit(resolvedHeadCommit, checkedOutCommit)
         };
+    }
+
+    private static void PrepareExistingGitSyncCheckout(GitSyncRequest request)
+    {
+        if (request.AuthType.Equals("none", StringComparison.OrdinalIgnoreCase))
+            ClearGitAuthConfigForDirectory(request.DestinationFull);
+        else if (string.IsNullOrWhiteSpace(request.AuthHeader))
+            return;
+
+        var setOrigin = RunGitCommandWithRetry(
+            request.DestinationFull,
+            new[] { "remote", "set-url", "origin", request.Repo },
+            null,
+            request.TimeoutSeconds,
+            request.Retry,
+            request.RetryDelayMs);
+
+        if (setOrigin.ExitCode != 0)
+        {
+            var addOrigin = RunGitCommandWithRetry(
+                request.DestinationFull,
+                new[] { "remote", "add", "origin", request.Repo },
+                null,
+                request.TimeoutSeconds,
+                request.Retry,
+                request.RetryDelayMs);
+
+            if (addOrigin.ExitCode != 0)
+            {
+                var preview = FirstNonEmptyLine(addOrigin.Error, setOrigin.Error, addOrigin.Output, setOrigin.Output) ?? "unknown error";
+                throw new InvalidOperationException($"git-sync remote origin update failed: {preview}");
+            }
+        }
+    }
+
+    private static bool ShouldRetryGitSyncFetchWithFreshClone(GitSyncRequest request, (int ExitCode, string Output, string Error) fetch)
+    {
+        if (fetch.ExitCode == 0)
+            return false;
+
+        return !string.IsNullOrWhiteSpace(request.AuthHeader) ||
+               request.AuthType.Equals("none", StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string> BuildGitSyncCloneArgs(GitSyncRequest request)
@@ -947,6 +991,11 @@ internal static partial class WebPipelineRunner
     private static void ClearGitAuthConfigForAnonymousRetry(string workingDirectory, IReadOnlyList<string> args)
     {
         var targetDirectory = ResolveGitCommandWorkingDirectory(workingDirectory, args);
+        ClearGitAuthConfigForDirectory(targetDirectory);
+    }
+
+    private static void ClearGitAuthConfigForDirectory(string targetDirectory)
+    {
         foreach (var key in new[] { "http.extraHeader", "http.https://github.com/.extraheader" })
             _ = RunGitCommand(targetDirectory, new[] { "config", "--local", "--unset-all", key }, null, 30);
     }
