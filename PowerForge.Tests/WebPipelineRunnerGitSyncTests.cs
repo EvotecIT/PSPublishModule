@@ -20,6 +20,13 @@ public class WebPipelineRunnerGitSyncTests
     }
 
     [Fact]
+    public void ResolveGitCommandWorkingDirectory_UsesGitCPath_WhenPresent()
+    {
+        Assert.Equal("/tmp/repo", WebPipelineRunner.ResolveGitCommandWorkingDirectory("/tmp/base", new[] { "-C", "/tmp/repo", "fetch" }));
+        Assert.Equal("/tmp/base", WebPipelineRunner.ResolveGitCommandWorkingDirectory("/tmp/base", new[] { "clone", "repo", "dest" }));
+    }
+
+    [Fact]
     public void RunPipeline_GitSync_ClonesRepository()
     {
         if (!IsGitAvailable())

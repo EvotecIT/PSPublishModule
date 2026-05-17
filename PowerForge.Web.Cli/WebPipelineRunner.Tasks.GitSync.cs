@@ -894,6 +894,7 @@ internal static partial class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(authHeader) && IsGitAuthenticationFailure(last))
         {
+            ClearGitAuthConfigForAnonymousRetry(workingDirectory, args);
             for (var attempt = 1; attempt <= attempts; attempt++)
             {
                 last = RunGitCommand(workingDirectory, args, null, timeoutSeconds);
@@ -917,6 +918,21 @@ internal static partial class WebPipelineRunner
         return message.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("Invalid username or token", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ClearGitAuthConfigForAnonymousRetry(string workingDirectory, IReadOnlyList<string> args)
+    {
+        var targetDirectory = ResolveGitCommandWorkingDirectory(workingDirectory, args);
+        foreach (var key in new[] { "http.extraHeader", "http.https://github.com/.extraheader" })
+            _ = RunGitCommand(targetDirectory, new[] { "config", "--local", "--unset-all", key }, null, 30);
+    }
+
+    internal static string ResolveGitCommandWorkingDirectory(string workingDirectory, IReadOnlyList<string> args)
+    {
+        if (args.Count >= 2 && string.Equals(args[0], "-C", StringComparison.Ordinal))
+            return args[1];
+
+        return workingDirectory;
     }
 
     private static string NormalizeGitLockMode(string? value)
