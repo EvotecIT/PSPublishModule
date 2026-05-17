@@ -100,27 +100,45 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private readonly record struct AssetSlotUsage(bool HasPreloadsSlot, bool HasCssSlot);
+    private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
 
     private static AssetSlotUsage ResolveAssetSlotUsage(string? template)
     {
         if (string.IsNullOrWhiteSpace(template))
             return new AssetSlotUsage(true, true);
 
+        var searchableTemplate = HtmlCommentRegex.Replace(template, string.Empty);
+        var headIndex = FindFirstRenderedTokenIndex(searchableTemplate, "head_html", "HEAD_HTML");
+        var preloadsIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.preloads_html", "PRELOADS");
+        var cssIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.css_html", "ASSET_CSS");
+
         return new AssetSlotUsage(
-            ContainsScribanToken(template, "assets.preloads_html") || ContainsSimpleToken(template, "PRELOADS"),
-            ContainsScribanToken(template, "assets.css_html") || ContainsSimpleToken(template, "ASSET_CSS"));
+            ShouldUseAssetSlot(preloadsIndex, headIndex),
+            ShouldUseAssetSlot(cssIndex, headIndex));
     }
 
-    private static bool ContainsScribanToken(string template, string token) =>
-        template.Contains(token, StringComparison.OrdinalIgnoreCase);
+    private static bool ShouldUseAssetSlot(int slotIndex, int headIndex) =>
+        slotIndex >= 0 && (headIndex < 0 || slotIndex < headIndex);
 
-    private static bool ContainsSimpleToken(string template, string token) =>
-        Regex.IsMatch(
-            template,
-            @"\{\{\s*" + Regex.Escape(token) + @"\s*\}\}",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-            RegexTimeout);
+    private static int FindFirstRenderedTokenIndex(string template, params string[] tokens)
+    {
+        var index = -1;
+        foreach (var token in tokens)
+        {
+            var match = Regex.Match(
+                template,
+                @"\{\{[-~]?\s*" + Regex.Escape(token) + @"\s*[-~]?\}\}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                RegexTimeout);
+            if (!match.Success)
+                continue;
+
+            if (index < 0 || match.Index < index)
+                index = match.Index;
+        }
+
+        return index;
+    }
 
     private static string BuildHeadHtml(
         SiteSpec spec,

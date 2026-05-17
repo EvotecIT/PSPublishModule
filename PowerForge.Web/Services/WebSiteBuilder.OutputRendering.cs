@@ -82,7 +82,7 @@ public static partial class WebSiteBuilder
         var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate);
         var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
-        var preloads = RenderPreloads(assetRegistry, assetSlotUsage.HasPreloadsSlot ? spec.Head : null);
+        var preloads = RenderPreloads(assetRegistry, assetSlotUsage.UsePreloadsSlot ? spec.Head : null);
         var criticalCss = RenderCriticalCss(assetRegistry, rootPath, renderCache);
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
@@ -93,7 +93,7 @@ public static partial class WebSiteBuilder
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
-        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetSlotUsage.HasCssSlot ? spec.Head : null);
+        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetSlotUsage.UseCssSlot ? spec.Head : null);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer data-cfasync=\"false\"></script>"));
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
@@ -115,8 +115,8 @@ public static partial class WebSiteBuilder
             item,
             allItems,
             rootPath,
-            includeEarlyHeadLinks: !assetSlotUsage.HasPreloadsSlot,
-            includeStylesheetHeadLinks: !assetSlotUsage.HasCssSlot);
+            includeEarlyHeadLinks: !assetSlotUsage.UsePreloadsSlot,
+            includeStylesheetHeadLinks: !assetSlotUsage.UseCssSlot);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item, outputRoot);
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);

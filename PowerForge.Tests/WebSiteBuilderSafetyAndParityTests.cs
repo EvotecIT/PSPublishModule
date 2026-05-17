@@ -750,6 +750,173 @@ public class WebSiteBuilderSafetyAndParityTests
         }
     }
 
+    [Fact]
+    public void Build_KeepsHeadAssetLinksInHeadHtml_WhenAssetSlotsFollowHeadHtml()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slot-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteSimpleTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{HEAD_HTML}}{{PRELOADS}}{{ASSET_CSS}}</head>
+                <body>{{CONTENT}}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "simple";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    }
+                }
+            };
+            spec.AssetRegistry = new AssetRegistrySpec
+            {
+                Bundles = new[]
+                {
+                    new AssetBundleSpec
+                    {
+                        Name = "global",
+                        Css = new[] { "/assets/app.css" }
+                    }
+                },
+                RouteBundles = new[]
+                {
+                    new RouteBundleSpec
+                    {
+                        Match = "/**",
+                        Bundles = new[] { "global" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            var preloadIndex = html.IndexOf("href=\"/fonts/test.woff2\"", StringComparison.Ordinal);
+            var fontIndex = html.IndexOf("href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal);
+            var appIndex = html.IndexOf("href=\"/assets/app.css\"", StringComparison.Ordinal);
+
+            Assert.True(preloadIndex >= 0 && appIndex >= 0 && preloadIndex < appIndex, "Head preloads should stay ahead of route CSS when slots follow head_html.");
+            Assert.True(fontIndex >= 0 && appIndex >= 0 && fontIndex < appIndex, "Head stylesheets should stay ahead of route CSS when slots follow head_html.");
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_IgnoresAssetSlotTokensInsideHtmlComments()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slot-comment-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteSimpleTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head><!-- {{PRELOADS}}{{ASSET_CSS}} -->{{HEAD_HTML}}</head>
+                <body>{{CONTENT}}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "simple";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            Assert.Contains("href=\"/fonts/test.woff2\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/fonts/site-fonts.css\"", html, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static SiteSpec BuildBasicSpec(string input, string output)
     {
         return new SiteSpec
