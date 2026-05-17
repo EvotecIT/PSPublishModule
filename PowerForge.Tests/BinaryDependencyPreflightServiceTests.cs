@@ -358,14 +358,44 @@ public sealed class BinaryDependencyPreflightServiceTests
     [Fact]
     public void DesktopHostBaseline_DoesNotTreatCoreRuntimeAssembliesAsBuiltIn()
     {
+        var hostAssemblies = GetHostProvidedAssemblyNamesForTest("Desktop");
+        var coreRuntimeAssemblies = GetWellKnownCoreRuntimeAssemblyNamesForTest();
+
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Management.Automation", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase));
+
+        foreach (var assemblyName in coreRuntimeAssemblies)
+            Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CoreHostBaseline_IncludesKnownPowerShellRuntimeAssemblies()
+    {
+        var hostAssemblies = GetHostProvidedAssemblyNamesForTest("Core");
+        var coreRuntimeAssemblies = GetWellKnownCoreRuntimeAssemblyNamesForTest();
+
+        foreach (var assemblyName in coreRuntimeAssemblies)
+            Assert.Contains(hostAssemblies, name => string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static System.Collections.Generic.IReadOnlyCollection<string> GetHostProvidedAssemblyNamesForTest(string edition)
+    {
         var method = typeof(BinaryDependencyPreflightService).GetMethod(
             "GetHostProvidedAssemblyNames",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var hostAssemblies = (System.Collections.Generic.IReadOnlyCollection<string>)method!.Invoke(null, new object[] { "Desktop" })!;
-        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Management.Automation", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase));
+        return (System.Collections.Generic.IReadOnlyCollection<string>)method.Invoke(null, new object[] { edition })!;
+    }
+
+    private static System.Collections.Generic.IReadOnlyCollection<string> GetWellKnownCoreRuntimeAssemblyNamesForTest()
+    {
+        var field = typeof(BinaryDependencyPreflightService).GetField(
+            "WellKnownCoreRuntimeAssemblyNames",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        return (System.Collections.Generic.IReadOnlyCollection<string>)field.GetValue(null)!;
     }
 
     private static DependencyFixture CreateDependencyFixture(string rootPath)

@@ -46,6 +46,19 @@ public sealed class BinaryDependencyPreflightService
         "UIAutomationTypes"
     };
 
+    // Assemblies PowerShell 7 commonly provides at runtime but a Desktop validation host may not expose.
+    private static readonly string[] WellKnownCoreRuntimeAssemblyNames =
+    {
+        "System.Buffers",
+        "System.Collections.Immutable",
+        "System.Memory",
+        "System.Net.ServicePoint",
+        "System.Numerics.Vectors",
+        "System.Runtime.CompilerServices.Unsafe",
+        "System.Text.Encoding.CodePages",
+        "System.Threading.Tasks.Extensions"
+    };
+
     private readonly ILogger _logger;
 
     /// <summary>
@@ -668,6 +681,10 @@ public sealed class BinaryDependencyPreflightService
 
             return set;
         }
+
+        // Core validation may run from a Desktop host, so seed assemblies PowerShell 7 provides at runtime.
+        foreach (var name in WellKnownCoreRuntimeAssemblyNames)
+            set.Add(name);
 
         AddAssembliesFromDirectory(set, Path.GetDirectoryName(typeof(object).Assembly.Location));
         AddAssembliesFromDirectory(set, Path.GetDirectoryName(typeof(PSObject).Assembly.Location));
