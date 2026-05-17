@@ -26,7 +26,7 @@ public static partial class WebApiDocsGenerator
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
-        var criticalCss = ResolveCriticalCss(options, warnings);
+        var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);

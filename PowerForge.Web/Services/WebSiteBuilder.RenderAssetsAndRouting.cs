@@ -12,17 +12,40 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    private static string RenderPreloads(AssetRegistrySpec? assets)
+    private static readonly HashSet<string> EarlyHeadLinkRels = new(StringComparer.OrdinalIgnoreCase)
     {
-        if (assets?.Preloads is null || assets.Preloads.Length == 0)
-            return string.Empty;
+        "preload",
+        "modulepreload",
+        "preconnect",
+        "dns-prefetch",
+        "prefetch"
+    };
+    private static readonly Regex ScribanCommentRegex = new(@"\{\{[-~]?\s*#.*?#\s*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanEscapeBlockRegex = new(@"\{%\{.*?\}%\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanControlBlockRegex = new(@"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|func|tablerow|wrap|end)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex SimplePartialReferenceRegex = new(@"\{\{>\s*(?<name>[^\s}]+)\s*\}\}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanPartialReferenceRegex = new(@"\{\{[-~]?\s*include\s+[""'](?<name>[^""']+)[""'][^}]*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private const int MaxAssetSlotPartialDepth = 8;
 
-        return string.Join(Environment.NewLine, assets.Preloads.Select(p =>
+    private static string RenderPreloads(AssetRegistrySpec? assets, HeadSpec? head = null)
+    {
+        var parts = new List<string>();
+
+        var headHints = RenderHeadLinks(head, static link => IsEarlyHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headHints))
+            parts.Add(headHints);
+
+        if (assets?.Preloads is { Length: > 0 })
         {
-            var type = string.IsNullOrWhiteSpace(p.Type) ? string.Empty : $" type=\"{p.Type}\"";
-            var cross = string.IsNullOrWhiteSpace(p.Crossorigin) ? string.Empty : $" crossorigin=\"{p.Crossorigin}\"";
-            return $"<link rel=\"preload\" href=\"{p.Href}\" as=\"{p.As}\"{type}{cross} />";
-        }));
+            parts.Add(string.Join(Environment.NewLine, assets.Preloads.Select(p =>
+            {
+                var type = string.IsNullOrWhiteSpace(p.Type) ? string.Empty : $" type=\"{p.Type}\"";
+                var cross = string.IsNullOrWhiteSpace(p.Crossorigin) ? string.Empty : $" crossorigin=\"{p.Crossorigin}\"";
+                return $"<link rel=\"preload\" href=\"{p.Href}\" as=\"{p.As}\"{type}{cross} />";
+            })));
+        }
+
+        return string.Join(Environment.NewLine, parts);
     }
 
     private static string RenderCriticalCss(AssetRegistrySpec? assets, string rootPath, BuildRenderCache? renderCache = null)
@@ -48,19 +71,27 @@ public static partial class WebSiteBuilder
         return sb.ToString();
     }
 
-    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets)
+    private static string RenderCssLinks(IEnumerable<string> cssLinks, AssetRegistrySpec? assets, HeadSpec? head = null)
     {
+        var parts = new List<string>();
+        var headStyles = RenderHeadLinks(head, static link => IsStylesheetHeadLink(link.Rel));
+        if (!string.IsNullOrWhiteSpace(headStyles))
+            parts.Add(headStyles);
+
         var links = cssLinks.ToArray();
-        if (links.Length == 0) return string.Empty;
+        if (links.Length == 0) return string.Join(Environment.NewLine, parts);
 
         var strategy = WebAssetCssStrategy.Normalize(assets?.CssStrategy);
         if (strategy.Equals("async", StringComparison.OrdinalIgnoreCase))
-            return string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink));
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderAsyncCssLink)));
 
-        if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
-            return string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink));
+        else if (strategy.Equals("preload", StringComparison.OrdinalIgnoreCase))
+            parts.Add(string.Join(Environment.NewLine, links.Select(RenderPreloadCssLink)));
 
-        return string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />"));
+        else
+            parts.Add(string.Join(Environment.NewLine, links.Select(c => $"<link rel=\"stylesheet\" href=\"{c}\" />")));
+
+        return string.Join(Environment.NewLine, parts);
     }
 
     private static string RenderAsyncCssLink(string href)
@@ -75,13 +106,149 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems, string rootPath)
+    private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
+
+    private enum AssetSlotTemplateKind
+    {
+        Simple,
+        Scriban
+    }
+
+    private static AssetSlotUsage ResolveAssetSlotUsage(
+        string? template,
+        Func<string, string?>? partialResolver = null,
+        AssetSlotTemplateKind templateKind = AssetSlotTemplateKind.Simple)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            // The built-in no-theme renderer emits PreloadsHtml and CssHtml directly, so keep those slots active.
+            return new AssetSlotUsage(true, true);
+        }
+
+        var searchableTemplate = BuildAssetSlotSearchTemplate(template, partialResolver, templateKind);
+        var headIndex = FindFirstRenderedTokenIndex(searchableTemplate, "head_html", "HEAD_HTML");
+        var preloadsIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.preloads_html", "PRELOADS");
+        var cssIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.css_html", "ASSET_CSS");
+
+        return new AssetSlotUsage(
+            ShouldUseAssetSlot(preloadsIndex, headIndex),
+            ShouldUseAssetSlot(cssIndex, headIndex));
+    }
+
+    private static bool ShouldUseAssetSlot(int slotIndex, int headIndex) =>
+        slotIndex >= 0 && (headIndex < 0 || slotIndex < headIndex);
+
+    private static string BuildAssetSlotSearchTemplate(
+        string template,
+        Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind)
+    {
+        var searchable = StripNonRenderedTemplateRegions(template);
+        return ExpandAssetSlotPartialReferences(searchable, partialResolver, templateKind, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+    }
+
+    private static string StripNonRenderedTemplateRegions(string template) =>
+        ScribanEscapeBlockRegex.Replace(
+            ScribanCommentRegex.Replace(
+                HtmlCommentRegex.Replace(template, string.Empty),
+                string.Empty),
+            string.Empty);
+
+    private static string ExpandAssetSlotPartialReferences(
+        string template,
+        Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind,
+        HashSet<string> seen,
+        int depth)
+    {
+        if (partialResolver is null || depth >= MaxAssetSlotPartialDepth || string.IsNullOrEmpty(template))
+            return template;
+
+        string ReplacePartial(Match match)
+        {
+            var name = match.Groups["name"].Value;
+            if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
+                return string.Empty;
+
+            try
+            {
+                var partial = partialResolver(name);
+                if (string.IsNullOrWhiteSpace(partial))
+                    return string.Empty;
+
+                partial = StripNonRenderedTemplateRegions(partial);
+                if (templateKind == AssetSlotTemplateKind.Simple)
+                    return partial;
+
+                return ExpandAssetSlotPartialReferences(partial, partialResolver, templateKind, seen, depth + 1);
+            }
+            finally
+            {
+                seen.Remove(name);
+            }
+        }
+
+        return templateKind == AssetSlotTemplateKind.Simple
+            ? SimplePartialReferenceRegex.Replace(template, ReplacePartial)
+            : ScribanPartialReferenceRegex.Replace(template, ReplacePartial);
+    }
+
+    private static int FindFirstRenderedTokenIndex(string template, params string[] tokens)
+    {
+        var index = -1;
+        foreach (var token in tokens)
+        {
+            foreach (Match match in Regex.Matches(
+                template,
+                @"\{\{[-~]?\s*" + Regex.Escape(token) + @"\s*[-~]?\}\}",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                RegexTimeout))
+            {
+                if (IsInsideScribanControlBlock(template, match.Index))
+                    continue;
+
+                if (index < 0 || match.Index < index)
+                    index = match.Index;
+            }
+        }
+
+        return index;
+    }
+
+    private static bool IsInsideScribanControlBlock(string template, int index)
+    {
+        var depth = 0;
+        // Branch truth is runtime data, so any slot inside a Scriban block stays conservative.
+        foreach (Match match in ScribanControlBlockRegex.Matches(template))
+        {
+            if (match.Index >= index)
+                break;
+
+            var keyword = match.Groups["keyword"].Value;
+            if (keyword.Equals("end", StringComparison.OrdinalIgnoreCase))
+                depth = Math.Max(0, depth - 1);
+            else
+                depth++;
+        }
+
+        return depth > 0;
+    }
+
+    private static string BuildHeadHtml(
+        SiteSpec spec,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        string rootPath,
+        bool includeEarlyHeadLinks = false,
+        bool includeStylesheetHeadLinks = false)
     {
         var parts = new List<string>();
         var head = spec.Head;
         if (head is not null)
         {
-            var links = RenderHeadLinks(head);
+            var links = RenderHeadLinks(
+                head,
+                link => ShouldRenderHeadLinkInHeadHtml(link.Rel, includeEarlyHeadLinks, includeStylesheetHeadLinks));
             if (!string.IsNullOrWhiteSpace(links))
                 parts.Add(links);
 
@@ -283,15 +450,40 @@ public static partial class WebSiteBuilder
             .FirstOrDefault();
     }
 
-    private static string RenderHeadLinks(HeadSpec head)
+    private static bool IsEarlyHeadLink(string? rel)
     {
-        if (head.Links.Length == 0)
+        if (string.IsNullOrWhiteSpace(rel))
+            return false;
+
+        return EarlyHeadLinkRels.Contains(rel.Trim());
+    }
+
+    private static bool IsStylesheetHeadLink(string? rel) =>
+        !string.IsNullOrWhiteSpace(rel) &&
+        rel.Trim().Equals("stylesheet", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldRenderHeadLinkInHeadHtml(string? rel, bool includeEarlyHeadLinks, bool includeStylesheetHeadLinks)
+    {
+        if (IsEarlyHeadLink(rel))
+            return includeEarlyHeadLinks;
+
+        if (IsStylesheetHeadLink(rel))
+            return includeStylesheetHeadLinks;
+
+        return true;
+    }
+
+    private static string RenderHeadLinks(HeadSpec? head, Func<HeadLinkSpec, bool>? predicate = null)
+    {
+        if (head?.Links is null || head.Links.Length == 0)
             return string.Empty;
 
         var sb = new System.Text.StringBuilder();
         foreach (var link in head.Links)
         {
             if (string.IsNullOrWhiteSpace(link.Rel) || string.IsNullOrWhiteSpace(link.Href))
+                continue;
+            if (predicate is not null && !predicate(link))
                 continue;
 
             sb.Append("<link");
