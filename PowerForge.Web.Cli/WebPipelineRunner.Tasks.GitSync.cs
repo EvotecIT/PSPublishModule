@@ -886,13 +886,37 @@ internal static partial class WebPipelineRunner
         {
             last = RunGitCommand(workingDirectory, args, authHeader, timeoutSeconds);
             if (last.ExitCode == 0 || attempt >= attempts)
-                return last;
+                break;
 
             if (retryDelayMs > 0)
                 System.Threading.Thread.Sleep(retryDelayMs);
         }
 
+        if (!string.IsNullOrWhiteSpace(authHeader) && IsGitAuthenticationFailure(last))
+        {
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                last = RunGitCommand(workingDirectory, args, null, timeoutSeconds);
+                if (last.ExitCode == 0 || attempt >= attempts)
+                    return last;
+
+                if (retryDelayMs > 0)
+                    System.Threading.Thread.Sleep(retryDelayMs);
+            }
+        }
+
         return last;
+    }
+
+    internal static bool IsGitAuthenticationFailure((int ExitCode, string Output, string Error) result)
+    {
+        if (result.ExitCode == 0)
+            return false;
+
+        var message = string.Concat(result.Error, Environment.NewLine, result.Output);
+        return message.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Invalid username or token", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeGitLockMode(string? value)
