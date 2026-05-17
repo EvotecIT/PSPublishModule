@@ -917,6 +917,138 @@ public class WebSiteBuilderSafetyAndParityTests
         }
     }
 
+    [Fact]
+    public void Build_KeepsHeadAssetLinksInHeadHtml_WhenScribanAssetSlotsAreConditional()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slot-conditional-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteScribanTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{ if false }}{{ assets.preloads_html }}{{ assets.css_html }}{{ end }}{{ head_html }}</head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "scriban";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            Assert.Contains("href=\"/fonts/test.woff2\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/fonts/site-fonts.css\"", html, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_RendersHeadAssetLinksOnce_WhenNoThemeIsConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-no-theme-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            Assert.Contains("href=\"/fonts/test.woff2\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/fonts/site-fonts.css\"", html, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static SiteSpec BuildBasicSpec(string input, string output)
     {
         return new SiteSpec
@@ -938,15 +1070,25 @@ public class WebSiteBuilderSafetyAndParityTests
 
     private static void WriteSimpleTheme(string root, string layout)
     {
+        WriteTheme(root, layout, "simple");
+    }
+
+    private static void WriteScribanTheme(string root, string layout)
+    {
+        WriteTheme(root, layout, "scriban");
+    }
+
+    private static void WriteTheme(string root, string layout, string engine)
+    {
         var themeRoot = Path.Combine(root, "themes", "t");
         Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
         File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
-            """
+            $$"""
             {
               "schemaVersion": 2,
               "contractVersion": 2,
               "name": "t",
-              "engine": "simple",
+              "engine": "{{engine}}",
               "layoutsPath": "layouts",
               "defaultLayout": "base"
             }

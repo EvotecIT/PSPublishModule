@@ -132,12 +132,36 @@ public static partial class WebSiteBuilder
                 RegexTimeout);
             if (!match.Success)
                 continue;
+            if (IsInsideScribanControlBlock(template, match.Index))
+                continue;
 
             if (index < 0 || match.Index < index)
                 index = match.Index;
         }
 
         return index;
+    }
+
+    private static bool IsInsideScribanControlBlock(string template, int index)
+    {
+        var depth = 0;
+        foreach (Match match in Regex.Matches(
+                     template,
+                     @"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|end)\b",
+                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                     RegexTimeout))
+        {
+            if (match.Index >= index)
+                break;
+
+            var keyword = match.Groups["keyword"].Value;
+            if (keyword.Equals("end", StringComparison.OrdinalIgnoreCase))
+                depth = Math.Max(0, depth - 1);
+            else
+                depth++;
+        }
+
+        return depth > 0;
     }
 
     private static string BuildHeadHtml(
@@ -367,9 +391,6 @@ public static partial class WebSiteBuilder
     private static bool IsStylesheetHeadLink(string? rel) =>
         !string.IsNullOrWhiteSpace(rel) &&
         rel.Trim().Equals("stylesheet", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsAssetSlotHeadLink(string? rel) =>
-        IsEarlyHeadLink(rel) || IsStylesheetHeadLink(rel);
 
     private static bool ShouldRenderHeadLinkInHeadHtml(string? rel, bool includeEarlyHeadLinks, bool includeStylesheetHeadLinks)
     {
