@@ -133,4 +133,27 @@ public sealed class WebWebsiteRunnerTests
                 File.Delete(pipelineConfig);
         }
     }
+
+    [Fact]
+    public void CreateGitHubGitEnvironment_UsesAskPassFallback_WhenTokenIsProvided()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-website-runner-credentials-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var environment = WebWebsiteRunner.CreateGitHubGitEnvironment("test-token", root);
+
+            Assert.NotNull(environment);
+            Assert.Equal("0", environment!["GIT_TERMINAL_PROMPT"]);
+            Assert.Equal("x-access-token", environment["GIT_USERNAME"]);
+            Assert.Equal("test-token", environment["GIT_PASSWORD"]);
+            Assert.True(File.Exists(environment["GIT_ASKPASS"]));
+            Assert.Contains("AUTHORIZATION: basic", environment["GIT_CONFIG_VALUE_0"]);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
 }

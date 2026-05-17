@@ -80,11 +80,12 @@ public static class WebWebsiteRunner
             throw new InvalidOperationException($"PowerForge ref must be an immutable commit SHA (40/64 hex): '{finalRef}'.");
 
         var extractRoot = Path.Combine(sessionRoot, "engine");
+        var gitEnvironment = CreateGitHubGitEnvironment(options.GitHubToken, sessionRoot);
         RunProcess(
             "git",
             null,
             new[] { "clone", "--filter=blob:none", "--no-checkout", "--quiet", GetGitCloneUrl(finalRepository), extractRoot },
-            CreateGitHubGitEnvironment(options.GitHubToken),
+            gitEnvironment,
             standardOutput,
             standardError,
             $"git clone --filter=blob:none --no-checkout --quiet https://github.com/{finalRepository}.git {extractRoot}");
@@ -92,7 +93,7 @@ public static class WebWebsiteRunner
             "git",
             null,
             new[] { "-C", extractRoot, "fetch", "--depth", "1", "origin", finalRef },
-            CreateGitHubGitEnvironment(options.GitHubToken),
+            gitEnvironment,
             standardOutput,
             standardError);
         RunProcess(
@@ -534,19 +535,75 @@ public static class WebWebsiteRunner
         return sessionRoot;
     }
 
-    private static IReadOnlyDictionary<string, string?>? CreateGitHubGitEnvironment(string? token)
+    internal static IReadOnlyDictionary<string, string?>? CreateGitHubGitEnvironment(string? token, string? credentialRoot)
     {
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
-        var basicToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"x-access-token:{token.Trim()}"));
-
-        return new Dictionary<string, string?>
+        var trimmedToken = token.Trim();
+        var basicToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"x-access-token:{trimmedToken}"));
+        var environment = new Dictionary<string, string?>
         {
             ["GIT_CONFIG_COUNT"] = "1",
             ["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader",
-            ["GIT_CONFIG_VALUE_0"] = $"AUTHORIZATION: basic {basicToken}"
+            ["GIT_CONFIG_VALUE_0"] = $"AUTHORIZATION: basic {basicToken}",
+            ["GIT_TERMINAL_PROMPT"] = "0"
         };
+
+        if (!string.IsNullOrWhiteSpace(credentialRoot))
+        {
+            Directory.CreateDirectory(credentialRoot);
+            var askPassPath = CreateGitAskPassScript(credentialRoot);
+            environment["GIT_ASKPASS"] = askPassPath;
+            environment["GIT_USERNAME"] = "x-access-token";
+            environment["GIT_PASSWORD"] = trimmedToken;
+        }
+
+        return environment;
+    }
+
+    private static string CreateGitAskPassScript(string credentialRoot)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var path = Path.Combine(credentialRoot, "powerforge-git-askpass.cmd");
+            File.WriteAllText(
+                path,
+                """
+                @echo off
+                setlocal
+                set "prompt=%~1"
+                echo %prompt% | findstr /i "Username" >nul
+                if %errorlevel%==0 (
+                  echo %GIT_USERNAME%
+                ) else (
+                  echo %GIT_PASSWORD%
+                )
+                """);
+            return path;
+        }
+
+        var scriptPath = Path.Combine(credentialRoot, "powerforge-git-askpass.sh");
+        File.WriteAllText(
+            scriptPath,
+            """
+            #!/bin/sh
+            case "$1" in
+              *Username*) printf '%s\n' "$GIT_USERNAME" ;;
+              *) printf '%s\n' "$GIT_PASSWORD" ;;
+            esac
+            """);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            var mode = File.GetUnixFileMode(scriptPath) |
+                       UnixFileMode.UserExecute |
+                       UnixFileMode.GroupExecute |
+                       UnixFileMode.OtherExecute;
+            File.SetUnixFileMode(scriptPath, mode);
+        }
+
+        return scriptPath;
     }
 
     private static void VerifySha256IfPresent(string assetPath, string? expectedSha256)
