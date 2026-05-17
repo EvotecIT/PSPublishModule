@@ -302,7 +302,7 @@ internal static partial class WebPipelineRunner
                 Directory.CreateDirectory(parent);
 
             var clone = RunGitCommandWithRetry(
-                request.BaseDirectory,
+                ResolveGitSyncCloneWorkingDirectory(request),
                 cloneArgs,
                 request.AuthHeader,
                 request.TimeoutSeconds,
@@ -310,7 +310,7 @@ internal static partial class WebPipelineRunner
                 request.RetryDelayMs);
             if (clone.ExitCode != 0)
             {
-                var preview = FirstNonEmptyLine(clone.Error, clone.Output) ?? "unknown error";
+                var preview = FirstGitFailureLine(clone.Error, clone.Output) ?? "unknown error";
                 throw new InvalidOperationException($"git-sync clone failed: {preview}");
             }
 
@@ -336,7 +336,7 @@ internal static partial class WebPipelineRunner
             {
                 DeleteDirectoryForGitSyncClean(request.DestinationFull);
                 fetch = RunGitCommandWithRetry(
-                    request.BaseDirectory,
+                    ResolveGitSyncCloneWorkingDirectory(request),
                     cloneArgs,
                     request.AuthType.Equals("none", StringComparison.OrdinalIgnoreCase) ? null : request.AuthHeader,
                     request.TimeoutSeconds,
@@ -347,7 +347,7 @@ internal static partial class WebPipelineRunner
 
             if (fetch.ExitCode != 0)
             {
-                var preview = FirstNonEmptyLine(fetch.Error, fetch.Output) ?? "unknown error";
+                var preview = FirstGitFailureLine(fetch.Error, fetch.Output) ?? "unknown error";
                 throw new InvalidOperationException($"git-sync fetch failed: {preview}");
             }
         }
@@ -416,6 +416,27 @@ internal static partial class WebPipelineRunner
 
         return !string.IsNullOrWhiteSpace(request.AuthHeader) ||
                request.AuthType.Equals("none", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveGitSyncCloneWorkingDirectory(GitSyncRequest request)
+    {
+        if (!IsRemoteGitRepo(request.Repo))
+            return request.BaseDirectory;
+
+        var parent = Path.GetDirectoryName(request.DestinationFull);
+        return string.IsNullOrWhiteSpace(parent)
+            ? request.BaseDirectory
+            : parent;
+    }
+
+    private static bool IsRemoteGitRepo(string repo)
+    {
+        if (string.IsNullOrWhiteSpace(repo))
+            return false;
+
+        var trimmed = repo.Trim();
+        return trimmed.Contains("://", StringComparison.Ordinal) ||
+               trimmed.StartsWith("git@", StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string> BuildGitSyncCloneArgs(GitSyncRequest request)
@@ -986,6 +1007,28 @@ internal static partial class WebPipelineRunner
         return message.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("Invalid username or token", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FirstGitFailureLine(params string[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            using var reader = new StringReader(candidate);
+            while (reader.ReadLine() is { } line)
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) ||
+                    trimmed.StartsWith("Cloning into ", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                return trimmed;
+            }
+        }
+
+        return FirstNonEmptyLine(candidates);
     }
 
     private static void ClearGitAuthConfigForAnonymousRetry(string workingDirectory, IReadOnlyList<string> args)
