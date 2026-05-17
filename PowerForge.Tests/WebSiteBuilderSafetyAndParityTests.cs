@@ -990,6 +990,82 @@ public class WebSiteBuilderSafetyAndParityTests
     }
 
     [Fact]
+    public void Build_UsesLaterRenderedAssetSlots_WhenEarlierScribanSlotsAreConditional()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slot-later-rendered-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteScribanTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{ if false }}{{ assets.preloads_html }}{{ assets.css_html }}{{ end }}{{ assets.preloads_html }}{{ assets.css_html }}<!-- head-html -->{{ head_html }}</head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "scriban";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            var preloadIndex = html.IndexOf("href=\"/fonts/test.woff2\"", StringComparison.Ordinal);
+            var fontIndex = html.IndexOf("href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal);
+            var headMarkerIndex = html.IndexOf("<!-- head-html -->", StringComparison.Ordinal);
+
+            Assert.True(preloadIndex >= 0 && preloadIndex < headMarkerIndex, "Preload links should use the later rendered preload slot.");
+            Assert.True(fontIndex >= 0 && fontIndex < headMarkerIndex, "Head stylesheets should use the later rendered CSS slot.");
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_RendersHeadAssetLinksOnce_WhenNoThemeIsConfigured()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-no-theme-" + Guid.NewGuid().ToString("N"));

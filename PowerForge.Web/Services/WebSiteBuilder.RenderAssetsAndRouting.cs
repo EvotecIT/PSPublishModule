@@ -125,18 +125,18 @@ public static partial class WebSiteBuilder
         var index = -1;
         foreach (var token in tokens)
         {
-            var match = Regex.Match(
+            foreach (Match match in Regex.Matches(
                 template,
                 @"\{\{[-~]?\s*" + Regex.Escape(token) + @"\s*[-~]?\}\}",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                RegexTimeout);
-            if (!match.Success)
-                continue;
-            if (IsInsideScribanControlBlock(template, match.Index))
-                continue;
+                RegexTimeout))
+            {
+                if (IsInsideScribanControlBlock(template, match.Index))
+                    continue;
 
-            if (index < 0 || match.Index < index)
-                index = match.Index;
+                if (index < 0 || match.Index < index)
+                    index = match.Index;
+            }
         }
 
         return index;
@@ -145,6 +145,7 @@ public static partial class WebSiteBuilder
     private static bool IsInsideScribanControlBlock(string template, int index)
     {
         var depth = 0;
+        // Branch truth is runtime data, so any slot inside a Scriban block stays conservative.
         foreach (Match match in Regex.Matches(
                      template,
                      @"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|end)\b",
