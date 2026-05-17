@@ -294,6 +294,9 @@ internal static partial class WebPipelineRunner
         var cloneArgs = BuildGitSyncCloneArgs(request);
         if (!Directory.Exists(gitFolder))
         {
+            if (Directory.Exists(request.DestinationFull))
+                DeleteDirectoryForGitSyncClean(request.DestinationFull);
+
             var parent = Path.GetDirectoryName(request.DestinationFull);
             if (!string.IsNullOrWhiteSpace(parent))
                 Directory.CreateDirectory(parent);
