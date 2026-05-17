@@ -68,6 +68,7 @@ public static partial class WebSiteBuilder
 
         string? themeTemplate = null;
         ITemplateEngine? themeEngine = null;
+        Func<string, string?>? partialResolver = null;
         if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
         {
             var layoutName = item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
@@ -79,7 +80,16 @@ public static partial class WebSiteBuilder
             }
         }
 
-        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate);
+        if (themeTemplate is not null && themeRoot is not null)
+        {
+            partialResolver = name =>
+            {
+                var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
+                return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
+            };
+        }
+
+        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate, partialResolver);
         var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
         var preloads = RenderPreloads(assetRegistry, assetSlotUsage.UsePreloadsSlot ? spec.Head : null);
@@ -173,11 +183,7 @@ public static partial class WebSiteBuilder
 
         if (themeTemplate is not null && themeEngine is not null)
         {
-            var html = themeEngine.Render(themeTemplate, renderContext, name =>
-            {
-                var partialPath = loader.ResolvePartialPath(themeRoot!, manifest, name);
-                return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
-            });
+            var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
             html = RebaseSelectedLanguageRootHtml(spec, html);
             ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
             return html;
