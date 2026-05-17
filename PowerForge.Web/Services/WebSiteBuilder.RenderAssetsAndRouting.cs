@@ -21,9 +21,10 @@ public static partial class WebSiteBuilder
         "prefetch"
     };
     private static readonly Regex ScribanCommentRegex = new(@"\{\{[-~]?\s*#.*?#\s*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex ScribanControlBlockRegex = new(@"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|func|end)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanEscapeBlockRegex = new(@"\{%\{.*?\}%\}", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanControlBlockRegex = new(@"\{\{[-~]?\s*(?<keyword>if|unless|case|for|while|capture|with|func|tablerow|wrap|end)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex SimplePartialReferenceRegex = new(@"\{\{>\s*(?<name>[^\s}]+)\s*\}\}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex ScribanPartialReferenceRegex = new(@"\{\{[-~]?\s*include\s+[""'](?<name>[^""']+)[""']\s*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ScribanPartialReferenceRegex = new(@"\{\{[-~]?\s*include\s+[""'](?<name>[^""']+)[""'][^}]*[-~]?\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     private const int MaxAssetSlotPartialDepth = 8;
 
     private static string RenderPreloads(AssetRegistrySpec? assets, HeadSpec? head = null)
@@ -107,7 +108,16 @@ public static partial class WebSiteBuilder
 
     private readonly record struct AssetSlotUsage(bool UsePreloadsSlot, bool UseCssSlot);
 
-    private static AssetSlotUsage ResolveAssetSlotUsage(string? template, Func<string, string?>? partialResolver = null)
+    private enum AssetSlotTemplateKind
+    {
+        Simple,
+        Scriban
+    }
+
+    private static AssetSlotUsage ResolveAssetSlotUsage(
+        string? template,
+        Func<string, string?>? partialResolver = null,
+        AssetSlotTemplateKind templateKind = AssetSlotTemplateKind.Simple)
     {
         if (string.IsNullOrWhiteSpace(template))
         {
@@ -115,7 +125,7 @@ public static partial class WebSiteBuilder
             return new AssetSlotUsage(true, true);
         }
 
-        var searchableTemplate = BuildAssetSlotSearchTemplate(template, partialResolver);
+        var searchableTemplate = BuildAssetSlotSearchTemplate(template, partialResolver, templateKind);
         var headIndex = FindFirstRenderedTokenIndex(searchableTemplate, "head_html", "HEAD_HTML");
         var preloadsIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.preloads_html", "PRELOADS");
         var cssIndex = FindFirstRenderedTokenIndex(searchableTemplate, "assets.css_html", "ASSET_CSS");
@@ -128,18 +138,26 @@ public static partial class WebSiteBuilder
     private static bool ShouldUseAssetSlot(int slotIndex, int headIndex) =>
         slotIndex >= 0 && (headIndex < 0 || slotIndex < headIndex);
 
-    private static string BuildAssetSlotSearchTemplate(string template, Func<string, string?>? partialResolver)
+    private static string BuildAssetSlotSearchTemplate(
+        string template,
+        Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind)
     {
-        var searchable = StripNonRenderedComments(template);
-        return ExpandAssetSlotPartialReferences(searchable, partialResolver, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+        var searchable = StripNonRenderedTemplateRegions(template);
+        return ExpandAssetSlotPartialReferences(searchable, partialResolver, templateKind, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
     }
 
-    private static string StripNonRenderedComments(string template) =>
-        ScribanCommentRegex.Replace(HtmlCommentRegex.Replace(template, string.Empty), string.Empty);
+    private static string StripNonRenderedTemplateRegions(string template) =>
+        ScribanEscapeBlockRegex.Replace(
+            ScribanCommentRegex.Replace(
+                HtmlCommentRegex.Replace(template, string.Empty),
+                string.Empty),
+            string.Empty);
 
     private static string ExpandAssetSlotPartialReferences(
         string template,
         Func<string, string?>? partialResolver,
+        AssetSlotTemplateKind templateKind,
         HashSet<string> seen,
         int depth)
     {
@@ -158,11 +176,11 @@ public static partial class WebSiteBuilder
                 if (string.IsNullOrWhiteSpace(partial))
                     return string.Empty;
 
-                return ExpandAssetSlotPartialReferences(
-                    StripNonRenderedComments(partial),
-                    partialResolver,
-                    seen,
-                    depth + 1);
+                partial = StripNonRenderedTemplateRegions(partial);
+                if (templateKind == AssetSlotTemplateKind.Simple)
+                    return partial;
+
+                return ExpandAssetSlotPartialReferences(partial, partialResolver, templateKind, seen, depth + 1);
             }
             finally
             {
@@ -170,8 +188,9 @@ public static partial class WebSiteBuilder
             }
         }
 
-        var expanded = SimplePartialReferenceRegex.Replace(template, ReplacePartial);
-        return ScribanPartialReferenceRegex.Replace(expanded, ReplacePartial);
+        return templateKind == AssetSlotTemplateKind.Simple
+            ? SimplePartialReferenceRegex.Replace(template, ReplacePartial)
+            : ScribanPartialReferenceRegex.Replace(template, ReplacePartial);
     }
 
     private static int FindFirstRenderedTokenIndex(string template, params string[] tokens)

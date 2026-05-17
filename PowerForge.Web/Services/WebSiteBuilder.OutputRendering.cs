@@ -68,6 +68,7 @@ public static partial class WebSiteBuilder
 
         string? themeTemplate = null;
         ITemplateEngine? themeEngine = null;
+        var assetSlotTemplateKind = AssetSlotTemplateKind.Simple;
         Func<string, string?>? partialResolver = null;
         if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
         {
@@ -77,6 +78,8 @@ public static partial class WebSiteBuilder
             {
                 themeTemplate = ReadCachedText(renderCache.LayoutTemplateCache, layoutPath);
                 themeEngine = ThemeEngineRegistry.Resolve(spec.ThemeEngine ?? manifest?.Engine);
+                if (themeEngine is ScribanTemplateEngine)
+                    assetSlotTemplateKind = AssetSlotTemplateKind.Scriban;
             }
         }
 
@@ -89,7 +92,7 @@ public static partial class WebSiteBuilder
             };
         }
 
-        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate, partialResolver);
+        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate, partialResolver, assetSlotTemplateKind);
         var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
         var preloads = RenderPreloads(assetRegistry, assetSlotUsage.UsePreloadsSlot ? spec.Head : null);
