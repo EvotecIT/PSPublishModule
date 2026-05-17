@@ -156,4 +156,13 @@ public sealed class WebWebsiteRunnerTests
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData("fatal: Authentication failed for 'https://github.com/EvotecIT/PSPublishModule.git/'")]
+    [InlineData("remote: Invalid username or token. Password authentication is not supported for Git operations.")]
+    [InlineData("fatal: could not read Username for 'https://github.com': No such device or address")]
+    public void IsGitAuthenticationFailure_DetectsCommonGitAuthFailures(string message)
+    {
+        Assert.True(WebWebsiteRunner.IsGitAuthenticationFailure(new InvalidOperationException(message)));
+    }
 }

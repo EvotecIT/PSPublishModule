@@ -81,21 +81,18 @@ public static class WebWebsiteRunner
 
         var extractRoot = Path.Combine(sessionRoot, "engine");
         var gitEnvironment = CreateGitHubGitEnvironment(options.GitHubToken, sessionRoot);
-        RunProcess(
-            "git",
-            null,
-            new[] { "clone", "--filter=blob:none", "--no-checkout", "--quiet", GetGitCloneUrl(finalRepository), extractRoot },
-            gitEnvironment,
-            standardOutput,
-            standardError,
-            $"git clone --filter=blob:none --no-checkout --quiet https://github.com/{finalRepository}.git {extractRoot}");
-        RunProcess(
-            "git",
-            null,
-            new[] { "-C", extractRoot, "fetch", "--depth", "1", "origin", finalRef },
-            gitEnvironment,
-            standardOutput,
-            standardError);
+
+        try
+        {
+            CloneAndFetchSourceEngine(finalRepository, finalRef, extractRoot, gitEnvironment, standardOutput, standardError);
+        }
+        catch (InvalidOperationException ex) when (gitEnvironment is not null && IsGitAuthenticationFailure(ex))
+        {
+            standardError?.Invoke("Authenticated PowerForge clone failed; retrying without credentials for public repository access.");
+            TryDeleteDirectory(extractRoot);
+            CloneAndFetchSourceEngine(finalRepository, finalRef, extractRoot, null, standardOutput, standardError);
+        }
+
         RunProcess(
             "git",
             null,
@@ -128,6 +125,31 @@ public static class WebWebsiteRunner
             Ref = finalRef,
             LaunchedPath = projectPath
         };
+    }
+
+    private static void CloneAndFetchSourceEngine(
+        string repository,
+        string reference,
+        string extractRoot,
+        IReadOnlyDictionary<string, string?>? gitEnvironment,
+        Action<string>? standardOutput,
+        Action<string>? standardError)
+    {
+        RunProcess(
+            "git",
+            null,
+            new[] { "clone", "--filter=blob:none", "--no-checkout", "--quiet", GetGitCloneUrl(repository), extractRoot },
+            gitEnvironment,
+            standardOutput,
+            standardError,
+            $"git clone --filter=blob:none --no-checkout --quiet https://github.com/{repository}.git {extractRoot}");
+        RunProcess(
+            "git",
+            null,
+            new[] { "-C", extractRoot, "fetch", "--depth", "1", "origin", reference },
+            gitEnvironment,
+            standardOutput,
+            standardError);
     }
 
     private static WebWebsiteRunnerResult RunBinaryMode(
@@ -604,6 +626,14 @@ public static class WebWebsiteRunner
         }
 
         return scriptPath;
+    }
+
+    internal static bool IsGitAuthenticationFailure(Exception exception)
+    {
+        var message = exception.Message;
+        return message.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Invalid username or token", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void VerifySha256IfPresent(string assetPath, string? expectedSha256)
