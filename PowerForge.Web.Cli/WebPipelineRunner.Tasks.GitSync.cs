@@ -291,20 +291,12 @@ internal static partial class WebPipelineRunner
 
         var gitFolder = Path.Combine(request.DestinationFull, ".git");
         var cloned = false;
+        var cloneArgs = BuildGitSyncCloneArgs(request);
         if (!Directory.Exists(gitFolder))
         {
             var parent = Path.GetDirectoryName(request.DestinationFull);
             if (!string.IsNullOrWhiteSpace(parent))
                 Directory.CreateDirectory(parent);
-
-            var cloneArgs = new List<string> { "clone", request.Repo, request.DestinationFull };
-            if (!request.FetchTags)
-                cloneArgs.Add("--no-tags");
-            if (request.Depth > 0)
-            {
-                cloneArgs.Add("--depth");
-                cloneArgs.Add(request.Depth.ToString());
-            }
 
             var clone = RunGitCommandWithRetry(
                 request.BaseDirectory,
@@ -333,6 +325,21 @@ internal static partial class WebPipelineRunner
                 request.TimeoutSeconds,
                 request.Retry,
                 request.RetryDelayMs);
+            if (fetch.ExitCode != 0 &&
+                !string.IsNullOrWhiteSpace(request.AuthHeader) &&
+                IsGitAuthenticationFailure(fetch))
+            {
+                DeleteDirectoryForGitSyncClean(request.DestinationFull);
+                fetch = RunGitCommandWithRetry(
+                    request.BaseDirectory,
+                    cloneArgs,
+                    null,
+                    request.TimeoutSeconds,
+                    request.Retry,
+                    request.RetryDelayMs);
+                cloned = fetch.ExitCode == 0;
+            }
+
             if (fetch.ExitCode != 0)
             {
                 var preview = FirstNonEmptyLine(fetch.Error, fetch.Output) ?? "unknown error";
@@ -362,6 +369,20 @@ internal static partial class WebPipelineRunner
             DisplayReference = ResolveHeadReference(request.DestinationFull, request.AuthHeader, request.TimeoutSeconds, request.Retry, request.RetryDelayMs),
             Commit = SelectResolvedCommit(resolvedHeadCommit, checkedOutCommit)
         };
+    }
+
+    private static List<string> BuildGitSyncCloneArgs(GitSyncRequest request)
+    {
+        var cloneArgs = new List<string> { "clone", request.Repo, request.DestinationFull };
+        if (!request.FetchTags)
+            cloneArgs.Add("--no-tags");
+        if (request.Depth > 0)
+        {
+            cloneArgs.Add("--depth");
+            cloneArgs.Add(request.Depth.ToString());
+        }
+
+        return cloneArgs;
     }
 
     private static string? SelectResolvedCommit(string? resolvedHeadCommit, string? checkedOutCommit)
