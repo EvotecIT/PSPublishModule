@@ -100,13 +100,43 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems, string rootPath)
+    private readonly record struct AssetSlotUsage(bool HasPreloadsSlot, bool HasCssSlot);
+
+    private static AssetSlotUsage ResolveAssetSlotUsage(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return new AssetSlotUsage(true, true);
+
+        return new AssetSlotUsage(
+            ContainsScribanToken(template, "assets.preloads_html") || ContainsSimpleToken(template, "PRELOADS"),
+            ContainsScribanToken(template, "assets.css_html") || ContainsSimpleToken(template, "ASSET_CSS"));
+    }
+
+    private static bool ContainsScribanToken(string template, string token) =>
+        template.Contains(token, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsSimpleToken(string template, string token) =>
+        Regex.IsMatch(
+            template,
+            @"\{\{\s*" + Regex.Escape(token) + @"\s*\}\}",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+            RegexTimeout);
+
+    private static string BuildHeadHtml(
+        SiteSpec spec,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        string rootPath,
+        bool includeEarlyHeadLinks = false,
+        bool includeStylesheetHeadLinks = false)
     {
         var parts = new List<string>();
         var head = spec.Head;
         if (head is not null)
         {
-            var links = RenderHeadLinks(head, static link => !IsAssetSlotHeadLink(link.Rel));
+            var links = RenderHeadLinks(
+                head,
+                link => ShouldRenderHeadLinkInHeadHtml(link.Rel, includeEarlyHeadLinks, includeStylesheetHeadLinks));
             if (!string.IsNullOrWhiteSpace(links))
                 parts.Add(links);
 
@@ -322,6 +352,17 @@ public static partial class WebSiteBuilder
 
     private static bool IsAssetSlotHeadLink(string? rel) =>
         IsEarlyHeadLink(rel) || IsStylesheetHeadLink(rel);
+
+    private static bool ShouldRenderHeadLinkInHeadHtml(string? rel, bool includeEarlyHeadLinks, bool includeStylesheetHeadLinks)
+    {
+        if (IsEarlyHeadLink(rel))
+            return includeEarlyHeadLinks;
+
+        if (IsStylesheetHeadLink(rel))
+            return includeStylesheetHeadLinks;
+
+        return true;
+    }
 
     private static string RenderHeadLinks(HeadSpec? head, Func<HeadLinkSpec, bool>? predicate = null)
     {

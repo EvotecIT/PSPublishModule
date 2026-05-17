@@ -569,6 +569,187 @@ public class WebSiteBuilderSafetyAndParityTests
         }
     }
 
+    [Fact]
+    public void Build_RoutesHeadAssetLinksThroughSlots_WhenTemplateSupportsThem()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slots-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteSimpleTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{PRELOADS}}<!-- head-html -->{{HEAD_HTML}}{{ASSET_CSS}}</head>
+                <body>{{CONTENT}}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "simple";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "icon",
+                        Href = "/favicon.ico"
+                    }
+                }
+            };
+            spec.AssetRegistry = new AssetRegistrySpec
+            {
+                Bundles = new[]
+                {
+                    new AssetBundleSpec
+                    {
+                        Name = "global",
+                        Css = new[] { "/assets/app.css" }
+                    }
+                },
+                RouteBundles = new[]
+                {
+                    new RouteBundleSpec
+                    {
+                        Match = "/**",
+                        Bundles = new[] { "global" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            var preloadIndex = html.IndexOf("href=\"/fonts/test.woff2\"", StringComparison.Ordinal);
+            var headMarkerIndex = html.IndexOf("<!-- head-html -->", StringComparison.Ordinal);
+            var fontIndex = html.IndexOf("href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal);
+            var appIndex = html.IndexOf("href=\"/assets/app.css\"", StringComparison.Ordinal);
+
+            Assert.True(preloadIndex >= 0 && preloadIndex < headMarkerIndex, "Preload links should render through the preload slot.");
+            Assert.True(fontIndex >= 0 && appIndex >= 0 && fontIndex < appIndex, "Head stylesheets should render through the CSS slot before route styles.");
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/assets/app.css\"", StringComparison.Ordinal));
+            Assert.Contains("href=\"/favicon.ico\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_KeepsHeadAssetLinksInHeadHtml_WhenTemplateLacksAssetSlots()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-asset-slot-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            WriteSimpleTheme(root,
+                """
+                <!doctype html>
+                <html>
+                <head>{{HEAD_HTML}}</head>
+                <body>{{CONTENT}}</body>
+                </html>
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.ThemesRoot = "themes";
+            spec.DefaultTheme = "t";
+            spec.ThemeEngine = "simple";
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "preload",
+                        Href = "/fonts/test.woff2",
+                        As = "font",
+                        Type = "font/woff2",
+                        Crossorigin = "anonymous"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css"
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "icon",
+                        Href = "/favicon.ico"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            Assert.Contains("href=\"/fonts/test.woff2\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/fonts/site-fonts.css\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/favicon.ico\"", html, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static SiteSpec BuildBasicSpec(string input, string output)
     {
         return new SiteSpec
@@ -586,6 +767,24 @@ public class WebSiteBuilderSafetyAndParityTests
                 }
             }
         };
+    }
+
+    private static void WriteSimpleTheme(string root, string layout)
+    {
+        var themeRoot = Path.Combine(root, "themes", "t");
+        Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+        File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+            """
+            {
+              "schemaVersion": 2,
+              "contractVersion": 2,
+              "name": "t",
+              "engine": "simple",
+              "layoutsPath": "layouts",
+              "defaultLayout": "base"
+            }
+            """);
+        File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"), layout);
     }
 
     private static int CountOccurrences(string text, string value, StringComparison comparison)

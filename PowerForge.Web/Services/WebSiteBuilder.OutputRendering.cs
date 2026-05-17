@@ -66,9 +66,23 @@ public static partial class WebSiteBuilder
         var assetRegistry = renderCache.AssetRegistry;
         var measure = Stopwatch.StartNew();
 
+        string? themeTemplate = null;
+        ITemplateEngine? themeEngine = null;
+        if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
+        {
+            var layoutName = item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
+            var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
+            if (!string.IsNullOrWhiteSpace(layoutPath))
+            {
+                themeTemplate = ReadCachedText(renderCache.LayoutTemplateCache, layoutPath);
+                themeEngine = ThemeEngineRegistry.Resolve(spec.ThemeEngine ?? manifest?.Engine);
+            }
+        }
+
+        var assetSlotUsage = ResolveAssetSlotUsage(themeTemplate);
         var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
-        var preloads = RenderPreloads(assetRegistry, spec.Head);
+        var preloads = RenderPreloads(assetRegistry, assetSlotUsage.HasPreloadsSlot ? spec.Head : null);
         var criticalCss = RenderCriticalCss(assetRegistry, rootPath, renderCache);
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
@@ -79,7 +93,7 @@ public static partial class WebSiteBuilder
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
-        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, spec.Head);
+        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetSlotUsage.HasCssSlot ? spec.Head : null);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer data-cfasync=\"false\"></script>"));
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
@@ -96,7 +110,13 @@ public static partial class WebSiteBuilder
         var listItems = ApplyPagination(fullListItems, pagination);
         var listMs = measure.ElapsedMilliseconds;
         measure.Restart();
-        var headHtml = BuildHeadHtml(spec, item, allItems, rootPath);
+        var headHtml = BuildHeadHtml(
+            spec,
+            item,
+            allItems,
+            rootPath,
+            includeEarlyHeadLinks: !assetSlotUsage.HasPreloadsSlot,
+            includeStylesheetHeadLinks: !assetSlotUsage.HasCssSlot);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item, outputRoot);
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
@@ -151,23 +171,16 @@ public static partial class WebSiteBuilder
             Pagination = pagination
         };
 
-        if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
+        if (themeTemplate is not null && themeEngine is not null)
         {
-            var layoutName = item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
-            var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
-            if (!string.IsNullOrWhiteSpace(layoutPath))
+            var html = themeEngine.Render(themeTemplate, renderContext, name =>
             {
-                var template = ReadCachedText(renderCache.LayoutTemplateCache, layoutPath);
-                var engine = ThemeEngineRegistry.Resolve(spec.ThemeEngine ?? manifest?.Engine);
-                var html = engine.Render(template, renderContext, name =>
-                {
-                    var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
-                    return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
-                });
-                html = RebaseSelectedLanguageRootHtml(spec, html);
-                ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
-                return html;
-            }
+                var partialPath = loader.ResolvePartialPath(themeRoot!, manifest, name);
+                return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
+            });
+            html = RebaseSelectedLanguageRootHtml(spec, html);
+            ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
+            return html;
         }
 
         var htmlLang = System.Web.HttpUtility.HtmlEncode(renderContext.Localization.Current.Code ?? "en");
