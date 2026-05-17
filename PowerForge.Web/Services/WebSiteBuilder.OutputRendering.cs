@@ -68,7 +68,7 @@ public static partial class WebSiteBuilder
 
         var cssLinks = ResolveCssLinks(assetRegistry, item.OutputPath);
         var jsLinks = ResolveJsLinks(assetRegistry, item.OutputPath);
-        var preloads = RenderPreloads(assetRegistry);
+        var preloads = RenderPreloads(assetRegistry, spec.Head);
         var criticalCss = RenderCriticalCss(assetRegistry, rootPath, renderCache);
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
@@ -79,7 +79,7 @@ public static partial class WebSiteBuilder
             ? string.Empty
             : $"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(canonicalUrl)}\" />";
 
-        var cssHtml = RenderCssLinks(cssLinks, assetRegistry);
+        var cssHtml = RenderCssLinks(cssLinks, assetRegistry, spec.Head);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer data-cfasync=\"false\"></script>"));
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);

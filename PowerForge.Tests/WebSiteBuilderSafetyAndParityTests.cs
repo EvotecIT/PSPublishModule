@@ -471,9 +471,96 @@ public class WebSiteBuilderSafetyAndParityTests
             var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
 
             Assert.Contains("rel=\"preload\"", html, StringComparison.Ordinal);
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/test.woff2\"", StringComparison.Ordinal));
             Assert.Contains("as=\"font\"", html, StringComparison.Ordinal);
             Assert.Contains("data-asset-role=\"font-preload\"", html, StringComparison.Ordinal);
             Assert.Contains("title=\"Test font\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_RendersHeadStylesheetsBeforeRouteStyles_WithoutDuplicating()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-head-stylesheet-slot-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.Head = new HeadSpec
+            {
+                Links = new[]
+                {
+                    new HeadLinkSpec
+                    {
+                        Rel = "stylesheet",
+                        Href = "/fonts/site-fonts.css",
+                        Attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["data-asset-role"] = "font-stylesheet"
+                        }
+                    },
+                    new HeadLinkSpec
+                    {
+                        Rel = "icon",
+                        Href = "/favicon.ico"
+                    }
+                }
+            };
+            spec.AssetRegistry = new AssetRegistrySpec
+            {
+                Bundles = new[]
+                {
+                    new AssetBundleSpec
+                    {
+                        Name = "global",
+                        Css = new[] { "/assets/app.css" }
+                    }
+                },
+                RouteBundles = new[]
+                {
+                    new RouteBundleSpec
+                    {
+                        Match = "/**",
+                        Bundles = new[] { "global" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var build = WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(build.OutputPath, "index.html"));
+
+            var fontIndex = html.IndexOf("href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal);
+            var appIndex = html.IndexOf("href=\"/assets/app.css\"", StringComparison.Ordinal);
+
+            Assert.True(fontIndex >= 0, "Expected the head stylesheet to render through the CSS asset slot.");
+            Assert.True(appIndex >= 0, "Expected the route stylesheet to render.");
+            Assert.True(fontIndex < appIndex, "Head stylesheets should be emitted before route bundle styles.");
+            Assert.Equal(1, CountOccurrences(html, "href=\"/fonts/site-fonts.css\"", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(html, "href=\"/assets/app.css\"", StringComparison.Ordinal));
+            Assert.Contains("data-asset-role=\"font-stylesheet\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/favicon.ico\"", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -499,5 +586,17 @@ public class WebSiteBuilderSafetyAndParityTests
                 }
             }
         };
+    }
+
+    private static int CountOccurrences(string text, string value, StringComparison comparison)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, comparison)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }
