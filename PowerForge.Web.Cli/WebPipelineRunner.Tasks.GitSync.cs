@@ -1115,6 +1115,8 @@ internal static partial class WebPipelineRunner
             CreateNoWindow = true
         };
         startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        startInfo.Environment["GIT_CONFIG_GLOBAL"] = EnsureEmptyGitConfig();
+        startInfo.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
 
         if (!string.IsNullOrWhiteSpace(authHeader))
         {
@@ -1170,5 +1172,13 @@ internal static partial class WebPipelineRunner
         }
 
         return (process.ExitCode, stdout.ToString().Trim(), stderr.ToString().Trim());
+    }
+
+    private static string EnsureEmptyGitConfig()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "powerforge-empty-gitconfig");
+        if (!File.Exists(path))
+            File.WriteAllText(path, string.Empty);
+        return path;
     }
 }
