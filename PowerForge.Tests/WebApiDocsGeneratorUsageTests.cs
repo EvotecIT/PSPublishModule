@@ -81,6 +81,70 @@ public class WebApiDocsGeneratorUsageTests
         }
     }
 
+    [Fact]
+    public void GenerateDocsHtml_DisambiguatesUsageLinksWithSameVisibleText()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-usage-disambiguation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGeneratorUsageTests).Assembly.Location;
+        var firstProducerType = typeof(ApiUsageCollision.First.Producer).FullName!;
+        var secondProducerType = typeof(ApiUsageCollision.Second.Producer).FullName!;
+        var targetType = typeof(ApiUsageTarget).FullName!;
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            $"""
+            <doc>
+              <assembly><name>UsageTests</name></assembly>
+              <members>
+                <member name="T:{firstProducerType}">
+                  <summary>First producer.</summary>
+                </member>
+                <member name="T:{secondProducerType}">
+                  <summary>Second producer.</summary>
+                </member>
+                <member name="T:{targetType}">
+                  <summary>Usage target.</summary>
+                </member>
+                <member name="M:{firstProducerType}.Create({targetType})">
+                  <summary>Creates a target.</summary>
+                </member>
+                <member name="M:{secondProducerType}.Create({targetType})">
+                  <summary>Creates a target.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            WebApiDocsGenerator.Generate(options);
+
+            var targetHtmlPath = Path.Combine(outputPath, "apiusagetarget", "index.html");
+            Assert.True(File.Exists(targetHtmlPath), "Expected target type HTML page to be generated.");
+            var html = File.ReadAllText(targetHtmlPath);
+
+            Assert.Contains(">Producer.Create</a>", html, StringComparison.Ordinal);
+            Assert.Contains($"aria-label=\"{firstProducerType}.Create\"", html, StringComparison.Ordinal);
+            Assert.Contains($"aria-label=\"{secondProducerType}.Create\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -109,4 +173,20 @@ public sealed class ApiUsageProducer
 
 public sealed class ApiUsageTarget
 {
+}
+
+namespace ApiUsageCollision.First
+{
+    public sealed class Producer
+    {
+        public ApiUsageTarget Create(ApiUsageTarget input) => input;
+    }
+}
+
+namespace ApiUsageCollision.Second
+{
+    public sealed class Producer
+    {
+        public ApiUsageTarget Create(ApiUsageTarget input) => input;
+    }
 }

@@ -371,13 +371,15 @@ public static partial class WebApiDocsGenerator
                     var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
                     var ownerName = System.Web.HttpUtility.HtmlEncode(GetDisplayTypeName(entry.OwnerType.FullName));
                     var memberName = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(entry.Member.DisplayName) ? entry.Member.Name : entry.Member.DisplayName);
+                    var memberLabel = string.IsNullOrWhiteSpace(entry.Member.DisplayName) ? entry.Member.Name : entry.Member.DisplayName;
+                    var accessibleLabel = System.Web.HttpUtility.HtmlAttributeEncode($"{entry.OwnerType.FullName}.{memberLabel}");
                     var kindLabel = System.Web.HttpUtility.HtmlEncode(GetUsageKindLabel(entry));
 
                     html.Line("<li class=\"usage-item\">");
                     using (html.Indent())
                     {
                         html.Line($"<span class=\"usage-kind\">{kindLabel}</span>");
-                        html.Line($"<a class=\"usage-link\" href=\"{safeHref}\">{ownerName}.{memberName}</a>");
+                        html.Line($"<a class=\"usage-link\" href=\"{safeHref}\" aria-label=\"{accessibleLabel}\">{ownerName}.{memberName}</a>");
                         if (!string.IsNullOrWhiteSpace(entry.ParameterName))
                             html.Line($"<span class=\"usage-meta\">parameter <code>{System.Web.HttpUtility.HtmlEncode(entry.ParameterName)}</code></span>");
                     }
