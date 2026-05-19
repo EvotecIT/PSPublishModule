@@ -106,11 +106,7 @@ public static class WebWebsiteRunner
         RunProcess(
             "dotnet",
             null,
-            new[]
-            {
-                "run", "--framework", "net10.0", "--project", projectPath, "--",
-                "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(options.PipelineMode, "ci")
-            },
+            BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci")),
             null,
             standardOutput,
             standardError);
@@ -124,6 +120,15 @@ public static class WebWebsiteRunner
             Repository = finalRepository,
             Ref = finalRef,
             LaunchedPath = projectPath
+        };
+    }
+
+    internal static string[] BuildSourcePipelineArguments(string projectPath, string pipelineConfig, string pipelineMode)
+    {
+        return new[]
+        {
+            "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--",
+            "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(pipelineMode, "ci")
         };
     }
 
