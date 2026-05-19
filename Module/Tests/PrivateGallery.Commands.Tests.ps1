@@ -47,9 +47,11 @@ Describe 'Private gallery command metadata' {
     It 'exposes the private gallery wrapper cmdlets' {
         $module = $script:PrivateGalleryTestModule
         $module.ExportedCmdlets.Keys | Should -Contain 'Connect-ModuleRepository'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Export-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Register-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Install-PrivateModule'
         $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Import-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Test-ModuleRepositoryProfile'
@@ -113,6 +115,12 @@ Describe 'Private gallery command metadata' {
         $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
         $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
 
+        $exportProfile = $module.ExportedCmdlets['Export-ModuleRepositoryProfile']
+        $exportProfile.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
+
+        $importProfile = $module.ExportedCmdlets['Import-ModuleRepositoryProfile']
+        $importProfile.Parameters.Keys | Should -Contain 'Overwrite'
+
         $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
@@ -131,6 +139,46 @@ Describe 'Private gallery command metadata' {
         $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
         Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+    }
+
+    It 'exports and imports non-secret managed profile files' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'Company.profile.json'
+
+        $exported = Export-ModuleRepositoryProfile -Name 'Company' -Path $exportPath -Force -PassThru
+        $json = Get-Content -LiteralPath $exportPath -Raw
+
+        $exported.Name | Should -Be 'Company'
+        $json | Should -Match '"Profiles"'
+        $json | Should -Not -Match '"Secret"'
+        $json | Should -Not -Match '"Password"'
+        $json | Should -Not -Match '"Token"'
+
+        Remove-ModuleRepositoryProfile -Name 'Company'
+        Get-ModuleRepositoryProfile -Name 'Company' -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+
+        $imported = Import-ModuleRepositoryProfile -Path $exportPath
+
+        $imported.Name | Should -Be 'Company'
+        $profile = Get-ModuleRepositoryProfile -Name 'Company'
+        $profile.AzureDevOpsOrganization | Should -Be 'contoso'
+        $profile.AzureDevOpsProject | Should -Be 'Platform'
+        $profile.AzureArtifactsFeed | Should -Be 'Modules'
+        $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+    }
+
+    It 'requires overwrite when importing an existing managed profile' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' | Out-Null
+        $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'Company.overwrite.profile.json'
+        Export-ModuleRepositoryProfile -Name 'Company' -Path $exportPath -Force
+
+        {
+            Import-ModuleRepositoryProfile -Path $exportPath
+        } | Should -Throw "*already exists*"
+
+        $imported = Import-ModuleRepositoryProfile -Path $exportPath -Overwrite
+
+        $imported.Name | Should -Be 'Company'
     }
 
     It 'tests saved profile readiness without registering repositories' {

@@ -58,15 +58,17 @@ Microsoft tooling:
 Artifacts Credential Provider on Windows workstations. Pre-install the credential provider on non-Windows
 systems with Microsoft's installer.
 4. Create the local feed profile once with Set-ModuleRepositoryProfile.
-5. Run Test-ModuleRepositoryProfile -ProfileName <name> to verify the saved profile and local prerequisite
+5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and import it on
+workstations with Import-ModuleRepositoryProfile.
+6. Run Test-ModuleRepositoryProfile -ProfileName <name> to verify the saved profile and local prerequisite
 readiness without registering or probing the repository.
-6. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
+7. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
 the repository and triggers the normal Entra/MFA credential-provider flow when no token is cached.
-7. Standardize user commands around Install-PrivateModule -ProfileName <name> and
+8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
 Update-PrivateModule -ProfileName <name>.
-8. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
+9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
 Publish-NugetPackage -ProfileName <name> so publishing and consuming resolve the same feed.
-9. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
+10. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
 
 RECOMMENDED WORKSTATION FLOW
 
@@ -95,6 +97,22 @@ New-ConfigurationPublish -ProfileName Company -Enabled
 Direct NuGet package pushes can also resolve the feed from the profile:
 
 Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+
+MANAGED PROFILE DEPLOYMENT
+
+Profile files are configuration, not credentials. An administrator can create the profile once, export it, and
+deploy the JSON file with Intune, GPO, configuration management, or a bootstrap script:
+
+Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+
+On the target workstation, import or refresh the profile:
+
+Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
+Test-ModuleRepositoryProfile -ProfileName Company
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+
+The imported profile still does not contain PATs, passwords, or tokens. If the user has not signed in before,
+the first connect/install/update operation triggers the normal Azure Artifacts Credential Provider Entra/MFA flow.
 
 PRODUCTION READINESS EVIDENCE
 
@@ -136,6 +154,14 @@ Installs missing prerequisites if needed, registers the repository, and validate
 PS> Test-ModuleRepositoryProfile -ProfileName Company
 
 Checks saved profile and local prerequisite readiness without changing repository registrations.
+
+PS> Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+
+Exports the non-secret Company profile for managed rollout.
+
+PS> Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
+
+Imports or refreshes managed profile settings on a workstation.
 
 PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
 

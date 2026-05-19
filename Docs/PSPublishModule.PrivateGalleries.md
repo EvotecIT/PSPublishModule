@@ -32,19 +32,22 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    credential provider with the official Microsoft installer before onboarding.
 4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
    contains feed identity only; it does not contain PATs, passwords, or tokens.
-5. Ask users or desktop support to run `Test-ModuleRepositoryProfile
+5. For managed rollout, export the non-secret profile with
+   `Export-ModuleRepositoryProfile` and import it on workstations with
+   `Import-ModuleRepositoryProfile`.
+6. Ask users or desktop support to run `Test-ModuleRepositoryProfile
    -ProfileName <name>` to verify the saved profile and local prerequisite
    readiness without registering or probing the repository.
-6. Ask users to run `Connect-ModuleRepository -ProfileName <name>
+7. Ask users to run `Connect-ModuleRepository -ProfileName <name>
    -InstallPrerequisites` once. This registers the repository and triggers the
    normal Entra/MFA credential-provider flow when a token is not already cached.
-7. Standardize install/update commands around `Install-PrivateModule
+8. Standardize install/update commands around `Install-PrivateModule
    -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
-8. For publishers and CI operators, use the same profile with
+9. For publishers and CI operators, use the same profile with
    `New-ConfigurationPublish -ProfileName <name>` and `Publish-NugetPackage
    -ProfileName <name>` so package push and package consumption resolve the same
    feed.
-9. Run the opt-in live Pester flow against at least one real feed/module before
+10. Run the opt-in live Pester flow against at least one real feed/module before
    announcing the feed as production-ready.
 
 The normal user command set should be short:
@@ -115,6 +118,29 @@ Artifacts, prefer the default profile settings:
 - `Tool = PSResourceGet`
 - `BootstrapMode = ExistingSession`
 - `AuthenticationMode = AzureArtifactsCredentialProvider`
+
+## Managed Profile Deployment
+
+Profile files are safe to treat as configuration, not credentials. An
+administrator can create the profile on a staging machine, export it, and deploy
+that JSON file with Intune, GPO, configuration management, or a bootstrap script:
+
+```powershell
+Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+```
+
+On the target workstation, import or refresh the profile:
+
+```powershell
+Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
+Test-ModuleRepositoryProfile -ProfileName Company
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+```
+
+The imported profile still does not contain secrets. If the user has not signed
+in before, the first connect/install/update operation triggers the normal Azure
+Artifacts Credential Provider Entra/MFA flow.
 
 ## PAT Fallback
 

@@ -22,6 +22,9 @@ Exports a code-signing certificate to DER format for NuGet.org registration.
 ### [Export-ConfigurationProject](Export-ConfigurationProject.md)
 Exports a PowerShell-authored project release object to JSON.
 
+### [Export-ModuleRepositoryProfile](Export-ModuleRepositoryProfile.md)
+Exports saved private module repository profiles to a non-secret JSON file.
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
@@ -48,6 +51,9 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 
 ### [Import-ConfigurationProject](Import-ConfigurationProject.md)
 Imports a PowerShell-authored project release object from JSON.
+
+### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
+Imports private module repository profiles from a non-secret JSON file.
 
 ### [Install-PrivateModule](Install-PrivateModule.md)
 Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
