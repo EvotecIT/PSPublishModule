@@ -58,13 +58,15 @@ Microsoft tooling:
 Artifacts Credential Provider on Windows workstations. Pre-install the credential provider on non-Windows
 systems with Microsoft's installer.
 4. Create the local feed profile once with Set-ModuleRepositoryProfile.
-5. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
+5. Run Test-ModuleRepositoryProfile -ProfileName <name> to verify the saved profile and local prerequisite
+readiness without registering or probing the repository.
+6. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
 the repository and triggers the normal Entra/MFA credential-provider flow when no token is cached.
-6. Standardize user commands around Install-PrivateModule -ProfileName <name> and
+7. Standardize user commands around Install-PrivateModule -ProfileName <name> and
 Update-PrivateModule -ProfileName <name>.
-7. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
+8. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
 Publish-NugetPackage -ProfileName <name> so publishing and consuming resolve the same feed.
-8. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
+9. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
 
 RECOMMENDED WORKSTATION FLOW
 
@@ -78,6 +80,7 @@ Set-ModuleRepositoryProfile `
 
 Connect and validate the workstation:
 
+Test-ModuleRepositoryProfile -ProfileName Company
 Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 
 Install or update modules:
@@ -129,6 +132,10 @@ Saves an Entra-first Azure Artifacts profile named Company.
 PS> Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 
 Installs missing prerequisites if needed, registers the repository, and validates authenticated feed access.
+
+PS> Test-ModuleRepositoryProfile -ProfileName Company
+
+Checks saved profile and local prerequisite readiness without changing repository registrations.
 
 PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
 

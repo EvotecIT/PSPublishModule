@@ -38,6 +38,7 @@ Typical user onboarding:
 
 ```powershell
 Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Test-ModuleRepositoryProfile -ProfileName Company
 Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA

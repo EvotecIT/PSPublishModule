@@ -52,6 +52,7 @@ Describe 'Private gallery command metadata' {
         $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Test-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-PrivateModule'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Publish-NugetPackage'
@@ -112,6 +113,10 @@ Describe 'Private gallery command metadata' {
         $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
         $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
 
+        $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
+        $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
+        $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+
         $publishPackage = $module.ExportedCmdlets['Publish-NugetPackage']
         $publishPackage.ParameterSets.Name | Should -Contain 'Profile'
         $publishPackage.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
@@ -126,6 +131,36 @@ Describe 'Private gallery command metadata' {
         $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
         Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+    }
+
+    It 'tests saved profile readiness without registering repositories' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+
+        $result = Test-ModuleRepositoryProfile -ProfileName 'Company'
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryProfileReadinessResult'
+        $result.Name | Should -Be 'Company'
+        $result.ProfileFound | Should -BeTrue
+        $result.RepositoryName | Should -Be 'Modules'
+        $result.PSResourceGetUri | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json'
+        $result.PowerShellGetSourceUri | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2'
+        $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
+        $result.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+        $result.RecommendedConnectCommand | Should -Match "Connect-ModuleRepository -ProfileName 'Company'"
+        $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -Name <ModuleName> -ProfileName 'Company'"
+        $result.ReadinessMessages | Should -Not -BeNullOrEmpty
+    }
+
+    It 'returns a non-terminating readiness object for a missing profile' {
+        $result = Test-ModuleRepositoryProfile -ProfileName 'MissingCompany'
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.Name | Should -Be 'MissingCompany'
+        $result.ProfileFound | Should -BeFalse
+        $result.IsReady | Should -BeFalse
+        $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
+        $result.ReadinessMessages | Should -Contain "Module repository profile 'MissingCompany' was not found. Create it with Set-ModuleRepositoryProfile before connecting, installing, updating, or publishing."
     }
 
     It 'uses saved profiles for WhatIf repository connection without prompting' {

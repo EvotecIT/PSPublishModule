@@ -32,22 +32,26 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    credential provider with the official Microsoft installer before onboarding.
 4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
    contains feed identity only; it does not contain PATs, passwords, or tokens.
-5. Ask users to run `Connect-ModuleRepository -ProfileName <name>
+5. Ask users or desktop support to run `Test-ModuleRepositoryProfile
+   -ProfileName <name>` to verify the saved profile and local prerequisite
+   readiness without registering or probing the repository.
+6. Ask users to run `Connect-ModuleRepository -ProfileName <name>
    -InstallPrerequisites` once. This registers the repository and triggers the
    normal Entra/MFA credential-provider flow when a token is not already cached.
-6. Standardize install/update commands around `Install-PrivateModule
+7. Standardize install/update commands around `Install-PrivateModule
    -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
-7. For publishers and CI operators, use the same profile with
+8. For publishers and CI operators, use the same profile with
    `New-ConfigurationPublish -ProfileName <name>` and `Publish-NugetPackage
    -ProfileName <name>` so package push and package consumption resolve the same
    feed.
-8. Run the opt-in live Pester flow against at least one real feed/module before
+9. Run the opt-in live Pester flow against at least one real feed/module before
    announcing the feed as production-ready.
 
 The normal user command set should be short:
 
 ```powershell
 Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Test-ModuleRepositoryProfile -ProfileName Company
 Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA
@@ -71,6 +75,7 @@ Set-ModuleRepositoryProfile `
 Connect and validate access on a workstation:
 
 ```powershell
+Test-ModuleRepositoryProfile -ProfileName Company
 Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 ```
 

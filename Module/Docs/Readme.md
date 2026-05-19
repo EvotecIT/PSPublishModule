@@ -253,6 +253,9 @@ Updates version numbers across multiple project files.
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
 
+### [Test-ModuleRepositoryProfile](Test-ModuleRepositoryProfile.md)
+Tests saved private module repository profiles and local authentication prerequisites.
+
 ### [Update-ModuleRepository](Update-ModuleRepository.md)
 Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.
 
