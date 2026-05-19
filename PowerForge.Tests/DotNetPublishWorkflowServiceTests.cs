@@ -65,15 +65,17 @@ public sealed class DotNetPublishWorkflowServiceTests
     public void Execute_runs_publish_when_plan_only_flags_are_not_set()
     {
         var expectedResult = new DotNetPublishResult { Succeeded = true };
+        var expectedProgress = new TestProgressReporter();
         var service = new DotNetPublishWorkflowService(
             new NullLogger(),
             planPublish: (_, _) => new DotNetPublishPlan(),
             runPublish: (plan, progress) =>
             {
                 Assert.NotNull(plan);
-                Assert.Null(progress);
+                Assert.Same(expectedProgress, progress);
                 return expectedResult;
-            });
+            },
+            createProgressReporter: _ => expectedProgress);
 
         var result = service.Execute(new DotNetPublishPreparedContext
         {
@@ -82,6 +84,15 @@ public sealed class DotNetPublishWorkflowServiceTests
         });
 
         Assert.Same(expectedResult, result.Result);
+    }
+
+    private sealed class TestProgressReporter : IDotNetPublishProgressReporter
+    {
+        public void StepStarting(DotNetPublishStep step) { }
+
+        public void StepCompleted(DotNetPublishStep step) { }
+
+        public void StepFailed(DotNetPublishStep step, Exception error) { }
     }
 
     private sealed class CollectingLogger : ILogger

@@ -10,17 +10,17 @@ public sealed partial class DotNetPublishPipelineRunner
     private void Restore(DotNetPublishPlan plan, string? runtime)
     {
         var workDir = plan.ProjectRoot;
-        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
 
         if (!string.IsNullOrWhiteSpace(runtime))
         {
+            var runtimeValue = runtime!;
             foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                _logger.Info($"Restore ({runtime}) -> {p}");
+                _logger.Info($"Restore ({runtimeValue}) -> {p}");
 
                 var args = new List<string> { "restore", p, "--nologo" };
-                args.AddRange(new[] { "-r", runtime! });
-                args.AddRange(props);
+                args.AddRange(new[] { "-r", runtimeValue });
+                args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, p, runtimeValue)));
 
                 RunDotnet(workDir, args);
             }
@@ -28,6 +28,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
+        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
         if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
         {
             _logger.Info($"Restore -> {plan.SolutionPath}");
@@ -40,6 +41,66 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"Restore -> {p}");
             RunDotnet(workDir, new[] { "restore", p, "--nologo" }.Concat(props).ToArray());
         }
+    }
+
+    internal static Dictionary<string, string> BuildRestoreMsBuildProperties(
+        DotNetPublishPlan plan,
+        string projectPath,
+        string runtime)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var merged = new Dictionary<string, string>(plan.MsBuildProperties, StringComparer.OrdinalIgnoreCase);
+        foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+        {
+            if (!string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var styles = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                .Where(combination => string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
+                .Select(combination => combination.Style)
+                .Distinct()
+                .ToArray();
+
+            foreach (var style in styles)
+            {
+                foreach (var property in BuildPublishMsBuildProperties(plan, target, style))
+                    merged[property.Key] = property.Value;
+
+                if (IsPortableStyle(style))
+                {
+                    if (!merged.ContainsKey("SelfContained"))
+                        merged["SelfContained"] = "true";
+                    if (!merged.ContainsKey("PublishSingleFile"))
+                        merged["PublishSingleFile"] = "true";
+                    if (!merged.ContainsKey("IncludeNativeLibrariesForSelfExtract"))
+                        merged["IncludeNativeLibrariesForSelfExtract"] = "true";
+                    if (!merged.ContainsKey("PortableTrim"))
+                        merged["PortableTrim"] = (style == DotNetPublishStyle.PortableSize).ToString().ToLowerInvariant();
+                    if (!merged.ContainsKey("PortableTrimMode"))
+                        merged["PortableTrimMode"] = style == DotNetPublishStyle.PortableSize ? "full" : "partial";
+                    if (target.Publish.ReadyToRun.HasValue && !merged.ContainsKey("PublishReadyToRun"))
+                        merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
+                }
+
+                if (style == DotNetPublishStyle.AotSpeed || style == DotNetPublishStyle.AotSize)
+                {
+                    if (!merged.ContainsKey("SelfContained"))
+                        merged["SelfContained"] = "true";
+                    if (!merged.ContainsKey("NativeAotPublish"))
+                        merged["NativeAotPublish"] = "true";
+                }
+            }
+        }
+
+        return merged;
+    }
+
+    private static bool IsPortableStyle(DotNetPublishStyle style)
+    {
+        return style == DotNetPublishStyle.Portable
+            || style == DotNetPublishStyle.PortableCompat
+            || style == DotNetPublishStyle.PortableSize;
     }
 
     private void Clean(DotNetPublishPlan plan)

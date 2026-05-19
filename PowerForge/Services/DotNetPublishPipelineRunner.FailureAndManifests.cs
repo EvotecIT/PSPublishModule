@@ -250,7 +250,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 var files = EnumerateExistingFiles(build.OutputFiles).ToArray();
                 var outputDir = ResolveOutputDirectory(files);
                 var version = string.IsNullOrWhiteSpace(build.Version) ? string.Empty : $" version={build.Version}";
-                lines.Add($"MSI {build.InstallerId} from {build.Target} ({build.Framework}, {build.Runtime}, {build.Style}) -> {outputDir} ({files.Length} files{version})");
+                var output = files.Length == 1
+                    ? files[0]
+                    : outputDir;
+                var fileList = files.Length <= 1
+                    ? string.Empty
+                    : $" files=[{string.Join(", ", files)}]";
+                lines.Add($"MSI {build.InstallerId} from {build.Target} ({build.Framework}, {build.Runtime}, {build.Style}) -> {output} ({files.Length} files{version}){fileList}");
             }
 
             File.WriteAllLines(txtPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));

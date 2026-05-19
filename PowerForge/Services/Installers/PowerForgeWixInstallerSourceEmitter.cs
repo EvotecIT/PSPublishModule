@@ -26,7 +26,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         PowerForgeInstallerDefinitionValidator.Validate(definition);
 
         var needsUi = definition.Dialogs.Count > 0;
-        var needsUtil = definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any();
+        var needsUtil = RequiresUtilExtension(definition);
         var rootAttributes = new List<XAttribute>();
         if (needsUtil)
             rootAttributes.Add(new XAttribute(XNamespace.Xmlns + "util", UtilNamespace.NamespaceName));
@@ -51,6 +51,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             package.Add(EmitUi(definition));
 
         package.Add(EmitFeature(definition));
+        package.Add(PowerForgeWixInstallerServiceScriptEmitter.EmitScriptInstallActions(definition));
 
         var root = new XElement(WixNamespace + "Wix", rootAttributes, package);
         root.Add(EmitDirectories(definition));
@@ -88,6 +89,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XElement(
                 "PropertyGroup",
                 new XElement("OutputType", "Package"),
+                new XElement("ManagePackageVersionsCentrally", "false"),
                 new XElement("EnableDefaultItems", "false"),
                 new XElement("Platform", options.Platform)));
 
@@ -105,7 +107,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         }
 
         var packageReferences = new List<XElement>();
-        if (definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any())
+        if (RequiresUtilExtension(definition))
         {
             packageReferences.Add(new XElement(
                 "PackageReference",
@@ -141,6 +143,14 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
         foreach (var input in definition.Inputs)
         {
+            if (string.IsNullOrWhiteSpace(input.DefaultValue) &&
+                !input.Secure &&
+                !input.Hidden &&
+                input.RegistrySearch is null)
+            {
+                continue;
+            }
+
             var property = new XElement(
                 WixNamespace + "Property",
                 new XAttribute("Id", input.PropertyName));
@@ -151,6 +161,16 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 property.Add(new XAttribute("Secure", "yes"));
             if (input.Hidden)
                 property.Add(new XAttribute("Hidden", "yes"));
+            if (input.RegistrySearch is not null)
+            {
+                property.Add(new XElement(
+                    WixNamespace + "RegistrySearch",
+                    new XAttribute("Id", input.RegistrySearch.Id),
+                    new XAttribute("Root", input.RegistrySearch.Root),
+                    new XAttribute("Key", input.RegistrySearch.Key),
+                    new XAttribute("Name", input.RegistrySearch.Name),
+                    new XAttribute("Type", input.RegistrySearch.Type)));
+            }
 
             package.Add(property);
         }
@@ -697,21 +717,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XAttribute("Source", service.Source),
             new XAttribute("KeyPath", "yes")));
 
-        var serviceInstall = new XElement(
-            WixNamespace + "ServiceInstall",
-            new XAttribute("Id", service.Id + "Install"),
-            new XAttribute("Name", service.ServiceName),
-            new XAttribute("DisplayName", service.DisplayName),
-            new XAttribute("Start", service.Start),
-            new XAttribute("Type", "ownProcess"),
-            new XAttribute("ErrorControl", "normal"),
-            new XAttribute("Vital", "yes"),
-            new XAttribute("Account", service.Account));
-        if (!string.IsNullOrWhiteSpace(service.Description))
-            serviceInstall.Add(new XAttribute("Description", service.Description!));
-        if (!string.IsNullOrWhiteSpace(service.Arguments))
-            serviceInstall.Add(new XAttribute("Arguments", service.Arguments!));
-        component.Add(serviceInstall);
+        if (service.ScriptInstall is null)
+            component.Add(EmitServiceInstall(service));
 
         if (service.DelayedAutoStart)
         {
@@ -728,12 +735,43 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             WixNamespace + "ServiceControl",
             new XAttribute("Id", service.Id + "Control"),
             new XAttribute("Name", service.ServiceName),
-            new XAttribute("Start", "none"),
-            new XAttribute("Stop", "both"),
-            new XAttribute("Remove", "both"),
+            new XAttribute("Start", service.ControlStart),
+            new XAttribute("Stop", service.ControlStop),
+            new XAttribute("Remove", service.ControlRemove),
             new XAttribute("Wait", "yes")));
 
         return component;
+    }
+
+    private static bool RequiresUtilExtension(PowerForgeInstallerDefinition definition)
+        => definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any() ||
+           PowerForgeWixInstallerServiceScriptEmitter.RequiresUtilExtension(definition);
+
+    private static XElement EmitServiceInstall(PowerForgeInstallerServiceComponent service)
+    {
+        var serviceInstall = new XElement(
+            WixNamespace + "ServiceInstall",
+            new XAttribute("Id", service.Id + "Install"),
+            new XAttribute("Name", service.ServiceName),
+            new XAttribute("DisplayName", service.DisplayName),
+            new XAttribute("Start", service.Start),
+            new XAttribute("Type", "ownProcess"),
+            new XAttribute("ErrorControl", "normal"),
+            new XAttribute("Vital", "yes"));
+        if (!IsLocalSystemAccount(service.Account))
+            serviceInstall.Add(new XAttribute("Account", service.Account));
+        if (!string.IsNullOrWhiteSpace(service.Description))
+            serviceInstall.Add(new XAttribute("Description", service.Description!));
+        if (!string.IsNullOrWhiteSpace(service.Arguments))
+            serviceInstall.Add(new XAttribute("Arguments", service.Arguments!));
+        return serviceInstall;
+    }
+
+    private static bool IsLocalSystemAccount(string? account)
+    {
+        return string.IsNullOrWhiteSpace(account)
+            || string.Equals(account, "LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(account, @"NT AUTHORITY\LocalSystem", StringComparison.OrdinalIgnoreCase);
     }
 
     private static XElement EmitRegistryValueComponent(PowerForgeInstallerRegistryValueComponent registryValue)
@@ -764,12 +802,15 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         var target = !string.IsNullOrWhiteSpace(shortcut.Target)
             ? shortcut.Target!
             : "[#" + shortcut.TargetFileId + "]";
-        component.Add(new XElement(
+        var shortcutElement = new XElement(
             WixNamespace + "Shortcut",
             new XAttribute("Id", shortcut.ShortcutId),
             new XAttribute("Name", shortcut.Name),
             new XAttribute("Target", target),
-            new XAttribute("WorkingDirectory", shortcut.WorkingDirectoryId)));
+            new XAttribute("WorkingDirectory", shortcut.WorkingDirectoryId));
+        if (!string.IsNullOrWhiteSpace(shortcut.Arguments))
+            shortcutElement.Add(new XAttribute("Arguments", shortcut.Arguments!));
+        component.Add(shortcutElement);
         component.Add(new XElement(
             WixNamespace + "RemoveFolder",
             new XAttribute("Id", shortcut.Id + "RemoveFolder"),

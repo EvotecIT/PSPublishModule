@@ -25,9 +25,19 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "LICENSE_KEY" &&
             (string?)e.Attribute("Secure") == "yes" &&
             (string?)e.Attribute("Hidden") == "yes"));
-        Assert.NotNull(doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
+        Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "MONITORINGDATADIR" &&
+            e.Descendants(Wix + "RegistrySearch").Any(search =>
+                (string?)search.Attribute("Name") == "DataDir" &&
+                (string?)search.Attribute("Type") == "raw")));
+        var serviceInstall = doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
             (string?)e.Attribute("Name") == "TestimoX.Monitoring" &&
-            (string?)e.Attribute("Arguments") == "--config \"[ProgramDataMonitoring]TestimoX.Monitoring.json\""));
+            (string?)e.Attribute("Arguments") == "--config \"[ProgramDataMonitoring]TestimoX.Monitoring.json\"");
+        Assert.NotNull(serviceInstall);
+        Assert.Null(serviceInstall!.Attribute("Account"));
+        Assert.NotNull(doc.Descendants(Wix + "ServiceControl").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring" &&
+            (string?)e.Attribute("Start") == "install"));
         Assert.NotNull(doc.Descendants(Wix + "RegistryValue").SingleOrDefault(e =>
             (string?)e.Attribute("Key") == @"SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring" &&
             (string?)e.Attribute("Name") == "DelayedAutoStart"));
@@ -39,6 +49,64 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Attribute("Condition"));
         Assert.NotNull(doc.Descendants(Wix + "ComponentGroupRef").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ProductFiles"));
+    }
+
+    [Fact]
+    public void EmitSource_ModelsScriptServiceInstallWithImagePathPreservation()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Components.Add(new PowerForgeInstallerFileComponent
+        {
+            Id = "InstallServiceScriptComponent",
+            FileId = "InstallServiceScript",
+            Source = "$(var.PayloadDir)\\Install-Service.ps1"
+        });
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.ControlStart = "none";
+        service.ControlStop = "uninstall";
+        service.ControlRemove = "uninstall";
+        service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\" -ConfigPath \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" -ServiceName \"TestimoX.Monitoring\"",
+            UpgradeCommand = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\" -ConfigPath \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" -ServiceName \"TestimoX.Monitoring\" -BackupPath \"[TempFolder]tmx-svc.txt\" -PreserveExistingServiceBinPath -UpgradeMode",
+            BackupExistingImagePath = true,
+            BackupPath = "[TempFolder]tmx-svc.txt",
+            StopServiceForUpgrade = true,
+            StopDelaySeconds = 30
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Null(doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring"));
+        Assert.NotNull(doc.Descendants(Wix + "ServiceControl").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring" &&
+            (string?)e.Attribute("Start") == "none" &&
+            (string?)e.Attribute("Stop") == "uninstall" &&
+            (string?)e.Attribute("Remove") == "uninstall"));
+        Assert.NotNull(doc.Descendants(Wix + "SetProperty").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "WixQuietExecCmdLine" &&
+            ((string?)e.Attribute("Value"))?.Contains(@"reg query ""HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring"" /v ImagePath", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponentInstallService" &&
+            (string?)e.Attribute("DllEntry") == "WixQuietExec" &&
+            (string?)e.Attribute("Execute") == "deferred" &&
+            (string?)e.Attribute("Impersonate") == "no"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponentSetInstallServiceUpgrade" &&
+            ((string?)e.Attribute("Value"))?.Contains("-PreserveExistingServiceBinPath -UpgradeMode", StringComparison.Ordinal) == true));
+
+        var sequenceActions = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
+            .Select(e => (string?)e.Attribute("Action"))
+            .ToArray();
+        Assert.Contains("ServiceComponentBackupImagePath", sequenceActions);
+        Assert.Contains("ServiceComponentSetStopService", sequenceActions);
+        Assert.Contains("ServiceComponentStopService", sequenceActions);
+        Assert.Contains("ServiceComponentSetInstallServiceUpgrade", sequenceActions);
+        Assert.Contains("ServiceComponentInstallService", sequenceActions);
     }
 
     [Fact]
@@ -475,6 +543,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             ShortcutId = "StartMenuShortcut",
             Name = "IntelligenceX Chat",
             TargetFileId = "PrimaryExeFile",
+            Arguments = "--open",
             RegistryKey = @"Software\Evotec\IntelligenceX\Chat"
         });
 
@@ -485,7 +554,8 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "ProgramMenuFolder"));
         Assert.NotNull(doc.Descendants(Wix + "Shortcut").SingleOrDefault(e =>
             (string?)e.Attribute("Name") == "IntelligenceX Chat" &&
-            (string?)e.Attribute("Target") == "[#PrimaryExeFile]"));
+            (string?)e.Attribute("Target") == "[#PrimaryExeFile]" &&
+            (string?)e.Attribute("Arguments") == "--open"));
         Assert.NotNull(doc.Descendants(Wix + "RegistryValue").SingleOrDefault(e =>
             (string?)e.Attribute("KeyPath") == "yes" &&
             (string?)e.Attribute("Root") == "HKCU" &&
@@ -1026,6 +1096,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         var doc = XDocument.Parse(xml);
 
         Assert.Equal("WixToolset.Sdk/4.0.6", (string?)doc.Root!.Attribute("Sdk"));
+        Assert.Equal("false", doc.Descendants("ManagePackageVersionsCentrally").Single().Value);
         Assert.Equal("false", doc.Descendants("EnableDefaultItems").Single().Value);
         Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
             (string?)e.Attribute("Include") == "WixToolset.Util.wixext"));
@@ -1036,6 +1107,33 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants("Compile").SingleOrDefault(e =>
             (string?)e.Attribute("Include") == "Harvest.wxs"));
         Assert.Contains("PayloadDir=Artifacts", doc.Descendants("DefineConstants").Single().Value, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitProjectFile_IncludesUtilExtensionForScriptServiceInstall()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = "ServiceComponent",
+            FileId = "ServiceExe",
+            Source = "$(var.PayloadDir)\\Service.exe",
+            ServiceName = "Contoso.Service",
+            DisplayName = "Contoso Service",
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\""
+            }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitProjectFile(
+            definition,
+            new PowerForgeWixInstallerProjectOptions { SourceFile = "Generated.wxs" });
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
+            (string?)e.Attribute("Include") == "WixToolset.Util.wixext"));
     }
 
     [Fact]
@@ -1233,6 +1331,19 @@ public sealed class PowerForgeInstallerAuthoringTests
                     "MaxLength": 128,
                     "ValidationPattern": "^[A-Za-z0-9-]+$",
                     "ValidationMessage": "Enter a valid license key."
+                  },
+                  {
+                    "Id": "DataDir",
+                    "PropertyName": "MONITORINGDATADIR",
+                    "Label": "Data folder",
+                    "Kind": "FolderPath",
+                    "RegistrySearch": {
+                      "Id": "MonitoringDataDirSearch",
+                      "Root": "HKLM",
+                      "Key": "Software\\Evotec\\TestimoX\\Monitoring",
+                      "Name": "DataDir",
+                      "Type": "raw"
+                    }
                   }
                 ],
                 "Dialogs": [
@@ -1291,13 +1402,18 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(authoring);
         Assert.Equal("TestimoX Monitoring", authoring!.Product.Name);
         Assert.Equal("ProductFiles", authoring.PayloadComponentGroupId);
-        var input = Assert.Single(authoring.Inputs);
+        Assert.Equal(2, authoring.Inputs.Count);
+        var input = authoring.Inputs[0];
         Assert.True(input.Required);
         Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);
         Assert.Equal(16, input.MinLength);
         Assert.Equal(128, input.MaxLength);
         Assert.Equal("^[A-Za-z0-9-]+$", input.ValidationPattern);
         Assert.Equal("Enter a valid license key.", input.ValidationMessage);
+        var dataDir = authoring.Inputs[1];
+        Assert.Equal("MONITORINGDATADIR", dataDir.PropertyName);
+        Assert.NotNull(dataDir.RegistrySearch);
+        Assert.Equal("MonitoringDataDirSearch", dataDir.RegistrySearch!.Id);
         Assert.Single(authoring.Dialogs);
         Assert.Single(authoring.Directories);
 
@@ -1350,6 +1466,21 @@ public sealed class PowerForgeInstallerAuthoringTests
             Description = "Remove %ProgramData% data on uninstall.",
             Kind = PowerForgeInstallerInputKind.Checkbox,
             DefaultValue = "0"
+        });
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "MonitoringDataDirectory",
+            PropertyName = "MONITORINGDATADIR",
+            Label = "Monitoring data folder",
+            Kind = PowerForgeInstallerInputKind.FolderPath,
+            RegistrySearch = new PowerForgeInstallerRegistrySearch
+            {
+                Id = "MonitoringDataDirSearch",
+                Root = "HKLM",
+                Key = @"Software\Evotec\TestimoX\Monitoring",
+                Name = "DataDir",
+                Type = "raw"
+            }
         });
         var preset = new PowerForgeInstallerInput
         {
@@ -1421,7 +1552,8 @@ public sealed class PowerForgeInstallerAuthoringTests
             DisplayName = "TestimoX Monitoring",
             Description = "TestimoX monitoring agent",
             Arguments = "--config \"[ProgramDataMonitoring]TestimoX.Monitoring.json\"",
-            DelayedAutoStart = true
+            DelayedAutoStart = true,
+            ControlStart = "install"
         });
         definition.Components.Add(new PowerForgeInstallerShortcutComponent
         {

@@ -191,6 +191,42 @@ public sealed class PowerForgeInstallerInput
     /// Choices for radio or combo style inputs.
     /// </summary>
     public List<PowerForgeInstallerInputChoice> Choices { get; set; } = new();
+
+    /// <summary>
+    /// Optional registry search used to remember this property between installs and upgrades.
+    /// </summary>
+    public PowerForgeInstallerRegistrySearch? RegistrySearch { get; set; }
+}
+
+/// <summary>
+/// Registry search metadata for an MSI property.
+/// </summary>
+public sealed class PowerForgeInstallerRegistrySearch
+{
+    /// <summary>
+    /// WiX registry search id.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Registry root, for example HKLM or HKCU.
+    /// </summary>
+    public string Root { get; set; } = "HKLM";
+
+    /// <summary>
+    /// Registry key path below <see cref="Root"/>.
+    /// </summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Registry value name.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// WiX registry search type, for example raw.
+    /// </summary>
+    public string Type { get; set; } = "raw";
 }
 
 /// <summary>
@@ -447,6 +483,67 @@ public sealed class PowerForgeInstallerServiceComponent : PowerForgeInstallerCom
     /// Whether the service should use delayed auto-start.
     /// </summary>
     public bool DelayedAutoStart { get; set; }
+
+    /// <summary>
+    /// ServiceControl start behavior, for example none, install, uninstall, or both.
+    /// </summary>
+    public string ControlStart { get; set; } = "none";
+
+    /// <summary>
+    /// ServiceControl stop behavior, for example none, install, uninstall, or both.
+    /// </summary>
+    public string ControlStop { get; set; } = "both";
+
+    /// <summary>
+    /// ServiceControl remove behavior, for example none, install, uninstall, or both.
+    /// </summary>
+    public string ControlRemove { get; set; } = "both";
+
+    /// <summary>
+    /// Optional script-based service install behavior used when a service installer script owns registration.
+    /// </summary>
+    public PowerForgeInstallerServiceScriptInstall? ScriptInstall { get; set; }
+}
+
+/// <summary>
+/// Script-based Windows service install custom actions.
+/// </summary>
+public sealed class PowerForgeInstallerServiceScriptInstall
+{
+    /// <summary>
+    /// Standard install command. Supports WiX formatted properties.
+    /// </summary>
+    public string Command { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional upgrade install command. Supports WiX formatted properties.
+    /// </summary>
+    public string? UpgradeCommand { get; set; }
+
+    /// <summary>
+    /// Condition used for the deferred install action.
+    /// </summary>
+    public string Condition { get; set; } = "NOT REMOVE=\"ALL\"";
+
+    /// <summary>
+    /// Backs up the existing service ImagePath before RemoveExistingProducts.
+    /// </summary>
+    public bool BackupExistingImagePath { get; set; }
+
+    /// <summary>
+    /// Backup file path used for the existing service ImagePath.
+    /// </summary>
+    public string BackupPath { get; set; } = "[TempFolder]powerforge-service-binpath.txt";
+
+    /// <summary>
+    /// Stops the existing service during an upgrade before the old product is removed.
+    /// </summary>
+    public bool StopServiceForUpgrade { get; set; }
+
+    /// <summary>
+    /// Delay after requesting a service stop during upgrade.
+    /// </summary>
+    public int StopDelaySeconds { get; set; } = 30;
 }
 
 /// <summary>
@@ -514,6 +611,11 @@ public sealed class PowerForgeInstallerShortcutComponent : PowerForgeInstallerCo
     /// Optional direct shortcut target such as <c>[INSTALLFOLDER]MyApp.exe</c>.
     /// </summary>
     public string? Target { get; set; }
+
+    /// <summary>
+    /// Optional shortcut arguments.
+    /// </summary>
+    public string? Arguments { get; set; }
 
     /// <summary>
     /// Working directory id.

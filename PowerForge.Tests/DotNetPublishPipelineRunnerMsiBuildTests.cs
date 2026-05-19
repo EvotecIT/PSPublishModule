@@ -15,10 +15,79 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             InstallerId = "TierBridge.MSI",
             Version = "4.0.9498",
-            VersionPropertyName = "ProductVersion"
+            VersionPropertyName = "ProductVersion",
+            OutputFiles = new[] { @"C:\Build\TierBridge.msi" }
         };
 
-        Assert.Equal("TierBridge.MSI 4.0.9498", result.ToString());
+        Assert.Equal(@"TierBridge.MSI 4.0.9498 -> C:\Build\TierBridge.msi", result.ToString());
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputName_AppliesTokensAndStripsMsiExtension()
+    {
+        var plan = new DotNetPublishPlan { Configuration = "Release" };
+        var installer = new DotNetPublishInstallerPlan
+        {
+            Id = "syncse",
+            OutputName = "{target}-{rid}-{version}.msi"
+        };
+        var step = new DotNetPublishStep
+        {
+            TargetName = "GraphEssentialsX.Sync.Service",
+            Runtime = "win-x64",
+            Framework = "net8.0",
+            Style = DotNetPublishStyle.PortableCompat
+        };
+
+        var outputName = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            installer,
+            step,
+            "1.0.9638");
+
+        Assert.Equal("GraphEssentialsX.Sync.Service-win-x64-1.0.9638", outputName);
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputDirectory_UsesConfiguredTemplate()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "syncse",
+                OutputPath = "Artifacts/Msi/{installer}/{rid}"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "syncse",
+                TargetName = "app",
+                Runtime = "win-x64",
+                Framework = "net8.0",
+                Style = DotNetPublishStyle.PortableCompat
+            };
+            var prepare = new DotNetPublishMsiPrepareResult { ManifestPath = string.Empty };
+
+            var outputPath = DotNetPublishPipelineRunner.ResolveInstallerOutputDirectory(
+                plan,
+                installer,
+                "syncse",
+                step,
+                prepare,
+                isGeneratedInstallerProject: true);
+
+            Assert.Equal(Path.Combine(root, "Artifacts", "Msi", "syncse", "win-x64"), outputPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]

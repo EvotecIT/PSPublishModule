@@ -85,6 +85,16 @@ internal static class PowerForgeInstallerDefinitionValidator
             }
 
             ValidateInputValidationMetadata(input);
+            if (input.RegistrySearch is not null)
+            {
+                Require(input.RegistrySearch.Id, $"input '{input.Id}' registry search ID");
+                RequireWixIdentifier(input.RegistrySearch.Id, $"input '{input.Id}' registry search ID");
+                Require(input.RegistrySearch.Root, $"input '{input.Id}' registry search root");
+                Require(input.RegistrySearch.Key, $"input '{input.Id}' registry search key");
+                Require(input.RegistrySearch.Name, $"input '{input.Id}' registry search name");
+                Require(input.RegistrySearch.Type, $"input '{input.Id}' registry search type");
+            }
+
             if (input.Kind == PowerForgeInstallerInputKind.RadioGroup && input.Choices.Count == 0)
                 throw new InvalidOperationException($"Input '{input.Id}' is a radio group but has no choices.");
             if (input.Required && input.Kind == PowerForgeInstallerInputKind.RadioGroup)
@@ -164,6 +174,12 @@ internal static class PowerForgeInstallerDefinitionValidator
                 Require(service.FileId, nameof(service.FileId));
                 RequireWixIdentifier(service.FileId, $"service component '{service.Id}' FileId");
                 Require(service.Source, nameof(service.Source));
+                Require(service.ServiceName, $"service component '{service.Id}' ServiceName");
+                Require(service.DisplayName, $"service component '{service.Id}' DisplayName");
+                Require(service.ControlStart, $"service component '{service.Id}' ControlStart");
+                Require(service.ControlStop, $"service component '{service.Id}' ControlStop");
+                Require(service.ControlRemove, $"service component '{service.Id}' ControlRemove");
+                ValidateServiceScriptInstall(service);
             }
             else if (component is PowerForgeInstallerRemoveFolderComponent removeFolder)
             {
@@ -184,6 +200,23 @@ internal static class PowerForgeInstallerDefinitionValidator
                         $"Registry value component '{registryValue.Id}' requires Value or ValueProperty.");
                 }
             }
+        }
+    }
+
+    private static void ValidateServiceScriptInstall(PowerForgeInstallerServiceComponent service)
+    {
+        var script = service.ScriptInstall;
+        if (script is null)
+            return;
+
+        Require(script.Command, $"service component '{service.Id}' ScriptInstall.Command");
+        Require(script.Condition, $"service component '{service.Id}' ScriptInstall.Condition");
+        if (script.BackupExistingImagePath)
+            Require(script.BackupPath, $"service component '{service.Id}' ScriptInstall.BackupPath");
+        if (script.StopDelaySeconds < 0)
+        {
+            throw new InvalidOperationException(
+                $"Service component '{service.Id}' ScriptInstall.StopDelaySeconds must be greater than or equal to 0.");
         }
     }
 

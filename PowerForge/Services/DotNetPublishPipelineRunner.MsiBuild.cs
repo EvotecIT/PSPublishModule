@@ -61,13 +61,17 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new FileNotFoundException($"Installer project path not found: {installerProjectPath}", installerProjectPath);
 
         var projectDir = Path.GetDirectoryName(installerProjectPath)!;
-        var generatedOutputDir = isGeneratedInstallerProject
-            ? ResolveGeneratedInstallerOutputDirectory(plan, installerId, step, prepare)
-            : null;
-        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
-            Directory.CreateDirectory(generatedOutputDir);
+        var configuredOutputDir = ResolveInstallerOutputDirectory(
+            plan,
+            installerConfig,
+            installerId,
+            step,
+            prepare,
+            isGeneratedInstallerProject);
+        if (!string.IsNullOrWhiteSpace(configuredOutputDir))
+            Directory.CreateDirectory(configuredOutputDir);
 
-        var outputSearchDir = generatedOutputDir ?? projectDir;
+        var outputSearchDir = configuredOutputDir ?? projectDir;
         var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: isGeneratedInstallerProject);
 
         var args = new List<string>
@@ -90,8 +94,11 @@ public sealed partial class DotNetPublishPipelineRunner
             licenseResolution.PropertyName,
             licenseResolution.Path);
         args.AddRange(BuildMsBuildPropertyArgs(installerMsBuildProperties));
-        if (!string.IsNullOrWhiteSpace(generatedOutputDir))
-            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(generatedOutputDir!)}");
+        if (!string.IsNullOrWhiteSpace(configuredOutputDir))
+            args.Add($"/p:OutputPath={EnsureTrailingDirectorySeparator(configuredOutputDir!)}");
+        var configuredOutputName = ResolveInstallerOutputName(plan, installerConfig, step, versionResolution.Version);
+        if (!string.IsNullOrWhiteSpace(configuredOutputName))
+            args.Add($"/p:OutputName={configuredOutputName}");
         args.Add($"/p:PowerForgeMsiInstallerId={installerId}");
         args.Add($"/p:PowerForgeMsiPayloadDir={prepare.StagingDir}");
         if (!string.IsNullOrWhiteSpace(prepare.ManifestPath))
@@ -127,6 +134,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         _logger.Info(
             $"MSI build starting for '{installerId}' ({target}, {framework}, {runtime}, {style.Value}) -> {Path.GetFileName(installerProjectPath)}");
+        if (!string.IsNullOrWhiteSpace(configuredOutputDir))
+            _logger.Info($"MSI output directory for '{installerId}' -> {configuredOutputDir}");
+        if (!string.IsNullOrWhiteSpace(configuredOutputName))
+            _logger.Info($"MSI output name for '{installerId}' -> {configuredOutputName}.msi");
         RunDotnet(plan.ProjectRoot, args);
 
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
@@ -136,7 +147,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (outputs.Length == 0)
             _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{outputSearchDir}'.");
         else
-            _logger.Info($"MSI build produced {outputs.Length} MSI output(s) for '{installerId}'.");
+        {
+            _logger.Info($"MSI build produced {outputs.Length} MSI output(s) for '{installerId}':");
+            foreach (var output in outputs)
+                _logger.Info($"  -> {output}");
+        }
 
         return new DotNetPublishMsiBuildResult
         {
@@ -242,6 +257,67 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' generated MSI output path");
         return path;
+    }
+
+    internal static string? ResolveInstallerOutputDirectory(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan? installer,
+        string installerId,
+        DotNetPublishStep step,
+        DotNetPublishMsiPrepareResult prepare,
+        bool isGeneratedInstallerProject)
+    {
+        if (installer is not null && !string.IsNullOrWhiteSpace(installer.OutputPath))
+        {
+            var tokens = BuildInstallerOutputTokens(plan, installerId, step, version: null);
+            var outputPath = installer.OutputPath!;
+            var path = ResolvePath(plan.ProjectRoot, ApplyTemplate(outputPath, tokens));
+            if (!plan.AllowOutputOutsideProjectRoot)
+                EnsurePathWithinRoot(plan.ProjectRoot, path, $"Installer '{installerId}' MSI output path");
+            return path;
+        }
+
+        return isGeneratedInstallerProject
+            ? ResolveGeneratedInstallerOutputDirectory(plan, installerId, step, prepare)
+            : null;
+    }
+
+    internal static string? ResolveInstallerOutputName(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan? installer,
+        DotNetPublishStep step,
+        string? version)
+    {
+        if (installer is null || string.IsNullOrWhiteSpace(installer.OutputName))
+            return null;
+
+        var tokens = BuildInstallerOutputTokens(plan, installer.Id, step, version);
+        var name = ApplyTemplate(installer.OutputName!, tokens).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        name = ToSafeFileName(name, "installer");
+        return name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileNameWithoutExtension(name)
+            : name;
+    }
+
+    private static Dictionary<string, string> BuildInstallerOutputTokens(
+        DotNetPublishPlan plan,
+        string installerId,
+        DotNetPublishStep step,
+        string? version)
+    {
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installerId,
+            ["target"] = step.TargetName ?? string.Empty,
+            ["rid"] = step.Runtime ?? string.Empty,
+            ["framework"] = step.Framework ?? string.Empty,
+            ["style"] = step.Style?.ToString() ?? string.Empty,
+            ["configuration"] = plan.Configuration ?? "Release",
+            ["version"] = version ?? string.Empty
+        };
     }
 
     private static string ResolveGeneratedInstallerArtifactDirectory(

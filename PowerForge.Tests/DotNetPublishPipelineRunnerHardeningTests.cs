@@ -224,6 +224,8 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
 
             var text = File.ReadAllText(manifestTxt);
             Assert.Contains("MSI app.msi", text, StringComparison.Ordinal);
+            Assert.Contains(msiPath, text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(msiSidecarPath, text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("->  (", text, StringComparison.Ordinal);
             Assert.Contains("(2 files version=1.2.3)", text, StringComparison.Ordinal);
             Assert.Contains("Store app.store", text, StringComparison.Ordinal);
@@ -530,6 +532,86 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
 
         Assert.True(firstSingleFile >= 0, "Expected style defaults to request single-file publish.");
         Assert.True(finalSingleFile > firstSingleFile, "Expected merged overrides to win by appearing after style defaults.");
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_IncludesReadyToRunForRuntimeRestore()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SyncSELocalHtmlForgeXProject"] = string.Empty
+            },
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64");
+
+        Assert.Equal("true", props["PublishReadyToRun"]);
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishSingleFile"]);
+        Assert.Equal("true", props["IncludeNativeLibrariesForSelfExtract"]);
+        Assert.True(props.ContainsKey("SyncSELocalHtmlForgeXProject"));
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_HonorsPublishReadyToRunOverride()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        ReadyToRun = true,
+                        MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["PublishReadyToRun"] = "false"
+                        }
+                    },
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64");
+
+        Assert.Equal("false", props["PublishReadyToRun"]);
     }
 
     [Fact]

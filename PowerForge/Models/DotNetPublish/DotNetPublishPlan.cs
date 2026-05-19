@@ -134,6 +134,12 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Optional prepare manifest path template.</summary>
     public string? ManifestPath { get; set; }
 
+    /// <summary>Optional MSI output directory template.</summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>Optional MSI output file name or base name template.</summary>
+    public string? OutputName { get; set; }
+
     /// <summary>Optional installer project ID used for project-catalog resolution.</summary>
     public string? InstallerProjectId { get; set; }
 
