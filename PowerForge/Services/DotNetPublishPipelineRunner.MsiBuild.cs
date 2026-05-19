@@ -67,6 +67,7 @@ public sealed partial class DotNetPublishPipelineRunner
             installerId,
             step,
             prepare,
+            versionResolution.Version,
             isGeneratedInstallerProject);
         if (!string.IsNullOrWhiteSpace(configuredOutputDir))
             Directory.CreateDirectory(configuredOutputDir);
@@ -265,11 +266,12 @@ public sealed partial class DotNetPublishPipelineRunner
         string installerId,
         DotNetPublishStep step,
         DotNetPublishMsiPrepareResult prepare,
+        string? version,
         bool isGeneratedInstallerProject)
     {
         if (installer is not null && !string.IsNullOrWhiteSpace(installer.OutputPath))
         {
-            var tokens = BuildInstallerOutputTokens(plan, installerId, step, version: null);
+            var tokens = BuildInstallerOutputTokens(plan, installerId, step, version);
             var outputPath = installer.OutputPath!;
             var path = ResolvePath(plan.ProjectRoot, ApplyTemplate(outputPath, tokens));
             if (!plan.AllowOutputOutsideProjectRoot)

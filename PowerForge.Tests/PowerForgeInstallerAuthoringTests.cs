@@ -87,8 +87,13 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Remove") == "uninstall"));
         Assert.NotNull(doc.Descendants(Wix + "SetProperty").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "WixQuietExecCmdLine" &&
+            (string?)e.Attribute("Action") == "ServiceComponentSetBackupCommand" &&
             ((string?)e.Attribute("Value"))?.Contains(@"reg query ""HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring"" /v ImagePath", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("|| type nul", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponentSetStopService" &&
+            ((string?)e.Attribute("Value"))?.Contains("exit /b 0", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponentInstallService" &&
             (string?)e.Attribute("DllEntry") == "WixQuietExec" &&
@@ -107,6 +112,33 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Contains("ServiceComponentStopService", sequenceActions);
         Assert.Contains("ServiceComponentSetInstallServiceUpgrade", sequenceActions);
         Assert.Contains("ServiceComponentInstallService", sequenceActions);
+    }
+
+    [Fact]
+    public void EmitSource_UsesUniqueScriptServiceActionIdsForLongComponentNames()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        AddScriptService(definition, "ServiceComponentWithVeryLongSharedPrefixForTenantAlpha");
+        AddScriptService(definition, "ServiceComponentWithVeryLongSharedPrefixForTenantBeta");
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        string[] actionIds = doc.Descendants(Wix + "CustomAction")
+            .Select(e => (string?)e.Attribute("Id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+        Assert.Equal(actionIds.Length, actionIds.Distinct(StringComparer.Ordinal).Count());
+
+        string[] setPropertyActions = doc.Descendants(Wix + "SetProperty")
+            .Select(e => (string?)e.Attribute("Action"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+        Assert.Equal(2, setPropertyActions.Length);
+        Assert.Equal(setPropertyActions.Length, setPropertyActions.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
@@ -1617,6 +1649,24 @@ public sealed class PowerForgeInstallerAuthoringTests
             Source = payloadFile
         });
         return definition;
+    }
+
+    private static void AddScriptService(PowerForgeInstallerDefinition definition, string componentId)
+    {
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = componentId,
+            FileId = componentId + "Exe",
+            Source = "$(var.PayloadDir)\\" + componentId + ".exe",
+            ServiceName = componentId + ".Service",
+            DisplayName = componentId,
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\"",
+                BackupExistingImagePath = true,
+                StopServiceForUpgrade = true
+            }
+        });
     }
 
     private static string CreateTempDirectory()

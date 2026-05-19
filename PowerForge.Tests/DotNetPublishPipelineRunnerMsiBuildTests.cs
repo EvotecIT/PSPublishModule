@@ -80,9 +80,53 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 "syncse",
                 step,
                 prepare,
+                version: null,
                 isGeneratedInstallerProject: true);
 
             Assert.Equal(Path.Combine(root, "Artifacts", "Msi", "syncse", "win-x64"), outputPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputDirectory_AppliesVersionToken()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "syncse",
+                OutputPath = "Artifacts/Msi/{installer}/{version}"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "syncse",
+                TargetName = "app",
+                Runtime = "win-x64",
+                Framework = "net8.0",
+                Style = DotNetPublishStyle.PortableCompat
+            };
+            var prepare = new DotNetPublishMsiPrepareResult { ManifestPath = string.Empty };
+
+            var outputPath = DotNetPublishPipelineRunner.ResolveInstallerOutputDirectory(
+                plan,
+                installer,
+                "syncse",
+                step,
+                prepare,
+                version: "1.0.9646",
+                isGeneratedInstallerProject: true);
+
+            Assert.Equal(Path.Combine(root, "Artifacts", "Msi", "syncse", "1.0.9646"), outputPath);
         }
         finally
         {

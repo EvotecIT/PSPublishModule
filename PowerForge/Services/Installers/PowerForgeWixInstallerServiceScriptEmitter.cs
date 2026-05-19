@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -51,6 +53,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             actions.Add(new XElement(
                 WixNamespace + "SetProperty",
                 new XAttribute("Id", "WixQuietExecCmdLine"),
+                new XAttribute("Action", ids.SetBackupCommandId),
                 new XAttribute("Value", BuildBackupCommand(service, script)),
                 new XAttribute("Before", ids.BackupImagePathId),
                 new XAttribute("Sequence", "execute"),
@@ -130,8 +133,8 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         sequence.Add(new XElement(
             WixNamespace + "Custom",
             new XAttribute("Action", ids.InstallServiceId),
-                new XAttribute("Before", "InstallFinalize"),
-                new XAttribute("Condition", script.Condition)));
+            new XAttribute("Before", "InstallFinalize"),
+            new XAttribute("Condition", script.Condition)));
     }
 
     private static XElement CreateQuietExecAction(string id, string execute, bool hideTarget = false)
@@ -165,7 +168,9 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
            service.ServiceName +
            "\" /v ImagePath > \"" +
            script.BackupPath +
-           "\" 2>nul";
+           "\" 2>nul || type nul > \"" +
+           script.BackupPath +
+           "\"";
 
     private static string BuildStopCommand(
         PowerForgeInstallerServiceComponent service,
@@ -178,16 +183,17 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             command += " & ping 127.0.0.1 -n " + pingCount.ToString(CultureInfo.InvariantCulture) + " >nul";
         }
 
-        return command;
+        return command + " & exit /b 0";
     }
 
     private static ServiceScriptActionIds BuildIds(string serviceComponentId)
     {
-        var prefix = serviceComponentId.Length <= 48
+        var prefix = serviceComponentId.Length <= 32
             ? serviceComponentId
-            : serviceComponentId.Substring(0, 48);
+            : serviceComponentId.Substring(0, 32) + "_" + HashId(serviceComponentId);
         return new ServiceScriptActionIds(
             prefix + "BackupImagePath",
+            prefix + "SetBackupCommand",
             prefix + "SetStopService",
             prefix + "StopService",
             prefix + "InstallService",
@@ -195,10 +201,18 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             prefix + "SetInstallServiceUpgrade");
     }
 
+    private static string HashId(string value)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(value));
+        return BitConverter.ToString(bytes, 0, 5).Replace("-", string.Empty);
+    }
+
     private sealed class ServiceScriptActionIds
     {
         internal ServiceScriptActionIds(
             string backupImagePathId,
+            string setBackupCommandId,
             string setStopServiceId,
             string stopServiceId,
             string installServiceId,
@@ -206,6 +220,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             string setInstallUpgradeId)
         {
             BackupImagePathId = backupImagePathId;
+            SetBackupCommandId = setBackupCommandId;
             SetStopServiceId = setStopServiceId;
             StopServiceId = stopServiceId;
             InstallServiceId = installServiceId;
@@ -214,6 +229,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         }
 
         internal string BackupImagePathId { get; }
+        internal string SetBackupCommandId { get; }
         internal string SetStopServiceId { get; }
         internal string StopServiceId { get; }
         internal string InstallServiceId { get; }
