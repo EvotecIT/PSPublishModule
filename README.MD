@@ -30,6 +30,28 @@ Each module that is published to PowerShellGallery has Build or Publish folder n
 
 For examples and usage you can visit other projects and see how they are built in addition to what is shown in Build folder.
 
+## Private Galleries
+
+PSPublishModule can also manage enterprise private PowerShell module feeds, with the first managed provider focused on Azure Artifacts. The recommended path uses Microsoft Entra ID/MFA through `Microsoft.PowerShell.PSResourceGet` and the Azure Artifacts Credential Provider, while PSPublishModule stores only non-secret profile settings such as organization, project, feed, and local repository name.
+
+Typical user onboarding:
+
+```powershell
+Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Install-PrivateModule -ProfileName Company -Name ModuleA
+Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+Publishers can reuse the same profile:
+
+```powershell
+New-ConfigurationPublish -ProfileName Company -Enabled
+Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+```
+
+See [Docs\PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries` for the rollout checklist, PAT fallback guidance, and live Azure Artifacts validation steps.
+
 ## PowerForge Studio
 
 The repo also contains the current PowerForge Studio hosts:
