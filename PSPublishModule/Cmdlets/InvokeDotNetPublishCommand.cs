@@ -185,7 +185,15 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                 },
                 warn: message => WriteWarning(message));
 
-            var workflow = new DotNetPublishWorkflowService(logger).Execute(preparation);
+            var workflow = new DotNetPublishWorkflowService(
+                logger,
+                createProgressReporter: plan => NoInteractive.IsPresent
+                    ? null
+                    : new DotNetPublishCmdletProgressReporter(
+                        message => Host.UI.WriteLine(message),
+                        WriteProgress,
+                        plan.Steps.Length))
+                .Execute(preparation);
 
             if (!string.IsNullOrWhiteSpace(workflow.JsonOutputPath))
             {

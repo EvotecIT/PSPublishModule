@@ -9,17 +9,20 @@ internal sealed class DotNetPublishWorkflowService
     private readonly ILogger _logger;
     private readonly Func<DotNetPublishSpec, string?, DotNetPublishPlan> _planPublish;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult> _runPublish;
+    private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?> _createProgressReporter;
     private readonly Action<DotNetPublishSpec, string> _writeSpecJson;
 
     public DotNetPublishWorkflowService(
         ILogger logger,
         Func<DotNetPublishSpec, string?, DotNetPublishPlan>? planPublish = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runPublish = null,
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?>? createProgressReporter = null,
         Action<DotNetPublishSpec, string>? writeSpecJson = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _planPublish = planPublish ?? ((spec, sourceLabel) => new DotNetPublishPipelineRunner(_logger).Plan(spec, sourceLabel));
         _runPublish = runPublish ?? ((plan, progress) => new DotNetPublishPipelineRunner(_logger).Run(plan, progress));
+        _createProgressReporter = createProgressReporter ?? (_ => null);
         _writeSpecJson = writeSpecJson ?? WriteSpecJson;
     }
 
@@ -58,7 +61,7 @@ internal sealed class DotNetPublishWorkflowService
 
         return new DotNetPublishWorkflowResult
         {
-            Result = _runPublish(plan, null)
+            Result = _runPublish(plan, _createProgressReporter(plan))
         };
     }
 

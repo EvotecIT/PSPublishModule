@@ -167,6 +167,18 @@ public sealed class DotNetPublishInstaller
     public string? ManifestPath { get; set; }
 
     /// <summary>
+    /// Optional MSI output directory template.
+    /// Supports tokens: <c>{installer}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>, <c>{version}</c>.
+    /// </summary>
+    public string? OutputPath { get; set; }
+
+    /// <summary>
+    /// Optional MSI output file name or base name template.
+    /// Supports tokens: <c>{installer}</c>, <c>{target}</c>, <c>{rid}</c>, <c>{framework}</c>, <c>{style}</c>, <c>{configuration}</c>, <c>{version}</c>.
+    /// </summary>
+    public string? OutputName { get; set; }
+
+    /// <summary>
     /// Optional installer project ID (resolved from <see cref="DotNetPublishSpec.Projects"/>) used by <c>msi.build</c>.
     /// </summary>
     public string? InstallerProjectId { get; set; }

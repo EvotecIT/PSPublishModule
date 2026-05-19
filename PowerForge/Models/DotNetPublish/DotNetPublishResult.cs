@@ -281,9 +281,14 @@ public sealed class DotNetPublishMsiBuildResult
     public override string ToString()
     {
         var name = string.IsNullOrWhiteSpace(InstallerId) ? "MSI" : InstallerId;
-        return string.IsNullOrWhiteSpace(Version)
+        var label = string.IsNullOrWhiteSpace(Version)
             ? name
             : $"{name} {Version}";
+        var output = (OutputFiles ?? Array.Empty<string>())
+            .FirstOrDefault(file => !string.IsNullOrWhiteSpace(file));
+        return string.IsNullOrWhiteSpace(output)
+            ? label
+            : $"{label} -> {output}";
     }
 }
 

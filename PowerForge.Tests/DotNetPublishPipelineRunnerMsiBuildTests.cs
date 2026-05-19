@@ -15,10 +15,145 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             InstallerId = "TierBridge.MSI",
             Version = "4.0.9498",
-            VersionPropertyName = "ProductVersion"
+            VersionPropertyName = "ProductVersion",
+            OutputFiles = new[] { @"C:\Build\TierBridge.msi" }
         };
 
-        Assert.Equal("TierBridge.MSI 4.0.9498", result.ToString());
+        Assert.Equal(@"TierBridge.MSI 4.0.9498 -> C:\Build\TierBridge.msi", result.ToString());
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputName_AppliesTokensAndStripsMsiExtension()
+    {
+        var plan = new DotNetPublishPlan { Configuration = "Release" };
+        var installer = new DotNetPublishInstallerPlan
+        {
+            Id = "syncse",
+            OutputName = "{target}-{rid}-{version}.msi"
+        };
+        var step = new DotNetPublishStep
+        {
+            TargetName = "GraphEssentialsX.Sync.Service",
+            Runtime = "win-x64",
+            Framework = "net8.0",
+            Style = DotNetPublishStyle.PortableCompat
+        };
+
+        var outputName = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            installer,
+            step,
+            "1.0.9638");
+
+        Assert.Equal("GraphEssentialsX.Sync.Service-win-x64-1.0.9638", outputName);
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputDirectory_UsesConfiguredTemplate()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "syncse",
+                OutputPath = "Artifacts/Msi/{installer}/{rid}"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "syncse",
+                TargetName = "app",
+                Runtime = "win-x64",
+                Framework = "net8.0",
+                Style = DotNetPublishStyle.PortableCompat
+            };
+            var prepare = new DotNetPublishMsiPrepareResult { ManifestPath = string.Empty };
+
+            var outputPath = DotNetPublishPipelineRunner.ResolveInstallerOutputDirectory(
+                plan,
+                installer,
+                "syncse",
+                step,
+                prepare,
+                version: null,
+                isGeneratedInstallerProject: true);
+
+            Assert.Equal(Path.Combine(root, "Artifacts", "Msi", "syncse", "win-x64"), outputPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputDirectory_AppliesVersionToken()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release"
+            };
+            var installer = new DotNetPublishInstallerPlan
+            {
+                Id = "syncse",
+                OutputPath = "Artifacts/Msi/{installer}/{version}"
+            };
+            var step = new DotNetPublishStep
+            {
+                InstallerId = "syncse",
+                TargetName = "app",
+                Runtime = "win-x64",
+                Framework = "net8.0",
+                Style = DotNetPublishStyle.PortableCompat
+            };
+            var prepare = new DotNetPublishMsiPrepareResult { ManifestPath = string.Empty };
+
+            var outputPath = DotNetPublishPipelineRunner.ResolveInstallerOutputDirectory(
+                plan,
+                installer,
+                "syncse",
+                step,
+                prepare,
+                version: "1.0.9646",
+                isGeneratedInstallerProject: true);
+
+            Assert.Equal(Path.Combine(root, "Artifacts", "Msi", "syncse", "1.0.9646"), outputPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void FindChangedMsiOutputs_DetectsCustomOutputPathOutsideBin()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputPath = Path.Combine(root, "Artifacts", "Msi", "syncse", "SyncSE.msi");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, "msi");
+
+            string[] filtered = InvokeFindChangedMsiOutputs(root, skipBinDirectoryFilter: false);
+            string[] unfiltered = InvokeFindChangedMsiOutputs(root, skipBinDirectoryFilter: true);
+
+            Assert.Empty(filtered);
+            Assert.Contains(Path.GetFullPath(outputPath), unfiltered);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]
@@ -967,6 +1102,21 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string[] InvokeFindChangedMsiOutputs(string root, bool skipBinDirectoryFilter)
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("FindChangedMsiOutputs", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        object? raw = method!.Invoke(
+            null,
+            new object?[]
+            {
+                root,
+                new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase),
+                skipBinDirectoryFilter
+            });
+        return Assert.IsType<string[]>(raw);
     }
 
     private static void TryDelete(string path)

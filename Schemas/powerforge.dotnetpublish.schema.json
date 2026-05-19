@@ -154,6 +154,18 @@
       },
       "required": ["Value", "Text"]
     },
+    "PowerForgeInstallerRegistrySearch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Root": { "type": "string", "minLength": 1 },
+        "Key": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string", "minLength": 1 },
+        "Type": { "type": "string", "minLength": 1 }
+      },
+      "required": ["Id", "Root", "Key", "Name"]
+    },
     "PowerForgeInstallerInput": {
       "type": "object",
       "additionalProperties": false,
@@ -172,6 +184,7 @@
         "MaxLength": { "type": ["integer", "null"], "minimum": 0 },
         "ValidationPattern": { "type": ["string", "null"] },
         "ValidationMessage": { "type": ["string", "null"] },
+        "RegistrySearch": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerRegistrySearch" }, { "type": "null" }] },
         "Choices": {
           "type": "array",
           "items": { "$ref": "#/$defs/PowerForgeInstallerInputChoice" }
@@ -293,9 +306,32 @@
         "Arguments": { "type": ["string", "null"] },
         "Account": { "type": "string" },
         "Start": { "type": "string" },
-        "DelayedAutoStart": { "type": "boolean" }
+        "DelayedAutoStart": { "type": "boolean" },
+        "ControlStart": { "type": "string" },
+        "ControlStop": { "type": "string" },
+        "ControlRemove": { "type": "string" },
+        "ScriptInstall": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerForgeInstallerServiceScriptInstall" },
+            { "type": "null" }
+          ]
+        }
       },
       "required": ["Type", "Id", "FileId", "Source", "ServiceName", "DisplayName"]
+    },
+    "PowerForgeInstallerServiceScriptInstall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Command": { "type": "string", "minLength": 1 },
+        "UpgradeCommand": { "type": ["string", "null"], "minLength": 1 },
+        "Condition": { "type": "string", "minLength": 1 },
+        "BackupExistingImagePath": { "type": "boolean" },
+        "BackupPath": { "type": "string", "minLength": 1 },
+        "StopServiceForUpgrade": { "type": "boolean" },
+        "StopDelaySeconds": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["Command"]
     },
     "PowerForgeInstallerShortcutComponent": {
       "type": "object",
@@ -309,6 +345,7 @@
         "Name": { "type": "string", "minLength": 1 },
         "TargetFileId": { "type": ["string", "null"], "minLength": 1 },
         "Target": { "type": ["string", "null"], "minLength": 1 },
+        "Arguments": { "type": ["string", "null"], "minLength": 1 },
         "WorkingDirectoryId": { "type": "string", "minLength": 1 },
         "RegistryKey": { "type": "string", "minLength": 1 },
         "RegistryValueName": { "type": "string", "minLength": 1 }
@@ -636,6 +673,8 @@
         "Styles": { "type": "array", "items": { "$ref": "#/$defs/DotNetPublishStyle" } },
         "StagingPath": { "type": ["string", "null"] },
         "ManifestPath": { "type": ["string", "null"] },
+        "OutputPath": { "type": ["string", "null"] },
+        "OutputName": { "type": ["string", "null"] },
         "InstallerProjectId": { "type": ["string", "null"] },
         "InstallerProjectPath": { "type": ["string", "null"] },
         "Authoring": { "anyOf": [{ "$ref": "#/$defs/PowerForgeInstallerDefinition" }, { "type": "null" }] },

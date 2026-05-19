@@ -708,6 +708,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Styles = NormalizeStyles(i.Styles),
                 StagingPath = i.StagingPath,
                 ManifestPath = i.ManifestPath,
+                OutputPath = i.OutputPath,
+                OutputName = i.OutputName,
                 InstallerProjectId = i.InstallerProjectId,
                 InstallerProjectPath = i.InstallerProjectPath,
                 Authoring = CloneInstallerDefinition(i.Authoring),
@@ -767,7 +769,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 MinLength = input.MinLength,
                 MaxLength = input.MaxLength,
                 ValidationPattern = input.ValidationPattern,
-                ValidationMessage = input.ValidationMessage
+                ValidationMessage = input.ValidationMessage,
+                RegistrySearch = input.RegistrySearch is null
+                    ? null
+                    : new PowerForgeInstallerRegistrySearch
+                    {
+                        Id = input.RegistrySearch.Id,
+                        Root = input.RegistrySearch.Root,
+                        Key = input.RegistrySearch.Key,
+                        Name = input.RegistrySearch.Name,
+                        Type = input.RegistrySearch.Type
+                    }
             };
             foreach (var choice in input.Choices)
             {
@@ -859,7 +871,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 Arguments = service.Arguments,
                 Account = service.Account,
                 Start = service.Start,
-                DelayedAutoStart = service.DelayedAutoStart
+                DelayedAutoStart = service.DelayedAutoStart,
+                ControlStart = service.ControlStart,
+                ControlStop = service.ControlStop,
+                ControlRemove = service.ControlRemove,
+                ScriptInstall = CloneServiceScriptInstall(service.ScriptInstall)
             },
             PowerForgeInstallerRegistryValueComponent registryValue => new PowerForgeInstallerRegistryValueComponent
             {
@@ -877,6 +893,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Name = shortcut.Name,
                 TargetFileId = shortcut.TargetFileId,
                 Target = shortcut.Target,
+                Arguments = shortcut.Arguments,
                 WorkingDirectoryId = shortcut.WorkingDirectoryId,
                 RegistryKey = shortcut.RegistryKey,
                 RegistryValueName = shortcut.RegistryValueName
@@ -888,6 +905,23 @@ public sealed partial class DotNetPublishPipelineRunner
         clone.DirectoryRefId = component.DirectoryRefId;
         clone.Guid = component.Guid;
         return clone;
+    }
+
+    private static PowerForgeInstallerServiceScriptInstall? CloneServiceScriptInstall(PowerForgeInstallerServiceScriptInstall? script)
+    {
+        if (script is null)
+            return null;
+
+        return new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = script.Command,
+            UpgradeCommand = script.UpgradeCommand,
+            Condition = script.Condition,
+            BackupExistingImagePath = script.BackupExistingImagePath,
+            BackupPath = script.BackupPath,
+            StopServiceForUpgrade = script.StopServiceForUpgrade,
+            StopDelaySeconds = script.StopDelaySeconds
+        };
     }
 
     private static DotNetPublishStorePackage[] CloneStorePackages(DotNetPublishStorePackage[] storePackages)
@@ -1747,6 +1781,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Styles = styles,
                 StagingPath = installer.StagingPath,
                 ManifestPath = installer.ManifestPath,
+                OutputPath = installer.OutputPath,
+                OutputName = installer.OutputName,
                 InstallerProjectId = installer.InstallerProjectId,
                 InstallerProjectPath = ResolveInstallerProjectPath(id, installer, projectCatalog, projectRoot),
                 Authoring = authoring,
