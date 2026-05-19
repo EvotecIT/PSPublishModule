@@ -11,6 +11,11 @@ profile settings such as organization, project, feed, repository name, and tool
 preferences. The Entra token/session cache remains owned by the Azure Artifacts
 Credential Provider.
 
+When registering Azure Artifacts feeds through PSResourceGet, PSPublishModule
+sets the repository credential provider to `AzArtifacts` when the installed
+PSResourceGet version exposes that parameter, and falls back to PSResourceGet's
+Azure Artifacts URL detection for older versions.
+
 Create a profile once:
 
 ```powershell

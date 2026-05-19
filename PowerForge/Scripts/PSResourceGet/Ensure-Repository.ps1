@@ -27,6 +27,29 @@ if (-not [string]::IsNullOrWhiteSpace($Priority)) { $commonParams.Priority = [in
 if (-not [string]::IsNullOrWhiteSpace($ApiVersion)) { $commonParams.ApiVersion = $ApiVersion }
 
 $isPSGallery = -not [string]::IsNullOrWhiteSpace($Name) -and ($Name.Trim().ToLowerInvariant() -eq 'psgallery')
+$isAzureArtifacts = $Uri -match '^https://pkgs\.dev\.azure\.com/' -or $Uri -match '^https://[^/]+\.pkgs\.visualstudio\.com/'
+
+function Invoke-RepositoryCommand {
+  param(
+    [string]$CommandName,
+    [hashtable]$Parameters
+  )
+
+  try {
+    & $CommandName @Parameters | Out-Null
+  } catch {
+    $message = $_.Exception.Message
+    if ($Parameters.ContainsKey('CredentialProvider') -and
+        ($message -match 'CredentialProvider' -or $message -match 'parameter.*cannot be found' -or $message -match 'named parameter')) {
+      $retry = $Parameters.Clone()
+      $retry.Remove('CredentialProvider')
+      & $CommandName @retry | Out-Null
+      return
+    }
+
+    throw
+  }
+}
 
 try {
   $created = $false
@@ -43,11 +66,16 @@ try {
   } else {
     $params = $commonParams.Clone()
     $params.Uri = $Uri
+    if ($isAzureArtifacts) {
+      $params.CredentialProvider = 'AzArtifacts'
+    }
+
     if ($existing) {
-      Set-PSResourceRepository @params | Out-Null
+      Invoke-RepositoryCommand -CommandName 'Set-PSResourceRepository' -Parameters $params
     } else {
       $created = $true
-      Register-PSResourceRepository @params -Force | Out-Null
+      $params.Force = $true
+      Invoke-RepositoryCommand -CommandName 'Register-PSResourceRepository' -Parameters $params
     }
   }
 
@@ -59,4 +87,3 @@ try {
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1
 }
-

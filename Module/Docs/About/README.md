@@ -8,4 +8,3 @@ This folder is generated from `about_*.help.txt` and `about_*.txt` source files.
 
 - [about_ModuleDependencies](about_ModuleDependencies.md) - Explains how module dependencies are declared, resolved, installed, and packaged in PSPublishModule builds.
 - [about_PrivateGalleries](about_PrivateGalleries.md) - Explains the enterprise private gallery profile flow for Azure Artifacts and PSPublishModule.
-

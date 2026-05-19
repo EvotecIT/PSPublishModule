@@ -34,6 +34,10 @@ Tool           = PSResourceGet
 BootstrapMode  = ExistingSession
 Authentication = AzureArtifactsCredentialProvider
 
+When PSResourceGet registration supports it, PSPublishModule configures Azure Artifacts repositories with
+CredentialProvider = AzArtifacts. Older PSResourceGet versions fall back to their built-in Azure Artifacts URL
+detection.
+
 PROFILE STORAGE
 
 Profile data is stored under the current user's local application data folder:
