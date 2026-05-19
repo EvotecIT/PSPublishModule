@@ -531,9 +531,9 @@ public sealed class PowerForgeInstallerServiceScriptInstall
     public bool BackupExistingImagePath { get; set; }
 
     /// <summary>
-    /// Backup file path used for the existing service ImagePath.
+    /// Backup file path used for the existing service ImagePath. Supports <c>{serviceId}</c> and <c>{serviceName}</c> tokens.
     /// </summary>
-    public string BackupPath { get; set; } = "[TempFolder]powerforge-service-binpath.txt";
+    public string BackupPath { get; set; } = "[TempFolder]powerforge-{serviceId}-service-binpath.txt";
 
     /// <summary>
     /// Stops the existing service during an upgrade before the old product is removed.

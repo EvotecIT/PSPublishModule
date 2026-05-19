@@ -86,21 +86,21 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Stop") == "uninstall" &&
             (string?)e.Attribute("Remove") == "uninstall"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "ServiceComponentSetBackupCommand" &&
+            (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
             ((string?)e.Attribute("Value"))?.Contains(@"reg query ""HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring"" /v ImagePath", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("|| type nul", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "ServiceComponentSetStopService" &&
+            (string?)e.Attribute("Id") == "ServiceComponent.SetStopService" &&
             ((string?)e.Attribute("Value"))?.Contains("exit /b 0", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "ServiceComponentInstallService" &&
+            (string?)e.Attribute("Id") == "ServiceComponent.InstallService" &&
             (string?)e.Attribute("DllEntry") == "WixQuietExec" &&
             (string?)e.Attribute("Execute") == "deferred" &&
             (string?)e.Attribute("Impersonate") == "no"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "ServiceComponentSetInstallServiceUpgrade" &&
+            (string?)e.Attribute("Id") == "ServiceComponent.SetInstallServiceUpgrade" &&
             ((string?)e.Attribute("Value"))?.Contains("-PreserveExistingServiceBinPath -UpgradeMode", StringComparison.Ordinal) == true));
 
         var sequenceRows = doc.Descendants(Wix + "InstallExecuteSequence")
@@ -109,23 +109,23 @@ public sealed class PowerForgeInstallerAuthoringTests
         var sequenceActions = sequenceRows
             .Select(e => (string?)e.Attribute("Action"))
             .ToArray();
-        Assert.Contains("ServiceComponentBackupImagePath", sequenceActions);
-        Assert.Contains("ServiceComponentSetStopService", sequenceActions);
-        Assert.Contains("ServiceComponentStopService", sequenceActions);
-        Assert.Contains("ServiceComponentSetInstallServiceUpgrade", sequenceActions);
-        Assert.Contains("ServiceComponentInstallService", sequenceActions);
+        Assert.Contains("ServiceComponent.BackupImagePath", sequenceActions);
+        Assert.Contains("ServiceComponent.SetStopService", sequenceActions);
+        Assert.Contains("ServiceComponent.StopService", sequenceActions);
+        Assert.Contains("ServiceComponent.SetInstallServiceUpgrade", sequenceActions);
+        Assert.Contains("ServiceComponent.InstallService", sequenceActions);
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
-            (string?)e.Attribute("Action") == "ServiceComponentSetBackupCommand" &&
+            (string?)e.Attribute("Action") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Before") == "RemoveExistingProducts"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
-            (string?)e.Attribute("Action") == "ServiceComponentBackupImagePath" &&
-            (string?)e.Attribute("After") == "ServiceComponentSetBackupCommand"));
+            (string?)e.Attribute("Action") == "ServiceComponent.BackupImagePath" &&
+            (string?)e.Attribute("After") == "ServiceComponent.SetBackupCommand"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
-            (string?)e.Attribute("Action") == "ServiceComponentSetStopService" &&
-            (string?)e.Attribute("After") == "ServiceComponentBackupImagePath"));
+            (string?)e.Attribute("Action") == "ServiceComponent.SetStopService" &&
+            (string?)e.Attribute("After") == "ServiceComponent.BackupImagePath"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
-            (string?)e.Attribute("Action") == "ServiceComponentStopService" &&
-            (string?)e.Attribute("After") == "ServiceComponentSetStopService"));
+            (string?)e.Attribute("Action") == "ServiceComponent.StopService" &&
+            (string?)e.Attribute("After") == "ServiceComponent.SetStopService"));
     }
 
     [Fact]
@@ -165,6 +165,92 @@ public sealed class PowerForgeInstallerAuthoringTests
         int betaBackupSetter = Array.FindLastIndex(sequenceActions, id => id.Contains("SetBackupCommand", StringComparison.Ordinal));
         Assert.True(alphaBackup >= 0);
         Assert.True(betaBackupSetter > alphaBackup);
+    }
+
+    [Fact]
+    public void EmitSource_UsesUniqueScriptServiceActionIdsForOverlappingComponentNames()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        AddScriptService(definition, "ASet");
+        AddScriptService(definition, "A");
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        string[] actionIds = doc.Descendants(Wix + "CustomAction")
+            .Select(e => (string?)e.Attribute("Id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+        Assert.Equal(actionIds.Length, actionIds.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains("ASet.InstallService", actionIds);
+        Assert.Contains("A.SetInstallService", actionIds);
+    }
+
+    [Fact]
+    public void EmitSource_UsesUniqueDefaultScriptServiceBackupPaths()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        AddScriptService(definition, "ServiceOne");
+        AddScriptService(definition, "ServiceTwo");
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        string[] backupCommands = doc.Descendants(Wix + "CustomAction")
+            .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
+            .Select(e => (string?)e.Attribute("Value"))
+            .Where(value => value?.Contains("reg query", StringComparison.Ordinal) == true)
+            .Select(value => value!)
+            .ToArray();
+        Assert.Contains(backupCommands, command =>
+            command.Contains("[TempFolder]powerforge-ServiceOne-service-binpath.txt", StringComparison.Ordinal));
+        Assert.Contains(backupCommands, command =>
+            command.Contains("[TempFolder]powerforge-ServiceTwo-service-binpath.txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EmitSource_GatesUpgradePrepActionsWithScriptInstallCondition()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = "ConditionalService",
+            FileId = "ConditionalServiceExe",
+            Source = "$(var.PayloadDir)\\ConditionalService.exe",
+            ServiceName = "Conditional.Service",
+            DisplayName = "Conditional Service",
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\"",
+                Condition = "INSTALL_CONDITIONAL_SERVICE=1 AND NOT REMOVE=\"ALL\"",
+                BackupExistingImagePath = true,
+                StopServiceForUpgrade = true
+            }
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        var upgradePrepRows = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
+            .Where(e =>
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.SetBackupCommand", StringComparison.Ordinal) ||
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.BackupImagePath", StringComparison.Ordinal) ||
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.SetStopService", StringComparison.Ordinal) ||
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.StopService", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(4, upgradePrepRows.Length);
+        Assert.All(upgradePrepRows, row =>
+        {
+            var condition = (string?)row.Attribute("Condition");
+            Assert.Contains("INSTALL_CONDITIONAL_SERVICE=1", condition, StringComparison.Ordinal);
+            Assert.Contains("WIX_UPGRADE_DETECTED", condition, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

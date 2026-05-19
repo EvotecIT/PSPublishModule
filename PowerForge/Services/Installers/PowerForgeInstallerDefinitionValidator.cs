@@ -43,6 +43,9 @@ internal static class PowerForgeInstallerDefinitionValidator
             definition.Inputs.Select(input => input.PropertyName),
             "installer input property");
         EnsureUnique(
+            definition.Inputs.Select(input => input.RegistrySearch?.Id),
+            "installer registry search ID");
+        EnsureUnique(
             definition.Dialogs.Select(dialog => dialog.Id),
             "installer dialog ID");
         // Reserve the whole generated-dialog prefix case-insensitively so authored dialogs cannot

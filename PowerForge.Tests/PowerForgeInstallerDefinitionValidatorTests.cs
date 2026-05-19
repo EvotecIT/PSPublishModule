@@ -144,6 +144,46 @@ public sealed class PowerForgeInstallerDefinitionValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsDuplicateRegistrySearchIds()
+    {
+        var definition = CreateValidDefinition();
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "InstallPath",
+            PropertyName = "INSTALL_PATH",
+            Label = "Install path",
+            RegistrySearch = new PowerForgeInstallerRegistrySearch
+            {
+                Id = "ExistingInstallPathSearch",
+                Root = "HKLM",
+                Key = @"Software\Contoso\Product",
+                Name = "InstallPath",
+                Type = "raw"
+            }
+        });
+        definition.Inputs.Add(new PowerForgeInstallerInput
+        {
+            Id = "DataPath",
+            PropertyName = "DATA_PATH",
+            Label = "Data path",
+            RegistrySearch = new PowerForgeInstallerRegistrySearch
+            {
+                Id = "existinginstallpathsearch",
+                Root = "HKLM",
+                Key = @"Software\Contoso\Product",
+                Name = "DataPath",
+                Type = "raw"
+            }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeInstallerDefinitionValidator.Validate(definition));
+
+        Assert.Contains("Duplicate installer registry search ID", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("ExistingInstallPathSearch", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Validate_RejectsMissingDialogIdWithoutNullReference()
     {
         var definition = CreateValidDefinition();

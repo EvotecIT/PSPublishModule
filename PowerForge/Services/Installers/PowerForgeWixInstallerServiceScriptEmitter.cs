@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -44,14 +45,15 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     {
         var script = service.ScriptInstall!;
         var ids = BuildIds(service.Id);
-        var upgradeCondition = "WIX_UPGRADE_DETECTED AND NOT REMOVE=\"ALL\"";
+        var resolvedBackupPath = ResolveBackupPath(service, script);
+        var upgradeCondition = CombineConditions(script.Condition, "WIX_UPGRADE_DETECTED", "NOT REMOVE=\"ALL\"");
         var standardCondition = string.IsNullOrWhiteSpace(script.UpgradeCommand)
             ? script.Condition
-            : "NOT WIX_UPGRADE_DETECTED AND NOT REMOVE=\"ALL\"";
+            : CombineConditions(script.Condition, "NOT WIX_UPGRADE_DETECTED", "NOT REMOVE=\"ALL\"");
 
         if (script.BackupExistingImagePath)
         {
-            actions.Add(CreateSetQuietExecCommand(ids.SetBackupCommandId, BuildBackupCommand(service, script)));
+            actions.Add(CreateSetQuietExecCommand(ids.SetBackupCommandId, BuildBackupCommand(service, resolvedBackupPath)));
             actions.Add(CreateQuietExecAction(ids.BackupImagePathId, execute: "immediate"));
         }
 
@@ -171,13 +173,13 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
     private static string BuildBackupCommand(
         PowerForgeInstallerServiceComponent service,
-        PowerForgeInstallerServiceScriptInstall script)
+        string backupPath)
         => "\"[%ComSpec]\" /c reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\" +
            service.ServiceName +
            "\" /v ImagePath > \"" +
-           script.BackupPath +
+           backupPath +
            "\" 2>nul || type nul > \"" +
-           script.BackupPath +
+           backupPath +
            "\"";
 
     private static string BuildStopCommand(
@@ -200,13 +202,43 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             ? serviceComponentId
             : serviceComponentId.Substring(0, 32) + "_" + HashId(serviceComponentId);
         return new ServiceScriptActionIds(
-            prefix + "BackupImagePath",
-            prefix + "SetBackupCommand",
-            prefix + "SetStopService",
-            prefix + "StopService",
-            prefix + "InstallService",
-            prefix + "SetInstallService",
-            prefix + "SetInstallServiceUpgrade");
+            BuildActionId(prefix, "BackupImagePath"),
+            BuildActionId(prefix, "SetBackupCommand"),
+            BuildActionId(prefix, "SetStopService"),
+            BuildActionId(prefix, "StopService"),
+            BuildActionId(prefix, "InstallService"),
+            BuildActionId(prefix, "SetInstallService"),
+            BuildActionId(prefix, "SetInstallServiceUpgrade"));
+    }
+
+    private static string BuildActionId(string prefix, string suffix)
+        => prefix + "." + suffix;
+
+    private static string ResolveBackupPath(
+        PowerForgeInstallerServiceComponent service,
+        PowerForgeInstallerServiceScriptInstall script)
+        => ReplaceToken(
+            ReplaceToken(script.BackupPath, "{serviceId}", service.Id),
+            "{serviceName}",
+            service.ServiceName);
+
+    private static string ReplaceToken(string value, string token, string replacement)
+        => Regex.Replace(
+            value,
+            Regex.Escape(token),
+            _ => replacement,
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static string CombineConditions(params string[] conditions)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parts = conditions
+            .Where(condition => !string.IsNullOrWhiteSpace(condition))
+            .Select(condition => condition.Trim())
+            .Where(condition => seen.Add(condition))
+            .Select(condition => "(" + condition + ")")
+            .ToArray();
+        return string.Join(" AND ", parts);
     }
 
     private static string HashId(string value)
