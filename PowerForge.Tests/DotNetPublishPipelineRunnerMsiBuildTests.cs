@@ -135,6 +135,28 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void FindChangedMsiOutputs_DetectsCustomOutputPathOutsideBin()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var outputPath = Path.Combine(root, "Artifacts", "Msi", "syncse", "SyncSE.msi");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, "msi");
+
+            string[] filtered = InvokeFindChangedMsiOutputs(root, skipBinDirectoryFilter: false);
+            string[] unfiltered = InvokeFindChangedMsiOutputs(root, skipBinDirectoryFilter: true);
+
+            Assert.Empty(filtered);
+            Assert.Contains(Path.GetFullPath(outputPath), unfiltered);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveGeneratedInstallerOutputDirectory_UsesTemplateFallback_WhenManifestPathMissing()
     {
         var root = CreateTempRoot();
@@ -1080,6 +1102,21 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string[] InvokeFindChangedMsiOutputs(string root, bool skipBinDirectoryFilter)
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod("FindChangedMsiOutputs", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        object? raw = method!.Invoke(
+            null,
+            new object?[]
+            {
+                root,
+                new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase),
+                skipBinDirectoryFilter
+            });
+        return Assert.IsType<string[]>(raw);
     }
 
     private static void TryDelete(string path)

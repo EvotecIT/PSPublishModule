@@ -85,9 +85,9 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Start") == "none" &&
             (string?)e.Attribute("Stop") == "uninstall" &&
             (string?)e.Attribute("Remove") == "uninstall"));
-        Assert.NotNull(doc.Descendants(Wix + "SetProperty").SingleOrDefault(e =>
-            (string?)e.Attribute("Id") == "WixQuietExecCmdLine" &&
-            (string?)e.Attribute("Action") == "ServiceComponentSetBackupCommand" &&
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponentSetBackupCommand" &&
+            (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
             ((string?)e.Attribute("Value"))?.Contains(@"reg query ""HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring"" /v ImagePath", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("|| type nul", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
@@ -103,8 +103,10 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "ServiceComponentSetInstallServiceUpgrade" &&
             ((string?)e.Attribute("Value"))?.Contains("-PreserveExistingServiceBinPath -UpgradeMode", StringComparison.Ordinal) == true));
 
-        var sequenceActions = doc.Descendants(Wix + "InstallExecuteSequence")
+        var sequenceRows = doc.Descendants(Wix + "InstallExecuteSequence")
             .Descendants(Wix + "Custom")
+            .ToArray();
+        var sequenceActions = sequenceRows
             .Select(e => (string?)e.Attribute("Action"))
             .ToArray();
         Assert.Contains("ServiceComponentBackupImagePath", sequenceActions);
@@ -112,6 +114,18 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Contains("ServiceComponentStopService", sequenceActions);
         Assert.Contains("ServiceComponentSetInstallServiceUpgrade", sequenceActions);
         Assert.Contains("ServiceComponentInstallService", sequenceActions);
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponentSetBackupCommand" &&
+            (string?)e.Attribute("Before") == "RemoveExistingProducts"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponentBackupImagePath" &&
+            (string?)e.Attribute("After") == "ServiceComponentSetBackupCommand"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponentSetStopService" &&
+            (string?)e.Attribute("After") == "ServiceComponentBackupImagePath"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponentStopService" &&
+            (string?)e.Attribute("After") == "ServiceComponentSetStopService"));
     }
 
     [Fact]
@@ -132,13 +146,25 @@ public sealed class PowerForgeInstallerAuthoringTests
             .ToArray();
         Assert.Equal(actionIds.Length, actionIds.Distinct(StringComparer.Ordinal).Count());
 
-        string[] setPropertyActions = doc.Descendants(Wix + "SetProperty")
+        string[] quietExecSetterIds = doc.Descendants(Wix + "CustomAction")
+            .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
+            .Select(e => (string?)e.Attribute("Id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+        Assert.Equal(4, quietExecSetterIds.Length);
+        Assert.Equal(quietExecSetterIds.Length, quietExecSetterIds.Distinct(StringComparer.Ordinal).Count());
+
+        string[] sequenceActions = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
             .Select(e => (string?)e.Attribute("Action"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .ToArray();
-        Assert.Equal(2, setPropertyActions.Length);
-        Assert.Equal(setPropertyActions.Length, setPropertyActions.Distinct(StringComparer.Ordinal).Count());
+        int alphaBackup = Array.FindIndex(sequenceActions, id => id.EndsWith("BackupImagePath", StringComparison.Ordinal));
+        int betaBackupSetter = Array.FindLastIndex(sequenceActions, id => id.Contains("SetBackupCommand", StringComparison.Ordinal));
+        Assert.True(alphaBackup >= 0);
+        Assert.True(betaBackupSetter > alphaBackup);
     }
 
     [Fact]

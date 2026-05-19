@@ -73,7 +73,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(configuredOutputDir);
 
         var outputSearchDir = configuredOutputDir ?? projectDir;
-        var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: isGeneratedInstallerProject);
+        var skipOutputBinDirectoryFilter = isGeneratedInstallerProject || !string.IsNullOrWhiteSpace(configuredOutputDir);
+        var before = SnapshotMsiOutputs(outputSearchDir, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
 
         var args = new List<string>
         {
@@ -144,7 +145,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
             WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);
 
-        var outputs = FindChangedMsiOutputs(outputSearchDir, before, skipBinDirectoryFilter: isGeneratedInstallerProject);
+        var outputs = FindChangedMsiOutputs(outputSearchDir, before, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
         if (outputs.Length == 0)
             _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{outputSearchDir}'.");
         else

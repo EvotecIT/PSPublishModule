@@ -21,12 +21,13 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     {
         var actions = new List<XElement>();
         var sequence = new XElement(WixNamespace + "InstallExecuteSequence");
+        string? upgradeSequenceTail = null;
         foreach (var service in definition.Components.OfType<PowerForgeInstallerServiceComponent>())
         {
             if (service.ScriptInstall is null)
                 continue;
 
-            EmitServiceActions(service, actions, sequence);
+            upgradeSequenceTail = EmitServiceActions(service, actions, sequence, upgradeSequenceTail);
         }
 
         foreach (var action in actions)
@@ -35,10 +36,11 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             yield return sequence;
     }
 
-    private static void EmitServiceActions(
+    private static string? EmitServiceActions(
         PowerForgeInstallerServiceComponent service,
         ICollection<XElement> actions,
-        XElement sequence)
+        XElement sequence,
+        string? upgradeSequenceTail)
     {
         var script = service.ScriptInstall!;
         var ids = BuildIds(service.Id);
@@ -49,26 +51,14 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
         if (script.BackupExistingImagePath)
         {
+            actions.Add(CreateSetQuietExecCommand(ids.SetBackupCommandId, BuildBackupCommand(service, script)));
             actions.Add(CreateQuietExecAction(ids.BackupImagePathId, execute: "immediate"));
-            actions.Add(new XElement(
-                WixNamespace + "SetProperty",
-                new XAttribute("Id", "WixQuietExecCmdLine"),
-                new XAttribute("Action", ids.SetBackupCommandId),
-                new XAttribute("Value", BuildBackupCommand(service, script)),
-                new XAttribute("Before", ids.BackupImagePathId),
-                new XAttribute("Sequence", "execute"),
-                new XAttribute("Condition", upgradeCondition)));
         }
 
         if (script.StopServiceForUpgrade)
         {
             actions.Add(CreateQuietExecAction(ids.StopServiceId, execute: "immediate"));
-            actions.Add(new XElement(
-                WixNamespace + "CustomAction",
-                new XAttribute("Id", ids.SetStopServiceId),
-                new XAttribute("Property", "WixQuietExecCmdLine"),
-                new XAttribute("Value", BuildStopCommand(service, script)),
-                new XAttribute("Execute", "immediate")));
+            actions.Add(CreateSetQuietExecCommand(ids.SetStopServiceId, BuildStopCommand(service, script)));
         }
 
         actions.Add(CreateQuietExecAction(ids.InstallServiceId, execute: "deferred", hideTarget: true));
@@ -79,41 +69,38 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         }
 
         actions.Add(CreateSetInstallCommand(ids.SetInstallStandardId, ids.InstallServiceId, script.Command));
-        AddSequenceRows(sequence, ids, script, standardCondition, upgradeCondition);
+        return AddSequenceRows(sequence, ids, script, standardCondition, upgradeCondition, upgradeSequenceTail);
     }
 
-    private static void AddSequenceRows(
+    private static string? AddSequenceRows(
         XElement sequence,
         ServiceScriptActionIds ids,
         PowerForgeInstallerServiceScriptInstall script,
         string standardCondition,
-        string upgradeCondition)
+        string upgradeCondition,
+        string? upgradeSequenceTail)
     {
+        string? tail = upgradeSequenceTail;
         if (script.BackupExistingImagePath)
         {
+            AddUpgradeSequenceRow(sequence, ids.SetBackupCommandId, tail, upgradeCondition);
             sequence.Add(new XElement(
                 WixNamespace + "Custom",
                 new XAttribute("Action", ids.BackupImagePathId),
-                new XAttribute("Before", "RemoveExistingProducts"),
+                new XAttribute("After", ids.SetBackupCommandId),
                 new XAttribute("Condition", upgradeCondition)));
+            tail = ids.BackupImagePathId;
         }
 
         if (script.StopServiceForUpgrade)
         {
-            var stopSet = new XElement(
-                WixNamespace + "Custom",
-                new XAttribute("Action", ids.SetStopServiceId),
-                new XAttribute("Condition", upgradeCondition));
-            if (script.BackupExistingImagePath)
-                stopSet.Add(new XAttribute("After", ids.BackupImagePathId));
-            else
-                stopSet.Add(new XAttribute("Before", "RemoveExistingProducts"));
-            sequence.Add(stopSet);
+            AddUpgradeSequenceRow(sequence, ids.SetStopServiceId, tail, upgradeCondition);
             sequence.Add(new XElement(
                 WixNamespace + "Custom",
                 new XAttribute("Action", ids.StopServiceId),
                 new XAttribute("After", ids.SetStopServiceId),
                 new XAttribute("Condition", upgradeCondition)));
+            tail = ids.StopServiceId;
         }
 
         if (!string.IsNullOrWhiteSpace(script.UpgradeCommand))
@@ -135,6 +122,24 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             new XAttribute("Action", ids.InstallServiceId),
             new XAttribute("Before", "InstallFinalize"),
             new XAttribute("Condition", script.Condition)));
+        return tail;
+    }
+
+    private static void AddUpgradeSequenceRow(
+        XElement sequence,
+        string actionId,
+        string? afterActionId,
+        string condition)
+    {
+        var element = new XElement(
+            WixNamespace + "Custom",
+            new XAttribute("Action", actionId),
+            new XAttribute("Condition", condition));
+        if (string.IsNullOrWhiteSpace(afterActionId))
+            element.Add(new XAttribute("Before", "RemoveExistingProducts"));
+        else
+            element.Add(new XAttribute("After", afterActionId!));
+        sequence.Add(element);
     }
 
     private static XElement CreateQuietExecAction(string id, string execute, bool hideTarget = false)
@@ -160,6 +165,9 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             new XAttribute("Property", actionId),
             new XAttribute("Value", command),
             new XAttribute("Execute", "immediate"));
+
+    private static XElement CreateSetQuietExecCommand(string id, string command)
+        => CreateSetInstallCommand(id, "WixQuietExecCmdLine", command);
 
     private static string BuildBackupCommand(
         PowerForgeInstallerServiceComponent service,
