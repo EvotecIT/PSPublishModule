@@ -34,43 +34,9 @@ internal sealed class AboutTopicWriter
         var aboutOutDir = Path.Combine(fullDocs, "About");
         Directory.CreateDirectory(aboutOutDir);
 
-        var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in aboutFiles)
-        {
-            AboutTopicMarkdownResult converted;
-            try { converted = ConvertSourceFile(file); }
-            catch { continue; }
-            if (string.IsNullOrWhiteSpace(converted.TopicName) || string.IsNullOrWhiteSpace(converted.Markdown))
-                continue;
-
-            var topic = converted.TopicName.Trim();
-            var candidate = new AboutTopicCandidate(
-                topic,
-                converted.Markdown,
-                converted.ShortDescription,
-                file,
-                GetSourcePriority(file));
-
-            if (!selected.TryGetValue(topic, out var existing))
-            {
-                selected[topic] = candidate;
-                continue;
-            }
-
-            // Prefer higher-priority source types when topic names are duplicated.
-            if (candidate.SourcePriority > existing.SourcePriority)
-            {
-                selected[topic] = candidate;
-                continue;
-            }
-
-            if (candidate.SourcePriority < existing.SourcePriority)
-                continue;
-
-            // Deterministic tie-breaker for same file type.
-            if (string.Compare(candidate.SourcePath, existing.SourcePath, StringComparison.OrdinalIgnoreCase) < 0)
-                selected[topic] = candidate;
-        }
+        var selected = SelectAboutTopics(aboutFiles)
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Value.Markdown))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
 
         var written = new List<AboutTopicInfo>();
         foreach (var topic in selected.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
@@ -83,6 +49,45 @@ internal sealed class AboutTopicWriter
         }
 
         WriteIndexFile(aboutOutDir, written);
+        return new AboutTopicWriteResult(written.ToArray());
+    }
+
+    public AboutTopicWriteResult WriteExternalHelpFiles(
+        string stagingPath,
+        string culturePath,
+        IEnumerable<string>? additionalSourcePaths = null)
+    {
+        if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+        if (string.IsNullOrWhiteSpace(culturePath)) throw new ArgumentException("CulturePath is required.", nameof(culturePath));
+
+        var fullStaging = Path.GetFullPath(stagingPath.Trim().Trim('"'));
+        var fullCulturePath = Path.GetFullPath(culturePath.Trim().Trim('"'));
+
+        if (!Directory.Exists(fullStaging)) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
+
+        var roots = ResolveSourceRoots(fullStaging, additionalSourcePaths);
+        var aboutFiles = roots
+            .SelectMany(EnumerateAboutTopicFiles)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (aboutFiles.Length == 0) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
+
+        var selected = SelectAboutTopics(aboutFiles);
+        if (selected.Count == 0) return new AboutTopicWriteResult(Array.Empty<AboutTopicInfo>());
+
+        Directory.CreateDirectory(fullCulturePath);
+
+        var written = new List<AboutTopicInfo>();
+        foreach (var topic in selected.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        {
+            var candidate = selected[topic];
+            var outPath = Path.Combine(fullCulturePath, SanitizeFileName(candidate.TopicName) + ".help.txt");
+            var content = File.ReadAllText(candidate.SourcePath);
+            File.WriteAllText(outPath, content, Utf8NoBom);
+            written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
+        }
+
         return new AboutTopicWriteResult(written.ToArray());
     }
 
@@ -125,6 +130,48 @@ internal sealed class AboutTopicWriter
         foreach (var f in SafeEnum("about_*.txt")) yield return f;
         foreach (var f in SafeEnum("about_*.md")) yield return f;
         foreach (var f in SafeEnum("about_*.markdown")) yield return f;
+    }
+
+    private static Dictionary<string, AboutTopicCandidate> SelectAboutTopics(IEnumerable<string> aboutFiles)
+    {
+        var selected = new Dictionary<string, AboutTopicCandidate>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in aboutFiles)
+        {
+            AboutTopicMarkdownResult converted;
+            try { converted = ConvertSourceFile(file); }
+            catch { continue; }
+            if (string.IsNullOrWhiteSpace(converted.TopicName))
+                continue;
+
+            var topic = converted.TopicName.Trim();
+            var candidate = new AboutTopicCandidate(
+                topic,
+                converted.Markdown,
+                converted.ShortDescription,
+                file,
+                GetSourcePriority(file));
+
+            if (!selected.TryGetValue(topic, out var existing))
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            if (candidate.SourcePriority > existing.SourcePriority)
+            {
+                selected[topic] = candidate;
+                continue;
+            }
+
+            if (candidate.SourcePriority < existing.SourcePriority)
+                continue;
+
+            if (string.Compare(candidate.SourcePath, existing.SourcePath, StringComparison.OrdinalIgnoreCase) < 0)
+                selected[topic] = candidate;
+        }
+
+        return selected;
     }
 
     private static void WriteIndexFile(string aboutOutDir, IReadOnlyCollection<AboutTopicInfo> topics)

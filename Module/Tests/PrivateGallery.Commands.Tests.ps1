@@ -1,24 +1,27 @@
 Describe 'Private gallery command metadata' {
     BeforeAll {
-        $existingCommand = Get-Command Connect-ModuleRepository -ErrorAction SilentlyContinue
-        $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
         $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
-        $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-        $tfm = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+        $tfm = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
         $binaryModule = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "../../PSPublishModule/bin/Release/$tfm") -ChildPath 'PSPublishModule.dll'
 
-        if ($existingCommand -and $existingCommand.Module) {
-            $script:PrivateGalleryTestModule = $existingCommand.Module
-        } elseif ($loadedModule) {
-            $script:PrivateGalleryTestModule = $loadedModule
-        } elseif (Test-Path -LiteralPath $binaryModule) {
+        if (Test-Path -LiteralPath $binaryModule) {
             try {
                 $script:PrivateGalleryTestModule = Import-Module $binaryModule -Force -PassThru -ErrorAction Stop
             } catch {
                 $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
             }
         } else {
-            $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
+            $loadedModule = Get-Module PSPublishModule -ErrorAction SilentlyContinue
+            if ($loadedModule) {
+                $script:PrivateGalleryTestModule = $loadedModule
+            } else {
+                $existingCommand = Get-Command Connect-ModuleRepository -ErrorAction SilentlyContinue
+                if ($existingCommand -and $existingCommand.Module) {
+                    $script:PrivateGalleryTestModule = $existingCommand.Module
+                } else {
+                    $script:PrivateGalleryTestModule = Import-Module $moduleManifest -Force -PassThru -ErrorAction Stop
+                }
+            }
         }
 
         $command = Get-Command Connect-ModuleRepository -ErrorAction Stop
@@ -27,6 +30,18 @@ Describe 'Private gallery command metadata' {
         } else {
             $command.ImplementingType.Assembly
         }
+
+        $script:PrivateGalleryProfileRoot = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.Tests." + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:PrivateGalleryProfileRoot -Force | Out-Null
+        $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
+        $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+    }
+
+    AfterAll {
+        Remove-Item Env:\POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH -ErrorAction SilentlyContinue
+        if ($script:PrivateGalleryProfileRoot -and (Test-Path -LiteralPath $script:PrivateGalleryProfileRoot)) {
+            Remove-Item -LiteralPath $script:PrivateGalleryProfileRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     It 'exposes the private gallery wrapper cmdlets' {
@@ -34,8 +49,12 @@ Describe 'Private gallery command metadata' {
         $module.ExportedCmdlets.Keys | Should -Contain 'Connect-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Register-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Install-PrivateModule'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-PrivateModule'
         $module.ExportedCmdlets.Keys | Should -Contain 'Update-ModuleRepository'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Publish-NugetPackage'
     }
 
     It 'keeps install/update wrapper parameter sets intact' {
@@ -48,6 +67,7 @@ Describe 'Private gallery command metadata' {
         $update.DefaultParameterSet | Should -Be 'Repository'
         $update.ParameterSets.Name | Should -Contain 'Repository'
         $update.ParameterSets.Name | Should -Contain 'AzureArtifacts'
+        $update.ParameterSets.Name | Should -Contain 'Profile'
     }
 
     It 'offers onboarding-friendly aliases' {
@@ -59,6 +79,7 @@ Describe 'Private gallery command metadata' {
         $connect.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $connect.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $connect.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $connect.ParameterSets.Name | Should -Contain 'Profile'
 
         $register = $module.ExportedCmdlets['Register-ModuleRepository']
         $register.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
@@ -67,6 +88,7 @@ Describe 'Private gallery command metadata' {
         $register.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $register.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $register.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $register.ParameterSets.Name | Should -Contain 'Profile'
 
         $install = $module.ExportedCmdlets['Install-PrivateModule']
         $install.Parameters['Name'].Aliases | Should -Contain 'ModuleName'
@@ -74,12 +96,76 @@ Describe 'Private gallery command metadata' {
         $install.Parameters['CredentialSecret'].Aliases | Should -Contain 'Token'
         $install.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $install.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $install.ParameterSets.Name | Should -Contain 'Profile'
 
         $update = $module.ExportedCmdlets['Update-PrivateModule']
         $update.Parameters['Name'].Aliases | Should -Contain 'ModuleName'
         $update.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
         $update.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $update.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $update.ParameterSets.Name | Should -Contain 'Profile'
+
+        $profile = $module.ExportedCmdlets['Set-ModuleRepositoryProfile']
+        $profile.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
+        $profile.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
+        $profile.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
+        $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
+        $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
+
+        $publishPackage = $module.ExportedCmdlets['Publish-NugetPackage']
+        $publishPackage.ParameterSets.Name | Should -Contain 'Profile'
+        $publishPackage.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+    }
+
+    It 'saves Azure Artifacts profiles with Entra-first defaults' {
+        $profile = Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
+
+        $profile.Name | Should -Be 'Company'
+        $profile.RepositoryName | Should -Be 'Modules'
+        $profile.Tool | Should -Be ([PowerForge.RepositoryRegistrationTool]::PSResourceGet)
+        $profile.BootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
+        $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+        Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
+    }
+
+    It 'uses saved profiles for WhatIf repository connection without prompting' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+
+        $result = Connect-ModuleRepository -ProfileName 'Company' -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.RepositoryName | Should -Be 'Modules'
+        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
+        $result.RegistrationPerformed | Should -BeFalse
+    }
+
+    It 'uses saved profiles for Azure Artifacts publish configuration' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+
+        $publish = New-ConfigurationPublish -ProfileName 'Company' -Enabled
+
+        $publish.Configuration.RepositoryName | Should -Be 'Modules'
+        $publish.Configuration.Tool | Should -Be ([PowerForge.PublishTool]::PSResourceGet)
+        $publish.Configuration.Repository.Uri | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json'
+        $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
+    }
+
+    It 'uses saved profiles for Azure Artifacts NuGet package publishing' {
+        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'packages'
+        New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+        $packagePath = Join-Path $packageRoot 'Company.Tools.1.0.0.nupkg'
+        Set-Content -LiteralPath $packagePath -Value 'placeholder' -NoNewline
+
+        $result = Publish-NugetPackage -Path $packageRoot -ProfileName 'Company' -SkipDuplicate -WhatIf
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.Success | Should -BeTrue
+        $result.ProfileName | Should -Be 'Company'
+        $result.RepositoryName | Should -Be 'Modules'
+        $result.Source | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json'
+        $result.Pushed | Should -Contain $packagePath
+        $result.Failed | Should -BeNullOrEmpty
     }
 
     It 'reports readiness information on the registration result type' {

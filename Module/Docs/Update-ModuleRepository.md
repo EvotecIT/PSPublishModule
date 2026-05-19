@@ -9,9 +9,14 @@ schema: 2.0.0
 Refreshes or repairs an Azure Artifacts private PowerShell module repository registration.
 
 ## SYNTAX
-### __AllParameterSets
+### AzureArtifacts (Default)
 ```powershell
 Update-ModuleRepository -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-Name <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Profile
+```powershell
+Update-ModuleRepository -ProfileName <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -26,7 +31,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
 
 ### EXAMPLE 1
 ```powershell
-Update-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential
+Update-ModuleRepository -ProfileName 'Company' -InstallPrerequisites
 ```
 
 
@@ -37,9 +42,9 @@ Azure Artifacts feed name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: Feed
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -53,9 +58,9 @@ Azure DevOps organization name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: Organization
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -69,9 +74,9 @@ Optional Azure DevOps project name for project-scoped feeds.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: Project
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -85,7 +90,7 @@ Bootstrap/authentication mode. Auto uses supplied or prompted credentials when r
 
 ```yaml
 Type: PrivateGalleryBootstrapMode
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: Mode
 Possible values: Auto, ExistingSession, CredentialPrompt
 
@@ -101,9 +106,9 @@ Optional repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts, Profile
 Aliases: Password, Token
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -117,9 +122,9 @@ Optional path to a file containing the repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts, Profile
 Aliases: CredentialPath, TokenPath
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -133,9 +138,9 @@ Optional repository credential username.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts, Profile
 Aliases: UserName
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -149,9 +154,9 @@ Installs missing private-gallery prerequisites such as PSResourceGet and the Azu
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts, Profile
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -165,9 +170,9 @@ Optional repository name override. Defaults to the feed name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: Repository
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -181,11 +186,27 @@ Optional PSResourceGet repository priority.
 
 ```yaml
 Type: Nullable`1
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved repository profile name.
+
+```yaml
+Type: String
+Parameter Sets: Profile
+Aliases: Profile
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -197,9 +218,9 @@ Prompts interactively for repository credentials.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts, Profile
 Aliases: Interactive
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -213,7 +234,7 @@ Private gallery provider. Currently only AzureArtifacts is supported.
 
 ```yaml
 Type: PrivateGalleryProvider
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: None
 Possible values: AzureArtifacts
 
@@ -229,7 +250,7 @@ Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGe
 
 ```yaml
 Type: RepositoryRegistrationTool
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: None
 Possible values: Auto, PSResourceGet, PowerShellGet, Both
 
@@ -245,9 +266,9 @@ When true, marks the repository as trusted.
 
 ```yaml
 Type: Boolean
-Parameter Sets: __AllParameterSets
+Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named

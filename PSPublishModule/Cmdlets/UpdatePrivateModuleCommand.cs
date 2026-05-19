@@ -18,8 +18,8 @@ namespace PSPublishModule;
 /// <code>Update-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'</code>
 /// </example>
 /// <example>
-/// <summary>Refresh an Azure Artifacts repository and update modules in one command</summary>
-/// <code>Update-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential</code>
+/// <summary>Update modules from a saved Azure Artifacts profile</summary>
+/// <code>Update-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</code>
 /// </example>
 [Cmdlet(VerbsData.Update, "PrivateModule", DefaultParameterSetName = ParameterSetRepository, SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleDependencyInstallResult))]
@@ -27,6 +27,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
 {
     private const string ParameterSetRepository = "Repository";
     private const string ParameterSetAzureArtifacts = "AzureArtifacts";
+    private const string ParameterSetProfile = "Profile";
 
     /// <summary>Module names to update.</summary>
     [Parameter(Mandatory = true, Position = 0)]
@@ -38,6 +39,12 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [Parameter(Mandatory = true, ParameterSetName = ParameterSetRepository)]
     [ValidateNotNullOrEmpty]
     public string Repository { get; set; } = string.Empty;
+
+    /// <summary>Saved repository profile name.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -103,6 +110,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
 
     /// <summary>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     public SwitchParameter InstallPrerequisites { get; set; }
 
     /// <summary>Includes prerelease versions when supported by the selected installer.</summary>
@@ -112,6 +120,31 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     /// <summary>Executes the update workflow.</summary>
     protected override void ProcessRecord()
     {
+        var useAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts || ParameterSetName == ParameterSetProfile;
+        var provider = Provider;
+        var organization = AzureDevOpsOrganization;
+        var project = AzureDevOpsProject;
+        var feed = AzureArtifactsFeed;
+        var repositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository;
+        var tool = Tool;
+        var bootstrapMode = BootstrapMode;
+        var trusted = Trusted;
+        var priority = Priority;
+
+        if (ParameterSetName == ParameterSetProfile)
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            provider = profile.Provider;
+            organization = profile.AzureDevOpsOrganization;
+            project = profile.AzureDevOpsProject;
+            feed = profile.AzureArtifactsFeed;
+            repositoryName = profile.RepositoryName;
+            tool = profile.Tool;
+            bootstrapMode = profile.BootstrapMode;
+            trusted = profile.Trusted;
+            priority = profile.Priority;
+        }
+
         var host = new CmdletPrivateGalleryHost(this);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var result = new PrivateModuleWorkflowService(host, new PrivateGalleryService(host), logger).Execute(
@@ -119,16 +152,16 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
             {
                 Operation = PrivateModuleWorkflowOperation.Update,
                 ModuleNames = Name,
-                UseAzureArtifacts = ParameterSetName == ParameterSetAzureArtifacts,
-                RepositoryName = ParameterSetName == ParameterSetAzureArtifacts ? (RepositoryName ?? string.Empty) : Repository,
-                Provider = Provider,
-                AzureDevOpsOrganization = AzureDevOpsOrganization,
-                AzureDevOpsProject = AzureDevOpsProject,
-                AzureArtifactsFeed = AzureArtifactsFeed,
-                Tool = Tool,
-                BootstrapMode = BootstrapMode,
-                Trusted = Trusted,
-                Priority = Priority,
+                UseAzureArtifacts = useAzureArtifacts,
+                RepositoryName = repositoryName,
+                Provider = provider,
+                AzureDevOpsOrganization = organization,
+                AzureDevOpsProject = project,
+                AzureArtifactsFeed = feed,
+                Tool = tool,
+                BootstrapMode = bootstrapMode,
+                Trusted = trusted,
+                Priority = priority,
                 CredentialUserName = CredentialUserName,
                 CredentialSecret = CredentialSecret,
                 CredentialSecretFilePath = CredentialSecretFilePath,

@@ -302,6 +302,40 @@ SHORT DESCRIPTION
     }
 
     [Fact]
+    public void AboutTopicWriter_CopiesAboutTopicsToExternalHelpCultureFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-external-help-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(root, "staging");
+        var extra = Path.Combine(root, "Help", "About");
+        var culture = Path.Combine(staging, "en-US");
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(extra);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(extra, "about_PrivateGalleries.help.txt"), """
+TOPIC
+    about_PrivateGalleries
+
+SHORT DESCRIPTION
+    Private gallery flow.
+""");
+
+            var result = new AboutTopicWriter().WriteExternalHelpFiles(staging, culture, new[] { @"..\Help\About" });
+
+            Assert.Single(result.Topics);
+            var helpPath = Path.Combine(culture, "about_PrivateGalleries.help.txt");
+            Assert.True(File.Exists(helpPath));
+            Assert.Contains("Private gallery flow.", File.ReadAllText(helpPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void AboutTopicWriter_SupportsMarkdownSources_AndPriorityRules()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-about-markdown-" + Guid.NewGuid().ToString("N"));

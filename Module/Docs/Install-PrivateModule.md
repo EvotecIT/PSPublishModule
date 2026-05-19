@@ -14,6 +14,11 @@ Installs one or more modules from a private repository, optionally bootstrapping
 Install-PrivateModule [-Name] <string[]> -Repository <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Profile
+```powershell
+Install-PrivateModule [-Name] <string[]> -ProfileName <string> [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ### AzureArtifacts
 ```powershell
 Install-PrivateModule [-Name] <string[]> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-Prerelease] [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
@@ -34,7 +39,7 @@ Install-PrivateModule -Name 'ModuleA', 'ModuleB' -Repository 'Company'
 
 ### EXAMPLE 2
 ```powershell
-Install-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential
+Install-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites
 ```
 
 
@@ -47,7 +52,7 @@ Azure Artifacts feed name.
 Type: String
 Parameter Sets: AzureArtifacts
 Aliases: Feed
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -63,7 +68,7 @@ Azure DevOps organization name.
 Type: String
 Parameter Sets: AzureArtifacts
 Aliases: Organization
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -79,7 +84,7 @@ Optional Azure DevOps project name for project-scoped feeds.
 Type: String
 Parameter Sets: AzureArtifacts
 Aliases: Project
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -109,9 +114,9 @@ Optional repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: Password, Token
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -125,9 +130,9 @@ Optional path to a file containing the repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: CredentialPath, TokenPath
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -141,9 +146,9 @@ Optional repository credential username.
 
 ```yaml
 Type: String
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: UserName
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -157,9 +162,9 @@ Forces reinstall even when a matching version is already present.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -173,9 +178,9 @@ Installs missing private-gallery prerequisites such as PSResourceGet and the Azu
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: AzureArtifacts
+Parameter Sets: Profile, AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -189,9 +194,9 @@ Module names to install.
 
 ```yaml
 Type: String[]
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: ModuleName
-Possible values: 
+Possible values:
 
 Required: True
 Position: 0
@@ -205,9 +210,9 @@ Includes prerelease versions when supported by the selected installer.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -223,9 +228,25 @@ Optional PSResourceGet repository priority used during automatic registration.
 Type: Nullable`1
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProfileName
+Saved repository profile name.
+
+```yaml
+Type: String
+Parameter Sets: Profile
+Aliases: Profile
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -237,9 +258,9 @@ Prompts interactively for repository credentials.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Repository, AzureArtifacts
+Parameter Sets: Repository, Profile, AzureArtifacts
 Aliases: Interactive
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -271,7 +292,7 @@ Name of an already registered repository.
 Type: String
 Parameter Sets: Repository
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: True
 Position: named
@@ -287,7 +308,7 @@ Optional repository name override when Azure Artifacts details are supplied.
 Type: String
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named
@@ -319,7 +340,7 @@ When true, marks the repository as trusted during automatic registration.
 Type: Boolean
 Parameter Sets: AzureArtifacts
 Aliases: None
-Possible values: 
+Possible values:
 
 Required: False
 Position: named

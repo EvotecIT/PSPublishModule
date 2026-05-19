@@ -22,6 +22,28 @@ public sealed class PrivateGalleryServiceTests
         Assert.Equal("credentialUserName", ex.ParamName);
     }
 
+    [Theory]
+    [InlineData("Package with name '__PowerForgePrivateGalleryConnectionProbe__' could not be found in repository 'Company'.")]
+    [InlineData("No match was found for __PowerForgePrivateGalleryConnectionProbe__.")]
+    [InlineData("No packages found matching __PowerForgePrivateGalleryConnectionProbe__.")]
+    public void IsMissingProbePackageMessage_TreatsProbePackageAbsenceAsReachableRepository(string message)
+    {
+        Assert.True(PrivateGalleryService.IsMissingProbePackageMessage(
+            message,
+            "__PowerForgePrivateGalleryConnectionProbe__"));
+    }
+
+    [Theory]
+    [InlineData("Response status code does not indicate success: 401 (Unauthorized).")]
+    [InlineData("The source repository 'Company' is not registered.")]
+    [InlineData("Package with name 'SomeOtherPackage' could not be found in repository 'Company'.")]
+    public void IsMissingProbePackageMessage_DoesNotHideAuthOrRegistrationFailures(string message)
+    {
+        Assert.False(PrivateGalleryService.IsMissingProbePackageMessage(
+            message,
+            "__PowerForgePrivateGalleryConnectionProbe__"));
+    }
+
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
         public bool ShouldProcess(string target, string action) => true;

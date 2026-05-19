@@ -28,6 +28,9 @@ Analyzes a script or scriptblock and reports functions/commands it calls that ar
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
 
+### [Get-ModuleRepositoryProfile](Get-ModuleRepositoryProfile.md)
+Gets saved private module repository profiles.
+
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
 
@@ -232,11 +235,17 @@ Registers an Azure Artifacts feed as a private PowerShell module repository for 
 ### [Remove-Comments](Remove-Comments.md)
 Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
+### [Remove-ModuleRepositoryProfile](Remove-ModuleRepositoryProfile.md)
+Removes a saved private module repository profile.
+
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 Removes specific files and folders from a project directory with safety features.
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
+
+### [Set-ModuleRepositoryProfile](Set-ModuleRepositoryProfile.md)
+Creates or updates a saved private module repository profile.
 
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 Updates version numbers across multiple project files.
@@ -253,4 +262,6 @@ Updates one or more modules from a private repository, optionally refreshing Azu
 ## About Topics
 
 ### [about_ModuleDependencies](About/about_ModuleDependencies.md)
+
+### [about_PrivateGalleries](About/about_PrivateGalleries.md)
 

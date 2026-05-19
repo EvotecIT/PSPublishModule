@@ -30,22 +30,39 @@ namespace PSPublishModule;
 /// <code>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</code>
 /// <para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</para>
 /// </example>
-[Cmdlet(VerbsData.Publish, "NugetPackage", SupportsShouldProcess = true)]
+/// <example>
+/// <summary>Publish to a saved Azure Artifacts profile</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -SkipDuplicate</code>
+/// <para>Resolves the Azure Artifacts NuGet v3 source from the saved profile and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</para>
+/// </example>
+[Cmdlet(VerbsData.Publish, "NugetPackage", DefaultParameterSetName = ParameterSetSource, SupportsShouldProcess = true)]
 public sealed class PublishNugetPackageCommand : PSCmdlet
 {
+    private const string ParameterSetSource = "Source";
+    private const string ParameterSetProfile = "Profile";
+    private const string AzureArtifactsApiKeyPlaceholder = "AzureArtifacts";
+
     /// <summary>Directory to search for NuGet packages.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
     [ValidateNotNullOrEmpty]
     public string[] Path { get; set; } = Array.Empty<string>();
 
-    /// <summary>API key used to authenticate against the NuGet feed.</summary>
-    [Parameter(Mandatory = true)]
-    [ValidateNotNullOrEmpty]
+    /// <summary>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetSource)]
+    [Parameter(ParameterSetName = ParameterSetProfile)]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>NuGet feed URL.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetSource)]
     public string Source { get; set; } = "https://api.nuget.org/v3/index.json";
+
+    /// <summary>Saved private gallery profile name for Azure Artifacts package publishing.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>
     /// When set, passes <c>--skip-duplicate</c> to <c>dotnet nuget push</c>.
@@ -59,18 +76,39 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     {
         try
         {
+            var source = Source;
+            var apiKey = ApiKey;
+            string? profileName = null;
+            string? repositoryName = null;
+
+            if (ParameterSetName == ParameterSetProfile)
+            {
+                var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+                var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+                    profile.AzureDevOpsOrganization,
+                    profile.AzureDevOpsProject,
+                    profile.AzureArtifactsFeed,
+                    profile.RepositoryName);
+
+                source = endpoint.PSResourceGetUri;
+                repositoryName = endpoint.RepositoryName;
+                profileName = profile.Name;
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    apiKey = AzureArtifactsApiKeyPlaceholder;
+            }
+
             var logger = new CmdletLogger(this, MyInvocation?.BoundParameters.ContainsKey("Verbose") == true);
             var service = new NuGetPackagePublishService(logger);
             var resolvedRoots = ResolveRoots(Path);
             var serviceResult = service.Execute(new NuGetPackagePublishRequest
             {
                 Roots = resolvedRoots,
-                ApiKey = ApiKey,
-                Source = Source,
+                ApiKey = apiKey,
+                Source = source,
                 SkipDuplicate = SkipDuplicate.IsPresent
-            }, package => ShouldProcess(package, $"Publish NuGet package to {Source}"));
+            }, package => ShouldProcess(package, $"Publish NuGet package to {source}"));
 
-            WriteObject(ToCmdletResult(serviceResult));
+            WriteObject(ToCmdletResult(serviceResult, source, profileName, repositoryName));
         }
         catch (Exception ex)
         {
@@ -86,14 +124,21 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
         => (rawPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path!))
-            .ToArray();
+        .ToArray();
 
-    private static PublishNugetPackageResult ToCmdletResult(PowerForge.NuGetPackagePublishResult result)
+    private static PublishNugetPackageResult ToCmdletResult(
+        PowerForge.NuGetPackagePublishResult result,
+        string source,
+        string? profileName,
+        string? repositoryName)
     {
         var mapped = new PublishNugetPackageResult
         {
             Success = result.Success,
-            ErrorMessage = result.ErrorMessage
+            ErrorMessage = result.ErrorMessage,
+            Source = source,
+            ProfileName = profileName,
+            RepositoryName = repositoryName
         };
 
         mapped.Pushed.AddRange(result.PublishedItems);
@@ -115,5 +160,14 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
 
         /// <summary>Optional error message for overall failure (e.g., path not found).</summary>
         public string? ErrorMessage { get; set; }
+
+        /// <summary>NuGet feed URL used for the push operation.</summary>
+        public string Source { get; set; } = string.Empty;
+
+        /// <summary>Saved profile name used to resolve the feed, when applicable.</summary>
+        public string? ProfileName { get; set; }
+
+        /// <summary>Local repository name resolved from the saved profile, when applicable.</summary>
+        public string? RepositoryName { get; set; }
     }
 }

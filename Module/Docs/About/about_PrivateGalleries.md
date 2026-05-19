@@ -1,0 +1,107 @@
+---
+topic: about_PrivateGalleries
+schema: 1.0.0
+---
+# about_PrivateGalleries
+
+## Short Description
+
+Explains the enterprise private gallery profile flow for Azure Artifacts and PSPublishModule.
+
+## Long Description
+
+PSPublishModule supports an Entra-first private gallery workflow for Azure Artifacts feeds.
+The intended enterprise flow is:
+
+1. Save non-secret feed settings in a local PSPublishModule profile.
+2. Let Microsoft.PowerShell.PSResourceGet and the Azure Artifacts Credential Provider own Entra ID, MFA,
+device login, and token/session caching.
+3. Use the saved profile for connect, install, update, and publish configuration commands.
+
+Profiles are created with Set-ModuleRepositoryProfile. A profile stores feed identity and local behavior:
+
+- Azure DevOps organization
+- optional Azure DevOps project
+- Azure Artifacts feed
+- local repository name
+- preferred repository tool
+- bootstrap mode
+- repository trust and priority settings
+
+Profiles intentionally do not store PATs, passwords, or Entra tokens. The default Azure Artifacts profile uses:
+
+Tool           = PSResourceGet
+BootstrapMode  = ExistingSession
+Authentication = AzureArtifactsCredentialProvider
+
+PROFILE STORAGE
+
+Profile data is stored under the current user's local application data folder:
+
+%LOCALAPPDATA%\PowerForge\PrivateGalleries\profiles.json
+
+Set POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH when tests, managed desktop rollout tooling, or ephemeral build
+agents need to redirect profile storage.
+
+RECOMMENDED WORKSTATION FLOW
+
+Create the profile once:
+
+Set-ModuleRepositoryProfile `
+-Name Company `
+-AzureDevOpsOrganization contoso `
+-AzureDevOpsProject Platform `
+-AzureArtifactsFeed Modules
+
+Connect and validate the workstation:
+
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+
+Install or update modules:
+
+Install-PrivateModule -ProfileName Company -Name ModuleA, ModuleB -InstallPrerequisites
+Update-PrivateModule -ProfileName Company -Name ModuleA, ModuleB
+
+Use the same profile in publish configuration:
+
+New-ConfigurationPublish -ProfileName Company -Enabled
+
+Direct NuGet package pushes can also resolve the feed from the profile:
+
+Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+
+PAT FALLBACK
+
+PAT/basic credential parameters remain available for legacy or constrained environments, but they are not the
+preferred enterprise path. Prefer the Azure Artifacts Credential Provider whenever Azure DevOps Services and
+workstation policy allow it.
+
+OTHER PRIVATE FEEDS
+
+The profile model is provider-shaped, but the only managed provider implemented today is Azure Artifacts.
+JFrog and generic NuGet v3 feeds should be added as explicit providers/adapters with their own credential
+policy instead of overloading Azure Artifacts behavior.
+
+## Examples
+
+```text
+PS> Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules
+
+Saves an Entra-first Azure Artifacts profile named Company.
+
+PS> Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+
+Installs missing prerequisites if needed, registers the repository, and validates authenticated feed access.
+
+PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
+
+Installs ModuleA from the saved private gallery profile.
+
+PS> Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+
+Pushes local NuGet packages to the saved Azure Artifacts feed using credential-provider authentication.
+```
+
+## Notes
+
+This file is source content for generated module documentation.

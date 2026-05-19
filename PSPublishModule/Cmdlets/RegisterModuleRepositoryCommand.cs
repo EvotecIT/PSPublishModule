@@ -22,55 +22,64 @@ namespace PSPublishModule;
 /// </para>
 /// </remarks>
 /// <example>
-/// <summary>Register an Azure Artifacts feed for both PowerShellGet and PSResourceGet</summary>
-/// <code>Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential -Trusted</code>
+/// <summary>Register a saved Azure Artifacts profile for PSResourceGet</summary>
+/// <code>Register-ModuleRepository -ProfileName 'Company' -InstallPrerequisites</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Register, "ModuleRepository", SupportsShouldProcess = true)]
+[Cmdlet(VerbsLifecycle.Register, "ModuleRepository", DefaultParameterSetName = ParameterSetAzureArtifacts, SupportsShouldProcess = true)]
 [Alias("Register-Gallery")]
 [OutputType(typeof(ModuleRepositoryRegistrationResult))]
 public sealed class RegisterModuleRepositoryCommand : PSCmdlet
 {
+    private const string ParameterSetAzureArtifacts = "AzureArtifacts";
+    private const string ParameterSetProfile = "Profile";
+
+    /// <summary>Saved repository profile name.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetProfile)]
+    [Alias("Profile")]
+    [ValidateNotNullOrEmpty]
+    public string ProfileName { get; set; } = string.Empty;
+
     /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;
 
     /// <summary>Azure DevOps organization name.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Organization")]
     [ValidateNotNullOrEmpty]
     public string AzureDevOpsOrganization { get; set; } = string.Empty;
 
     /// <summary>Optional Azure DevOps project name for project-scoped feeds.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Project")]
     public string? AzureDevOpsProject { get; set; }
 
     /// <summary>Azure Artifacts feed name.</summary>
-    [Parameter(Mandatory = true)]
+    [Parameter(Mandatory = true, ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Feed")]
     [ValidateNotNullOrEmpty]
     public string AzureArtifactsFeed { get; set; } = string.Empty;
 
     /// <summary>Optional repository name override. Defaults to the feed name.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Repository")]
     public string? Name { get; set; }
 
     /// <summary>Registration strategy. Auto prefers PSResourceGet and falls back to PowerShellGet when needed.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.Auto;
 
     /// <summary>Bootstrap/authentication mode. Auto uses supplied or prompted credentials when requested; otherwise it prefers ExistingSession when Azure Artifacts prerequisites are ready and falls back to CredentialPrompt when they are not.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Alias("Mode")]
     public PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.Auto;
 
     /// <summary>When true, marks the repository as trusted.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public bool Trusted { get; set; } = true;
 
     /// <summary>Optional PSResourceGet repository priority.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     public int? Priority { get; set; }
 
     /// <summary>Optional repository credential username.</summary>
@@ -100,21 +109,45 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
     /// <summary>Executes the repository registration.</summary>
     protected override void ProcessRecord()
     {
+        var provider = Provider;
+        var organization = AzureDevOpsOrganization;
+        var project = AzureDevOpsProject;
+        var feed = AzureArtifactsFeed;
+        var repositoryName = Name;
+        var tool = Tool;
+        var bootstrapMode = BootstrapMode;
+        var trusted = Trusted;
+        var priority = Priority;
+
+        if (ParameterSetName == ParameterSetProfile)
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            provider = profile.Provider;
+            organization = profile.AzureDevOpsOrganization;
+            project = profile.AzureDevOpsProject;
+            feed = profile.AzureArtifactsFeed;
+            repositoryName = profile.RepositoryName;
+            tool = profile.Tool;
+            bootstrapMode = profile.BootstrapMode;
+            trusted = profile.Trusted;
+            priority = profile.Priority;
+        }
+
         var host = new CmdletPrivateGalleryHost(this);
         var service = new PrivateGalleryService(host);
-        service.EnsureProviderSupported(Provider);
+        service.EnsureProviderSupported(provider);
 
         var endpoint = AzureArtifactsRepositoryEndpoints.Create(
-            AzureDevOpsOrganization,
-            AzureDevOpsProject,
-            AzureArtifactsFeed,
-            Name);
+            organization,
+            project,
+            feed,
+            repositoryName);
         var prerequisiteInstall = service.EnsureBootstrapPrerequisites(InstallPrerequisites.IsPresent);
         var allowInteractivePrompt = !host.IsWhatIfRequested;
 
         var credentialResolution = service.ResolveCredential(
             endpoint.RepositoryName,
-            BootstrapMode,
+            bootstrapMode,
             CredentialUserName,
             CredentialSecret,
             CredentialSecretFilePath,
@@ -123,21 +156,21 @@ public sealed class RegisterModuleRepositoryCommand : PSCmdlet
             allowInteractivePrompt);
 
         var result = service.EnsureAzureArtifactsRepositoryRegistered(
-            AzureDevOpsOrganization,
-            AzureDevOpsProject,
-            AzureArtifactsFeed,
-            Name,
-            Tool,
-            Trusted,
-            Priority,
-            BootstrapMode,
+            organization,
+            project,
+            feed,
+            repositoryName,
+            tool,
+            trusted,
+            priority,
+            bootstrapMode,
             credentialResolution.BootstrapModeUsed,
             credentialResolution.CredentialSource,
             credentialResolution.Credential,
             prerequisiteInstall.Status,
-            shouldProcessAction: Tool == RepositoryRegistrationTool.Auto
+            shouldProcessAction: tool == RepositoryRegistrationTool.Auto
                 ? "Register module repository using Auto (prefer PSResourceGet, fall back to PowerShellGet)"
-                : $"Register module repository using {Tool}");
+                : $"Register module repository using {tool}");
         result.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
         result.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 

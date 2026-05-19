@@ -15,7 +15,7 @@ repository registration exists and then performs a lightweight authenticated pro
 the chosen bootstrap path can actually access the private feed.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="AzureArtifacts">
         <maml:name>Connect-ModuleRepository</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
           <maml:name>AzureArtifactsFeed</maml:name>
@@ -200,6 +200,81 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Connect-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before connecting.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
+          <maml:name>PromptForCredential</maml:name>
+          <maml:description>
+            <maml:para>Prompts interactively for repository credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
@@ -327,6 +402,18 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved repository profile name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
         <maml:name>PromptForCredential</maml:name>
         <maml:description>
@@ -409,8 +496,8 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Connect to an Azure Artifacts repository using the best available bootstrap mode</maml:title>
-        <dev:code>Connect-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -InstallPrerequisites</dev:code>
+        <maml:title>Connect to a saved Azure Artifacts profile using Entra-backed credential provider login</maml:title>
+        <dev:code>Connect-ModuleRepository -ProfileName 'Company' -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -1765,6 +1852,82 @@ containing common fields such as module name, version, required modules, and the
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-ModuleRepositoryProfile</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>ModuleRepositoryProfile</command:noun>
+      <maml:description>
+        <maml:para>Gets saved private module repository profiles.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Gets saved private module repository profiles.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-ModuleRepositoryProfile</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional profile name. When omitted, all profiles are returned.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Optional profile name. When omitted, all profiles are returned.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleRepositoryProfileResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>User-facing private module repository profile saved by PSPublishModule.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Get-ModuleRepositoryProfile -Name 'Name'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-ModuleTestFailures</command:name>
       <command:verb>Get</command:verb>
       <command:noun>ModuleTestFailures</command:noun>
@@ -2961,6 +3124,117 @@ the requested modules.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Install-PrivateModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Forces reinstall even when a matching version is already present.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module names to install.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Prerelease</maml:name>
+          <maml:description>
+            <maml:para>Includes prerelease versions when supported by the selected installer.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
+          <maml:name>PromptForCredential</maml:name>
+          <maml:description>
+            <maml:para>Prompts interactively for repository credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
       <command:syntaxItem parameterSetName="AzureArtifacts">
         <maml:name>Install-PrivateModule</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
@@ -3333,6 +3607,18 @@ the requested modules.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved repository profile name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
         <maml:name>PromptForCredential</maml:name>
         <maml:description>
@@ -3443,8 +3729,8 @@ the requested modules.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Register an Azure Artifacts repository and install modules in one command</maml:title>
-        <dev:code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential</dev:code>
+        <maml:title>Install modules from a saved Azure Artifacts profile</maml:title>
+        <dev:code>Install-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -25070,6 +25356,57 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>New-ConfigurationPublish</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enabled</maml:name>
+          <maml:description>
+            <maml:para>Enable publishing to the chosen destination.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ID</maml:name>
+          <maml:description>
+            <maml:para>Optional ID of the artefact used for publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved private gallery profile name for Azure Artifacts publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
@@ -25210,6 +25547,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <maml:para>Override tag name used for GitHub publishing.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved private gallery profile name for Azure Artifacts publishing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -25435,7 +25784,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       </command:example>
       <command:example>
         <maml:title>Publish to Azure Artifacts (private feed preset)</maml:title>
-        <dev:code>New-ConfigurationPublish -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -RepositoryCredentialUserName 'user@contoso.com' -RepositoryCredentialSecretFilePath "$env:USERPROFILE\.secrets\azdo.pat" -Enabled</dev:code>
+        <dev:code>New-ConfigurationPublish -ProfileName 'Company' -Enabled</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -28317,12 +28666,12 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       <maml:para>Use -SkipDuplicate for CI-friendly, idempotent runs.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="Source">
         <maml:name>Publish-NugetPackage</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ApiKey</maml:name>
           <maml:description>
-            <maml:para>API key used to authenticate against the NuGet feed.</maml:para>
+            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -28369,12 +28718,64 @@ This makes repeated publishing runs idempotent when the package already exists.<
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Publish-NugetPackage</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ApiKey</maml:name>
+          <maml:description>
+            <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Directory to search for NuGet packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved private gallery profile name for Azure Artifacts package publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDuplicate</maml:name>
+          <maml:description>
+            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
+This makes repeated publishing runs idempotent when the package already exists.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApiKey</maml:name>
         <maml:description>
-          <maml:para>API key used to authenticate against the NuGet feed.</maml:para>
+          <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -28391,6 +28792,18 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved private gallery profile name for Azure Artifacts package publishing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -28459,6 +28872,16 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <dev:code>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</dev:code>
         <dev:remarks>
           <maml:para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to a saved Azure Artifacts profile</maml:title>
+        <maml:introduction>
+          <maml:para>PS&gt; </maml:para>
+        </maml:introduction>
+        <dev:code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -SkipDuplicate</dev:code>
+        <dev:remarks>
+          <maml:para>Resolves the Azure Artifacts NuGet v3 source from the saved profile and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -28878,7 +29301,7 @@ with the Azure Artifacts v3 endpoint so Install-PSResource can use the Azure Art
 Install-PSResource, Install-Module, or both are available for the configured repository.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="AzureArtifacts">
         <maml:name>Register-ModuleRepository</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
           <maml:name>AzureArtifactsFeed</maml:name>
@@ -29063,6 +29486,81 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Register-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before registration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
+          <maml:name>PromptForCredential</maml:name>
+          <maml:description>
+            <maml:para>Prompts interactively for repository credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
@@ -29190,6 +29688,18 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved repository profile name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
         <maml:name>PromptForCredential</maml:name>
         <maml:description>
@@ -29272,8 +29782,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Register an Azure Artifacts feed for both PowerShellGet and PSResourceGet</maml:title>
-        <dev:code>Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential -Trusted</dev:code>
+        <maml:title>Register a saved Azure Artifacts profile for PSResourceGet</maml:title>
+        <dev:code>Register-ModuleRepository -ProfileName 'Company' -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -29606,6 +30116,103 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
         <dev:code>$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)</dev:code>
         <dev:remarks>
           <maml:para>Returns the processed content when no destination file is specified.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Remove-ModuleRepositoryProfile</command:name>
+      <command:verb>Remove</command:verb>
+      <command:noun>ModuleRepositoryProfile</command:noun>
+      <maml:description>
+        <maml:para>Removes a saved private module repository profile.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Removes a saved private module repository profile.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Remove-ModuleRepositoryProfile</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Profile name to remove.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Returns true when a profile was removed, otherwise false.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Profile name to remove.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Returns true when a profile was removed, otherwise false.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Boolean</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Remove-ModuleRepositoryProfile -Name 'Name'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -30542,6 +31149,329 @@ When false, the cmdlet fails on existing tags.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Set-ModuleRepositoryProfile</command:name>
+      <command:verb>Set</command:verb>
+      <command:noun>ModuleRepositoryProfile</command:noun>
+      <maml:description>
+        <maml:para>Creates or updates a saved private module repository profile.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Profiles store the non-secret Azure Artifacts feed settings used by Connect-ModuleRepository,&#xD;
+Install-PrivateModule, and Update-PrivateModule. Azure Artifacts profiles default to&#xD;
+PSResourceGet with the Azure Artifacts Credential Provider so Entra ID/MFA is handled by the provider&#xD;
+instead of storing PATs in PSPublishModule.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Set-ModuleRepositoryProfile</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
+          <maml:name>AzureArtifactsFeed</maml:name>
+          <maml:description>
+            <maml:para>Azure Artifacts feed name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Organization">
+          <maml:name>AzureDevOpsOrganization</maml:name>
+          <maml:description>
+            <maml:para>Azure DevOps organization name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Project">
+          <maml:name>AzureDevOpsProject</maml:name>
+          <maml:description>
+            <maml:para>Optional Azure DevOps project name for project-scoped feeds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Mode">
+          <maml:name>BootstrapMode</maml:name>
+          <maml:description>
+            <maml:para>Bootstrap/authentication mode saved in the profile. Defaults to ExistingSession for Azure Artifacts Credential Provider login.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PrivateGalleryBootstrapMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ExistingSession</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">CredentialPrompt</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PrivateGalleryBootstrapMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Profile name used by connect/install/update commands.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Optional PSResourceGet repository priority.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Provider</maml:name>
+          <maml:description>
+            <maml:para>Private gallery provider. Currently only AzureArtifacts is supported.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PrivateGalleryProvider</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">AzureArtifacts</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PrivateGalleryProvider</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Repository">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Optional local repository name override. Defaults to the feed name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>RepositoryRegistrationTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Trusted</maml:name>
+          <maml:description>
+            <maml:para>When true, marks the repository as trusted during registration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
+        <maml:name>AzureArtifactsFeed</maml:name>
+        <maml:description>
+          <maml:para>Azure Artifacts feed name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Organization">
+        <maml:name>AzureDevOpsOrganization</maml:name>
+        <maml:description>
+          <maml:para>Azure DevOps organization name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Project">
+        <maml:name>AzureDevOpsProject</maml:name>
+        <maml:description>
+          <maml:para>Optional Azure DevOps project name for project-scoped feeds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Mode">
+        <maml:name>BootstrapMode</maml:name>
+        <maml:description>
+          <maml:para>Bootstrap/authentication mode saved in the profile. Defaults to ExistingSession for Azure Artifacts Credential Provider login.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PrivateGalleryBootstrapMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ExistingSession</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">CredentialPrompt</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PrivateGalleryBootstrapMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Profile name used by connect/install/update commands.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Priority</maml:name>
+        <maml:description>
+          <maml:para>Optional PSResourceGet repository priority.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Provider</maml:name>
+        <maml:description>
+          <maml:para>Private gallery provider. Currently only AzureArtifacts is supported.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PrivateGalleryProvider</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">AzureArtifacts</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PrivateGalleryProvider</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Repository">
+        <maml:name>RepositoryName</maml:name>
+        <maml:description>
+          <maml:para>Optional local repository name override. Defaults to the feed name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Tool</maml:name>
+        <maml:description>
+          <maml:para>Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">RepositoryRegistrationTool</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Both</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>RepositoryRegistrationTool</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Trusted</maml:name>
+        <maml:description>
+          <maml:para>When true, marks the repository as trusted during registration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleRepositoryProfileResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>User-facing private module repository profile saved by PSPublishModule.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Create an Entra-first Azure Artifacts profile</maml:title>
+        <dev:code>Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Set-ProjectVersion</command:name>
       <command:verb>Set</command:verb>
       <command:noun>ProjectVersion</command:noun>
@@ -30936,7 +31866,7 @@ registration details have changed.</maml:para>
 Install-PSResource, Install-Module, or both are available for the configured repository.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="AzureArtifacts">
         <maml:name>Update-ModuleRepository</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
           <maml:name>AzureArtifactsFeed</maml:name>
@@ -31121,6 +32051,81 @@ Install-PSResource, Install-Module, or both are available for the configured rep
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Update-ModuleRepository</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before refresh.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
+          <maml:name>PromptForCredential</maml:name>
+          <maml:description>
+            <maml:para>Prompts interactively for repository credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Feed">
@@ -31248,6 +32253,18 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved repository profile name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
         <maml:name>PromptForCredential</maml:name>
         <maml:description>
@@ -31330,8 +32347,8 @@ Install-PSResource, Install-Module, or both are available for the configured rep
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Refresh an Azure Artifacts repository registration</maml:title>
-        <dev:code>Update-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential</dev:code>
+        <maml:title>Refresh a saved Azure Artifacts repository profile</maml:title>
+        <dev:code>Update-ModuleRepository -ProfileName 'Company' -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -31435,6 +32452,105 @@ are provided, the repository registration is refreshed before the update is atte
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Profile">
+        <maml:name>Update-PrivateModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module names to update.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Prerelease</maml:name>
+          <maml:description>
+            <maml:para>Includes prerelease versions when supported by the selected installer.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
+          <maml:name>PromptForCredential</maml:name>
+          <maml:description>
+            <maml:para>Prompts interactively for repository credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -31788,6 +32904,18 @@ are provided, the repository registration is refreshed before the update is atte
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Profile">
+        <maml:name>ProfileName</maml:name>
+        <maml:description>
+          <maml:para>Saved repository profile name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Interactive">
         <maml:name>PromptForCredential</maml:name>
         <maml:description>
@@ -31898,8 +33026,8 @@ are provided, the repository registration is refreshed before the update is atte
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>Refresh an Azure Artifacts repository and update modules in one command</maml:title>
-        <dev:code>Update-PrivateModule -Name 'ModuleA', 'ModuleB' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -PromptForCredential</dev:code>
+        <maml:title>Update modules from a saved Azure Artifacts profile</maml:title>
+        <dev:code>Update-PrivateModule -Name 'ModuleA', 'ModuleB' -ProfileName 'Company' -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

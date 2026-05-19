@@ -450,8 +450,30 @@ internal sealed class PrivateGalleryService
         }
         catch (Exception ex)
         {
+            if (IsMissingProbePackageMessage(ex.Message, probeName))
+            {
+                return new RepositoryAccessProbeResult(
+                    true,
+                    tool,
+                    $"Repository access probe reached '{registration.RepositoryName}' via {tool}; the synthetic probe package was not present.");
+            }
+
             return new RepositoryAccessProbeResult(false, tool, ex.Message);
         }
+    }
+
+    internal static bool IsMissingProbePackageMessage(string? message, string probeName)
+    {
+        if (string.IsNullOrWhiteSpace(message) || string.IsNullOrWhiteSpace(probeName))
+            return false;
+
+        var text = message!;
+        return text.IndexOf(probeName, StringComparison.OrdinalIgnoreCase) >= 0 &&
+               (text.IndexOf("could not be found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no match", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no packages found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no results", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     public void WriteRegistrationSummary(ModuleRepositoryRegistrationResult result)
