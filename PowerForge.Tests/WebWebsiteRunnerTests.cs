@@ -135,6 +135,15 @@ public sealed class WebWebsiteRunnerTests
     }
 
     [Fact]
+    public void BuildSourcePipelineArguments_DisablesLockedRestoreForSourceCheckout()
+    {
+        var arguments = WebWebsiteRunner.BuildSourcePipelineArguments("PowerForge.Web.Cli.csproj", "pipeline.json", "ci");
+
+        Assert.Contains("-p:RestoreLockedMode=false", arguments);
+        Assert.Equal(new[] { "pipeline", "--config", "pipeline.json", "--mode", "ci" }, arguments.SkipWhile(value => value != "--").Skip(1));
+    }
+
+    [Fact]
     public void CreateGitHubGitEnvironment_UsesAskPassFallback_WhenTokenIsProvided()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-website-runner-credentials-" + Guid.NewGuid().ToString("N"));
