@@ -42,6 +42,25 @@ LONG DESCRIPTION
     Set POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH when tests, managed desktop rollout tooling, or ephemeral build
     agents need to redirect profile storage.
 
+    ENTERPRISE ROLLOUT CHECKLIST
+
+    For a managed workstation estate, keep PSPublishModule as the wrapper and leave identity/session ownership with
+    Microsoft tooling:
+
+        1. Publish PSPublishModule through the approved bootstrap channel users already trust.
+        2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
+        3. Use Connect-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet and the Azure
+           Artifacts Credential Provider on Windows workstations. Pre-install the credential provider on non-Windows
+           systems with Microsoft's installer.
+        4. Create the local feed profile once with Set-ModuleRepositoryProfile.
+        5. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
+           the repository and triggers the normal Entra/MFA credential-provider flow when no token is cached.
+        6. Standardize user commands around Install-PrivateModule -ProfileName <name> and
+           Update-PrivateModule -ProfileName <name>.
+        7. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
+           Publish-NugetPackage -ProfileName <name> so publishing and consuming resolve the same feed.
+        8. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
+
     RECOMMENDED WORKSTATION FLOW
 
     Create the profile once:
@@ -68,6 +87,20 @@ LONG DESCRIPTION
     Direct NuGet package pushes can also resolve the feed from the profile:
 
         Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+
+    PRODUCTION READINESS EVIDENCE
+
+    Before calling a feed ready for users, prove:
+
+        - Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites succeeds and reports
+          AccessProbeSucceeded = True.
+        - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
+          credential parameters.
+        - Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.
+        - New-ConfigurationPublish -ProfileName <name> -Enabled produces an Azure Artifacts v3 URI and no stored
+          credential.
+        - Publish-NugetPackage -ProfileName <name> succeeds for a disposable package when publish validation is
+          intentionally enabled.
 
     PAT FALLBACK
 

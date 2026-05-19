@@ -16,6 +16,48 @@ sets the repository credential provider to `AzArtifacts` when the installed
 PSResourceGet version exposes that parameter, and falls back to PSResourceGet's
 Azure Artifacts URL detection for older versions.
 
+## Enterprise Rollout Checklist
+
+For a managed workstation estate, treat PSPublishModule as the operator-facing
+wrapper and leave identity/session ownership with Microsoft tooling:
+
+1. Publish PSPublishModule to the approved bootstrap channel users already trust
+   (PSGallery mirror, Azure Artifacts, Intune package, or internal software
+   distribution).
+2. Ensure users have Azure DevOps access to the target feed through Entra ID
+   groups. Do not create PATs by default.
+3. Let `Connect-ModuleRepository -InstallPrerequisites` install or refresh
+   `Microsoft.PowerShell.PSResourceGet` and the Azure Artifacts Credential
+   Provider on Windows workstations. On non-Windows systems, pre-install the
+   credential provider with the official Microsoft installer before onboarding.
+4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
+   contains feed identity only; it does not contain PATs, passwords, or tokens.
+5. Ask users to run `Connect-ModuleRepository -ProfileName <name>
+   -InstallPrerequisites` once. This registers the repository and triggers the
+   normal Entra/MFA credential-provider flow when a token is not already cached.
+6. Standardize install/update commands around `Install-PrivateModule
+   -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
+7. For publishers and CI operators, use the same profile with
+   `New-ConfigurationPublish -ProfileName <name>` and `Publish-NugetPackage
+   -ProfileName <name>` so package push and package consumption resolve the same
+   feed.
+8. Run the opt-in live Pester flow against at least one real feed/module before
+   announcing the feed as production-ready.
+
+The normal user command set should be short:
+
+```powershell
+Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Install-PrivateModule -ProfileName Company -Name ModuleA
+Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+If you distribute a pre-created profile file, redirect the profile store with
+`POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` or place `profiles.json` in the
+default profile store. Keep that file non-secret and user-writable only when
+users should be allowed to edit profile definitions.
+
 Create a profile once:
 
 ```powershell
@@ -115,6 +157,19 @@ The live test creates a temporary profile store, saves an Entra-first profile,
 runs `Connect-ModuleRepository`, verifies profile-backed publish configuration,
 then calls `Install-PrivateModule` and `Update-PrivateModule` through the saved
 profile.
+
+Recommended production-readiness evidence:
+
+- `Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites` succeeds
+  on a clean user workstation and reports `AccessProbeSucceeded = True`.
+- `Install-PrivateModule -ProfileName <name> -Name <known module>` succeeds with
+  no PAT or explicit credential parameters.
+- `Update-PrivateModule -ProfileName <name> -Name <known module>` succeeds for
+  an installed private module.
+- `New-ConfigurationPublish -ProfileName <name> -Enabled` produces a repository
+  configuration with an Azure Artifacts v3 URI and no stored credential.
+- `Publish-NugetPackage -ProfileName <name>` succeeds for a disposable package
+  when `PSPUBLISHMODULE_AZDO_PUBLISH_LIVE=1` is intentionally enabled.
 
 To prove a real package push as well, opt in separately with a package path.
 This mutates the target feed, so it is intentionally not part of the default
