@@ -9,21 +9,27 @@ namespace PSPublishModule;
 /// <remarks>
 /// <para>
 /// Profiles store the non-secret Azure Artifacts feed settings used by <c>Connect-ModuleRepository</c>,
-/// <c>Install-PrivateModule</c>, and <c>Update-PrivateModule</c>. Azure Artifacts profiles default to
-/// PSResourceGet with the Azure Artifacts Credential Provider so Entra ID/MFA is handled by the provider
-/// instead of storing PATs in PSPublishModule.
+/// <c>Install-PrivateModule</c>, <c>Update-PrivateModule</c>, <c>New-ConfigurationPublish</c>, and
+/// <c>Publish-NugetPackage</c>. Azure Artifacts profiles default to PSResourceGet with the Azure Artifacts
+/// Credential Provider so Entra ID/MFA is handled by the provider instead of storing PATs in PSPublishModule.
 /// </para>
 /// </remarks>
 /// <example>
 /// <summary>Create an Entra-first Azure Artifacts profile</summary>
 /// <code>Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules</code>
+/// <para>Saves a user-local profile that later commands can reference with <c>-ProfileName Company</c>.</para>
+/// </example>
+/// <example>
+/// <summary>Use a different local repository name</summary>
+/// <code>Set-ModuleRepositoryProfile -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20</code>
+/// <para>Stores the Azure Artifacts feed identity while registering it locally as <c>CompanyModules</c>.</para>
 /// </example>
 [Cmdlet(VerbsCommon.Set, "ModuleRepositoryProfile", SupportsShouldProcess = true)]
 [Alias("Set-GalleryProfile")]
 [OutputType(typeof(ModuleRepositoryProfileResult))]
 public sealed class SetModuleRepositoryProfileCommand : PSCmdlet
 {
-    /// <summary>Profile name used by connect/install/update commands.</summary>
+    /// <summary>Profile name used by connect, install, update, and publish commands.</summary>
     [Parameter(Mandatory = true, Position = 0)]
     [Alias("ProfileName")]
     [ValidateNotNullOrEmpty]

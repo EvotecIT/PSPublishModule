@@ -15,15 +15,24 @@ Get-ModuleRepositoryProfile [[-Name] <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Gets saved private module repository profiles.
+Profiles contain non-secret private gallery settings. Use this cmdlet to review the local repository name,
+Azure Artifacts feed identity, bootstrap mode, and profile store path before connecting or publishing.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Get-ModuleRepositoryProfile -Name 'Name'
+Get-ModuleRepositoryProfile
 ```
 
+Returns all profiles saved in the current user's PSPublishModule profile store.
+
+### EXAMPLE 2
+```powershell
+Get-ModuleRepositoryProfile -Name Company
+```
+
+Returns the saved Azure Artifacts profile named Company.
 
 ## PARAMETERS
 

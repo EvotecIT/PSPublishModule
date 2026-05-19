@@ -15,15 +15,24 @@ Remove-ModuleRepositoryProfile [-Name] <string> [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ## DESCRIPTION
-Removes a saved private module repository profile.
+Removing a profile deletes only PSPublishModule's non-secret feed settings. It does not unregister any PowerShell
+repository and does not clear Azure Artifacts Credential Provider token caches.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Remove-ModuleRepositoryProfile -Name 'Name'
+Remove-ModuleRepositoryProfile -Name Company
 ```
 
+Deletes the saved Company profile from the current user's profile store.
+
+### EXAMPLE 2
+```powershell
+Remove-ModuleRepositoryProfile -Name Company -PassThru
+```
+
+Returns True when the profile was removed, otherwise False.
 
 ## PARAMETERS
 

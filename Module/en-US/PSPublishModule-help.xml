@@ -1860,7 +1860,8 @@ containing common fields such as module name, version, required modules, and the
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Gets saved private module repository profiles.</maml:para>
+      <maml:para>Profiles contain non-secret private gallery settings. Use this cmdlet to review the local repository name,&#xD;
+Azure Artifacts feed identity, bootstrap mode, and profile store path before connecting or publishing.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -1917,10 +1918,17 @@ containing common fields such as module name, version, required modules, and the
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ModuleRepositoryProfile -Name 'Name'</dev:code>
+        <maml:title>List all saved private gallery profiles</maml:title>
+        <dev:code>Get-ModuleRepositoryProfile</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns all profiles saved in the current user's PSPublishModule profile store.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Inspect one saved profile</maml:title>
+        <dev:code>Get-ModuleRepositoryProfile -Name Company</dev:code>
+        <dev:remarks>
+          <maml:para>Returns the saved Azure Artifacts profile named Company.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -30131,7 +30139,8 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Removes a saved private module repository profile.</maml:para>
+      <maml:para>Removing a profile deletes only PSPublishModule's non-secret feed settings. It does not unregister any PowerShell&#xD;
+repository and does not clear Azure Artifacts Credential Provider token caches.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -30209,10 +30218,17 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Remove-ModuleRepositoryProfile -Name 'Name'</dev:code>
+        <maml:title>Remove a saved private gallery profile</maml:title>
+        <dev:code>Remove-ModuleRepositoryProfile -Name Company</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Deletes the saved Company profile from the current user's profile store.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Remove a profile and return whether it existed</maml:title>
+        <dev:code>Remove-ModuleRepositoryProfile -Name Company -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para>Returns True when the profile was removed, otherwise False.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -31158,9 +31174,9 @@ When false, the cmdlet fails on existing tags.</maml:para>
     </command:details>
     <maml:description>
       <maml:para>Profiles store the non-secret Azure Artifacts feed settings used by Connect-ModuleRepository,&#xD;
-Install-PrivateModule, and Update-PrivateModule. Azure Artifacts profiles default to&#xD;
-PSResourceGet with the Azure Artifacts Credential Provider so Entra ID/MFA is handled by the provider&#xD;
-instead of storing PATs in PSPublishModule.</maml:para>
+Install-PrivateModule, Update-PrivateModule, New-ConfigurationPublish, and&#xD;
+Publish-NugetPackage. Azure Artifacts profiles default to PSResourceGet with the Azure Artifacts&#xD;
+Credential Provider so Entra ID/MFA is handled by the provider instead of storing PATs in PSPublishModule.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -31221,7 +31237,7 @@ instead of storing PATs in PSPublishModule.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
           <maml:name>Name</maml:name>
           <maml:description>
-            <maml:para>Profile name used by connect/install/update commands.</maml:para>
+            <maml:para>Profile name used by connect, install, update, and publish commands.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -31358,7 +31374,7 @@ instead of storing PATs in PSPublishModule.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProfileName">
         <maml:name>Name</maml:name>
         <maml:description>
-          <maml:para>Profile name used by connect/install/update commands.</maml:para>
+          <maml:para>Profile name used by connect, install, update, and publish commands.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -31464,7 +31480,14 @@ instead of storing PATs in PSPublishModule.</maml:para>
         <maml:title>Create an Entra-first Azure Artifacts profile</maml:title>
         <dev:code>Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Saves a user-local profile that later commands can reference with -ProfileName Company.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Use a different local repository name</maml:title>
+        <dev:code>Set-ModuleRepositoryProfile -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20</dev:code>
+        <dev:remarks>
+          <maml:para>Stores the Azure Artifacts feed identity while registering it locally as CompanyModules.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

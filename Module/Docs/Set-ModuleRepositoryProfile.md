@@ -16,9 +16,9 @@ Set-ModuleRepositoryProfile [-Name] <string> -AzureDevOpsOrganization <string> -
 
 ## DESCRIPTION
 Profiles store the non-secret Azure Artifacts feed settings used by Connect-ModuleRepository,
-Install-PrivateModule, and Update-PrivateModule. Azure Artifacts profiles default to
-PSResourceGet with the Azure Artifacts Credential Provider so Entra ID/MFA is handled by the provider
-instead of storing PATs in PSPublishModule.
+Install-PrivateModule, Update-PrivateModule, New-ConfigurationPublish, and
+Publish-NugetPackage. Azure Artifacts profiles default to PSResourceGet with the Azure Artifacts
+Credential Provider so Entra ID/MFA is handled by the provider instead of storing PATs in PSPublishModule.
 
 ## EXAMPLES
 
@@ -27,6 +27,14 @@ instead of storing PATs in PSPublishModule.
 Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules
 ```
 
+Saves a user-local profile that later commands can reference with -ProfileName Company.
+
+### EXAMPLE 2
+```powershell
+Set-ModuleRepositoryProfile -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20
+```
+
+Stores the Azure Artifacts feed identity while registering it locally as CompanyModules.
 
 ## PARAMETERS
 
@@ -95,7 +103,7 @@ Accept wildcard characters: True
 ```
 
 ### -Name
-Profile name used by connect/install/update commands.
+Profile name used by connect, install, update, and publish commands.
 
 ```yaml
 Type: String

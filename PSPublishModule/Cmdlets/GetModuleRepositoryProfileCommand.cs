@@ -8,6 +8,22 @@ namespace PSPublishModule;
 /// <summary>
 /// Gets saved private module repository profiles.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Profiles contain non-secret private gallery settings. Use this cmdlet to review the local repository name,
+/// Azure Artifacts feed identity, bootstrap mode, and profile store path before connecting or publishing.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>List all saved private gallery profiles</summary>
+/// <code>Get-ModuleRepositoryProfile</code>
+/// <para>Returns all profiles saved in the current user's PSPublishModule profile store.</para>
+/// </example>
+/// <example>
+/// <summary>Inspect one saved profile</summary>
+/// <code>Get-ModuleRepositoryProfile -Name Company</code>
+/// <para>Returns the saved Azure Artifacts profile named <c>Company</c>.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "ModuleRepositoryProfile")]
 [Alias("Get-GalleryProfile")]
 [OutputType(typeof(ModuleRepositoryProfileResult))]
