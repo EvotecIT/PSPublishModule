@@ -232,6 +232,22 @@ adds a non-secret run summary from the evidence JSON and uploads
 `private-gallery-live.xml` and `private-gallery-live.evidence.json` as the
 `private-gallery-live-validation` artifact.
 
+Because GitHub only exposes brand-new `workflow_dispatch` workflows after the
+workflow file exists on the default branch, pre-merge validation can also run
+through the existing `Test & Build Module` workflow (`BuildModule.yml`). Dispatch
+that workflow against the feature branch and set:
+
+- `privateGalleryLiveValidation = true`
+- `privateGalleryOrganization`, `privateGalleryProject`, `privateGalleryFeed`,
+  and `privateGalleryModuleName`
+- `privateGalleryGenerateDisposablePackage = true` when package-push proof is
+  required
+- `privateGalleryRunnerLabels` to the approved runner JSON array
+
+That gated job uses the same validation helper, writes the same step summary,
+and uploads the same evidence artifact. Normal push and pull request runs do not
+run the live Azure Artifacts job.
+
 To run the harness directly, set:
 
 ```powershell

@@ -130,6 +130,9 @@ LONG DESCRIPTION
           or another approved self-hosted runner because hosted runners usually cannot prove interactive or cached
           Entra-backed feed access. The workflow writes a non-secret run summary and uploads the XML/evidence JSON
           artifacts for release records.
+        - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
+          workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
+          helper, summary, and artifact path and does not run during normal push or pull request builds.
         - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
           succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
         - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit

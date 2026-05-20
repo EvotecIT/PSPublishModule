@@ -36,7 +36,9 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
         $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
-        $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path '.github\workflows\private-gallery-live-validation.yml'
+        $script:PrivateGalleryRepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+        $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\private-gallery-live-validation.yml'
+        $script:PrivateGalleryBuildWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\BuildModule.yml'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
     }
 
@@ -71,6 +73,19 @@ Describe 'Private gallery command metadata' {
         $workflow | Should -Match 'private-gallery-live\.evidence\.json'
         $workflow | Should -Match 'GITHUB_STEP_SUMMARY'
         $workflow | Should -Match 'actions/upload-artifact@v4'
+    }
+
+    It 'offers pre-merge live validation through the existing module build workflow' {
+        Test-Path -LiteralPath $script:PrivateGalleryBuildWorkflowPath -PathType Leaf | Should -BeTrue
+
+        $workflow = Get-Content -LiteralPath $script:PrivateGalleryBuildWorkflowPath -Raw
+        $workflow | Should -Match 'privateGalleryLiveValidation:'
+        $workflow | Should -Match 'PrivateGalleryLiveValidation:'
+        $workflow | Should -Match 'inputs\.privateGalleryLiveValidation\s+==\s+true'
+        $workflow | Should -Match 'privateGalleryRunnerLabels:'
+        $workflow | Should -Match 'Invoke-PrivateGalleryAzureArtifactsLiveValidation\.ps1'
+        $workflow | Should -Match 'Convert-PrivateGalleryLiveEvidenceToMarkdown\.ps1'
+        $workflow | Should -Match 'private-gallery-live-validation'
     }
 
     It 'formats Azure Artifacts live evidence as a non-secret Markdown summary' {
