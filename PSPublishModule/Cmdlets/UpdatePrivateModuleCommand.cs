@@ -153,6 +153,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
                 Operation = PrivateModuleWorkflowOperation.Update,
                 ModuleNames = Name,
                 UseAzureArtifacts = useAzureArtifacts,
+                ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
                 RepositoryName = repositoryName,
                 Provider = provider,
                 AzureDevOpsOrganization = organization,

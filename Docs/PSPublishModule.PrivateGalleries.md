@@ -50,6 +50,10 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    diagnostics, and constrained rollouts.
 8. Standardize install/update commands around `Install-PrivateModule
    -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
+   These commands refresh the repository registration and run the same access
+   probe/session-prime step before installing or updating, so an expired Azure
+   Artifacts Credential Provider session can be renewed from the normal
+   day-to-day command in an interactive shell.
 9. For publishers and CI operators, use the same profile with
    `New-ConfigurationPublish -ProfileName <name>` and `Publish-NugetPackage
    -ProfileName <name> -InstallPrerequisites` so package push and package
@@ -178,6 +182,13 @@ prime the Azure Artifacts Credential Provider for the feed URI so the user can
 complete Entra/MFA and cache a session token. PSResourceGet itself calls the
 provider in non-interactive mode after that, so the explicit priming step is
 what gives managed workstation onboarding a real prompt/cache path.
+
+`Install-PrivateModule -ProfileName <name>` and `Update-PrivateModule
+-ProfileName <name>` also perform this access probe/session-prime step before
+installing or updating modules. If the cached session expired after onboarding,
+or a different user receives the same non-secret profile, the first normal
+install/update command can invoke the Azure Artifacts Credential Provider again
+and then continue once Entra/MFA succeeds.
 
 ## PAT Fallback
 

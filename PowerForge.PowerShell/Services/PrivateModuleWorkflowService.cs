@@ -9,17 +9,20 @@ internal sealed class PrivateModuleWorkflowService
     private readonly PrivateGalleryService _privateGalleryService;
     private readonly ILogger _logger;
     private readonly Func<PrivateModuleDependencyExecutionRequest, IReadOnlyList<ModuleDependencyInstallResult>> _dependencyExecutor;
+    private readonly Func<ModuleRepositoryRegistrationResult, RepositoryCredential?, bool, RepositoryAccessProbeResult> _accessProbeExecutor;
 
     public PrivateModuleWorkflowService(
         IPrivateGalleryHost host,
         PrivateGalleryService privateGalleryService,
         ILogger logger,
-        Func<PrivateModuleDependencyExecutionRequest, IReadOnlyList<ModuleDependencyInstallResult>>? dependencyExecutor = null)
+        Func<PrivateModuleDependencyExecutionRequest, IReadOnlyList<ModuleDependencyInstallResult>>? dependencyExecutor = null,
+        Func<ModuleRepositoryRegistrationResult, RepositoryCredential?, bool, RepositoryAccessProbeResult>? accessProbeExecutor = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _privateGalleryService = privateGalleryService ?? throw new ArgumentNullException(nameof(privateGalleryService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _dependencyExecutor = dependencyExecutor ?? ExecuteDependencies;
+        _accessProbeExecutor = accessProbeExecutor ?? _privateGalleryService.ProbeRepositoryAccessWithOptionalSessionPrime;
     }
 
     public PrivateModuleWorkflowResult Execute(PrivateModuleWorkflowRequest request, Func<string, string, bool> shouldProcess)
@@ -88,7 +91,25 @@ internal sealed class PrivateModuleWorkflowService
                 };
             }
 
+            var probe = _accessProbeExecutor(registration, credential, !_host.IsWhatIfRequested);
+            registration.AccessProbePerformed = true;
+            registration.AccessProbeSucceeded = probe.Succeeded;
+            registration.AccessProbeTool = probe.Tool;
+            registration.AccessProbeMessage = probe.Message;
+
             _privateGalleryService.WriteRegistrationSummary(registration);
+
+            if (!probe.Succeeded)
+            {
+                var message = string.IsNullOrWhiteSpace(probe.Message)
+                    ? $"Repository access probe failed via {probe.Tool}."
+                    : $"Repository access probe failed via {probe.Tool}: {probe.Message}";
+                var refreshCommand = string.IsNullOrWhiteSpace(request.ProfileName)
+                    ? "Initialize-ModuleRepository for this Azure Artifacts feed"
+                    : $"Initialize-ModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
+                throw new InvalidOperationException($"{message} Re-run {refreshCommand} or retry the command in an interactive shell to refresh the Azure Artifacts Credential Provider session.");
+            }
+
             _host.WriteVerbose($"Repository '{registration.RepositoryName}' is ready for {GetOperationNoun(request.Operation)}.");
 
             if (credential is null &&

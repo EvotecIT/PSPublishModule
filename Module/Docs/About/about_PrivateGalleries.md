@@ -74,7 +74,9 @@ only want profile/readiness output without repository registration or probing.
 7. Keep Set-ModuleRepositoryProfile, Test-ModuleRepositoryProfile, and Connect-ModuleRepository available as
 the advanced/manual flow for admins, diagnostics, and constrained rollouts.
 8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
-Update-PrivateModule -ProfileName <name>.
+Update-PrivateModule -ProfileName <name>. These commands refresh repository registration and perform the
+same access probe/session-prime step before install/update, so an expired Azure Artifacts Credential
+Provider session can be renewed from the normal day-to-day command in an interactive shell.
 9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
 Publish-NugetPackage -ProfileName <name> -InstallPrerequisites so publishing and consuming resolve the
 same feed and can bootstrap the same Azure Artifacts credential-provider path.
@@ -132,6 +134,11 @@ The imported profile still does not contain PATs, passwords, or tokens. If the u
 Initialize-ModuleRepository and Connect-ModuleRepository can prime the Azure Artifacts Credential Provider
 session for the feed URI. PSResourceGet calls the provider non-interactively after that, so the explicit priming
 step is what gives managed workstation onboarding a real Entra/MFA prompt/cache path.
+
+Install-PrivateModule -ProfileName <name> and Update-PrivateModule -ProfileName <name> also perform this access
+probe/session-prime step before installing or updating modules. If the cached session expired after onboarding,
+or a different user receives the same non-secret profile, the first normal install/update command can invoke the
+Azure Artifacts Credential Provider again and then continue once Entra/MFA succeeds.
 
 PRODUCTION READINESS EVIDENCE
 

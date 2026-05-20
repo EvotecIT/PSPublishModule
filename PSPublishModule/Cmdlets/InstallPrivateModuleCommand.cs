@@ -158,6 +158,7 @@ public sealed class InstallPrivateModuleCommand : PSCmdlet
                 Operation = PrivateModuleWorkflowOperation.Install,
                 ModuleNames = Name,
                 UseAzureArtifacts = useAzureArtifacts,
+                ProfileName = ParameterSetName == ParameterSetProfile ? ProfileName : null,
                 RepositoryName = repositoryName,
                 Provider = provider,
                 AzureDevOpsOrganization = organization,
