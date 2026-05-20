@@ -53,6 +53,64 @@ Describe 'Private gallery command metadata' {
         $errors | Should -BeNullOrEmpty
     }
 
+    It 'restores the caller profile path after the Azure Artifacts live validation runner' {
+        $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles.json'
+        $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+
+        function Invoke-Pester {
+            param(
+                [string] $Path,
+                [string] $Output,
+                [string] $OutputFile,
+                [string] $OutputFormat,
+                [switch] $PassThru
+            )
+
+            $Path | Should -Match 'PrivateGallery\.AzureArtifacts\.Live\.Tests\.ps1$'
+            $PassThru.IsPresent | Should -BeTrue
+            $env:PSPUBLISHMODULE_AZDO_LIVE | Should -Be '1'
+            $env:PSPUBLISHMODULE_AZDO_ORGANIZATION | Should -Be 'contoso'
+            $env:PSPUBLISHMODULE_AZDO_FEED | Should -Be 'Modules'
+            $env:PSPUBLISHMODULE_AZDO_MODULE_NAME | Should -Be 'ModuleA'
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = 'mutated-by-live-test'
+
+            [pscustomobject]@{
+                FailedCount = 0
+                Result      = 'Passed'
+            }
+        }
+
+        try {
+            $result = & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Feed Modules -ModuleName ModuleA -PassThru
+            $result.FailedCount | Should -Be 0
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+        } finally {
+            Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+        }
+    }
+
+    It 'fails the Azure Artifacts live validation runner when Pester reports failures' {
+        $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles-failed.json'
+        $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+
+        function Invoke-Pester {
+            [pscustomobject]@{
+                FailedCount = 2
+                Result      = 'Failed'
+            }
+        }
+
+        try {
+            { & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Feed Modules -ModuleName ModuleA } |
+                Should -Throw "Live Azure Artifacts private gallery validation failed: 2 Pester test(s) failed."
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+        } finally {
+            Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+        }
+    }
+
     It 'exposes the private gallery wrapper cmdlets' {
         $module = $script:PrivateGalleryTestModule
         $module.ExportedCmdlets.Keys | Should -Contain 'Connect-ModuleRepository'

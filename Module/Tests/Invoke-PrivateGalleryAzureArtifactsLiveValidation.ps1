@@ -7,6 +7,7 @@ This helper wraps PrivateGallery.AzureArtifacts.Live.Tests.ps1 with parameters
 so desktop support, release operators, and maintainers can prove the managed
 Initialize-ModuleRepository onboarding flow without hand-setting environment
 variables. It restores the caller's environment variables after the run.
+The helper fails the script when the live Pester run reports failed tests.
 
 .EXAMPLE
 .\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
@@ -71,7 +72,8 @@ $envNames = @(
     'PSPUBLISHMODULE_AZDO_PROFILE_NAME',
     'PSPUBLISHMODULE_AZDO_PUBLISH_LIVE',
     'PSPUBLISHMODULE_AZDO_PACKAGE_PATH',
-    'PSPUBLISHMODULE_TEST_MANIFEST_PATH'
+    'PSPUBLISHMODULE_TEST_MANIFEST_PATH',
+    'POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH'
 )
 $previous = @{}
 
@@ -121,11 +123,29 @@ try {
         $pesterParameters.OutputFormat = $OutputFormat
     }
 
-    if ($PassThru.IsPresent) {
-        $pesterParameters.PassThru = $true
+    $pesterParameters.PassThru = $true
+
+    $pesterResult = Invoke-Pester @pesterParameters
+    $failedCount = 0
+    if ($null -ne $pesterResult) {
+        $failedCountProperty = $pesterResult.PSObject.Properties['FailedCount']
+        if ($failedCountProperty -and $null -ne $failedCountProperty.Value) {
+            $failedCount = [int] $failedCountProperty.Value
+        }
+
+        $resultProperty = $pesterResult.PSObject.Properties['Result']
+        if ($failedCount -eq 0 -and $resultProperty -and [string] $resultProperty.Value -eq 'Failed') {
+            $failedCount = 1
+        }
     }
 
-    Invoke-Pester @pesterParameters
+    if ($failedCount -gt 0) {
+        throw "Live Azure Artifacts private gallery validation failed: $failedCount Pester test(s) failed."
+    }
+
+    if ($PassThru.IsPresent) {
+        $pesterResult
+    }
 } finally {
     foreach ($name in $envNames) {
         if ($null -eq $previous[$name]) {

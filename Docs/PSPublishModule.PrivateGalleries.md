@@ -196,7 +196,10 @@ least one module the current user may install/update:
 
 The helper sets the required environment variables for the current process,
 runs the Pester harness, optionally writes an NUnit/JUnit result file, and then
-restores the caller's environment. To run the harness directly, set:
+restores the caller's environment, including any existing
+`POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` override. The helper throws when
+Pester reports failed tests so release operators get a non-zero script outcome
+instead of a false-green live validation. To run the harness directly, set:
 
 ```powershell
 $env:PSPUBLISHMODULE_AZDO_LIVE = '1'

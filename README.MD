@@ -48,7 +48,7 @@ For a single-user or admin-created profile, the same onboarding can be created
 and connected directly:
 
 ```powershell
-Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 ```
 
 Publishers can reuse the same profile:
