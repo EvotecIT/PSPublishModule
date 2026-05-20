@@ -35,6 +35,7 @@ Describe 'Private gallery command metadata' {
         New-Item -ItemType Directory -Path $script:PrivateGalleryProfileRoot -Force | Out-Null
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
+        $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
         $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path '.github\workflows\private-gallery-live-validation.yml'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
     }
@@ -47,11 +48,13 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'keeps the Azure Artifacts live validation runner parseable' {
-        $tokens = $null
-        $errors = $null
-        [System.Management.Automation.Language.Parser]::ParseFile($script:PrivateGalleryLiveValidationRunnerPath, [ref] $tokens, [ref] $errors) | Out-Null
+        foreach ($scriptPath in @($script:PrivateGalleryLiveValidationRunnerPath, $script:PrivateGalleryLiveEvidenceSummaryPath)) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref] $tokens, [ref] $errors) | Out-Null
 
-        $errors | Should -BeNullOrEmpty
+            $errors | Should -BeNullOrEmpty
+        }
     }
 
     It 'ships a manual Azure Artifacts live validation workflow' {
@@ -63,10 +66,68 @@ Describe 'Private gallery command metadata' {
         $workflow | Should -Match 'runnerLabels:'
         $workflow | Should -Match 'runs-on:\s+\$\{\{\s*fromJSON\(inputs\.runnerLabels\)\s*\}\}'
         $workflow | Should -Match 'Invoke-PrivateGalleryAzureArtifactsLiveValidation\.ps1'
+        $workflow | Should -Match 'Convert-PrivateGalleryLiveEvidenceToMarkdown\.ps1'
         $workflow | Should -Match 'GenerateDisposablePackage'
         $workflow | Should -Match 'private-gallery-live\.evidence\.json'
         $workflow | Should -Match 'GITHUB_STEP_SUMMARY'
         $workflow | Should -Match 'actions/upload-artifact@v4'
+    }
+
+    It 'formats Azure Artifacts live evidence as a non-secret Markdown summary' {
+        $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'summary.evidence.json'
+        [ordered]@{
+            SchemaVersion          = 1
+            GeneratedAtUtc         = '2026-05-20T00:00:00Z'
+            Succeeded              = $true
+            Provider               = 'AzureArtifacts'
+            Organization           = 'contoso'
+            Project                = 'Platform'
+            Feed                   = 'Modules'
+            ModuleName             = 'ModuleA'
+            ProfileName            = 'LiveAzureArtifacts'
+            PublishPackageSupplied = $true
+            PublishPackageName     = 'Company.Tools.1.2.3.nupkg'
+            GeneratedDisposablePackage = $true
+            DisposablePackageName  = 'Company.Tools'
+            DisposablePackageVersion = '1.2.3'
+            ValidationItems        = @(
+                [ordered]@{
+                    Name                              = 'OnboardingInstallUpdate'
+                    Succeeded                         = $true
+                    AccessProbeSucceeded              = $true
+                    InstallResultReturned             = $true
+                    UpdateResultReturned              = $true
+                    PublishConfigurationHasCredential = $false
+                },
+                [ordered]@{
+                    Name                 = 'PublishPackage'
+                    Succeeded            = $true
+                    AccessProbeSucceeded = $true
+                    PushedPackageNames   = @('Company.Tools.1.2.3.nupkg')
+                    FailedCount          = 0
+                }
+            )
+            EvidenceValidationErrors = @()
+            Pester                 = [ordered]@{
+                Result               = 'Passed'
+                TotalCount           = 2
+                PassedCount          = 2
+                FailedCount          = 0
+                SkippedCount         = 0
+                DurationMilliseconds = 250
+            }
+        } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidencePath -Encoding UTF8
+
+        $summary = & $script:PrivateGalleryLiveEvidenceSummaryPath -EvidenceFile $evidencePath
+
+        $summary | Should -Match '### Private Gallery Live Validation'
+        $summary | Should -Match '\| Succeeded \| True \|'
+        $summary | Should -Match '\| Pester result \| Passed \|'
+        $summary | Should -Match '\| Passed / Failed / Skipped \| 2 / 0 / 0 \|'
+        $summary | Should -Match '\| Publish proof enabled \| True \|'
+        $summary | Should -Match '\| Generated disposable package \| True \|'
+        $summary | Should -Match '\| OnboardingInstallUpdate \| True \| AccessProbe=True, Install=True, Update=True \|'
+        $summary | Should -Match '\| PublishPackage \| True \| AccessProbe=True, PushedPackages=1, FailedPackages=0 \|'
     }
 
     It 'restores the caller profile path after the Azure Artifacts live validation runner' {
