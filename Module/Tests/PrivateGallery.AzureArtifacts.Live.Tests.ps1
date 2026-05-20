@@ -1,5 +1,3 @@
-$liveEnabled = $env:PSPUBLISHMODULE_AZDO_LIVE -eq '1'
-
 function Add-AzureArtifactsLiveEvidenceItem {
     param(
         [Parameter(Mandatory)]
@@ -30,7 +28,7 @@ function Add-AzureArtifactsLiveEvidenceItem {
 
 Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifacts' {
     BeforeAll {
-        if (-not $liveEnabled) {
+        if ([Environment]::GetEnvironmentVariable('PSPUBLISHMODULE_AZDO_LIVE') -ne '1') {
             return
         }
 
@@ -51,7 +49,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
     }
 
     AfterAll {
-        if (-not $liveEnabled) {
+        if ([Environment]::GetEnvironmentVariable('PSPUBLISHMODULE_AZDO_LIVE') -ne '1') {
             return
         }
 
@@ -61,7 +59,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         }
     }
 
-    It 'connects, builds publish configuration, installs, and updates using an Entra-backed Azure Artifacts profile' -Skip:(-not $liveEnabled) {
+    It 'connects, builds publish configuration, installs, and updates using an Entra-backed Azure Artifacts profile' -Skip:([Environment]::GetEnvironmentVariable('PSPUBLISHMODULE_AZDO_LIVE') -ne '1') {
         $organization = $env:PSPUBLISHMODULE_AZDO_ORGANIZATION
         $project = $env:PSPUBLISHMODULE_AZDO_PROJECT
         $feed = $env:PSPUBLISHMODULE_AZDO_FEED
@@ -161,7 +159,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         }
     }
 
-    It 'publishes a supplied NuGet package using an Entra-backed Azure Artifacts profile' -Skip:(-not $liveEnabled -or $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE -ne '1' -or [string]::IsNullOrWhiteSpace($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH)) {
+    It 'publishes a supplied NuGet package using an Entra-backed Azure Artifacts profile' -Skip:([Environment]::GetEnvironmentVariable('PSPUBLISHMODULE_AZDO_LIVE') -ne '1' -or $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE -ne '1' -or [string]::IsNullOrWhiteSpace($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH)) {
         $organization = $env:PSPUBLISHMODULE_AZDO_ORGANIZATION
         $project = $env:PSPUBLISHMODULE_AZDO_PROJECT
         $feed = $env:PSPUBLISHMODULE_AZDO_FEED
