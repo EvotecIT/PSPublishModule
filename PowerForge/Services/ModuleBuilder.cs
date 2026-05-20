@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -445,7 +447,67 @@ public sealed class ModuleBuilder
             copied++;
         }
 
+        copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options);
+
         _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
+    }
+
+    private static int CopyReferencedTopLevelAssemblies(string publishDir, string targetDir, PublishCopyOptions options)
+    {
+        var copied = 0;
+        var initialAssemblies = Directory.EnumerateFiles(targetDir, "*.dll", SearchOption.TopDirectoryOnly).ToArray();
+
+        foreach (var assemblyPath in initialAssemblies)
+        {
+            string[] references;
+            try
+            {
+                references = ReadReferencedAssemblyNames(assemblyPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var referenceName in references)
+            {
+                if (string.IsNullOrWhiteSpace(referenceName)) continue;
+                if (IsPowerShellRuntimeLibraryId(referenceName)) continue;
+
+                var fileName = referenceName + ".dll";
+                if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
+                if (MatchesAnyFilter(fileName, referenceName, options.ExcludeLibraryFilters)) continue;
+
+                var destination = Path.Combine(targetDir, fileName);
+                if (File.Exists(destination)) continue;
+
+                var source = Path.Combine(publishDir, fileName);
+                if (!File.Exists(source)) continue;
+
+                File.Copy(source, destination, overwrite: true);
+                copied++;
+            }
+        }
+
+        return copied;
+    }
+
+    private static string[] ReadReferencedAssemblyNames(string assemblyPath)
+    {
+        using var stream = File.OpenRead(assemblyPath);
+        using var peReader = new PEReader(stream);
+        var metadataReader = peReader.GetMetadataReader();
+        var references = new List<string>();
+
+        foreach (var handle in metadataReader.AssemblyReferences)
+        {
+            var reference = metadataReader.GetAssemblyReference(handle);
+            var name = metadataReader.GetString(reference.Name);
+            if (!string.IsNullOrWhiteSpace(name))
+                references.Add(name);
+        }
+
+        return references.ToArray();
     }
 
     private static string? TryResolveXmlDocPath(string publishDir, string xmlFileName)
