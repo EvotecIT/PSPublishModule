@@ -114,7 +114,7 @@ That's it. Whenever there's a new version you simply run the command and you can
 
 ### Documentation - Local, GitHub, Azure DevOps
 
-PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. Use PSMaintenance to view docs with a rich UI (README + CHANGELOG + License + Docs tabs, dependencies graph, commands help).
+PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. The former PSMaintenance documentation viewer/installer surface is now available directly from PSPublishModule, backed by PowerForge services for module resolution, documentation planning, repository content lookup, and install/copy behavior.
 
 - Build-time bundling (in your module's Build script):
   - `New-ConfigurationInformation -IncludeAll 'Internals\'`
@@ -123,17 +123,20 @@ PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Con
     - GitHub: `New-ConfigurationDelivery -RepositoryPaths 'docs' -RepositoryBranch main`
     - Azure DevOps: `New-ConfigurationDelivery -RepositoryPaths 'Docs/en-US' -RepositoryBranch main`
 
-- Copy docs for a module already installed:
-  - Use the PSMaintenance module for viewing documentation locally.
+- Copy docs or scripts for a module already installed:
+  - `Install-ModuleDocumentation -Name 'EFAdminManager' -Path 'C:\Docs' -Layout ModuleAndVersion`
+  - `Install-ModuleScript -Name 'EFAdminManager' -Path 'C:\Tools' -Unblock`
 
-- View docs (PSMaintenance):
-  - Local files: `Show-ModuleDocumentation -Name 'EFAdminManager' -Readme -Changelog`
-  - Prefer repository: `Show-ModuleDocumentation -Name 'EFAdminManager' -PreferRepository`
-  - Prefer Internals: `Show-ModuleDocumentation -Name 'EFAdminManager' -Readme -Changelog -PreferInternals`
+- View docs:
+  - Local files: `Show-ModuleDocumentation -Name 'EFAdminManager'`
+  - Include repository content: `Show-ModuleDocumentation -Name 'EFAdminManager' -Online`
+  - Prefer Internals: `Show-ModuleDocumentation -Name 'EFAdminManager' -PreferInternals`
   - Specific file from copied docs: `Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -File 'Internals\Docs\HowTo.md'`
   - GitHub token (private repos): set once `setx PG_GITHUB_TOKEN "ghp_xxx"` or `Set-ModuleDocumentation -GitHubToken 'ghp_xxx'`
   - Azure DevOps PAT (Code: Read): set once `setx PG_AZDO_PAT "your_pat"` or `Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'`
   - Repo URL format for AzDO: `https://dev.azure.com/{organization}/{project}/_git/{repository}`
+
+Compatibility aliases from PSMaintenance are preserved: `Show-Documentation`, `Install-Documentation`, `Install-ModuleScripts`, `Install-Scripts`, and `Set-Documentation`.
 
 ### Documentation Generation (Markdown, External Help, about_*)
 
