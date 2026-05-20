@@ -245,6 +245,21 @@ Workflow inputs override variables when both are provided. The pre-merge
 `Test & Build Module` workflow uses the same variable names for its opt-in
 `PrivateGalleryLiveValidation` job.
 
+Before dispatching a live run, check the repository configuration without
+printing any secret values:
+
+```powershell
+.\Module\Tests\Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1 `
+    -Repository EvotecIT/PSPublishModule `
+    -RequireUnattendedCredentialProviderSecret `
+    -Markdown
+```
+
+Use `-NoFail` for a report-only inventory. Without `-NoFail`, the helper fails
+when required variables are missing or, when
+`-RequireUnattendedCredentialProviderSecret` is used, when none of the supported
+Azure Artifacts Credential Provider secret names is present.
+
 Prefer a self-hosted Windows runner that is allowed to use the Azure Artifacts
 Credential Provider and already has a cached or policy-provided identity for
 the target feed. Hosted runners generally do not have the interactive or cached

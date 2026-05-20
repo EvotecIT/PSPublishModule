@@ -158,6 +158,14 @@ PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS -> VSS_NUGET_EXTERNAL_FEE
 The evidence JSON and step summary report only whether each unattended credential-provider endpoint
 variable was configured, never the secret value. The workflow writes a non-secret run summary and uploads
 the XML/evidence JSON artifacts for release records.
+- Before dispatching a live run, check the repository configuration without printing any secret values:
+.\Module\Tests\Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1 `
+-Repository EvotecIT/PSPublishModule `
+-RequireUnattendedCredentialProviderSecret `
+-Markdown
+Use -NoFail for a report-only inventory. Without -NoFail, the helper fails when required variables are
+missing or, when -RequireUnattendedCredentialProviderSecret is used, when none of the supported Azure
+Artifacts Credential Provider secret names is present.
 - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
 workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
 helper, summary, and artifact path and does not run during normal push or pull request builds.

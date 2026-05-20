@@ -36,6 +36,7 @@ Describe 'Private gallery command metadata' {
         $script:PrivateGalleryProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'profiles.json'
         $script:PrivateGalleryLiveValidationRunnerPath = Join-Path $PSScriptRoot 'Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1'
         $script:PrivateGalleryLiveEvidenceSummaryPath = Join-Path $PSScriptRoot 'Convert-PrivateGalleryLiveEvidenceToMarkdown.ps1'
+        $script:PrivateGalleryGitHubConfigurationPath = Join-Path $PSScriptRoot 'Test-PrivateGalleryGitHubLiveValidationConfiguration.ps1'
         $script:PrivateGalleryRepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
         $script:PrivateGalleryLiveValidationWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\private-gallery-live-validation.yml'
         $script:PrivateGalleryBuildWorkflowPath = Join-Path $script:PrivateGalleryRepositoryRoot '.github\workflows\BuildModule.yml'
@@ -50,13 +51,50 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'keeps the Azure Artifacts live validation runner parseable' {
-        foreach ($scriptPath in @($script:PrivateGalleryLiveValidationRunnerPath, $script:PrivateGalleryLiveEvidenceSummaryPath)) {
+        foreach ($scriptPath in @($script:PrivateGalleryLiveValidationRunnerPath, $script:PrivateGalleryLiveEvidenceSummaryPath, $script:PrivateGalleryGitHubConfigurationPath)) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref] $tokens, [ref] $errors) | Out-Null
 
             $errors | Should -BeNullOrEmpty
         }
+    }
+
+    It 'reports GitHub live validation configuration readiness without exposing secret values' {
+        $variableJson = @(
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_ORGANIZATION' },
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_FEED' },
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_MODULE_NAME' },
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_RUNNER_LABELS' }
+        ) | ConvertTo-Json
+        $secretJson = @(
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS' }
+        ) | ConvertTo-Json
+
+        $result = & $script:PrivateGalleryGitHubConfigurationPath -Repository EvotecIT/PSPublishModule -VariableJson $variableJson -SecretJson $secretJson -RequireUnattendedCredentialProviderSecret -NoFail -PassThru
+
+        $result.Succeeded | Should -BeTrue
+        $result.RequiredVariablesMissing | Should -BeNullOrEmpty
+        $result.RequiredVariablesPresent | Should -Contain 'PSPUBLISHMODULE_AZDO_ORGANIZATION'
+        $result.OptionalVariablesPresent | Should -Contain 'PSPUBLISHMODULE_AZDO_RUNNER_LABELS'
+        $result.CredentialProviderSecretsPresent | Should -Contain 'PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS'
+        $result.UnattendedCredentialProviderSecretConfigured | Should -BeTrue
+        ($result | ConvertTo-Json -Depth 4) | Should -Not -Match 'secret-value'
+    }
+
+    It 'reports required GitHub variables as missing before live validation dispatch' {
+        $variableJson = @(
+            [ordered]@{ name = 'PSPUBLISHMODULE_AZDO_ORGANIZATION' }
+        ) | ConvertTo-Json
+        $secretJson = @() | ConvertTo-Json
+
+        $result = & $script:PrivateGalleryGitHubConfigurationPath -Repository EvotecIT/PSPublishModule -VariableJson $variableJson -SecretJson $secretJson -RequireUnattendedCredentialProviderSecret -NoFail -PassThru
+
+        $result.Succeeded | Should -BeFalse
+        $result.RequiredVariablesMissing | Should -Contain 'PSPUBLISHMODULE_AZDO_FEED'
+        $result.RequiredVariablesMissing | Should -Contain 'PSPUBLISHMODULE_AZDO_MODULE_NAME'
+        $result.UnattendedCredentialProviderSecretConfigured | Should -BeFalse
+        $result.RequiredActions | Should -Contain "Define repository variable 'PSPUBLISHMODULE_AZDO_FEED'."
     }
 
     It 'ships a manual Azure Artifacts live validation workflow' {
