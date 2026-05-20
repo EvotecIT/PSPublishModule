@@ -212,6 +212,25 @@ JSON artifact cannot look successful while omitting the evidence operators need.
 For publish proof, use either `-PublishPackagePath` with a prebuilt disposable
 package or `-GenerateDisposablePackage` to create a unique non-secret validation
 package for the run.
+
+The repository also includes a manual GitHub Actions workflow named
+`Private Gallery Live Validation`. Use it when you want the same proof captured
+as a workflow run with downloadable evidence artifacts. Dispatch it with:
+
+- `organization`, `project`, `feed`, and `moduleName` for the Azure Artifacts
+  feed and an existing module to install/update.
+- `generateDisposablePackage = true` when the run should also push a generated
+  disposable package to the feed.
+- `runnerLabels` set to a JSON array for the runner that owns the enterprise
+  authentication policy, for example `["self-hosted","windows"]`.
+
+Prefer a self-hosted Windows runner that is allowed to use the Azure Artifacts
+Credential Provider and complete the Entra-backed sign-in/session flow for the
+target feed. Hosted runners generally do not have the interactive or cached
+enterprise identity context needed to prove the Entra-first path. The workflow
+uploads `private-gallery-live.xml` and `private-gallery-live.evidence.json` as
+the `private-gallery-live-validation` artifact.
+
 To run the harness directly, set:
 
 ```powershell

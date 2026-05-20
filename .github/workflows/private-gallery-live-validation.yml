@@ -1,0 +1,134 @@
+name: Private Gallery Live Validation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: Azure DevOps organization name.
+        required: true
+        type: string
+      project:
+        description: Optional Azure DevOps project name for project-scoped feeds.
+        required: false
+        type: string
+      feed:
+        description: Azure Artifacts feed name.
+        required: true
+        type: string
+      moduleName:
+        description: Existing module name to install/update from the feed.
+        required: true
+        type: string
+      profileName:
+        description: Temporary PSPublishModule profile name used during validation.
+        required: true
+        default: LiveAzureArtifacts
+        type: string
+      generateDisposablePackage:
+        description: Also publish a generated disposable NuGet package to prove package push.
+        required: true
+        default: false
+        type: boolean
+      disposablePackageName:
+        description: Disposable package ID used when package-push proof is enabled.
+        required: true
+        default: PSPublishModule.PrivateGallery.LiveValidation
+        type: string
+      disposablePackageVersion:
+        description: Optional disposable package version. Leave blank for timestamped version.
+        required: false
+        type: string
+      runnerLabels:
+        description: JSON array of runner labels. Prefer a self-hosted Windows runner with Azure Artifacts auth policy.
+        required: true
+        default: '["self-hosted","windows"]'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  AzureArtifactsLiveValidation:
+    runs-on: ${{ fromJSON(inputs.runnerLabels) }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Build PSPublishModule
+        shell: pwsh
+        timeout-minutes: 15
+        run: .\Build\Build-Module.ps1
+
+      - name: Run live Azure Artifacts validation
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          AZDO_ORGANIZATION: ${{ inputs.organization }}
+          AZDO_PROJECT: ${{ inputs.project }}
+          AZDO_FEED: ${{ inputs.feed }}
+          AZDO_MODULE_NAME: ${{ inputs.moduleName }}
+          AZDO_PROFILE_NAME: ${{ inputs.profileName }}
+          AZDO_GENERATE_DISPOSABLE_PACKAGE: ${{ inputs.generateDisposablePackage }}
+          AZDO_DISPOSABLE_PACKAGE_NAME: ${{ inputs.disposablePackageName }}
+          AZDO_DISPOSABLE_PACKAGE_VERSION: ${{ inputs.disposablePackageVersion }}
+        run: |
+          $outputRoot = Join-Path $PWD 'live-validation-output'
+          New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+
+          $arguments = @{
+              Organization       = $env:AZDO_ORGANIZATION
+              Feed               = $env:AZDO_FEED
+              ModuleName         = $env:AZDO_MODULE_NAME
+              ProfileName        = $env:AZDO_PROFILE_NAME
+              OutputFile         = Join-Path $outputRoot 'private-gallery-live.xml'
+              EvidenceFile       = Join-Path $outputRoot 'private-gallery-live.evidence.json'
+              ModuleManifestPath = Join-Path $PWD 'Module\PSPublishModule.psd1'
+              Output             = 'Detailed'
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:AZDO_PROJECT)) {
+              $arguments.Project = $env:AZDO_PROJECT
+          }
+
+          if ($env:AZDO_GENERATE_DISPOSABLE_PACKAGE -eq 'true') {
+              $arguments.GenerateDisposablePackage = $true
+              $arguments.DisposablePackageName = $env:AZDO_DISPOSABLE_PACKAGE_NAME
+              if (-not [string]::IsNullOrWhiteSpace($env:AZDO_DISPOSABLE_PACKAGE_VERSION)) {
+                  $arguments.DisposablePackageVersion = $env:AZDO_DISPOSABLE_PACKAGE_VERSION
+              }
+          }
+
+          .\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 @arguments
+
+      - name: Upload live validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-gallery-live-validation
+          path: live-validation-output
+          if-no-files-found: warn
+          retention-days: 14
