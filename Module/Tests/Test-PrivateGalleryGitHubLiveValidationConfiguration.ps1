@@ -134,6 +134,37 @@ if ($RequireUnattendedCredentialProviderSecret -and -not $unattendedCredentialPr
     [void] $requiredActions.Add("Define at least one supported Azure Artifacts Credential Provider Actions secret: $($credentialProviderSecrets -join ', ').")
 }
 
+$variablePlaceholders = @{
+    PSPUBLISHMODULE_AZDO_ORGANIZATION                 = '<azure-devops-organization>'
+    PSPUBLISHMODULE_AZDO_FEED                         = '<azure-artifacts-feed>'
+    PSPUBLISHMODULE_AZDO_MODULE_NAME                  = '<known-module-name>'
+    PSPUBLISHMODULE_AZDO_PROJECT                      = '<azure-devops-project>'
+    PSPUBLISHMODULE_AZDO_PROFILE_NAME                 = '<profile-name>'
+    PSPUBLISHMODULE_AZDO_RUNNER_LABELS                = '["self-hosted","windows"]'
+    PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_NAME      = 'PSPublishModule.PrivateGallery.LiveValidation'
+    PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_VERSION   = '<optional-semver>'
+}
+
+$setupCommands = New-Object 'System.Collections.Generic.List[string]'
+foreach ($name in @($missingRequiredVariables + $missingOptionalVariables)) {
+    $placeholder = $variablePlaceholders[$name]
+    if ([string]::IsNullOrWhiteSpace($placeholder)) {
+        $placeholder = '<value>'
+    }
+
+    [void] $setupCommands.Add("gh variable set $name --repo $Repository --body '$placeholder'")
+}
+
+if ($RequireUnattendedCredentialProviderSecret -and -not $unattendedCredentialProviderSecretConfigured) {
+    [void] $setupCommands.Add("gh secret set PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS --repo $Repository < external-feed-endpoints.json")
+    [void] $setupCommands.Add("# Alternative supported secret names: PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS, PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS")
+}
+
+$dispatchCommands = @(
+    "gh workflow run BuildModule.yml --repo $Repository --ref <feature-or-main-branch> -f privateGalleryLiveValidation=true -f privateGalleryGenerateDisposablePackage=true",
+    "gh workflow run private-gallery-live-validation.yml --repo $Repository --ref main -f generateDisposablePackage=true"
+)
+
 $succeeded = $missingRequiredVariables.Count -eq 0 -and
     (-not $RequireUnattendedCredentialProviderSecret -or $unattendedCredentialProviderSecretConfigured)
 
@@ -148,6 +179,8 @@ $result = [pscustomobject]@{
     CredentialProviderSecretsMissing             = $missingCredentialProviderSecrets
     UnattendedCredentialProviderSecretConfigured = $unattendedCredentialProviderSecretConfigured
     RequiredActions                              = @($requiredActions)
+    SuggestedSetupCommands                       = @($setupCommands)
+    SuggestedDispatchCommands                    = @($dispatchCommands)
 }
 
 if ($Markdown) {
@@ -172,6 +205,24 @@ if ($Markdown) {
             "- $action"
         }
     }
+
+    if ($result.SuggestedSetupCommands.Count -gt 0) {
+        ''
+        'Suggested setup commands:'
+        '```powershell'
+        foreach ($command in $result.SuggestedSetupCommands) {
+            $command
+        }
+        '```'
+    }
+
+    ''
+    'Suggested dispatch commands:'
+    '```powershell'
+    foreach ($command in $result.SuggestedDispatchCommands) {
+        $command
+    }
+    '```'
 }
 
 if ($PassThru -or -not $Markdown) {

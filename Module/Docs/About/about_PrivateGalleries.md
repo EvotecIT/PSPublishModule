@@ -175,7 +175,9 @@ the XML/evidence JSON artifacts for release records.
 -Markdown
 Use -NoFail for a report-only inventory. Without -NoFail, the helper fails when required variables are
 missing or, when -RequireUnattendedCredentialProviderSecret is used, when none of the supported Azure
-Artifacts Credential Provider secret names is present.
+Artifacts Credential Provider secret names is present. The Markdown output includes suggested gh variable
+set, gh secret set, and gh workflow run command shapes with placeholders so operators can move from inventory
+to a live run without putting secret material in profiles, logs, or docs.
 - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
 workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
 helper, summary, and artifact path and does not run during normal push or pull request builds.

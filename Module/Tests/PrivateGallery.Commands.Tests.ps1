@@ -96,6 +96,21 @@ Describe 'Private gallery command metadata' {
         $result.RequiredVariablesMissing | Should -Contain 'PSPUBLISHMODULE_AZDO_MODULE_NAME'
         $result.UnattendedCredentialProviderSecretConfigured | Should -BeFalse
         $result.RequiredActions | Should -Contain "Define repository variable 'PSPUBLISHMODULE_AZDO_FEED'."
+        $result.SuggestedSetupCommands | Should -Contain "gh variable set PSPUBLISHMODULE_AZDO_FEED --repo EvotecIT/PSPublishModule --body '<azure-artifacts-feed>'"
+        $result.SuggestedSetupCommands | Should -Contain "gh secret set PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS --repo EvotecIT/PSPublishModule < external-feed-endpoints.json"
+        $result.SuggestedDispatchCommands | Should -Contain "gh workflow run BuildModule.yml --repo EvotecIT/PSPublishModule --ref <feature-or-main-branch> -f privateGalleryLiveValidation=true -f privateGalleryGenerateDisposablePackage=true"
+    }
+
+    It 'renders live validation setup and dispatch guidance without secret values' {
+        $markdown = & $script:PrivateGalleryGitHubConfigurationPath -Repository EvotecIT/PSPublishModule -VariableJson '[]' -SecretJson '[]' -RequireUnattendedCredentialProviderSecret -NoFail -Markdown
+        $text = $markdown -join [Environment]::NewLine
+
+        $text | Should -Match 'Suggested setup commands'
+        $text | Should -Match 'gh variable set PSPUBLISHMODULE_AZDO_ORGANIZATION --repo EvotecIT/PSPublishModule'
+        $text | Should -Match 'gh secret set PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS --repo EvotecIT/PSPublishModule < external-feed-endpoints\.json'
+        $text | Should -Match 'gh workflow run BuildModule\.yml --repo EvotecIT/PSPublishModule'
+        $text | Should -Match 'gh workflow run private-gallery-live-validation\.yml --repo EvotecIT/PSPublishModule'
+        $text | Should -Not -Match 'secret-value'
     }
 
     It 'ships a manual Azure Artifacts live validation workflow' {
