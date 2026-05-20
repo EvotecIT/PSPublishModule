@@ -176,7 +176,10 @@ public sealed class ConnectModuleRepositoryCommand : PSCmdlet
             return;
         }
 
-        var probe = service.ProbeRepositoryAccess(result, credentialResolution.Credential);
+        var probe = service.ProbeRepositoryAccessWithOptionalSessionPrime(
+            result,
+            credentialResolution.Credential,
+            allowInteractiveCredentialProviderPrime: !host.IsWhatIfRequested);
         result.AccessProbePerformed = true;
         result.AccessProbeSucceeded = probe.Succeeded;
         result.AccessProbeTool = probe.Tool;

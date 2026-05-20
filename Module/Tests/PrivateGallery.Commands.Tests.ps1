@@ -721,6 +721,10 @@ Describe 'Private gallery command metadata' {
         $type.GetProperty('AccessProbeSucceeded').SetValue($result, $true)
         $type.GetProperty('AccessProbeTool').SetValue($result, 'PSResourceGet')
         $type.GetProperty('AccessProbeMessage').SetValue($result, 'Repository access probe completed successfully via PSResourceGet.')
+        $type.GetProperty('CredentialProviderSessionPrimeAttempted').SetValue($result, $true)
+        $type.GetProperty('CredentialProviderSessionPrimeSucceeded').SetValue($result, $true)
+        $type.GetProperty('CredentialProviderSessionPrimePath').SetValue($result, 'CredentialProvider.Microsoft.exe')
+        $type.GetProperty('CredentialProviderSessionPrimeMessage').SetValue($result, 'Azure Artifacts Credential Provider session priming completed successfully.')
         $result.InstalledPrerequisites = @('PSResourceGet')
         $result.PrerequisiteInstallMessages = @('PSResourceGet prerequisite handled via PowerShellGet (Installed).')
         $result.ToolRequested = [PowerForge.RepositoryRegistrationTool]::Auto
@@ -755,6 +759,10 @@ Describe 'Private gallery command metadata' {
         $type.GetProperty('AccessProbeSucceeded').GetValue($result) | Should -BeTrue
         $type.GetProperty('AccessProbeTool').GetValue($result) | Should -Be 'PSResourceGet'
         $type.GetProperty('AccessProbeMessage').GetValue($result) | Should -Be 'Repository access probe completed successfully via PSResourceGet.'
+        $type.GetProperty('CredentialProviderSessionPrimeAttempted').GetValue($result) | Should -BeTrue
+        $type.GetProperty('CredentialProviderSessionPrimeSucceeded').GetValue($result) | Should -BeTrue
+        $type.GetProperty('CredentialProviderSessionPrimePath').GetValue($result) | Should -Be 'CredentialProvider.Microsoft.exe'
+        $type.GetProperty('CredentialProviderSessionPrimeMessage').GetValue($result) | Should -Be 'Azure Artifacts Credential Provider session priming completed successfully.'
         $result.InstalledPrerequisites | Should -Contain 'PSResourceGet'
         $result.PrerequisiteInstallMessages | Should -Contain 'PSResourceGet prerequisite handled via PowerShellGet (Installed).'
     }

@@ -66,7 +66,8 @@ workstations. Pre-install the credential provider on non-Windows systems with Mi
 5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
 desktop support to run Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite
 -InstallPrerequisites once. This imports or refreshes the profile, registers the repository, probes
-access, and triggers the normal Entra/MFA credential-provider flow when no token is cached.
+access, and, when the first ExistingSession probe cannot use a cached token, invokes the Azure Artifacts
+Credential Provider interactively so the user can complete Entra/MFA and cache a session token.
 6. If the profile is already deployed into the profile store, use
 Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites instead. Add -SkipConnect when you
 only want profile/readiness output without repository registration or probing.
@@ -118,7 +119,9 @@ On the target workstation, import or refresh the profile and connect in one step
 Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 
 The imported profile still does not contain PATs, passwords, or tokens. If the user has not signed in before,
-the first connect/install/update operation triggers the normal Azure Artifacts Credential Provider Entra/MFA flow.
+Initialize-ModuleRepository and Connect-ModuleRepository can prime the Azure Artifacts Credential Provider
+session for the feed URI. PSResourceGet calls the provider non-interactively after that, so the explicit priming
+step is what gives managed workstation onboarding a real Entra/MFA prompt/cache path.
 
 PRODUCTION READINESS EVIDENCE
 
@@ -132,14 +135,19 @@ while omitting the proof operators need. For package-push proof, use -GenerateDi
 a prebuilt disposable package with -PublishPackagePath.
 - The manual GitHub Actions workflow named Private Gallery Live Validation succeeds on a runner that owns
 the enterprise Azure Artifacts credential-provider policy. Prefer runnerLabels = ["self-hosted","windows"]
-or another approved self-hosted runner because hosted runners usually cannot prove interactive or cached
-Entra-backed feed access. The workflow writes a non-secret run summary and uploads the XML/evidence JSON
-artifacts for release records.
+or another approved self-hosted runner because hosted runners usually cannot prove cached Entra-backed
+feed access. For unattended validation, configure the Azure Artifacts Credential Provider with
+ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS for access-token based automation or
+ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for managed identity/service-principal based automation. Do
+not put those secrets in PSPublishModule profiles. The workflow writes a non-secret run summary and uploads
+the XML/evidence JSON artifacts for release records.
 - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
 workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same
 helper, summary, and artifact path and does not run during normal push or pull request builds.
 - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
-succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
+succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True. If no cached token
+existed before the first probe, Connection.CredentialProviderSessionPrimeAttempted shows whether
+PSPublishModule invoked the provider to prime the Entra-backed session before retrying.
 - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
 credential parameters.
 - Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.

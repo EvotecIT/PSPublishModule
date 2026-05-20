@@ -123,6 +123,10 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
             AccessProbePerformed             = $onboarding.Connection.AccessProbePerformed
             AccessProbeSucceeded             = $onboarding.Connection.AccessProbeSucceeded
             BootstrapModeUsed                = [string] $onboarding.Connection.BootstrapModeUsed
+            CredentialProviderSessionPrimeAttempted = $onboarding.Connection.CredentialProviderSessionPrimeAttempted
+            CredentialProviderSessionPrimeSucceeded = $onboarding.Connection.CredentialProviderSessionPrimeSucceeded
+            CredentialProviderSessionPrimeSkipped = $onboarding.Connection.CredentialProviderSessionPrimeSkipped
+            CredentialProviderSessionPrimeMessage = $onboarding.Connection.CredentialProviderSessionPrimeMessage
             PublishConfigurationUri          = $publish.Configuration.Repository.Uri
             PublishConfigurationHasCredential = $null -ne $publish.Configuration.Repository.Credential
             InstallResultReturned            = $null -ne $install
@@ -182,6 +186,10 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
             Succeeded            = $true
             ProfileName          = $profileName
             AccessProbeSucceeded = $onboarding.Connection.AccessProbeSucceeded
+            CredentialProviderSessionPrimeAttempted = $onboarding.Connection.CredentialProviderSessionPrimeAttempted
+            CredentialProviderSessionPrimeSucceeded = $onboarding.Connection.CredentialProviderSessionPrimeSucceeded
+            CredentialProviderSessionPrimeSkipped = $onboarding.Connection.CredentialProviderSessionPrimeSkipped
+            CredentialProviderSessionPrimeMessage = $onboarding.Connection.CredentialProviderSessionPrimeMessage
             PackageName          = [IO.Path]::GetFileName($publishPackagePath)
             Source               = $result.Source
             PushedPackageNames   = @($result.Pushed | ForEach-Object { [IO.Path]::GetFileName($_) })

@@ -126,6 +126,21 @@ public sealed class ModuleRepositoryRegistrationResult
     /// <summary>Outcome message returned from the repository access probe.</summary>
     public string? AccessProbeMessage { get; set; }
 
+    /// <summary>Whether PSPublishModule attempted to prime the Azure Artifacts Credential Provider session after a failed ExistingSession probe.</summary>
+    public bool CredentialProviderSessionPrimeAttempted { get; set; }
+
+    /// <summary>Whether the Azure Artifacts Credential Provider session priming completed successfully.</summary>
+    public bool CredentialProviderSessionPrimeSucceeded { get; set; }
+
+    /// <summary>Whether session priming was intentionally skipped, for example in a CI/headless process.</summary>
+    public bool CredentialProviderSessionPrimeSkipped { get; set; }
+
+    /// <summary>Credential-provider executable or DLL path used for session priming.</summary>
+    public string? CredentialProviderSessionPrimePath { get; set; }
+
+    /// <summary>Outcome message from Azure Artifacts Credential Provider session priming.</summary>
+    public string? CredentialProviderSessionPrimeMessage { get; set; }
+
     /// <summary>Whether the existing-session/device-login bootstrap path is ready for Azure Artifacts.</summary>
     public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
 

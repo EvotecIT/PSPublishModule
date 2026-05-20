@@ -293,7 +293,10 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
             return registration;
         }
 
-        var probe = service.ProbeRepositoryAccess(registration, credentialResolution.Credential);
+        var probe = service.ProbeRepositoryAccessWithOptionalSessionPrime(
+            registration,
+            credentialResolution.Credential,
+            allowInteractiveCredentialProviderPrime: !host.IsWhatIfRequested);
         registration.AccessProbePerformed = true;
         registration.AccessProbeSucceeded = probe.Succeeded;
         registration.AccessProbeTool = probe.Tool;

@@ -85,3 +85,26 @@ internal readonly struct RepositoryAccessProbeResult
     internal string Tool { get; }
     internal string? Message { get; }
 }
+
+internal readonly struct CredentialProviderSessionPrimeResult
+{
+    internal CredentialProviderSessionPrimeResult(
+        bool attempted,
+        bool succeeded,
+        bool skipped,
+        string? providerPath,
+        string? message)
+    {
+        Attempted = attempted;
+        Succeeded = succeeded;
+        Skipped = skipped;
+        ProviderPath = providerPath;
+        Message = message;
+    }
+
+    internal bool Attempted { get; }
+    internal bool Succeeded { get; }
+    internal bool Skipped { get; }
+    internal string? ProviderPath { get; }
+    internal string? Message { get; }
+}

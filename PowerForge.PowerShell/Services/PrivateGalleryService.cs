@@ -471,6 +471,138 @@ internal sealed class PrivateGalleryService
         }
     }
 
+    public RepositoryAccessProbeResult ProbeRepositoryAccessWithOptionalSessionPrime(
+        ModuleRepositoryRegistrationResult registration,
+        RepositoryCredential? credential,
+        bool allowInteractiveCredentialProviderPrime)
+    {
+        if (registration is null)
+            throw new ArgumentNullException(nameof(registration));
+
+        var probe = ProbeRepositoryAccess(registration, credential);
+        if (probe.Succeeded ||
+            credential is not null ||
+            !allowInteractiveCredentialProviderPrime ||
+            registration.BootstrapModeUsed != PrivateGalleryBootstrapMode.ExistingSession ||
+            !registration.PSResourceGetRegistered ||
+            !registration.ExistingSessionBootstrapReady)
+        {
+            return probe;
+        }
+
+        var prime = PrimeAzureArtifactsCredentialProviderSession(registration);
+        registration.CredentialProviderSessionPrimeAttempted = prime.Attempted;
+        registration.CredentialProviderSessionPrimeSucceeded = prime.Succeeded;
+        registration.CredentialProviderSessionPrimeSkipped = prime.Skipped;
+        registration.CredentialProviderSessionPrimePath = prime.ProviderPath;
+        registration.CredentialProviderSessionPrimeMessage = prime.Message;
+
+        if (!prime.Succeeded)
+            return probe;
+
+        var retry = ProbeRepositoryAccess(registration, credential);
+        if (retry.Succeeded)
+            return retry;
+
+        var message = string.IsNullOrWhiteSpace(retry.Message)
+            ? "Repository access probe still failed after Azure Artifacts Credential Provider session priming."
+            : $"Repository access probe still failed after Azure Artifacts Credential Provider session priming. {retry.Message}";
+        return new RepositoryAccessProbeResult(false, retry.Tool, message);
+    }
+
+    internal CredentialProviderSessionPrimeResult PrimeAzureArtifactsCredentialProviderSession(
+        ModuleRepositoryRegistrationResult registration,
+        TimeSpan? timeout = null)
+    {
+        if (registration is null)
+            throw new ArgumentNullException(nameof(registration));
+
+        if (string.IsNullOrWhiteSpace(registration.PSResourceGetUri))
+        {
+            return new CredentialProviderSessionPrimeResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                providerPath: null,
+                message: "Azure Artifacts Credential Provider session priming was skipped because the PSResourceGet feed URI is empty.");
+        }
+
+        if (IsHeadlessAutomation())
+        {
+            return new CredentialProviderSessionPrimeResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                providerPath: null,
+                message: "Azure Artifacts Credential Provider session priming was skipped because the current process appears to be CI/headless. Use a pre-cached provider session or configure ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS / ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for unattended validation.");
+        }
+
+        var providerPath = SelectCredentialProviderPath(registration.AzureArtifactsCredentialProviderPaths);
+        if (string.IsNullOrWhiteSpace(providerPath))
+        {
+            return new CredentialProviderSessionPrimeResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                providerPath: null,
+                message: "Azure Artifacts Credential Provider session priming was skipped because no credential-provider executable or DLL was detected.");
+        }
+
+        if (!_host.ShouldProcess(registration.RepositoryName, "Prime Azure Artifacts Credential Provider session"))
+        {
+            return new CredentialProviderSessionPrimeResult(
+                attempted: false,
+                succeeded: false,
+                skipped: true,
+                providerPath: providerPath,
+                message: "Azure Artifacts Credential Provider session priming was skipped by ShouldProcess.");
+        }
+
+        _host.WriteWarning("The Azure Artifacts access probe failed without an explicit credential. PSPublishModule will invoke the Azure Artifacts Credential Provider so you can complete the Entra/MFA sign-in and cache a session token for this feed.");
+
+        var providerExecutablePath = providerPath!;
+        var runner = new ProcessRunner();
+        var fileName = providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? "dotnet" : providerExecutablePath;
+        var arguments = new List<string>();
+        if (providerExecutablePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            arguments.Add(providerExecutablePath);
+
+        arguments.Add("-I");
+        arguments.Add("-U");
+        arguments.Add(registration.PSResourceGetUri);
+        arguments.Add("-F");
+        arguments.Add("Json");
+
+        var result = runner.RunAsync(
+            new ProcessRunRequest(
+                fileName,
+                Environment.CurrentDirectory,
+                arguments,
+                timeout ?? TimeSpan.FromMinutes(10),
+                captureOutput: false,
+                captureError: false)).GetAwaiter().GetResult();
+
+        if (result.Succeeded)
+        {
+            return new CredentialProviderSessionPrimeResult(
+                attempted: true,
+                succeeded: true,
+                skipped: false,
+                providerPath: providerExecutablePath,
+                message: "Azure Artifacts Credential Provider session priming completed successfully.");
+        }
+
+        var failure = result.TimedOut
+            ? "Azure Artifacts Credential Provider session priming timed out."
+            : $"Azure Artifacts Credential Provider session priming failed with exit code {result.ExitCode}.";
+        return new CredentialProviderSessionPrimeResult(
+            attempted: true,
+            succeeded: false,
+            skipped: false,
+            providerPath: providerExecutablePath,
+            message: failure);
+    }
+
     internal static bool IsMissingProbePackageMessage(string? message, string probeName)
     {
         if (string.IsNullOrWhiteSpace(message) || string.IsNullOrWhiteSpace(probeName))
@@ -530,6 +662,13 @@ internal sealed class PrivateGalleryService
             else if (!string.IsNullOrWhiteSpace(result.AccessProbeMessage))
                 _host.WriteWarning($"Repository access probe failed via {result.AccessProbeTool ?? "unknown"}: {result.AccessProbeMessage}");
         }
+
+        if (result.CredentialProviderSessionPrimeAttempted && result.CredentialProviderSessionPrimeSucceeded)
+            _host.WriteVerbose(result.CredentialProviderSessionPrimeMessage ?? "Azure Artifacts Credential Provider session priming succeeded.");
+        else if (result.CredentialProviderSessionPrimeAttempted)
+            _host.WriteWarning(result.CredentialProviderSessionPrimeMessage ?? "Azure Artifacts Credential Provider session priming did not succeed.");
+        else if (result.CredentialProviderSessionPrimeSkipped && !string.IsNullOrWhiteSpace(result.CredentialProviderSessionPrimeMessage))
+            _host.WriteVerbose(result.CredentialProviderSessionPrimeMessage!);
 
         _host.WriteVerbose($"Bootstrap mode used: {result.BootstrapModeUsed}; credential source: {result.CredentialSource}.");
         _host.WriteVerbose($"Repository registration requested {result.ToolRequested}; successful path: {result.ToolUsed}.");
@@ -611,4 +750,35 @@ internal sealed class PrivateGalleryService
     private static bool IsPrereleaseVersion(string version)
         => !string.IsNullOrWhiteSpace(version) &&
            version.IndexOf("-", StringComparison.Ordinal) >= 0;
+
+    private static bool IsHeadlessAutomation()
+    {
+        if (!Environment.UserInteractive)
+            return true;
+
+        foreach (var name in new[] { "CI", "GITHUB_ACTIONS", "TF_BUILD", "BUILD_BUILDID" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(name, "BUILD_BUILDID", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(value))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string? SelectCredentialProviderPath(IEnumerable<string>? paths)
+    {
+        var candidates = (paths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.exe", StringComparison.OrdinalIgnoreCase)) ??
+               candidates.FirstOrDefault(static path => path.EndsWith("CredentialProvider.Microsoft.dll", StringComparison.OrdinalIgnoreCase));
+    }
 }

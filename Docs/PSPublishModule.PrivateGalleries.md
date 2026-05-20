@@ -37,8 +37,10 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    `Export-ModuleRepositoryProfile` and ask users or desktop support to run
    `Initialize-ModuleRepository -Path <profile.json> -ProfileName <name>
    -Overwrite -InstallPrerequisites` once. This imports or refreshes the
-   profile, registers the repository, probes access, and triggers the normal
-   Entra/MFA credential-provider flow when a token is not already cached.
+   profile, registers the repository, probes access, and, when the first
+   ExistingSession probe cannot use a cached token, invokes the Azure Artifacts
+   Credential Provider interactively so the user can complete Entra/MFA and
+   cache a session token for later install/update/publish commands.
 6. If the profile is already deployed into the profile store, use
    `Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites`
    instead. Add `-SkipConnect` when you only want profile/readiness output
@@ -151,8 +153,11 @@ Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -O
 ```
 
 The imported profile still does not contain secrets. If the user has not signed
-in before, the first connect/install/update operation triggers the normal Azure
-Artifacts Credential Provider Entra/MFA flow.
+in before, `Initialize-ModuleRepository` and `Connect-ModuleRepository` can
+prime the Azure Artifacts Credential Provider for the feed URI so the user can
+complete Entra/MFA and cache a session token. PSResourceGet itself calls the
+provider in non-interactive mode after that, so the explicit priming step is
+what gives managed workstation onboarding a real prompt/cache path.
 
 ## PAT Fallback
 
@@ -225,10 +230,16 @@ as a workflow run with downloadable evidence artifacts. Dispatch it with:
   authentication policy, for example `["self-hosted","windows"]`.
 
 Prefer a self-hosted Windows runner that is allowed to use the Azure Artifacts
-Credential Provider and complete the Entra-backed sign-in/session flow for the
-target feed. Hosted runners generally do not have the interactive or cached
-enterprise identity context needed to prove the Entra-first path. The workflow
-adds a non-secret run summary from the evidence JSON and uploads
+Credential Provider and already has a cached or policy-provided identity for
+the target feed. Hosted runners generally do not have the interactive or cached
+enterprise identity context needed to prove the Entra-first path. In unattended
+validation outside a signed-in workstation, configure the Azure Artifacts
+Credential Provider using its supported endpoint environment variables, such as
+`ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS` for access-token based
+automation or `ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS` for managed
+identity/service-principal based automation. PSPublishModule does not write
+those secrets into profiles. The workflow adds a non-secret run summary from
+the evidence JSON and uploads
 `private-gallery-live.xml` and `private-gallery-live.evidence.json` as the
 `private-gallery-live-validation` artifact.
 
@@ -269,7 +280,10 @@ Recommended production-readiness evidence:
 
 - `Initialize-ModuleRepository -Path <profile.json> -ProfileName <name>
   -Overwrite -InstallPrerequisites` succeeds on a clean user workstation and
-  reports `Connection.AccessProbeSucceeded = True`.
+  reports `Connection.AccessProbeSucceeded = True`. If no cached token existed
+  before the first probe, `Connection.CredentialProviderSessionPrimeAttempted`
+  shows whether PSPublishModule invoked the provider to prime the Entra-backed
+  session before retrying.
 - `Install-PrivateModule -ProfileName <name> -Name <known module>` succeeds with
   no PAT or explicit credential parameters.
 - `Update-PrivateModule -ProfileName <name> -Name <known module>` succeeds for

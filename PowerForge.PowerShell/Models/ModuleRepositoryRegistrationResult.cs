@@ -47,6 +47,11 @@ internal sealed class ModuleRepositoryRegistrationResult
     public bool AccessProbeSucceeded { get; set; }
     public string? AccessProbeTool { get; set; }
     public string? AccessProbeMessage { get; set; }
+    public bool CredentialProviderSessionPrimeAttempted { get; set; }
+    public bool CredentialProviderSessionPrimeSucceeded { get; set; }
+    public bool CredentialProviderSessionPrimeSkipped { get; set; }
+    public string? CredentialProviderSessionPrimePath { get; set; }
+    public string? CredentialProviderSessionPrimeMessage { get; set; }
 
     public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
     public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;

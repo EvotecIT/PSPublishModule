@@ -82,6 +82,11 @@ if ($items.Count -gt 0) {
         if ($null -ne $item.PSObject.Properties['AccessProbeSucceeded'] -and $null -ne $item.AccessProbeSucceeded) {
             $details += "AccessProbe=$($item.AccessProbeSucceeded)"
         }
+        if ($null -ne $item.PSObject.Properties['CredentialProviderSessionPrimeAttempted'] -and [bool] $item.CredentialProviderSessionPrimeAttempted) {
+            $details += "SessionPrime=$($item.CredentialProviderSessionPrimeSucceeded)"
+        } elseif ($null -ne $item.PSObject.Properties['CredentialProviderSessionPrimeSkipped'] -and [bool] $item.CredentialProviderSessionPrimeSkipped) {
+            $details += "SessionPrime=Skipped"
+        }
         if ($null -ne $item.PSObject.Properties['InstallResultReturned'] -and $null -ne $item.InstallResultReturned) {
             $details += "Install=$($item.InstallResultReturned)"
         }
