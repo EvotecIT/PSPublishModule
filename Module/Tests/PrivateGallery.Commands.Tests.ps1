@@ -230,6 +230,7 @@ Describe 'Private gallery command metadata' {
     It 'restores the caller profile path after the Azure Artifacts live validation runner' {
         $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles.json'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+        $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES = '11'
         $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'live.evidence.json'
         $outputPath = Join-Path $script:PrivateGalleryProfileRoot 'live.xml'
         $packagePath = Join-Path $script:PrivateGalleryProfileRoot 'Company.Tools.1.2.3.nupkg'
@@ -251,6 +252,7 @@ Describe 'Private gallery command metadata' {
             $env:PSPUBLISHMODULE_AZDO_FEED | Should -Be 'Modules'
             $env:PSPUBLISHMODULE_AZDO_MODULE_NAME | Should -Be 'ModuleA'
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = 'mutated-by-live-test'
+            $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES | Should -Be '30'
             $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH | Should -Not -BeNullOrEmpty
 
             @(
@@ -288,11 +290,13 @@ Describe 'Private gallery command metadata' {
         }
 
         try {
-            $result = & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Project Platform -Feed Modules -ModuleName ModuleA -PublishPackagePath $packagePath -OutputFile $outputPath -EvidenceFile $evidencePath -PassThru
+            $result = & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Project Platform -Feed Modules -ModuleName ModuleA -PublishPackagePath $packagePath -OutputFile $outputPath -EvidenceFile $evidencePath -CredentialProviderWaitMinutes 30 -PassThru
             $result.FailedCount | Should -Be 0
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+            $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES | Should -Be '11'
             $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
             $evidence.Succeeded | Should -BeTrue
+            $evidence.CredentialProviderWaitMinutes | Should -Be 30
             $evidence.UnattendedCredentialProviderEnvironment.ArtifactsExternalFeedEndpointsConfigured | Should -BeFalse
             $evidence.UnattendedCredentialProviderEnvironment.ArtifactsFeedEndpointsConfigured | Should -BeFalse
             $evidence.UnattendedCredentialProviderEnvironment.LegacyVssExternalFeedEndpointsConfigured | Should -BeFalse
@@ -325,6 +329,7 @@ Describe 'Private gallery command metadata' {
         } finally {
             Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+            Remove-Item Env:\POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES -ErrorAction SilentlyContinue
         }
     }
 

@@ -24,6 +24,7 @@ The helper fails the script when the live Pester run reports failed tests.
     -Feed Modules `
     -ModuleName ModuleA `
     -GenerateDisposablePackage `
+    -CredentialProviderWaitMinutes 30 `
     -EvidenceFile .\private-gallery-live-publish.evidence.json
 #>
 [CmdletBinding()]
@@ -80,6 +81,10 @@ param(
     [string] $ModuleManifestPath,
 
     [Parameter()]
+    [ValidateRange(1, 1440)]
+    [int] $CredentialProviderWaitMinutes,
+
+    [Parameter()]
     [switch] $PassThru
 )
 
@@ -98,7 +103,8 @@ $envNames = @(
     'PSPUBLISHMODULE_AZDO_PACKAGE_PATH',
     'PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH',
     'PSPUBLISHMODULE_TEST_MANIFEST_PATH',
-    'POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH'
+    'POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH',
+    'POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES'
 )
 $previous = @{}
 $evidenceDataPath = $null
@@ -222,6 +228,10 @@ try {
     $env:PSPUBLISHMODULE_AZDO_FEED = $Feed
     $env:PSPUBLISHMODULE_AZDO_MODULE_NAME = $ModuleName
     $env:PSPUBLISHMODULE_AZDO_PROFILE_NAME = $ProfileName
+
+    if ($PSBoundParameters.ContainsKey('CredentialProviderWaitMinutes')) {
+        $env:POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES = [string] $CredentialProviderWaitMinutes
+    }
 
     if ($PSBoundParameters.ContainsKey('Project') -and -not [string]::IsNullOrWhiteSpace($Project)) {
         $env:PSPUBLISHMODULE_AZDO_PROJECT = $Project
@@ -418,6 +428,7 @@ try {
                 ArtifactsFeedEndpointsConfigured = -not [string]::IsNullOrWhiteSpace($env:ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS)
                 LegacyVssExternalFeedEndpointsConfigured = -not [string]::IsNullOrWhiteSpace($env:VSS_NUGET_EXTERNAL_FEED_ENDPOINTS)
             }
+            CredentialProviderWaitMinutes = if ($PSBoundParameters.ContainsKey('CredentialProviderWaitMinutes')) { $CredentialProviderWaitMinutes } else { $null }
             ValidationItems      = $validationItems
             EvidenceValidationErrors = $evidenceValidationErrors
             Pester               = [ordered]@{

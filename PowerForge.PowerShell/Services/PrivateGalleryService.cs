@@ -9,6 +9,7 @@ internal sealed class PrivateGalleryService
 {
     private const string MinimumPSResourceGetVersion = "1.1.1";
     private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0";
+    private const string CredentialProviderTimeoutMinutesEnvironmentVariable = "POWERFORGE_AZURE_ARTIFACTS_CREDENTIAL_PROVIDER_TIMEOUT_MINUTES";
 
     private readonly IPrivateGalleryHost _host;
 
@@ -578,7 +579,7 @@ internal sealed class PrivateGalleryService
                 fileName,
                 Environment.CurrentDirectory,
                 arguments,
-                timeout ?? TimeSpan.FromMinutes(10),
+                timeout ?? GetCredentialProviderSessionPrimeTimeout(),
                 captureOutput: false,
                 captureError: false)).GetAwaiter().GetResult();
 
@@ -768,6 +769,15 @@ internal sealed class PrivateGalleryService
         }
 
         return false;
+    }
+
+    private static TimeSpan GetCredentialProviderSessionPrimeTimeout()
+    {
+        var raw = Environment.GetEnvironmentVariable(CredentialProviderTimeoutMinutesEnvironmentVariable);
+        if (int.TryParse(raw, out var minutes) && minutes > 0)
+            return TimeSpan.FromMinutes(Math.Min(minutes, 1440));
+
+        return TimeSpan.FromMinutes(10);
     }
 
     private static string? SelectCredentialProviderPath(IEnumerable<string>? paths)
