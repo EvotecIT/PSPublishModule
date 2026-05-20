@@ -75,7 +75,8 @@ the advanced/manual flow for admins, diagnostics, and constrained rollouts.
 8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
 Update-PrivateModule -ProfileName <name>.
 9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
-Publish-NugetPackage -ProfileName <name> so publishing and consuming resolve the same feed.
+Publish-NugetPackage -ProfileName <name> -InstallPrerequisites so publishing and consuming resolve the
+same feed and can bootstrap the same Azure Artifacts credential-provider path.
 10. Run the opt-in live Pester flow against a real feed/module before announcing the feed as production-ready.
 
 RECOMMENDED WORKSTATION FLOW
@@ -103,7 +104,7 @@ New-ConfigurationPublish -ProfileName Company -Enabled
 
 Direct NuGet package pushes can also resolve the feed from the profile:
 
-Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+Publish-NugetPackage -Path .\artifacts -ProfileName Company -InstallPrerequisites -SkipDuplicate
 
 MANAGED PROFILE DEPLOYMENT
 

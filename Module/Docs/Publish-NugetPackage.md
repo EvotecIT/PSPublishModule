@@ -16,7 +16,7 @@ Publish-NugetPackage -Path <string[]> -ApiKey <string> [-Source <string>] [-Skip
 
 ### Profile
 ```powershell
-Publish-NugetPackage -Path <string[]> -ProfileName <string> [-ApiKey <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-NugetPackage -Path <string[]> -ProfileName <string> [-ApiKey <string>] [-InstallPrerequisites] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -42,10 +42,10 @@ Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifa
 
 ### EXAMPLE 3
 ```powershell
-PS> Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -SkipDuplicate
+PS> Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate
 ```
 
-Resolves the Azure Artifacts NuGet v3 source from the saved profile and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.
+Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs missing credential-provider prerequisites when requested, and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.
 
 ## PARAMETERS
 
@@ -59,6 +59,22 @@ Aliases: None
 Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallPrerequisites
+Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Profile
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False

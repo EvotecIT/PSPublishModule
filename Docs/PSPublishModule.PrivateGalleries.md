@@ -50,8 +50,9 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
 9. For publishers and CI operators, use the same profile with
    `New-ConfigurationPublish -ProfileName <name>` and `Publish-NugetPackage
-   -ProfileName <name>` so package push and package consumption resolve the same
-   feed.
+   -ProfileName <name> -InstallPrerequisites` so package push and package
+   consumption resolve the same feed and can bootstrap the same Azure Artifacts
+   credential-provider path.
 10. Run the opt-in live Pester flow against at least one real feed/module before
    announcing the feed as production-ready.
 
@@ -106,7 +107,7 @@ New-ConfigurationPublish -ProfileName Company -Enabled
 Direct NuGet package pushes can also resolve the feed from the profile:
 
 ```powershell
-Publish-NugetPackage -Path .\artifacts -ProfileName Company -SkipDuplicate
+Publish-NugetPackage -Path .\artifacts -ProfileName Company -InstallPrerequisites -SkipDuplicate
 ```
 
 ## Profile Storage

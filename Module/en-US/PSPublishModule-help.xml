@@ -29710,6 +29710,18 @@ This makes repeated publishing runs idempotent when the package already exists.<
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallPrerequisites</maml:name>
+          <maml:description>
+            <maml:para>Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
@@ -29758,6 +29770,18 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>InstallPrerequisites</maml:name>
+        <maml:description>
+          <maml:para>Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -29857,9 +29881,9 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <maml:introduction>
           <maml:para>PS&gt; </maml:para>
         </maml:introduction>
-        <dev:code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -SkipDuplicate</dev:code>
+        <dev:code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate</dev:code>
         <dev:remarks>
-          <maml:para>Resolves the Azure Artifacts NuGet v3 source from the saved profile and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</maml:para>
+          <maml:para>Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs missing credential-provider prerequisites when requested, and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

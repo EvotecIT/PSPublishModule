@@ -270,6 +270,7 @@ Describe 'Private gallery command metadata' {
         $publishPackage = $module.ExportedCmdlets['Publish-NugetPackage']
         $publishPackage.ParameterSets.Name | Should -Contain 'Profile'
         $publishPackage.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+        $publishPackage.Parameters.Keys | Should -Contain 'InstallPrerequisites'
     }
 
     It 'saves Azure Artifacts profiles with Entra-first defaults' {
@@ -474,7 +475,7 @@ Describe 'Private gallery command metadata' {
         $packagePath = Join-Path $packageRoot 'Company.Tools.1.0.0.nupkg'
         Set-Content -LiteralPath $packagePath -Value 'placeholder' -NoNewline
 
-        $result = Publish-NugetPackage -Path $packageRoot -ProfileName 'Company' -SkipDuplicate -WhatIf
+        $result = Publish-NugetPackage -Path $packageRoot -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate -WhatIf
 
         $result | Should -Not -BeNullOrEmpty
         $result.Success | Should -BeTrue

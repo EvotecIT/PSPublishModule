@@ -169,7 +169,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $onboarding.Succeeded | Should -BeTrue
         $onboarding.Connection.AccessProbeSucceeded | Should -BeTrue
 
-        $result = Publish-NugetPackage -Path $packageRoot -ProfileName $profileName -SkipDuplicate -ErrorAction Stop
+        $result = Publish-NugetPackage -Path $packageRoot -ProfileName $profileName -InstallPrerequisites -SkipDuplicate -ErrorAction Stop
 
         $result.Success | Should -BeTrue
         $result.ProfileName | Should -Be $profileName

@@ -33,8 +33,8 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Publish to a saved Azure Artifacts profile</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -SkipDuplicate</code>
-/// <para>Resolves the Azure Artifacts NuGet v3 source from the saved profile and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</para>
+/// <code>Publish-NugetPackage -Path '.\artifacts' -ProfileName 'Company' -InstallPrerequisites -SkipDuplicate</code>
+/// <para>Resolves the Azure Artifacts NuGet v3 source from the saved profile, installs missing credential-provider prerequisites when requested, and lets the Azure Artifacts Credential Provider handle Entra-backed authentication.</para>
 /// </example>
 [Cmdlet(VerbsData.Publish, "NugetPackage", DefaultParameterSetName = ParameterSetSource, SupportsShouldProcess = true)]
 public sealed class PublishNugetPackageCommand : PSCmdlet
@@ -64,6 +64,10 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ProfileName { get; set; } = string.Empty;
 
+    /// <summary>Installs missing private-gallery prerequisites before profile-backed Azure Artifacts package publishing.</summary>
+    [Parameter(ParameterSetName = ParameterSetProfile)]
+    public SwitchParameter InstallPrerequisites { get; set; }
+
     /// <summary>
     /// When set, passes <c>--skip-duplicate</c> to <c>dotnet nuget push</c>.
     /// This makes repeated publishing runs idempotent when the package already exists.
@@ -84,6 +88,16 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             if (ParameterSetName == ParameterSetProfile)
             {
                 var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+                var host = new CmdletPrivateGalleryHost(this);
+                var privateGallery = new PrivateGalleryService(host);
+                privateGallery.EnsureProviderSupported(profile.Provider);
+
+                var prerequisites = privateGallery.EnsureBootstrapPrerequisites(
+                    InstallPrerequisites.IsPresent,
+                    profile.BootstrapMode);
+                foreach (var message in prerequisites.Messages)
+                    WriteVerbose(message);
+
                 var endpoint = AzureArtifactsRepositoryEndpoints.Create(
                     profile.AzureDevOpsOrganization,
                     profile.AzureDevOpsProject,
