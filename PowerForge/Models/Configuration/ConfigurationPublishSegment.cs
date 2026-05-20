@@ -60,6 +60,9 @@ public sealed class PublishConfiguration
     /// <summary>When true, asks GitHub to generate release notes automatically.</summary>
     public bool GenerateReleaseNotes { get; set; }
 
+    /// <summary>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</summary>
+    public bool UseAsDependencyVersionSource { get; set; }
+
     /// <summary>Verbose mode requested.</summary>
     public bool Verbose { get; set; }
 }

@@ -10,14 +10,22 @@ internal sealed class RequiredModuleDraftDescriptor
     public string? MinimumVersion { get; }
     public string? RequiredVersion { get; }
     public string? Guid { get; }
+    public ModuleDependencyVersionSource VersionSource { get; }
 
-    public RequiredModuleDraftDescriptor(string moduleName, string? moduleVersion, string? minimumVersion, string? requiredVersion, string? guid)
+    public RequiredModuleDraftDescriptor(
+        string moduleName,
+        string? moduleVersion,
+        string? minimumVersion,
+        string? requiredVersion,
+        string? guid,
+        ModuleDependencyVersionSource versionSource)
     {
         ModuleName = moduleName;
         ModuleVersion = moduleVersion;
         MinimumVersion = minimumVersion;
         RequiredVersion = requiredVersion;
         Guid = guid;
+        VersionSource = versionSource;
     }
 }
 
@@ -51,7 +59,8 @@ internal sealed class RequiredModuleResolutionEngine
         IReadOnlyDictionary<string, (string? Version, string? Guid)> installed,
         Func<IReadOnlyCollection<string>, IReadOnlyDictionary<string, (string? Version, string? Guid)>>? onlineLookup,
         bool resolveMissingModulesOnline,
-        bool warnIfRequiredModulesOutdated)
+        bool warnIfRequiredModulesOutdated,
+        bool preferOnlineMetadata = false)
     {
         var list = (drafts ?? Array.Empty<RequiredModuleDraftDescriptor>())
             .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
@@ -63,9 +72,9 @@ internal sealed class RequiredModuleResolutionEngine
 
         IReadOnlyDictionary<string, (string? Version, string? Guid)> onlineVersions =
             new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
-        if ((resolveMissingModulesOnline || warnIfRequiredModulesOutdated) && onlineLookup is not null)
+        if ((resolveMissingModulesOnline || warnIfRequiredModulesOutdated || preferOnlineMetadata) && onlineLookup is not null)
         {
-            var candidates = BuildOnlineLookupCandidates(list, installed, warnIfRequiredModulesOutdated);
+            var candidates = BuildOnlineLookupCandidates(list, installed, warnIfRequiredModulesOutdated, preferOnlineMetadata);
             if (candidates.Count > 0)
                 onlineVersions = onlineLookup(candidates) ??
                                  new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
@@ -84,13 +93,13 @@ internal sealed class RequiredModuleResolutionEngine
 
             if (onlineVersions.TryGetValue(draft.ModuleName, out var onlineInfo))
             {
-                if (string.IsNullOrWhiteSpace(availableVersion) && !string.IsNullOrWhiteSpace(onlineInfo.Version))
+                if ((preferOnlineMetadata || string.IsNullOrWhiteSpace(availableVersion)) && !string.IsNullOrWhiteSpace(onlineInfo.Version))
                 {
                     availableVersion = onlineInfo.Version;
                     resolvedOnline.Add(draft.ModuleName);
                 }
 
-                if (string.IsNullOrWhiteSpace(availableGuid) && !string.IsNullOrWhiteSpace(onlineInfo.Guid))
+                if ((preferOnlineMetadata || string.IsNullOrWhiteSpace(availableGuid)) && !string.IsNullOrWhiteSpace(onlineInfo.Guid))
                     availableGuid = onlineInfo.Guid;
             }
 
@@ -233,7 +242,8 @@ internal sealed class RequiredModuleResolutionEngine
     private static IReadOnlyCollection<string> BuildOnlineLookupCandidates(
         IEnumerable<RequiredModuleDraftDescriptor> drafts,
         IReadOnlyDictionary<string, (string? Version, string? Guid)> installed,
-        bool warnIfRequiredModulesOutdated)
+        bool warnIfRequiredModulesOutdated,
+        bool preferOnlineMetadata)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var draft in drafts ?? Array.Empty<RequiredModuleDraftDescriptor>())
@@ -246,9 +256,9 @@ internal sealed class RequiredModuleResolutionEngine
 
             installed.TryGetValue(draft.ModuleName, out var info);
             var minimumSource = !string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.MinimumVersion : draft.ModuleVersion;
-            var needsVersionLookup = string.IsNullOrWhiteSpace(info.Version) &&
-                                     (IsAutoOrLatest(draft.RequiredVersion) || IsAutoOrLatest(minimumSource));
-            var needsGuidLookup = string.IsNullOrWhiteSpace(info.Guid) && IsAutoGuid(draft.Guid);
+            var hasAutoVersion = IsAutoOrLatest(draft.RequiredVersion) || IsAutoOrLatest(minimumSource);
+            var needsVersionLookup = hasAutoVersion && (preferOnlineMetadata || string.IsNullOrWhiteSpace(info.Version));
+            var needsGuidLookup = IsAutoGuid(draft.Guid) && (preferOnlineMetadata || string.IsNullOrWhiteSpace(info.Guid));
             if (needsVersionLookup || needsGuidLookup)
                 candidates.Add(draft.ModuleName);
         }
@@ -323,10 +333,10 @@ internal sealed class RequiredModuleResolutionEngine
         }
     }
 
-    private static Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid), int>
+    private static Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid, ModuleDependencyVersionSource VersionSource), int>
         BuildDraftCounts(IEnumerable<RequiredModuleDraftDescriptor> drafts)
     {
-        var counts = new Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid), int>();
+        var counts = new Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid, ModuleDependencyVersionSource VersionSource), int>();
         foreach (var draft in drafts ?? Array.Empty<RequiredModuleDraftDescriptor>())
         {
             if (draft is null || string.IsNullOrWhiteSpace(draft.ModuleName))
@@ -337,7 +347,8 @@ internal sealed class RequiredModuleResolutionEngine
                 ModuleVersion: NormalizeDraftValue(draft.ModuleVersion),
                 MinimumVersion: NormalizeDraftValue(draft.MinimumVersion),
                 RequiredVersion: NormalizeDraftValue(draft.RequiredVersion),
-                Guid: NormalizeDraftValue(draft.Guid));
+                Guid: NormalizeDraftValue(draft.Guid),
+                VersionSource: draft.VersionSource);
 
             counts.TryGetValue(key, out var current);
             counts[key] = current + 1;

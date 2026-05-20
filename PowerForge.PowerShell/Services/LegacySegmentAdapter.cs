@@ -265,7 +265,9 @@ public static class LegacySegmentAdapter
                     ModuleVersion = GetString(d, "ModuleVersion"),
                     MinimumVersion = GetString(d, "MinimumVersion"),
                     RequiredVersion = GetString(d, "RequiredVersion"),
-                    Guid = GetString(d, "Guid")
+                    Guid = GetString(d, "Guid"),
+                    VersionSource = TryParseModuleDependencyVersionSource(GetString(d, "VersionSource"))
+                        ?? ModuleDependencyVersionSource.Auto
                 }
             });
             return;
@@ -282,6 +284,12 @@ public static class LegacySegmentAdapter
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         return Enum.TryParse<InstallationStrategy>(value!.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static ModuleDependencyVersionSource? TryParseModuleDependencyVersionSource(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<ModuleDependencyVersionSource>(value!.Trim(), ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static AssemblyTypeAcceleratorExportMode? TryParseAssemblyTypeAcceleratorExportMode(string? value)

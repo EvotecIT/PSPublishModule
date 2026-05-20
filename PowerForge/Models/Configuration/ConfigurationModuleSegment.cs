@@ -40,5 +40,7 @@ public sealed class ModuleDependencyConfiguration
 
     /// <summary>Module GUID (optional; legacy field).</summary>
     public string? Guid { get; set; }
-}
 
+    /// <summary>Source used when resolving Auto/Latest version values.</summary>
+    public ModuleDependencyVersionSource VersionSource { get; set; } = ModuleDependencyVersionSource.Auto;
+}

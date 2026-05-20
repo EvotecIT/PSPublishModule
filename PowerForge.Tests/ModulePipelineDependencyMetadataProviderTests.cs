@@ -68,6 +68,245 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_UsesPublishRepositoryAsDependencyVersionSource_WhenPublishOptInIsEnabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "Latest"
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            Enabled = true,
+                            RepositoryName = "PSGallery",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = new(dependencyName, "1.41.0.5", null, @"C:\Modules\PSWriteHTML\1.41.0.5")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal(dependencyName, required.ModuleName);
+            Assert.Equal("1.41.0", required.ModuleVersion);
+            Assert.Equal("PSGallery", provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_HonorsInstalledVersionSource_WhenPublishOptInIsEnabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.Installed
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            Enabled = true,
+                            RepositoryName = "PSGallery",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = new(dependencyName, "1.41.0.5", null, @"C:\Modules\PSWriteHTML\1.41.0.5")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal("1.41.0.5", required.ModuleVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DoesNotResolveInstalledVersionSourceOnline_WhenInstalledModuleIsMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.Installed
+                        }
+                    }
+                }
+            };
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Null(required.ModuleVersion);
+            Assert.Equal(0, provider.OnlineLookups);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_ThrowsForPublishRepositoryVersionSource_WhenNoPublishSourceIsConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "PSWriteHTML",
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.PublishRepository
+                        }
+                    }
+                }
+            };
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase));
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
+            Assert.Contains("UseAsDependencyVersionSource", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_ReordersRequiredModules_ForBinaryConflictOrder_UsingInjectedDependencyMetadataProvider()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -262,6 +501,7 @@ public sealed class Marker
         internal int InstalledLookups { get; private set; }
         internal int OnlineLookups { get; private set; }
         internal int RequiredModuleLookups { get; private set; }
+        internal string? LastOnlineRepository { get; private set; }
 
         internal FakeModuleDependencyMetadataProvider(
             IReadOnlyDictionary<string, InstalledModuleMetadata> installedModules,
@@ -306,6 +546,7 @@ public sealed class Marker
             bool prerelease)
         {
             OnlineLookups++;
+            LastOnlineRepository = repository;
             var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in names ?? Array.Empty<string>())
             {

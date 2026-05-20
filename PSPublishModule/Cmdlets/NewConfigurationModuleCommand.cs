@@ -114,6 +114,12 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
     [ArgumentCompleter(typeof(AutoLatestCompleter))]
     public string? Guid { get; set; }
 
+    /// <summary>
+    /// Source used when resolving <c>Auto</c>/<c>Latest</c> version values.
+    /// </summary>
+    [Parameter]
+    public PowerForge.ModuleDependencyVersionSource VersionSource { get; set; } = PowerForge.ModuleDependencyVersionSource.Auto;
+
     /// <summary>Emits module dependency configuration objects.</summary>
     protected override void ProcessRecord()
     {
@@ -136,7 +142,8 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
                     ModuleVersion = null,
                     MinimumVersion = min,
                     RequiredVersion = RequiredVersion,
-                    Guid = Guid
+                    Guid = Guid,
+                    VersionSource = VersionSource
                 }
             };
 
