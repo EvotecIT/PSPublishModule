@@ -91,11 +91,32 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $profile.Name | Should -Be $profileName
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
 
+        $bootstrapRoot = Join-Path $script:LiveProfileRoot 'bootstrap'
+        $bootstrapPackage = New-ModuleRepositoryBootstrap -ProfileName $profileName -OutputDirectory $bootstrapRoot -InstallModule $moduleName -Force
+        $bootstrapPackage | Should -Not -BeNullOrEmpty
+        $bootstrapPackage.ContainsSecrets | Should -BeFalse
+        $bootstrapPackage.ProfileNames | Should -Contain $profileName
+        $bootstrapPackage.InstallModules | Should -Contain $moduleName
+        Test-Path -LiteralPath $bootstrapPackage.ProfilePath -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath $bootstrapPackage.ScriptPath -PathType Leaf | Should -BeTrue
+
+        $bootstrapProfileJson = Get-Content -LiteralPath $bootstrapPackage.ProfilePath -Raw
+        $bootstrapProfileJson | Should -Not -Match '"Secret"'
+        $bootstrapProfileJson | Should -Not -Match '"Password"'
+        $bootstrapProfileJson | Should -Not -Match '"Token"'
+
         $profileFile = Join-Path $script:LiveProfileRoot "$profileName.profile.json"
         Export-ModuleRepositoryProfile -Name $profileName -Path $profileFile -Force | Out-Null
         Remove-ModuleRepositoryProfile -Name $profileName
 
-        $onboarding = Initialize-ModuleRepository -Path $profileFile -ProfileName $profileName -Overwrite -InstallPrerequisites -ErrorAction Stop
+        $bootstrapOutput = @(& $bootstrapPackage.ScriptPath -ErrorAction Stop)
+        $onboarding = @(
+            $bootstrapOutput |
+                Where-Object { $_ -and $_.PSObject.Properties['Connection'] } |
+                Select-Object -Last 1
+        )
+        $onboarding | Should -Not -BeNullOrEmpty
+        $onboarding = $onboarding[0]
         $onboarding.Succeeded | Should -BeTrue
         $onboarding.ProfileWritten | Should -BeTrue
         $onboarding.ConnectAttempted | Should -BeTrue
@@ -118,6 +139,12 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
             Name                             = 'OnboardingInstallUpdate'
             Succeeded                        = $true
             ProfileName                      = $profileName
+            BootstrapPackageGenerated        = $null -ne $bootstrapPackage
+            BootstrapPackageContainsSecrets  = $bootstrapPackage.ContainsSecrets
+            BootstrapScriptPath              = [IO.Path]::GetFileName($bootstrapPackage.ScriptPath)
+            BootstrapProfilePath             = [IO.Path]::GetFileName($bootstrapPackage.ProfilePath)
+            BootstrapScriptExecuted          = $bootstrapOutput.Count -gt 0
+            BootstrapRecommendedCommand      = $bootstrapPackage.RecommendedCommand
             ManagedProfileImported           = $onboarding.ProfileWritten
             ConnectAttempted                 = $onboarding.ConnectAttempted
             AccessProbePerformed             = $onboarding.Connection.AccessProbePerformed

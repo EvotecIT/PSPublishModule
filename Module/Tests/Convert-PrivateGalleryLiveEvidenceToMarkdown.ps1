@@ -90,6 +90,12 @@ if ($items.Count -gt 0) {
         if ($null -ne $item.PSObject.Properties['AccessProbeSucceeded'] -and $null -ne $item.AccessProbeSucceeded) {
             $details += "AccessProbe=$($item.AccessProbeSucceeded)"
         }
+        if ($null -ne $item.PSObject.Properties['BootstrapPackageGenerated'] -and $null -ne $item.BootstrapPackageGenerated) {
+            $details += "BootstrapPackage=$($item.BootstrapPackageGenerated)"
+        }
+        if ($null -ne $item.PSObject.Properties['BootstrapScriptExecuted'] -and $null -ne $item.BootstrapScriptExecuted) {
+            $details += "BootstrapScript=$($item.BootstrapScriptExecuted)"
+        }
         if ($null -ne $item.PSObject.Properties['CredentialProviderSessionPrimeAttempted'] -and [bool] $item.CredentialProviderSessionPrimeAttempted) {
             $details += "SessionPrime=$($item.CredentialProviderSessionPrimeSucceeded)"
         } elseif ($null -ne $item.PSObject.Properties['CredentialProviderSessionPrimeSkipped'] -and [bool] $item.CredentialProviderSessionPrimeSkipped) {

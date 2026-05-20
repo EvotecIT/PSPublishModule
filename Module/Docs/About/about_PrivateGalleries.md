@@ -138,8 +138,9 @@ PRODUCTION READINESS EVIDENCE
 Before calling a feed ready for users, prove:
 
 - Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 succeeds against the real feed/module
-and writes a non-secret evidence JSON file with -EvidenceFile. The evidence should include the
-access probe, credential-free publish configuration, install/update, and optional package-push checks.
+and writes a non-secret evidence JSON file with -EvidenceFile. The evidence should include bootstrap package
+generation, non-secret package contents, bootstrap script execution, the access probe,
+credential-free publish configuration, install/update, and optional package-push checks.
 Missing or incomplete required evidence details make the helper fail so the JSON cannot look successful
 while omitting the proof operators need. For package-push proof, use -GenerateDisposablePackage or pass
 a prebuilt disposable package with -PublishPackagePath.

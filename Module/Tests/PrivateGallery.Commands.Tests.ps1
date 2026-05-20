@@ -183,6 +183,9 @@ Describe 'Private gallery command metadata' {
                     Name                              = 'OnboardingInstallUpdate'
                     Succeeded                         = $true
                     AccessProbeSucceeded              = $true
+                    BootstrapPackageGenerated         = $true
+                    BootstrapPackageContainsSecrets   = $false
+                    BootstrapScriptExecuted           = $true
                     InstallResultReturned             = $true
                     UpdateResultReturned              = $true
                     PublishConfigurationHasCredential = $false
@@ -217,7 +220,7 @@ Describe 'Private gallery command metadata' {
         $summary | Should -Match '\| Credential-provider external endpoints configured \| True \|'
         $summary | Should -Match '\| Credential-provider feed endpoints configured \| False \|'
         $summary | Should -Match '\| Legacy VSS external endpoints configured \| False \|'
-        $summary | Should -Match '\| OnboardingInstallUpdate \| True \| AccessProbe=True, Install=True, Update=True \|'
+        $summary | Should -Match '\| OnboardingInstallUpdate \| True \| AccessProbe=True, BootstrapPackage=True, BootstrapScript=True, Install=True, Update=True \|'
         $summary | Should -Match '\| PublishPackage \| True \| AccessProbe=True, PushedPackages=1, FailedPackages=0 \|'
     }
 
@@ -253,6 +256,9 @@ Describe 'Private gallery command metadata' {
                     Succeeded                         = $true
                     ProfileName                       = 'LiveAzureArtifacts'
                     AccessProbeSucceeded              = $true
+                    BootstrapPackageGenerated         = $true
+                    BootstrapPackageContainsSecrets   = $false
+                    BootstrapScriptExecuted           = $true
                     PublishConfigurationHasCredential = $false
                     InstallResultReturned             = $true
                     UpdateResultReturned              = $true
@@ -298,6 +304,9 @@ Describe 'Private gallery command metadata' {
             $evidence.ValidationItems.Count | Should -Be 2
             $evidence.ValidationItems[0].Name | Should -Be 'OnboardingInstallUpdate'
             $evidence.ValidationItems[0].AccessProbeSucceeded | Should -BeTrue
+            $evidence.ValidationItems[0].BootstrapPackageGenerated | Should -BeTrue
+            $evidence.ValidationItems[0].BootstrapPackageContainsSecrets | Should -BeFalse
+            $evidence.ValidationItems[0].BootstrapScriptExecuted | Should -BeTrue
             $evidence.ValidationItems[0].PublishConfigurationHasCredential | Should -BeFalse
             $evidence.ValidationItems[0].InstallResultReturned | Should -BeTrue
             $evidence.ValidationItems[0].UpdateResultReturned | Should -BeTrue
@@ -340,6 +349,9 @@ Describe 'Private gallery command metadata' {
                     Succeeded                         = $true
                     ProfileName                       = 'LiveAzureArtifacts'
                     AccessProbeSucceeded              = $true
+                    BootstrapPackageGenerated         = $true
+                    BootstrapPackageContainsSecrets   = $false
+                    BootstrapScriptExecuted           = $true
                     PublishConfigurationHasCredential = $false
                     InstallResultReturned             = $true
                     UpdateResultReturned              = $true

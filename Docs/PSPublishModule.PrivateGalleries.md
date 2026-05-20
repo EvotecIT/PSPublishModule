@@ -229,14 +229,15 @@ Pester reports failed tests so release operators get a non-zero script outcome
 instead of a false-green live validation. `-EvidenceFile` writes a non-secret
 JSON evidence summary with the provider, organization, project, feed, module,
 profile name, publish opt-in state, Pester counts, optional result-file
-metadata, and sanitized live assertion details such as access probe success,
-credential-free publish configuration, install/update execution, and optional
-package-push evidence. When `-EvidenceFile` is used, the helper also treats
-missing or incomplete required assertion details as a validation failure so the
-JSON artifact cannot look successful while omitting the evidence operators need.
-For publish proof, use either `-PublishPackagePath` with a prebuilt disposable
-package or `-GenerateDisposablePackage` to create a unique non-secret validation
-package for the run.
+metadata, and sanitized live assertion details such as bootstrap package
+generation, non-secret package contents, bootstrap script execution, access
+probe success, credential-free publish configuration, install/update execution,
+and optional package-push evidence. When `-EvidenceFile` is used, the helper
+also treats missing or incomplete required assertion details as a validation
+failure so the JSON artifact cannot look successful while omitting the evidence
+operators need. For publish proof, use either `-PublishPackagePath` with a
+prebuilt disposable package or `-GenerateDisposablePackage` to create a unique
+non-secret validation package for the run.
 
 The repository also includes a manual GitHub Actions workflow named
 `Private Gallery Live Validation`. Use it when you want the same proof captured

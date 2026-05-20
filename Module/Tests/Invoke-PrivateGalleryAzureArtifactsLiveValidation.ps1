@@ -347,6 +347,15 @@ try {
                 if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'AccessProbeSucceeded')) {
                     $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove AccessProbeSucceeded = true."
                 }
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'BootstrapPackageGenerated')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove BootstrapPackageGenerated = true."
+                }
+                if ((Get-ValidationItemValue -Item $onboardingEvidence -PropertyName 'BootstrapPackageContainsSecrets') -ne $false) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove the bootstrap package was non-secret."
+                }
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'BootstrapScriptExecuted')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove BootstrapScriptExecuted = true."
+                }
                 if ((Get-ValidationItemValue -Item $onboardingEvidence -PropertyName 'PublishConfigurationHasCredential') -ne $false) {
                     $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove publish configuration was credential-free."
                 }
