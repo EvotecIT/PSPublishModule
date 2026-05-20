@@ -37,7 +37,7 @@ PSPublishModule can also manage enterprise private PowerShell module feeds, with
 Typical user onboarding:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -SkipConnect
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 Install-PrivateModule -ProfileName Company -Name ModuleA

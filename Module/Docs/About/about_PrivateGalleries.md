@@ -82,7 +82,7 @@ RECOMMENDED WORKSTATION FLOW
 
 Create and connect a profile directly:
 
-Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 
 Import a managed profile file and connect the workstation:
 
@@ -149,7 +149,7 @@ policy instead of overloading Azure Artifacts behavior.
 ## Examples
 
 ```text
-PS> Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+PS> Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 
 Saves an Entra-first Azure Artifacts profile named Company, installs missing prerequisites if needed, registers
 the repository, and validates authenticated feed access.

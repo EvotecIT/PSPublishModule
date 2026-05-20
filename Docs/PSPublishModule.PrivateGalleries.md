@@ -138,7 +138,7 @@ administrator can create the profile on a staging machine, export it, and deploy
 that JSON file with Intune, GPO, configuration management, or a bootstrap script:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -SkipConnect
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 ```
 

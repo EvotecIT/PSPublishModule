@@ -24,7 +24,7 @@ namespace PSPublishModule;
 /// </example>
 /// <example>
 /// <summary>Create and connect an Entra-first Azure Artifacts profile</summary>
-/// <code>Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</code>
+/// <code>Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</code>
 /// <para>Saves an Entra-first profile and connects the workstation in one command.</para>
 /// </example>
 /// <example>
@@ -41,10 +41,11 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     private const string ParameterSetImport = "Import";
     private const string ParameterSetAzureArtifacts = "AzureArtifacts";
 
-    /// <summary>Saved repository profile name. When used with Path, selects one imported profile from the file.</summary>
+    /// <summary>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</summary>
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetProfile)]
     [Parameter(ParameterSetName = ParameterSetImport)]
-    [Alias("Profile")]
+    [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetAzureArtifacts)]
+    [Alias("Name", "Profile")]
     [ValidateNotNullOrEmpty]
     public string? ProfileName { get; set; }
 
@@ -56,11 +57,6 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
     /// <summary>Replace saved profiles with matching names when importing from Path.</summary>
     [Parameter(ParameterSetName = ParameterSetImport)]
     public SwitchParameter Overwrite { get; set; }
-
-    /// <summary>Profile name to create when supplying Azure Artifacts feed details.</summary>
-    [Parameter(Mandatory = true, Position = 0, ParameterSetName = ParameterSetAzureArtifacts)]
-    [ValidateNotNullOrEmpty]
-    public string? Name { get; set; }
 
     /// <summary>Private gallery provider. Currently only AzureArtifacts is supported.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
@@ -203,7 +199,7 @@ public sealed class InitializeModuleRepositoryCommand : PSCmdlet
         {
             var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
             {
-                Name = Name!,
+                Name = ProfileName!,
                 Provider = Provider,
                 AzureDevOpsOrganization = AzureDevOpsOrganization,
                 AzureDevOpsProject = AzureDevOpsProject,

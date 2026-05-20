@@ -21,7 +21,7 @@ Initialize-ModuleRepository [-Path] <string> [-ProfileName <string>] [-Overwrite
 
 ### AzureArtifacts
 ```powershell
-Initialize-ModuleRepository [-Name] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ModuleRepository [-ProfileName] <string> -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-SkipConnect] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -41,7 +41,7 @@ Imports the non-secret profile, installs/refreshes prerequisites, registers the 
 
 ### EXAMPLE 2
 ```powershell
-Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 ```
 
 Saves an Entra-first profile and connects the workstation in one command.
@@ -183,22 +183,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Name
-Profile name to create when supplying Azure Artifacts feed details.
-
-```yaml
-Type: String
-Parameter Sets: AzureArtifacts
-Aliases: None
-Possible values:
-
-Required: True
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -Overwrite
 Replace saved profiles with matching names when importing from Path.
 
@@ -248,12 +232,12 @@ Accept wildcard characters: True
 ```
 
 ### -ProfileName
-Saved repository profile name. When used with Path, selects one imported profile from the file.
+Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.
 
 ```yaml
 Type: String
-Parameter Sets: Profile, Import
-Aliases: Profile
+Parameter Sets: Profile, Import, AzureArtifacts
+Aliases: Name, Profile
 Possible values:
 
 Required: True

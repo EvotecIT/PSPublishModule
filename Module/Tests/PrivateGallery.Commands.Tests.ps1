@@ -136,6 +136,7 @@ Describe 'Private gallery command metadata' {
         $initialize.ParameterSets.Name | Should -Contain 'Import'
         $initialize.ParameterSets.Name | Should -Contain 'AzureArtifacts'
         $initialize.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+        $initialize.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $initialize.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
         $initialize.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
         $initialize.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
@@ -221,6 +222,17 @@ Describe 'Private gallery command metadata' {
 
         $profile = Get-ModuleRepositoryProfile -Name 'CompanyInit'
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+    }
+
+    It 'initializes a new Azure Artifacts profile using the canonical ProfileName parameter' {
+        $result = Initialize-ModuleRepository -ProfileName 'CompanyCanonical' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -SkipConnect
+
+        $result.ProfileName | Should -Be 'CompanyCanonical'
+        $result.ProfileWritten | Should -BeTrue
+        $result.Profile.AzureDevOpsOrganization | Should -Be 'contoso'
+
+        $profile = Get-ModuleRepositoryProfile -Name 'CompanyCanonical'
+        $profile.RepositoryName | Should -Be 'Modules'
     }
 
     It 'initializes from a managed profile file in one command without connecting when requested' {

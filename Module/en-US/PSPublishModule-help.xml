@@ -3351,10 +3351,10 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Profile">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
-            <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file.</maml:para>
+            <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -3462,10 +3462,10 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Profile">
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
           <maml:name>ProfileName</maml:name>
           <maml:description>
-            <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file.</maml:para>
+            <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -3602,18 +3602,6 @@ authenticated access through the selected bootstrap mode.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
-          <maml:name>Name</maml:name>
-          <maml:description>
-            <maml:para>Profile name to create when supplying Azure Artifacts feed details.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Priority</maml:name>
           <maml:description>
@@ -3622,6 +3610,18 @@ authenticated access through the selected bootstrap mode.</maml:para>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
           <dev:type>
             <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -3811,18 +3811,6 @@ authenticated access through the selected bootstrap mode.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
-        <maml:name>Name</maml:name>
-        <maml:description>
-          <maml:para>Profile name to create when supplying Azure Artifacts feed details.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Overwrite</maml:name>
         <maml:description>
@@ -3859,10 +3847,10 @@ authenticated access through the selected bootstrap mode.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Profile">
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Name,Profile">
         <maml:name>ProfileName</maml:name>
         <maml:description>
-          <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file.</maml:para>
+          <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -3985,7 +3973,7 @@ authenticated access through the selected bootstrap mode.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Create and connect an Entra-first Azure Artifacts profile</maml:title>
-        <dev:code>Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</dev:code>
+        <dev:code>Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites</dev:code>
         <dev:remarks>
           <maml:para>Saves an Entra-first profile and connects the workstation in one command.</maml:para>
         </dev:remarks>
