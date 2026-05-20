@@ -89,7 +89,8 @@ Import a managed profile file and connect the workstation:
 Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 
 Use Test-ModuleRepositoryProfile and Connect-ModuleRepository directly when separate readiness and
-connection/probe steps are desired.
+connection/probe steps are desired. The readiness object includes RecommendedOnboardingCommand for the managed
+one-command path and RecommendedConnectCommand for the lower-level connection step.
 
 Install or update modules:
 

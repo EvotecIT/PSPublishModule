@@ -58,6 +58,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
             InstallPrerequisitesRecommended = installPrerequisitesRecommended,
             RecommendedBootstrapMode = PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(status),
             RecommendedConnectCommand = BuildRecommendedConnectCommand(profile.Name, installPrerequisitesRecommended),
+            RecommendedOnboardingCommand = BuildRecommendedOnboardingCommand(profile.Name, installPrerequisitesRecommended),
             RecommendedInstallCommand = $"Install-PrivateModule -Name <ModuleName> -ProfileName '{profile.Name}'",
             ReadinessMessages = status.ReadinessMessages
         };
@@ -68,7 +69,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
         var normalizedName = string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim();
         var messages = new List<string>(1)
         {
-            $"Module repository profile '{normalizedName}' was not found. Create it with Set-ModuleRepositoryProfile before connecting, installing, updating, or publishing."
+            $"Module repository profile '{normalizedName}' was not found. Create or import it with Initialize-ModuleRepository before installing, updating, or publishing."
         };
 
         return new ModuleRepositoryProfileReadinessResult
@@ -85,6 +86,20 @@ internal static class ModuleRepositoryProfileReadinessMapper
         var parts = new List<string>
         {
             "Connect-ModuleRepository",
+            $"-ProfileName '{profileName}'"
+        };
+
+        if (installPrerequisitesRecommended)
+            parts.Add("-InstallPrerequisites");
+
+        return string.Join(" ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    private static string BuildRecommendedOnboardingCommand(string profileName, bool installPrerequisitesRecommended)
+    {
+        var parts = new List<string>
+        {
+            "Initialize-ModuleRepository",
             $"-ProfileName '{profileName}'"
         };
 

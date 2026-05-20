@@ -268,6 +268,7 @@ Describe 'Private gallery command metadata' {
         $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
         $result.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
         $result.RecommendedConnectCommand | Should -Match "Connect-ModuleRepository -ProfileName 'Company'"
+        $result.RecommendedOnboardingCommand | Should -Match "Initialize-ModuleRepository -ProfileName 'Company'"
         $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -Name <ModuleName> -ProfileName 'Company'"
         $result.ReadinessMessages | Should -Not -BeNullOrEmpty
     }
@@ -280,7 +281,7 @@ Describe 'Private gallery command metadata' {
         $result.ProfileFound | Should -BeFalse
         $result.IsReady | Should -BeFalse
         $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
-        $result.ReadinessMessages | Should -Contain "Module repository profile 'MissingCompany' was not found. Create it with Set-ModuleRepositoryProfile before connecting, installing, updating, or publishing."
+        $result.ReadinessMessages | Should -Contain "Module repository profile 'MissingCompany' was not found. Create or import it with Initialize-ModuleRepository before installing, updating, or publishing."
     }
 
     It 'treats an ExistingSession profile as not ready when PSResourceGet is below the Entra bootstrap version' {

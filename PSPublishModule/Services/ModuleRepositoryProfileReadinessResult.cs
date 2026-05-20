@@ -114,6 +114,9 @@ public sealed class ModuleRepositoryProfileReadinessResult
     /// <summary>Suggested command to connect or refresh the saved repository registration.</summary>
     public string RecommendedConnectCommand { get; set; } = string.Empty;
 
+    /// <summary>Suggested one-command onboarding command for the saved profile.</summary>
+    public string RecommendedOnboardingCommand { get; set; } = string.Empty;
+
     /// <summary>Suggested wrapper command for installing modules from this profile.</summary>
     public string RecommendedInstallCommand { get; set; } = string.Empty;
 

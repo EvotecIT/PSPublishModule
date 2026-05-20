@@ -86,7 +86,9 @@ Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
 ```
 
 Use `Test-ModuleRepositoryProfile` and `Connect-ModuleRepository` directly when
-you want separate readiness and connection/probe steps.
+you want separate readiness and connection/probe steps. The readiness object
+includes both `RecommendedOnboardingCommand` for the managed one-command path
+and `RecommendedConnectCommand` for the lower-level connection step.
 
 Install or update modules by profile:
 
