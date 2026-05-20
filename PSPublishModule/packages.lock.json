@@ -801,8 +801,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
@@ -904,6 +904,7 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "PowerForge": "[1.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
           "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       }
@@ -1480,8 +1481,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+        "resolved": "10.0.7",
+        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
@@ -1589,6 +1590,7 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "PowerForge": "[1.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
           "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       }
