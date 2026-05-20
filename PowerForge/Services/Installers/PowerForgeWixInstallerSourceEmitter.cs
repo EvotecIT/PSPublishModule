@@ -25,7 +25,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         if (definition is null) throw new ArgumentNullException(nameof(definition));
         PowerForgeInstallerDefinitionValidator.Validate(definition);
 
-        var needsUi = definition.Dialogs.Count > 0;
+        var needsUi = definition.Dialogs.Count > 0 || definition.ExitLaunch is { Enabled: true };
         var needsUtil = RequiresUtilExtension(definition);
         var rootAttributes = new List<XAttribute>();
         if (needsUtil)
@@ -47,6 +47,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XElement(WixNamespace + "MediaTemplate", new XAttribute("EmbedCab", "yes")));
 
         EmitProperties(package, definition);
+        EmitExitLaunchAction(package, definition);
         if (needsUi)
             package.Add(EmitUi(definition));
 
@@ -82,6 +83,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             .OrderBy(file => string.Equals(file, options.SourceFile, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var needsUi = definition.Dialogs.Count > 0 || definition.ExitLaunch is { Enabled: true };
 
         var project = new XElement(
             "Project",
@@ -115,7 +117,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Version", options.SdkVersion)));
         }
 
-        if (definition.Dialogs.Count > 0)
+        if (needsUi)
         {
             packageReferences.Add(new XElement(
                 "PackageReference",
@@ -172,8 +174,30 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                     new XAttribute("Type", input.RegistrySearch.Type)));
             }
 
-            package.Add(property);
+        package.Add(property);
         }
+    }
+
+    private static void EmitExitLaunchAction(XElement package, PowerForgeInstallerDefinition definition)
+    {
+        if (definition.ExitLaunch is not { Enabled: true } exitLaunch)
+            return;
+
+        package.Add(
+            new XElement(
+                WixNamespace + "Property",
+                new XAttribute("Id", "WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT"),
+                new XAttribute("Value", exitLaunch.Text)),
+            new XElement(
+                WixNamespace + "Property",
+                new XAttribute("Id", "WixShellExecTarget"),
+                new XAttribute("Value", exitLaunch.Target)),
+            new XElement(
+                WixNamespace + "CustomAction",
+                new XAttribute("Id", "PowerForgeLaunchOnExit"),
+                new XAttribute("BinaryRef", "Wix4UtilCA_$(sys.BUILDARCHSHORT)"),
+                new XAttribute("DllEntry", "WixShellExec"),
+                new XAttribute("Impersonate", "yes")));
     }
 
     private static XElement EmitUi(PowerForgeInstallerDefinition definition)
@@ -211,8 +235,21 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         }
 
         ui.Add(EmitDialogSequence(dialogs));
+        if (definition.ExitLaunch is { Enabled: true } exitLaunch)
+            ui.Add(EmitExitLaunchPublish(exitLaunch));
 
         return ui;
+    }
+
+    private static XElement EmitExitLaunchPublish(PowerForgeInstallerExitLaunch exitLaunch)
+    {
+        return new XElement(
+            WixNamespace + "Publish",
+            new XAttribute("Dialog", "ExitDialog"),
+            new XAttribute("Control", "Finish"),
+            new XAttribute("Event", "DoAction"),
+            new XAttribute("Value", "PowerForgeLaunchOnExit"),
+            new XAttribute("Condition", exitLaunch.Condition));
     }
 
     private static string BuildRequiredInputDialogId(int index)
@@ -745,6 +782,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
     private static bool RequiresUtilExtension(PowerForgeInstallerDefinition definition)
         => definition.Components.OfType<PowerForgeInstallerRemoveFolderComponent>().Any() ||
+           definition.ExitLaunch is { Enabled: true } ||
            PowerForgeWixInstallerServiceScriptEmitter.RequiresUtilExtension(definition);
 
     private static XElement EmitServiceInstall(PowerForgeInstallerServiceComponent service)

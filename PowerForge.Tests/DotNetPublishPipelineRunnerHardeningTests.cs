@@ -615,6 +615,110 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildRestoreMsBuildProperties_UsesSdkNativeAotPropertyForAotStyles()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishAot"]);
+        Assert.False(props.ContainsKey("NativeAotPublish"));
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_FiltersAotPropertiesByFramework()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.AotSpeed
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net8.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        }
+                    }
+                }
+            }
+        };
+
+        var props = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net8.0");
+
+        Assert.Equal("true", props["SelfContained"]);
+        Assert.Equal("true", props["PublishSingleFile"]);
+        Assert.False(props.ContainsKey("PublishAot"));
+    }
+
+    [Fact]
+    public void BuildPublishArguments_UsesSdkNativeAotPropertyForAotStyles()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release",
+            NoRestoreInPublish = true,
+            Targets = Array.Empty<DotNetPublishTargetPlan>()
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            ProjectPath = "Service.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net10.0",
+            "win-x64",
+            DotNetPublishStyle.AotSpeed,
+            "out");
+
+        Assert.Contains("/p:PublishAot=true", args);
+        Assert.Contains("/p:IlcOptimizationPreference=Speed", args);
+        Assert.DoesNotContain("/p:NativeAotPublish=true", args);
+    }
+
+    [Fact]
     public void BuildWixHarvestFragment_PreservesSubdirectoriesForNestedFiles()
     {
         var root = CreateTempRoot();

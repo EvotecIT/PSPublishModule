@@ -129,6 +129,38 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ModelsExitDialogLaunchAction()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open TestimoX Monitoring",
+            Target = "http://127.0.0.1:9000/"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Root!.Attribute(XNamespace.Xmlns + "ui"));
+        Assert.NotNull(doc.Root!.Attribute(XNamespace.Xmlns + "util"));
+        Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" &&
+            (string?)e.Attribute("Value") == "Open TestimoX Monitoring"));
+        Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "PowerForgeLaunchOnExit" &&
+            (string?)e.Attribute("BinaryRef") == "Wix4UtilCA_$(sys.BUILDARCHSHORT)" &&
+            (string?)e.Attribute("DllEntry") == "WixShellExec"));
+        Assert.NotNull(doc.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Dialog") == "ExitDialog" &&
+            (string?)e.Attribute("Control") == "Finish" &&
+            (string?)e.Attribute("Event") == "DoAction" &&
+            (string?)e.Attribute("Value") == "PowerForgeLaunchOnExit"));
+    }
+
+    [Fact]
     public void EmitSource_UsesUniqueScriptServiceActionIdsForLongComponentNames()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
@@ -1278,6 +1310,27 @@ public sealed class PowerForgeInstallerAuthoringTests
 
         Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
             (string?)e.Attribute("Include") == "WixToolset.Util.wixext"));
+    }
+
+    [Fact]
+    public void EmitProjectFile_IncludesUtilAndUiExtensionsForExitLaunch()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open app",
+            Target = "http://127.0.0.1:9000/"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitProjectFile(
+            definition,
+            new PowerForgeWixInstallerProjectOptions { SourceFile = "Generated.wxs" });
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
+            (string?)e.Attribute("Include") == "WixToolset.Util.wixext"));
+        Assert.NotNull(doc.Descendants("PackageReference").SingleOrDefault(e =>
+            (string?)e.Attribute("Include") == "WixToolset.UI.wixext"));
     }
 
     [Fact]
