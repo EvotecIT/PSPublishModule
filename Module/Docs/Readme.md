@@ -55,6 +55,9 @@ Imports a PowerShell-authored project release object from JSON.
 ### [Import-ModuleRepositoryProfile](Import-ModuleRepositoryProfile.md)
 Imports private module repository profiles from a non-secret JSON file.
 
+### [Initialize-ModuleRepository](Initialize-ModuleRepository.md)
+Performs one-command enterprise onboarding for a private module repository profile.
+
 ### [Install-PrivateModule](Install-PrivateModule.md)
 Installs one or more modules from a private repository, optionally bootstrapping Azure Artifacts registration first.
 

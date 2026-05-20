@@ -8,12 +8,14 @@ LONG DESCRIPTION
     PSPublishModule supports an Entra-first private gallery workflow for Azure Artifacts feeds.
     The intended enterprise flow is:
 
-        1. Save non-secret feed settings in a local PSPublishModule profile.
+        1. Save or import non-secret feed settings in a local PSPublishModule profile.
         2. Let Microsoft.PowerShell.PSResourceGet and the Azure Artifacts Credential Provider own Entra ID, MFA,
            device login, and token/session caching.
-        3. Use the saved profile for connect, install, update, and publish configuration commands.
+        3. Use Initialize-ModuleRepository as the one-command workstation onboarding entry point.
+        4. Use the saved profile for install, update, and publish configuration commands.
 
-    Profiles are created with Set-ModuleRepositoryProfile. A profile stores feed identity and local behavior:
+    Profiles are created with Initialize-ModuleRepository or Set-ModuleRepositoryProfile. A profile stores feed
+    identity and local behavior:
 
         - Azure DevOps organization
         - optional Azure DevOps project
@@ -52,16 +54,19 @@ LONG DESCRIPTION
 
         1. Publish PSPublishModule through the approved bootstrap channel users already trust.
         2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
-        3. Use Connect-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
+        3. Use Initialize-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
            required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
            workstations. Pre-install the credential provider on non-Windows systems with Microsoft's installer.
         4. Create the local feed profile once with Set-ModuleRepositoryProfile.
-        5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and import it on
-           workstations with Import-ModuleRepositoryProfile.
-        6. Run Test-ModuleRepositoryProfile -ProfileName <name> to verify the saved profile and local prerequisite
-           readiness without registering or probing the repository.
-        7. Ask users to run Connect-ModuleRepository -ProfileName <name> -InstallPrerequisites once. This registers
-           the repository and triggers the normal Entra/MFA credential-provider flow when no token is cached.
+        5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and ask users or
+           desktop support to run Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite
+           -InstallPrerequisites once. This imports or refreshes the profile, registers the repository, probes
+           access, and triggers the normal Entra/MFA credential-provider flow when no token is cached.
+        6. If the profile is already deployed into the profile store, use
+           Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites instead. Add -SkipConnect when you
+           only want profile/readiness output without repository registration or probing.
+        7. Keep Set-ModuleRepositoryProfile, Test-ModuleRepositoryProfile, and Connect-ModuleRepository available as
+           the advanced/manual flow for admins, diagnostics, and constrained rollouts.
         8. Standardize user commands around Install-PrivateModule -ProfileName <name> and
            Update-PrivateModule -ProfileName <name>.
         9. Use the same profile for New-ConfigurationPublish -ProfileName <name> and
@@ -70,18 +75,16 @@ LONG DESCRIPTION
 
     RECOMMENDED WORKSTATION FLOW
 
-    Create the profile once:
+    Create and connect a profile directly:
 
-        Set-ModuleRepositoryProfile `
-            -Name Company `
-            -AzureDevOpsOrganization contoso `
-            -AzureDevOpsProject Platform `
-            -AzureArtifactsFeed Modules
+        Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 
-    Connect and validate the workstation:
+    Import a managed profile file and connect the workstation:
 
-        Test-ModuleRepositoryProfile -ProfileName Company
-        Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+        Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+
+    Use Test-ModuleRepositoryProfile and Connect-ModuleRepository directly when separate readiness and
+    connection/probe steps are desired.
 
     Install or update modules:
 
@@ -103,11 +106,9 @@ LONG DESCRIPTION
 
         Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 
-    On the target workstation, import or refresh the profile:
+    On the target workstation, import or refresh the profile and connect in one step:
 
-        Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-        Test-ModuleRepositoryProfile -ProfileName Company
-        Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+        Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 
     The imported profile still does not contain PATs, passwords, or tokens. If the user has not signed in before,
     the first connect/install/update operation triggers the normal Azure Artifacts Credential Provider Entra/MFA flow.
@@ -139,13 +140,18 @@ LONG DESCRIPTION
     policy instead of overloading Azure Artifacts behavior.
 
 EXAMPLES
-    PS> Set-ModuleRepositoryProfile -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules
+    PS> Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 
-    Saves an Entra-first Azure Artifacts profile named Company.
+    Saves an Entra-first Azure Artifacts profile named Company, installs missing prerequisites if needed, registers
+    the repository, and validates authenticated feed access.
+
+    PS> Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+
+    Imports or refreshes a managed profile file, then registers and probes the repository.
 
     PS> Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
 
-    Installs missing prerequisites if needed, registers the repository, and validates authenticated feed access.
+    Runs the lower-level connection/probe step for an already saved profile.
 
     PS> Test-ModuleRepositoryProfile -ProfileName Company
 
@@ -157,7 +163,7 @@ EXAMPLES
 
     PS> Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
 
-    Imports or refreshes managed profile settings on a workstation.
+    Imports or refreshes managed profile settings on a workstation without connecting.
 
     PS> Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
 

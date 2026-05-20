@@ -39,11 +39,16 @@ Typical user onboarding:
 ```powershell
 Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-Test-ModuleRepositoryProfile -ProfileName Company
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+For a single-user or admin-created profile, the same onboarding can be created
+and connected directly:
+
+```powershell
+Initialize-ModuleRepository -Name Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 ```
 
 Publishers can reuse the same profile:

@@ -26,22 +26,26 @@ wrapper and leave identity/session ownership with Microsoft tooling:
    distribution).
 2. Ensure users have Azure DevOps access to the target feed through Entra ID
    groups. Do not create PATs by default.
-3. Let `Connect-ModuleRepository -InstallPrerequisites` install or refresh
+3. Let `Initialize-ModuleRepository -InstallPrerequisites` install or refresh
    `Microsoft.PowerShell.PSResourceGet` at the version required by the selected
    bootstrap mode and install the Azure Artifacts Credential Provider on Windows
-   workstations. On non-Windows systems, pre-install the
-   credential provider with the official Microsoft installer before onboarding.
+   workstations. On non-Windows systems, pre-install the credential provider
+   with the official Microsoft installer before onboarding.
 4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
    contains feed identity only; it does not contain PATs, passwords, or tokens.
 5. For managed rollout, export the non-secret profile with
-   `Export-ModuleRepositoryProfile` and import it on workstations with
-   `Import-ModuleRepositoryProfile`.
-6. Ask users or desktop support to run `Test-ModuleRepositoryProfile
-   -ProfileName <name>` to verify the saved profile and local prerequisite
-   readiness without registering or probing the repository.
-7. Ask users to run `Connect-ModuleRepository -ProfileName <name>
-   -InstallPrerequisites` once. This registers the repository and triggers the
-   normal Entra/MFA credential-provider flow when a token is not already cached.
+   `Export-ModuleRepositoryProfile` and ask users or desktop support to run
+   `Initialize-ModuleRepository -Path <profile.json> -ProfileName <name>
+   -Overwrite -InstallPrerequisites` once. This imports or refreshes the
+   profile, registers the repository, probes access, and triggers the normal
+   Entra/MFA credential-provider flow when a token is not already cached.
+6. If the profile is already deployed into the profile store, use
+   `Initialize-ModuleRepository -ProfileName <name> -InstallPrerequisites`
+   instead. Add `-SkipConnect` when you only want profile/readiness output
+   without repository registration or probing.
+7. Keep `Set-ModuleRepositoryProfile`, `Test-ModuleRepositoryProfile`, and
+   `Connect-ModuleRepository` available as the advanced/manual flow for admins,
+   diagnostics, and constrained rollouts.
 8. Standardize install/update commands around `Install-PrivateModule
    -ProfileName <name>` and `Update-PrivateModule -ProfileName <name>`.
 9. For publishers and CI operators, use the same profile with
@@ -54,9 +58,7 @@ wrapper and leave identity/session ownership with Microsoft tooling:
 The normal user command set should be short:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platform -Feed Modules
-Test-ModuleRepositoryProfile -ProfileName Company
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA
 ```
@@ -76,12 +78,15 @@ Set-ModuleRepositoryProfile `
     -AzureArtifactsFeed Modules
 ```
 
-Connect and validate access on a workstation:
+Connect and validate access on a workstation with the one-command onboarding
+wrapper:
 
 ```powershell
-Test-ModuleRepositoryProfile -ProfileName Company
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Initialize-ModuleRepository -ProfileName Company -InstallPrerequisites
 ```
+
+Use `Test-ModuleRepositoryProfile` and `Connect-ModuleRepository` directly when
+you want separate readiness and connection/probe steps.
 
 Install or update modules by profile:
 
@@ -135,12 +140,11 @@ Set-ModuleRepositoryProfile -Name Company -Organization contoso -Project Platfor
 Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
 ```
 
-On the target workstation, import or refresh the profile:
+On the target workstation, import or refresh the profile and connect in one
+step:
 
 ```powershell
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-Test-ModuleRepositoryProfile -ProfileName Company
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
 ```
 
 The imported profile still does not contain secrets. If the user has not signed

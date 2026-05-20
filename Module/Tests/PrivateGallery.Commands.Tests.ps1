@@ -52,6 +52,7 @@ Describe 'Private gallery command metadata' {
         $module.ExportedCmdlets.Keys | Should -Contain 'Install-PrivateModule'
         $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Import-ModuleRepositoryProfile'
+        $module.ExportedCmdlets.Keys | Should -Contain 'Initialize-ModuleRepository'
         $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
         $module.ExportedCmdlets.Keys | Should -Contain 'Test-ModuleRepositoryProfile'
@@ -121,6 +122,18 @@ Describe 'Private gallery command metadata' {
         $importProfile = $module.ExportedCmdlets['Import-ModuleRepositoryProfile']
         $importProfile.Parameters.Keys | Should -Contain 'Overwrite'
 
+        $initialize = $module.ExportedCmdlets['Initialize-ModuleRepository']
+        $initialize.ParameterSets.Name | Should -Contain 'Profile'
+        $initialize.ParameterSets.Name | Should -Contain 'Import'
+        $initialize.ParameterSets.Name | Should -Contain 'AzureArtifacts'
+        $initialize.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
+        $initialize.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
+        $initialize.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
+        $initialize.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
+        $initialize.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
+        $initialize.Parameters.Keys | Should -Contain 'InstallPrerequisites'
+        $initialize.Parameters.Keys | Should -Contain 'SkipConnect'
+
         $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
@@ -179,6 +192,45 @@ Describe 'Private gallery command metadata' {
         $imported = Import-ModuleRepositoryProfile -Path $exportPath -Overwrite
 
         $imported.Name | Should -Be 'Company'
+    }
+
+    It 'initializes a new Azure Artifacts profile without connecting when requested' {
+        $result = Initialize-ModuleRepository -Name 'CompanyInit' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -SkipConnect
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryOnboardingResult'
+        $result.ProfileName | Should -Be 'CompanyInit'
+        $result.ProfileFound | Should -BeTrue
+        $result.ProfileWritten | Should -BeTrue
+        $result.ConnectAttempted | Should -BeFalse
+        $result.ConnectSkipped | Should -BeTrue
+        $result.Succeeded | Should -BeTrue
+        $result.Profile.RepositoryName | Should -Be 'Modules'
+        $result.Readiness.RepositoryName | Should -Be 'Modules'
+        $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
+        $result.RecommendedUpdateCommand | Should -Be "Update-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
+
+        $profile = Get-ModuleRepositoryProfile -Name 'CompanyInit'
+        $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
+    }
+
+    It 'initializes from a managed profile file in one command without connecting when requested' {
+        Set-ModuleRepositoryProfile -Name 'CompanyFile' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'CompanyFile.profile.json'
+        Export-ModuleRepositoryProfile -Name 'CompanyFile' -Path $exportPath -Force
+        Remove-ModuleRepositoryProfile -Name 'CompanyFile'
+
+        $result = Initialize-ModuleRepository -Path $exportPath -ProfileName 'CompanyFile' -Overwrite -SkipConnect
+
+        $result.ProfileName | Should -Be 'CompanyFile'
+        $result.ProfileWritten | Should -BeTrue
+        $result.ImportedFromPath | Should -Be $exportPath
+        $result.ConnectAttempted | Should -BeFalse
+        $result.ConnectSkipped | Should -BeTrue
+        $result.Profile.AzureDevOpsProject | Should -Be 'Platform'
+
+        $profile = Get-ModuleRepositoryProfile -Name 'CompanyFile'
+        $profile.AzureArtifactsFeed | Should -Be 'Modules'
     }
 
     It 'tests saved profile readiness without registering repositories' {
