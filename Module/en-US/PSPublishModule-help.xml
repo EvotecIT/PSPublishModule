@@ -109,7 +109,7 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before connecting.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -241,7 +241,7 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before connecting.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -369,7 +369,7 @@ the chosen bootstrap path can actually access the private feed.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before connecting.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before connecting, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -3452,7 +3452,7 @@ the requested modules.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -3616,7 +3616,7 @@ the requested modules.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -3837,7 +3837,7 @@ the requested modules.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before automatic registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -29670,7 +29670,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before registration.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -29802,7 +29802,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before registration.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -29930,7 +29930,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before registration.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before registration, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -32335,7 +32335,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before refresh.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -32467,7 +32467,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before refresh.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -32595,7 +32595,7 @@ Install-PSResource, Install-Module, or both are available for the configured rep
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before refresh.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -32873,7 +32873,7 @@ are provided, the repository registration is refreshed before the update is atte
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -33025,7 +33025,7 @@ are provided, the repository registration is refreshed before the update is atte
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallPrerequisites</maml:name>
           <maml:description>
-            <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</maml:para>
+            <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -33234,7 +33234,7 @@ are provided, the repository registration is refreshed before the update is atte
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallPrerequisites</maml:name>
         <maml:description>
-          <maml:para>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</maml:para>
+          <maml:para>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

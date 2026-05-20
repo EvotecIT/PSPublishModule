@@ -150,7 +150,7 @@ Accept wildcard characters: True
 ```
 
 ### -InstallPrerequisites
-Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before refresh.
+Installs missing private-gallery prerequisites before refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.
 
 ```yaml
 Type: SwitchParameter

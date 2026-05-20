@@ -8,7 +8,7 @@ namespace PowerForge;
 internal sealed class PrivateGalleryService
 {
     private const string MinimumPSResourceGetVersion = "1.1.1";
-    private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0-preview5";
+    private const string MinimumPSResourceGetExistingSessionVersion = "1.2.0";
 
     private readonly IPrivateGalleryHost _host;
 
@@ -347,7 +347,10 @@ internal sealed class PrivateGalleryService
         return result;
     }
 
-    public BootstrapPrerequisiteInstallResult EnsureBootstrapPrerequisites(bool installPrerequisites, bool forceInstall = false)
+    public BootstrapPrerequisiteInstallResult EnsureBootstrapPrerequisites(
+        bool installPrerequisites,
+        PrivateGalleryBootstrapMode bootstrapMode = PrivateGalleryBootstrapMode.Auto,
+        bool forceInstall = false)
     {
         var initialStatus = GetBootstrapPrerequisiteStatus();
         if (!installPrerequisites)
@@ -357,16 +360,21 @@ internal sealed class PrivateGalleryService
         var messages = new List<string>(4);
         var runner = new PowerShellRunner();
         var logger = new PrivateGalleryHostLogger(_host);
+        var requiredPSResourceGetVersion = PrivateGalleryVersionPolicy.RequiresExistingSessionBootstrap(bootstrapMode)
+            ? MinimumPSResourceGetExistingSessionVersion
+            : MinimumPSResourceGetVersion;
 
-        if (!initialStatus.PSResourceGetAvailable || !initialStatus.PSResourceGetMeetsMinimumVersion || forceInstall)
+        if (!initialStatus.PSResourceGetAvailable ||
+            !PrivateGalleryVersionPolicy.VersionMeetsMinimum(initialStatus.PSResourceGetVersion, requiredPSResourceGetVersion) ||
+            forceInstall)
         {
             if (_host.ShouldProcess("Microsoft.PowerShell.PSResourceGet", "Install private-gallery prerequisite"))
             {
                 var installer = new ModuleDependencyInstaller(runner, logger);
                 var results = installer.EnsureInstalled(
-                    new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet", minimumVersion: MinimumPSResourceGetVersion) },
+                    new[] { new ModuleDependency("Microsoft.PowerShell.PSResourceGet", minimumVersion: requiredPSResourceGetVersion) },
                     force: forceInstall,
-                    prerelease: false,
+                    prerelease: IsPrereleaseVersion(requiredPSResourceGetVersion),
                     timeoutPerModule: TimeSpan.FromMinutes(10));
 
                 var result = results.FirstOrDefault();
@@ -378,15 +386,16 @@ internal sealed class PrivateGalleryService
 
                 installed.Add("PSResourceGet");
                 var resolvedVersion = string.IsNullOrWhiteSpace(result.ResolvedVersion) ? "unknown version" : result.ResolvedVersion;
-                messages.Add($"PSResourceGet prerequisite handled via {result.Installer ?? "module installer"} ({result.Status}, resolved {resolvedVersion}).");
+                messages.Add($"PSResourceGet prerequisite handled via {result.Installer ?? "module installer"} ({result.Status}, required {requiredPSResourceGetVersion}, resolved {resolvedVersion}).");
             }
         }
 
         var statusAfterPsResourceGet = GetBootstrapPrerequisiteStatus();
         if (installed.Contains("PSResourceGet", StringComparer.OrdinalIgnoreCase) &&
-            (!statusAfterPsResourceGet.PSResourceGetAvailable || !statusAfterPsResourceGet.PSResourceGetMeetsMinimumVersion))
+            (!statusAfterPsResourceGet.PSResourceGetAvailable ||
+             !PrivateGalleryVersionPolicy.VersionMeetsMinimum(statusAfterPsResourceGet.PSResourceGetVersion, requiredPSResourceGetVersion)))
         {
-            throw new InvalidOperationException($"PSResourceGet prerequisite installation completed, but version {statusAfterPsResourceGet.PSResourceGetVersion ?? "unknown"} does not satisfy minimum {MinimumPSResourceGetVersion}.");
+            throw new InvalidOperationException($"PSResourceGet prerequisite installation completed, but version {statusAfterPsResourceGet.PSResourceGetVersion ?? "unknown"} does not satisfy minimum {requiredPSResourceGetVersion}.");
         }
 
         if (!statusAfterPsResourceGet.CredentialProviderDetection.IsDetected)
@@ -598,4 +607,8 @@ internal sealed class PrivateGalleryService
             credentialProviderDetection,
             readinessMessages.ToArray());
     }
+
+    private static bool IsPrereleaseVersion(string version)
+        => !string.IsNullOrWhiteSpace(version) &&
+           version.IndexOf("-", StringComparison.Ordinal) >= 0;
 }

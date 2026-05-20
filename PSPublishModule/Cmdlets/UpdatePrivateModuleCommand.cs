@@ -108,7 +108,7 @@ public sealed class UpdatePrivateModuleCommand : PSCmdlet
     [Alias("Interactive")]
     public SwitchParameter PromptForCredential { get; set; }
 
-    /// <summary>Installs missing private-gallery prerequisites such as PSResourceGet and the Azure Artifacts credential provider before automatic registration refresh.</summary>
+    /// <summary>Installs missing private-gallery prerequisites before automatic registration refresh, including the PSResourceGet version required by the selected bootstrap mode and the Azure Artifacts credential provider.</summary>
     [Parameter(ParameterSetName = ParameterSetAzureArtifacts)]
     [Parameter(ParameterSetName = ParameterSetProfile)]
     public SwitchParameter InstallPrerequisites { get; set; }

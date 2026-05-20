@@ -14,8 +14,21 @@ public sealed class ModuleRepositoryProfileReadinessResult
     /// <summary>Whether the named profile exists in the local profile store.</summary>
     public bool ProfileFound { get; set; }
 
-    /// <summary>Whether the saved profile and at least one bootstrap path are ready locally.</summary>
-    public bool IsReady => ProfileFound && (ExistingSessionBootstrapReady || CredentialPromptBootstrapReady);
+    /// <summary>Whether the saved profile's selected bootstrap path is ready locally.</summary>
+    public bool IsReady
+    {
+        get
+        {
+            if (!ProfileFound)
+                return false;
+            if (BootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
+                return ExistingSessionBootstrapReady;
+            if (BootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
+                return CredentialPromptBootstrapReady;
+
+            return ExistingSessionBootstrapReady || CredentialPromptBootstrapReady;
+        }
+    }
 
     /// <summary>Private gallery provider.</summary>
     public PrivateGalleryProvider Provider { get; set; } = PrivateGalleryProvider.AzureArtifacts;

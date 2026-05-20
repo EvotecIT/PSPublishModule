@@ -50,7 +50,30 @@ internal sealed class ModuleRepositoryRegistrationResult
 
     public bool ExistingSessionBootstrapReady => PSResourceGetSupportsExistingSessionBootstrap && AzureArtifactsCredentialProviderDetected;
     public bool CredentialPromptBootstrapReady => (PSResourceGetAvailable && PSResourceGetMeetsMinimumVersion) || PowerShellGetAvailable;
-    public bool InstallPrerequisitesRecommended => !PSResourceGetAvailable || !PSResourceGetMeetsMinimumVersion || !AzureArtifactsCredentialProviderDetected;
+    public bool InstallPrerequisitesRecommended
+    {
+        get
+        {
+            var status = new BootstrapPrerequisiteStatus(
+                PSResourceGetAvailable,
+                PSResourceGetVersion,
+                PSResourceGetMeetsMinimumVersion,
+                PSResourceGetSupportsExistingSessionBootstrap,
+                null,
+                PowerShellGetAvailable,
+                PowerShellGetVersion,
+                null,
+                new AzureArtifactsCredentialProviderDetectionResult
+                {
+                    IsDetected = AzureArtifactsCredentialProviderDetected,
+                    Paths = AzureArtifactsCredentialProviderPaths,
+                    Version = AzureArtifactsCredentialProviderVersion
+                },
+                ReadinessMessages);
+
+            return PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(status, BootstrapModeRequested);
+        }
+    }
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode
         => ExistingSessionBootstrapReady ? PrivateGalleryBootstrapMode.ExistingSession
             : CredentialPromptBootstrapReady ? PrivateGalleryBootstrapMode.CredentialPrompt

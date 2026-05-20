@@ -22,10 +22,9 @@ internal static class ModuleRepositoryProfileReadinessMapper
 
         var existingSessionReady = PrivateGalleryVersionPolicy.IsExistingSessionBootstrapReady(status);
         var credentialPromptReady = PrivateGalleryVersionPolicy.IsCredentialPromptBootstrapReady(status);
-        var installPrerequisitesRecommended =
-            !status.PSResourceGetAvailable ||
-            !status.PSResourceGetMeetsMinimumVersion ||
-            !status.CredentialProviderDetection.IsDetected;
+        var installPrerequisitesRecommended = PrivateGalleryVersionPolicy.ShouldInstallPrerequisitesForBootstrap(
+            status,
+            profile.BootstrapMode);
 
         return new ModuleRepositoryProfileReadinessResult
         {

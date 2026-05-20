@@ -134,7 +134,12 @@ public sealed class ModuleRepositoryRegistrationResult
 
     /// <summary>Whether the repository bootstrap recommendation should include prerequisite installation.</summary>
     public bool InstallPrerequisitesRecommended
-        => !PSResourceGetAvailable || !PSResourceGetMeetsMinimumVersion || !AzureArtifactsCredentialProviderDetected;
+        => !PSResourceGetAvailable ||
+           !PSResourceGetMeetsMinimumVersion ||
+           !AzureArtifactsCredentialProviderDetected ||
+           ((BootstrapModeRequested == PrivateGalleryBootstrapMode.ExistingSession ||
+             BootstrapModeRequested == PrivateGalleryBootstrapMode.Auto) &&
+            !PSResourceGetSupportsExistingSessionBootstrap);
 
     /// <summary>Suggested bootstrap mode based on detected prerequisites.</summary>
     public PrivateGalleryBootstrapMode RecommendedBootstrapMode

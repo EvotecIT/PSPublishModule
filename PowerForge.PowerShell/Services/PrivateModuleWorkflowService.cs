@@ -44,7 +44,9 @@ internal sealed class PrivateModuleWorkflowService
                 request.AzureDevOpsProject,
                 request.AzureArtifactsFeed,
                 request.RepositoryName);
-            var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(request.InstallPrerequisites);
+            var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(
+                request.InstallPrerequisites,
+                request.BootstrapMode);
             repositoryName = endpoint.RepositoryName;
 
             var credentialResolution = _privateGalleryService.ResolveCredential(

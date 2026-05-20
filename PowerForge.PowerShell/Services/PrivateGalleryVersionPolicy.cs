@@ -32,6 +32,33 @@ internal static class PrivateGalleryVersionPolicy
     internal static bool IsCredentialPromptBootstrapReady(BootstrapPrerequisiteStatus status)
         => (status.PSResourceGetAvailable && status.PSResourceGetMeetsMinimumVersion) || status.PowerShellGetAvailable;
 
+    internal static bool IsBootstrapModeReady(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
+    {
+        if (bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession)
+            return IsExistingSessionBootstrapReady(status);
+        if (bootstrapMode == PrivateGalleryBootstrapMode.CredentialPrompt)
+            return IsCredentialPromptBootstrapReady(status);
+
+        return IsExistingSessionBootstrapReady(status) || IsCredentialPromptBootstrapReady(status);
+    }
+
+    internal static bool ShouldInstallPrerequisitesForBootstrap(BootstrapPrerequisiteStatus status, PrivateGalleryBootstrapMode bootstrapMode)
+    {
+        if (!status.PSResourceGetAvailable ||
+            !status.PSResourceGetMeetsMinimumVersion ||
+            !status.CredentialProviderDetection.IsDetected)
+        {
+            return true;
+        }
+
+        return RequiresExistingSessionBootstrap(bootstrapMode) &&
+               !status.PSResourceGetSupportsExistingSessionBootstrap;
+    }
+
+    internal static bool RequiresExistingSessionBootstrap(PrivateGalleryBootstrapMode bootstrapMode)
+        => bootstrapMode == PrivateGalleryBootstrapMode.ExistingSession ||
+           bootstrapMode == PrivateGalleryBootstrapMode.Auto;
+
     internal static string SelectAccessProbeTool(ModuleRepositoryRegistrationResult registration, RepositoryCredential? credential)
     {
         if (credential is null)

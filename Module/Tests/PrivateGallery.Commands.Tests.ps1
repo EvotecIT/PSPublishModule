@@ -211,6 +211,27 @@ Describe 'Private gallery command metadata' {
         $result.ReadinessMessages | Should -Contain "Module repository profile 'MissingCompany' was not found. Create it with Set-ModuleRepositoryProfile before connecting, installing, updating, or publishing."
     }
 
+    It 'treats an ExistingSession profile as not ready when PSResourceGet is below the Entra bootstrap version' {
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryProfileReadinessResult', $true)
+        $result = [System.Activator]::CreateInstance($type)
+        $result.ProfileFound = $true
+        $result.BootstrapMode = [PowerForge.PrivateGalleryBootstrapMode]::ExistingSession
+        $result.PSResourceGetAvailable = $true
+        $result.PSResourceGetVersion = '1.1.1'
+        $result.PSResourceGetMeetsMinimumVersion = $true
+        $result.PSResourceGetSupportsExistingSessionBootstrap = $false
+        $result.PowerShellGetAvailable = $true
+        $result.AzureArtifactsCredentialProviderDetected = $true
+        $result.CredentialPromptBootstrapReady = $true
+
+        $result.CredentialPromptBootstrapReady | Should -BeTrue
+        $result.ExistingSessionBootstrapReady | Should -BeFalse
+        $result.IsReady | Should -BeFalse
+
+        $result.BootstrapMode = [PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt
+        $result.IsReady | Should -BeTrue
+    }
+
     It 'uses saved profiles for WhatIf repository connection without prompting' {
         Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
 
@@ -351,6 +372,27 @@ Describe 'Private gallery command metadata' {
         $result.PreferredInstallCommand | Should -Be 'Install-Module'
         $result.RecommendedNativeInstallCommand | Should -Be "Install-Module -Name <ModuleName> -Repository 'Company'"
         $result.RecommendedBootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+    }
+
+    It 'recommends prerequisite installation for Entra-first bootstrap when PSResourceGet is too old' {
+        $type = $script:PrivateGalleryTestAssembly.GetType('PSPublishModule.ModuleRepositoryRegistrationResult', $true)
+        $result = [System.Activator]::CreateInstance($type)
+        $result.RepositoryName = 'Company'
+        $result.AzureDevOpsOrganization = 'contoso'
+        $result.AzureArtifactsFeed = 'Modules'
+        $result.PSResourceGetAvailable = $true
+        $result.PSResourceGetVersion = '1.1.1'
+        $result.PSResourceGetMeetsMinimumVersion = $true
+        $type.GetProperty('PSResourceGetSupportsExistingSessionBootstrap').SetValue($result, $false)
+        $result.PowerShellGetAvailable = $true
+        $result.AzureArtifactsCredentialProviderDetected = $true
+        $result.BootstrapModeRequested = [PowerForge.PrivateGalleryBootstrapMode]::ExistingSession
+
+        $result.InstallPrerequisitesRecommended | Should -BeTrue
+        $result.RecommendedBootstrapCommand | Should -Match '-InstallPrerequisites'
+
+        $result.BootstrapModeRequested = [PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt
+        $result.InstallPrerequisitesRecommended | Should -BeFalse
     }
 
     It 'rejects PSGallery as an Azure Artifacts repository name' {

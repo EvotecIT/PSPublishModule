@@ -27,8 +27,9 @@ wrapper and leave identity/session ownership with Microsoft tooling:
 2. Ensure users have Azure DevOps access to the target feed through Entra ID
    groups. Do not create PATs by default.
 3. Let `Connect-ModuleRepository -InstallPrerequisites` install or refresh
-   `Microsoft.PowerShell.PSResourceGet` and the Azure Artifacts Credential
-   Provider on Windows workstations. On non-Windows systems, pre-install the
+   `Microsoft.PowerShell.PSResourceGet` at the version required by the selected
+   bootstrap mode and install the Azure Artifacts Credential Provider on Windows
+   workstations. On non-Windows systems, pre-install the
    credential provider with the official Microsoft installer before onboarding.
 4. Create the local profile once with `Set-ModuleRepositoryProfile`. The profile
    contains feed identity only; it does not contain PATs, passwords, or tokens.
@@ -118,6 +119,10 @@ Artifacts, prefer the default profile settings:
 - `Tool = PSResourceGet`
 - `BootstrapMode = ExistingSession`
 - `AuthenticationMode = AzureArtifactsCredentialProvider`
+
+`-InstallPrerequisites` honors these Entra-first defaults by upgrading
+PSResourceGet to the ExistingSession-capable line before it installs or refreshes
+the Azure Artifacts Credential Provider.
 
 ## Managed Profile Deployment
 

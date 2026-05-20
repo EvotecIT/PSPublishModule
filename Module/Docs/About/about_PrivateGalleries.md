@@ -37,6 +37,9 @@ Authentication = AzureArtifactsCredentialProvider
 When PSResourceGet registration supports it, PSPublishModule configures Azure Artifacts repositories with
 CredentialProvider = AzArtifacts. Older PSResourceGet versions fall back to their built-in Azure Artifacts URL
 detection.
+Install-prerequisite flows honor the selected bootstrap mode. For the default ExistingSession profile, they
+upgrade PSResourceGet to the ExistingSession-capable line before installing or refreshing the Azure Artifacts
+Credential Provider.
 
 PROFILE STORAGE
 
@@ -54,9 +57,9 @@ Microsoft tooling:
 
 1. Publish PSPublishModule through the approved bootstrap channel users already trust.
 2. Grant Azure DevOps feed access through Entra ID groups. Do not create PATs by default.
-3. Use Connect-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet and the Azure
-Artifacts Credential Provider on Windows workstations. Pre-install the credential provider on non-Windows
-systems with Microsoft's installer.
+3. Use Connect-ModuleRepository -InstallPrerequisites to install or refresh PSResourceGet at the version
+required by the selected bootstrap mode and install the Azure Artifacts Credential Provider on Windows
+workstations. Pre-install the credential provider on non-Windows systems with Microsoft's installer.
 4. Create the local feed profile once with Set-ModuleRepositoryProfile.
 5. For managed rollout, export the non-secret profile with Export-ModuleRepositoryProfile and import it on
 workstations with Import-ModuleRepositoryProfile.
