@@ -73,6 +73,227 @@ Install-PrivateModule -ProfileName Company -Name ModuleA
 Update-PrivateModule -ProfileName Company -Name ModuleA
 ```
 
+## Testing Handoff Scenarios
+
+Use this matrix when handing the feature to desktop, platform, or release
+testing. Keep real organization/project/feed names in the test ticket or secure
+run notes, not in committed repository files.
+
+### 1. Static PR Readiness
+
+Purpose: prove the code and non-live behavior are ready before involving an
+enterprise feed.
+
+Run:
+
+```powershell
+dotnet build .\PSPublishModule\PSPublishModule.csproj -c Release -f net8.0
+Invoke-Pester -Path .\Module\Tests\PrivateGallery.Commands.Tests.ps1 -Output Detailed
+Invoke-Pester -Path .\Module\Tests\PrivateGallery.AzureArtifacts.Live.Tests.ps1 -Output Detailed
+```
+
+Expected:
+
+- Build succeeds.
+- Command tests pass.
+- Live Azure Artifacts tests are skipped when live environment variables are
+  not enabled.
+- Pull request checks are green. The live job may be skipped unless explicitly
+  enabled.
+
+### 2. Managed Profile Package
+
+Purpose: prove administrators can prepare non-secret feed metadata without
+sharing credentials.
+
+Run on an admin/staging workstation:
+
+```powershell
+Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -SkipConnect
+Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
+New-ModuleRepositoryBootstrap -ProfileName Company -OutputDirectory .\CompanyGalleryBootstrap -InstallModule ModuleA -Force
+```
+
+Expected:
+
+- The exported profile and bootstrap package contain organization, project,
+  feed, and profile settings only.
+- They do not contain PATs, passwords, Entra tokens, or credential-provider
+  session cache files.
+
+### 3. First User Onboarding On A Compliant Workstation
+
+Purpose: prove a normal user can import the profile, register the repository,
+complete Entra/MFA through Azure Artifacts Credential Provider, and install a
+module without PAT parameters.
+
+Run:
+
+```powershell
+Initialize-ModuleRepository -Path .\Company.profile.json -ProfileName Company -Overwrite -InstallPrerequisites
+Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
+Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+Expected:
+
+- `Initialize-ModuleRepository` reports `Connection.AccessProbeSucceeded =
+  True`.
+- If no token was cached before the run, `Connection.CredentialProviderSessionPrimeAttempted`
+  is true and the provider prompts with an Entra-capable browser/dialog or
+  device-code flow.
+- Install and update succeed without `-CredentialUserName`,
+  `-CredentialSecret`, or `-CredentialSecretFilePath`.
+
+### 4. Existing Or Expired User Session
+
+Purpose: prove day-to-day commands recover when the profile already exists but
+the user's credential-provider cache is missing or expired.
+
+Run as the same user after deleting/expiring the Azure Artifacts Credential
+Provider session cache, or as a second user on a machine that already has the
+profile:
+
+```powershell
+Install-PrivateModule -ProfileName Company -Name ModuleA -InstallPrerequisites
+Update-PrivateModule -ProfileName Company -Name ModuleA
+```
+
+Expected:
+
+- PSPublishModule refreshes/validates repository registration before the
+  operation.
+- If access fails because there is no usable cached session, PSPublishModule
+  invokes Azure Artifacts Credential Provider and retries after successful
+  sign-in.
+- Authentication remains per-user even when the profile was deployed
+  machine-wide.
+
+### 5. Conditional Access Block
+
+Purpose: prove enterprise policy failures are visible and are not confused with
+missing profile data or PAT requirements.
+
+Run scenario 3 from a device/user that can open the Azure DevOps web UI but is
+not allowed by Conditional Access for the package-tool client.
+
+Expected:
+
+- Browser access to Azure DevOps is not treated as sufficient package-tool
+  proof. The browser uses web session cookies; PSResourceGet/NuGet uses Azure
+  Artifacts Credential Provider and its own token/session cache.
+- The credential provider displays or returns the tenant policy failure, for
+  example a "you cannot get there from here" or device-compliance block.
+- PSPublishModule reports the failed access probe/session-prime result without
+  storing credentials.
+- Remediation is policy/device/runner selection, not switching the managed
+  profile to PAT by default.
+
+### 6. Publisher Flow
+
+Purpose: prove publishers can reuse the same managed profile and still keep
+credentials out of configuration.
+
+Run:
+
+```powershell
+New-ConfigurationPublish -ProfileName Company -Enabled
+Publish-NugetPackage -Path .\artifacts -ProfileName Company -InstallPrerequisites -SkipDuplicate
+```
+
+Expected:
+
+- `New-ConfigurationPublish` resolves the Azure Artifacts v3 URI from the
+  profile.
+- The publish configuration does not contain a credential object.
+- Package push succeeds only for a user or automation identity with feed push
+  permission.
+
+### 7. Disposable Live Validation
+
+Purpose: collect one artifact that proves onboarding, install/update, and
+optional push against a real feed.
+
+Run from a compliant workstation or approved self-hosted runner:
+
+```powershell
+$root = Join-Path $env:TEMP ("PSPublishModule.LiveProof." + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $root -Force | Out-Null
+$evidence = Join-Path $root 'private-gallery-live.evidence.json'
+$version = "0.0.1-live.$([DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmss'))"
+
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
+    -Organization contoso `
+    -Project Platform `
+    -Feed Modules `
+    -ModuleName ModuleA `
+    -GenerateDisposablePackage `
+    -DisposablePackageName 'PSPublishModule.PrivateGallery.LiveValidation' `
+    -DisposablePackageVersion $version `
+    -CredentialProviderWaitMinutes 30 `
+    -EvidenceFile $evidence `
+    -Output Detailed `
+    -PassThru
+
+$evidence
+```
+
+Expected:
+
+- Evidence JSON has `Succeeded = true`.
+- `OnboardingInstallUpdate` proves access probe, non-secret bootstrap package,
+  bootstrap script execution, credential-free publish configuration, install,
+  and update.
+- `PublishPackage` is present and successful when disposable package publish is
+  enabled.
+- The evidence reports only whether unattended credential-provider environment
+  variables were configured. It never includes secret values.
+
+### 8. Unattended Runner Or Service Principal
+
+Purpose: prove repeatable CI/release validation without a human device-login
+prompt.
+
+Configure one supported Azure Artifacts Credential Provider secret for the
+runner, such as:
+
+- `PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS`
+- `PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS`
+- `PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS`
+
+Then run the manual `Private Gallery Live Validation` workflow, or dispatch the
+existing `Test & Build Module` workflow with `privateGalleryLiveValidation =
+true`.
+
+Expected:
+
+- The selected runner has policy permission to access the feed.
+- Live validation succeeds without an interactive prompt.
+- Evidence artifacts are uploaded by the workflow.
+
+### 9. PAT Fallback
+
+Purpose: prove the legacy escape hatch still works for constrained tenants
+where Entra/provider-based authentication cannot be used.
+
+Run with a test-only, low-scope, rotated PAT:
+
+```powershell
+Install-PrivateModule `
+    -Name ModuleA `
+    -AzureDevOpsOrganization contoso `
+    -AzureDevOpsProject Platform `
+    -AzureArtifactsFeed Modules `
+    -CredentialUserName user@contoso.com `
+    -CredentialSecretFilePath "$env:USERPROFILE\.secrets\azdo.pat"
+```
+
+Expected:
+
+- Install succeeds when PAT permissions are valid.
+- The test record marks this as fallback coverage, not the default enterprise
+  rollout path.
+
 If you distribute a pre-created profile file, redirect the user profile store
 with `POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH`, redirect the machine profile
 store with `POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH`, or place
@@ -266,6 +487,7 @@ least one module the current user may install/update:
     -Project Platform `
     -Feed Modules `
     -ModuleName ModuleA `
+    -CredentialProviderWaitMinutes 30 `
     -OutputFile .\private-gallery-live.xml `
     -EvidenceFile .\private-gallery-live.evidence.json
 ```
