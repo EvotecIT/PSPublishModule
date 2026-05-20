@@ -295,20 +295,23 @@ internal sealed partial class DocumentationPlanner
             }
         }
 
-        // About topics (local) – always included by default
-        try
+        // About topics are part of the default/all view, but explicit selectors should stay narrow.
+        if (!hasSelectors || req.All)
         {
-            var aboutFiles = _finder.ResolveAboutTopics((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.DocsPaths);
-            foreach (var f in aboutFiles)
+            try
             {
-                var title = BuildTitle(req, StripAboutExtensions(f.Name));
-                string raw;
-                try { raw = System.IO.File.ReadAllText(f.FullName); }
-                catch { continue; }
-                res.Items.Add(new DocumentItem { Title = title, Kind = "ABOUT", Path = f.FullName, FileName = f.Name, Content = AboutToMarkdown(raw), Source = "Local" });
+                var aboutFiles = _finder.ResolveAboutTopics((req.RootBase, req.InternalsBase, new DeliveryOptions()), req.DocsPaths);
+                foreach (var f in aboutFiles)
+                {
+                    var title = BuildTitle(req, StripAboutExtensions(f.Name));
+                    string raw;
+                    try { raw = System.IO.File.ReadAllText(f.FullName); }
+                    catch { continue; }
+                    res.Items.Add(new DocumentItem { Title = title, Kind = "ABOUT", Path = f.FullName, FileName = f.Name, Content = AboutToMarkdown(raw), Source = "Local" });
+                }
             }
+            catch { }
         }
-        catch { }
 
         // Formats and Types (local)
         try

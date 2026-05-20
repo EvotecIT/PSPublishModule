@@ -137,6 +137,16 @@ internal sealed class Renderer
         var content = c.Content ?? string.Empty;
         if (lang == "json" || lang == "jsonc")
         {
+            if (_jsonPreference == JsonRendererPreference.System)
+            {
+                if (!RenderJsonWithSystemTextJson(content))
+                {
+                    var codeMarkup = new HighlighterPipeline().Highlight(content, lang);
+                    AnsiConsole.MarkupLine(codeMarkup);
+                }
+                return;
+            }
+
             try
             {
                 var jt = new JsonText(content);
@@ -144,7 +154,9 @@ internal sealed class Renderer
             }
             catch
             {
-                // fallback to generic highlight
+                if (_jsonPreference == JsonRendererPreference.Auto && RenderJsonWithSystemTextJson(content))
+                    return;
+
                 var codeMarkup = new HighlighterPipeline().Highlight(content, lang);
                 AnsiConsole.MarkupLine(codeMarkup);
             }
@@ -161,6 +173,23 @@ internal sealed class Renderer
         if (!string.IsNullOrWhiteSpace(c.Caption))
         {
             AnsiConsole.MarkupLine($"[dim]{Markup.Escape(c.Caption!)}[/]");
+        }
+    }
+
+    private static bool RenderJsonWithSystemTextJson(string content)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(content);
+            var formatted = System.Text.Json.JsonSerializer.Serialize(
+                document.RootElement,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            Console.WriteLine(formatted);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

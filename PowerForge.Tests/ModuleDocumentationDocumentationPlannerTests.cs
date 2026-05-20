@@ -116,6 +116,53 @@ public class DocumentationPlannerTests
     }
 
     [Fact]
+    public void Execute_LocalReadme_Strips_Git_Suffix_From_ProjectUri()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "README.md"), """
+        [Guide](docs/Use-Git.md)
+        ![Logo](assets/ugit.svg)
+        """);
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            ProjectUri = "https://github.com/StartAutomating/ugit.git"
+        });
+
+        var readme = Assert.Single(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://github.com/StartAutomating/ugit/blob/main/docs/Use-Git.md", readme.Content, StringComparison.Ordinal);
+        Assert.Contains("https://raw.githubusercontent.com/StartAutomating/ugit/main/assets/ugit.svg", readme.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ugit.git/", readme.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Execute_ExplicitReadmeSelection_Does_Not_Include_AboutTopics()
+    {
+        var root = CreateTempModule(out var internals);
+        File.WriteAllText(Path.Combine(root, "about_Test.help.txt"), @"
+TOPIC
+    about_Test
+
+SHORT DESCRIPTION
+    Test topic.
+");
+
+        var planner = new DocumentationPlanner(new DocumentationFinder());
+        var res = planner.Execute(new DocumentationPlanner.Request
+        {
+            RootBase = root,
+            InternalsBase = internals,
+            Readme = true
+        });
+
+        Assert.Contains(res.Items, i => string.Equals(i.FileName, "README.md", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(res.Items, i => string.Equals(i.Kind, "ABOUT", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Execute_Changelog_Builds_Typed_Releases()
     {
         var root = CreateTempModule(out var internals);

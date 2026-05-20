@@ -24,7 +24,7 @@ internal static class RepoUrlParser
                     Host = RepoHost.GitHub,
                     ProjectUri = uri,
                     Owner = parts[0],
-                    Repo = parts[1]
+                    Repo = TrimGitSuffix(parts[1])
                 };
             }
         }
@@ -67,4 +67,7 @@ internal static class RepoUrlParser
 
         return new RepoInfo { Host = RepoHost.Unknown, ProjectUri = uri };
     }
+
+    private static string TrimGitSuffix(string value)
+        => Regex.Replace(value ?? string.Empty, "\\.git$", string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 }

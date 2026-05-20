@@ -1,5 +1,7 @@
 // ReSharper disable All
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using PowerForge;
 using System.IO;
 using System.Linq;
@@ -90,10 +92,10 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
                 {
                     titleName = (pso.Properties["Name"]?.Value ?? pso.Properties["ModuleName"]?.Value)?.ToString();
                     titleVersion = pso.Properties["Version"]?.Value?.ToString();
-                    delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
-                    repository = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
+                    delivery = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestCandidates[0]).FirstOrDefault());
+                    repository = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestCandidates[0]).FirstOrDefault());
                     projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestCandidates[0]).FirstOrDefault()?.ToString();
-                    var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                    var internalsRel = GetPsObjectString(delivery, "InternalsPath") ?? "Internals";
                     var cand = Path.Combine(rootBase, internalsRel);
                     internalsBase = Directory.Exists(cand) ? cand : null;
                 }
@@ -133,9 +135,10 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             var manifestPath = Directory.GetFiles(rootBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
             if (!string.IsNullOrEmpty(manifestPath))
             {
-                delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault() as PSObject;
+                delivery = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Delivery").Invoke(manifestPath).FirstOrDefault());
+                repository = AsPsObject(this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.Repository").Invoke(manifestPath).FirstOrDefault());
                 projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestPath).FirstOrDefault()?.ToString();
-                var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                var internalsRel = GetPsObjectString(delivery, "InternalsPath") ?? "Internals";
                 var cand = Path.Combine(rootBase, internalsRel);
                 internalsBase = Directory.Exists(cand) ? cand : null;
             }
@@ -186,30 +189,13 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         {
             if (string.IsNullOrWhiteSpace(branchToUse) && repository != null)
             {
-                string? b = null;
-                try { b = repository.Properties["Branch"]?.Value?.ToString(); } catch { }
-                if (string.IsNullOrWhiteSpace(b))
-                {
-                    var prop = repository.Properties.FirstOrDefault(pp => string.Equals(pp.Name, "Branch", StringComparison.OrdinalIgnoreCase));
-                    b = prop?.Value?.ToString();
-                }
+                var b = GetPsObjectString(repository, "Branch");
                 if (!string.IsNullOrWhiteSpace(b)) branchToUse = b;
             }
             if ((pathsToUse == null || pathsToUse.Length == 0) && repository != null)
             {
-                System.Collections.IEnumerable? arr = null;
-                try { arr = repository.Properties["Paths"]?.Value as System.Collections.IEnumerable; } catch { }
-                if (arr == null)
-                {
-                    var prop = repository.Properties.FirstOrDefault(pp => string.Equals(pp.Name, "Paths", StringComparison.OrdinalIgnoreCase));
-                    arr = prop?.Value as System.Collections.IEnumerable;
-                }
-                if (arr != null)
-                {
-                    var list = new System.Collections.Generic.List<string>();
-                    foreach (var o in arr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!); }
-                    if (list.Count > 0) pathsToUse = list.ToArray();
-                }
+                var values = GetPsObjectStringArray(repository, "Paths");
+                if (values.Length > 0) pathsToUse = values;
             }
         }
         catch { }
@@ -244,5 +230,61 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             else
                 renderer.ShowContent(di.Title, di.Content, Raw);
         }
+    }
+
+    private static PSObject? AsPsObject(object? value)
+    {
+        if (value == null) return null;
+        return value as PSObject ?? PSObject.AsPSObject(value);
+    }
+
+    private static object? GetPsObjectValue(PSObject? value, string name)
+    {
+        if (value == null || string.IsNullOrWhiteSpace(name)) return null;
+
+        if (value.BaseObject is IDictionary dictionary)
+        {
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                if (entry.Key != null && string.Equals(entry.Key.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                    return entry.Value;
+            }
+        }
+
+        try
+        {
+            var exact = value.Properties[name]?.Value;
+            if (exact != null) return exact;
+        }
+        catch { }
+
+        var property = value.Properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        return property?.Value;
+    }
+
+    private static string? GetPsObjectString(PSObject? value, string name)
+    {
+        var raw = GetPsObjectValue(value, name);
+        return raw?.ToString();
+    }
+
+    private static string[] GetPsObjectStringArray(PSObject? value, string name)
+    {
+        var raw = GetPsObjectValue(value, name);
+        if (raw is string text)
+            return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text };
+
+        if (raw is IEnumerable enumerable)
+        {
+            var list = new List<string>();
+            foreach (var item in enumerable)
+            {
+                var textItem = item?.ToString();
+                if (!string.IsNullOrWhiteSpace(textItem)) list.Add(textItem!);
+            }
+            return list.ToArray();
+        }
+
+        return Array.Empty<string>();
     }
 }
