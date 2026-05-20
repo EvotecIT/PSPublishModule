@@ -370,7 +370,7 @@ internal sealed partial class DocumentationPlanner
         // Remote standard docs (README/CHANGELOG/LICENSE)
         try
         {
-            bool wantRemoteFetch = !string.IsNullOrWhiteSpace(req.ProjectUri);
+            bool wantRemoteFetch = req.Online && !string.IsNullOrWhiteSpace(req.ProjectUri);
             if (wantRemoteFetch)
             {
                 bool hasReadme = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("README", StringComparison.OrdinalIgnoreCase)));

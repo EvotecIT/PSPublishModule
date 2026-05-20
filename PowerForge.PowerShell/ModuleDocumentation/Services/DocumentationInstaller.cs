@@ -94,6 +94,7 @@ internal sealed class DocumentationInstaller
             var licTarget = Path.Combine(dest, "license.txt");
             if (!(File.Exists(licTarget) && !force))
             {
+                PrepareOverwriteTarget(licTarget, force);
                 lic.CopyTo(licTarget, overwrite: true);
             }
         }
@@ -130,6 +131,7 @@ internal sealed class DocumentationInstaller
                 // Merge semantics: keep existing file unless Force/overwrite specified
                 continue;
             }
+            PrepareOverwriteTarget(target, overwrite);
             File.Copy(file, target, true);
         }
     }
@@ -141,7 +143,26 @@ internal sealed class DocumentationInstaller
         {
             var target = Path.Combine(dest, f.Name);
             if (File.Exists(target) && !force) continue; // keep existing unless -Force
+            PrepareOverwriteTarget(target, force);
             f.CopyTo(target, overwrite: true);
+        }
+    }
+
+    private static void PrepareOverwriteTarget(string target, bool overwrite)
+    {
+        if (!overwrite || !File.Exists(target)) return;
+
+        try
+        {
+            var attributes = File.GetAttributes(target);
+            if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+            {
+                File.SetAttributes(target, attributes & ~FileAttributes.ReadOnly);
+            }
+        }
+        catch
+        {
+            // Let the following copy operation report the real filesystem failure.
         }
     }
 }

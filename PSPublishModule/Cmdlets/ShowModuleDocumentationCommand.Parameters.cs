@@ -115,7 +115,7 @@ public sealed partial class ShowModuleDocumentationCommand
     /// </summary>
     [Parameter]
     [ValidateSet("PreferLocal","PreferRemote","All")]
-    public string Mode { get; set; } = "All";
+    public string Mode { get; set; } = "PreferLocal";
     /// <summary>Show both variants even when content is identical (root vs internals and local vs remote).</summary>
     [Parameter] public SwitchParameter ShowDuplicates { get; set; }
 }
