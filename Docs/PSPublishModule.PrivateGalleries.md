@@ -191,7 +191,8 @@ least one module the current user may install/update:
     -Project Platform `
     -Feed Modules `
     -ModuleName ModuleA `
-    -OutputFile .\private-gallery-live.xml
+    -OutputFile .\private-gallery-live.xml `
+    -EvidenceFile .\private-gallery-live.evidence.json
 ```
 
 The helper sets the required environment variables for the current process,
@@ -199,7 +200,10 @@ runs the Pester harness, optionally writes an NUnit/JUnit result file, and then
 restores the caller's environment, including any existing
 `POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH` override. The helper throws when
 Pester reports failed tests so release operators get a non-zero script outcome
-instead of a false-green live validation. To run the harness directly, set:
+instead of a false-green live validation. `-EvidenceFile` writes a non-secret
+JSON evidence summary with the provider, organization, project, feed, module,
+profile name, publish opt-in state, Pester counts, and optional result-file
+metadata. To run the harness directly, set:
 
 ```powershell
 $env:PSPUBLISHMODULE_AZDO_LIVE = '1'
@@ -241,5 +245,6 @@ live smoke:
     -Feed Modules `
     -ModuleName ModuleA `
     -PublishPackagePath 'C:\Temp\Company.Tools.1.0.0.nupkg' `
-    -OutputFile .\private-gallery-live-publish.xml
+    -OutputFile .\private-gallery-live-publish.xml `
+    -EvidenceFile .\private-gallery-live-publish.evidence.json
 ```

@@ -14,7 +14,8 @@ The helper fails the script when the live Pester run reports failed tests.
     -Organization contoso `
     -Project Platform `
     -Feed Modules `
-    -ModuleName ModuleA
+    -ModuleName ModuleA `
+    -EvidenceFile .\private-gallery-live.evidence.json
 #>
 [CmdletBinding()]
 param(
@@ -51,6 +52,9 @@ param(
 
     [Parameter()]
     [string] $OutputFile,
+
+    [Parameter()]
+    [string] $EvidenceFile,
 
     [Parameter()]
     [string] $ModuleManifestPath,
@@ -127,16 +131,78 @@ try {
 
     $pesterResult = Invoke-Pester @pesterParameters
     $failedCount = 0
+    $passedCount = 0
+    $skippedCount = 0
+    $totalCount = 0
+    $resultText = 'Unknown'
+    $durationMilliseconds = $null
     if ($null -ne $pesterResult) {
         $failedCountProperty = $pesterResult.PSObject.Properties['FailedCount']
         if ($failedCountProperty -and $null -ne $failedCountProperty.Value) {
             $failedCount = [int] $failedCountProperty.Value
         }
 
+        $passedCountProperty = $pesterResult.PSObject.Properties['PassedCount']
+        if ($passedCountProperty -and $null -ne $passedCountProperty.Value) {
+            $passedCount = [int] $passedCountProperty.Value
+        }
+
+        $skippedCountProperty = $pesterResult.PSObject.Properties['SkippedCount']
+        if ($skippedCountProperty -and $null -ne $skippedCountProperty.Value) {
+            $skippedCount = [int] $skippedCountProperty.Value
+        }
+
+        $totalCountProperty = $pesterResult.PSObject.Properties['TotalCount']
+        if ($totalCountProperty -and $null -ne $totalCountProperty.Value) {
+            $totalCount = [int] $totalCountProperty.Value
+        }
+
         $resultProperty = $pesterResult.PSObject.Properties['Result']
-        if ($failedCount -eq 0 -and $resultProperty -and [string] $resultProperty.Value -eq 'Failed') {
+        if ($resultProperty -and $null -ne $resultProperty.Value) {
+            $resultText = [string] $resultProperty.Value
+        }
+
+        if ($failedCount -eq 0 -and $resultText -eq 'Failed') {
             $failedCount = 1
         }
+
+        $durationProperty = $pesterResult.PSObject.Properties['Duration']
+        if ($durationProperty -and $durationProperty.Value -is [TimeSpan]) {
+            $durationMilliseconds = [math]::Round($durationProperty.Value.TotalMilliseconds, 0)
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('EvidenceFile') -and -not [string]::IsNullOrWhiteSpace($EvidenceFile)) {
+        $evidenceDirectory = Split-Path -Path $EvidenceFile -Parent
+        if (-not [string]::IsNullOrWhiteSpace($evidenceDirectory) -and -not (Test-Path -LiteralPath $evidenceDirectory)) {
+            New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
+        }
+
+        $evidence = [ordered]@{
+            SchemaVersion        = 1
+            GeneratedAtUtc       = [DateTimeOffset]::UtcNow.ToString('o')
+            Succeeded            = $failedCount -eq 0 -and $resultText -ne 'Failed'
+            Provider             = 'AzureArtifacts'
+            Organization         = $Organization
+            Project              = if ($PSBoundParameters.ContainsKey('Project') -and -not [string]::IsNullOrWhiteSpace($Project)) { $Project } else { $null }
+            Feed                 = $Feed
+            ModuleName           = $ModuleName
+            ProfileName          = $ProfileName
+            PublishPackageSupplied = $PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)
+            PublishPackageName   = if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) { [IO.Path]::GetFileName($PublishPackagePath) } else { $null }
+            Pester               = [ordered]@{
+                Result               = $resultText
+                TotalCount           = $totalCount
+                PassedCount          = $passedCount
+                FailedCount          = $failedCount
+                SkippedCount         = $skippedCount
+                DurationMilliseconds = $durationMilliseconds
+                OutputFile           = if ($PSBoundParameters.ContainsKey('OutputFile') -and -not [string]::IsNullOrWhiteSpace($OutputFile)) { $OutputFile } else { $null }
+                OutputFormat         = if ($PSBoundParameters.ContainsKey('OutputFile') -and -not [string]::IsNullOrWhiteSpace($OutputFile)) { $OutputFormat } else { $null }
+            }
+        }
+
+        $evidence | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $EvidenceFile -Encoding UTF8
     }
 
     if ($failedCount -gt 0) {

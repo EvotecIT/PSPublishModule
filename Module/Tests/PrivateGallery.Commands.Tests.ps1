@@ -56,6 +56,10 @@ Describe 'Private gallery command metadata' {
     It 'restores the caller profile path after the Azure Artifacts live validation runner' {
         $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles.json'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+        $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'live.evidence.json'
+        $outputPath = Join-Path $script:PrivateGalleryProfileRoot 'live.xml'
+        $packagePath = Join-Path $script:PrivateGalleryProfileRoot 'Company.Tools.1.2.3.nupkg'
+        Set-Content -LiteralPath $packagePath -Value 'not a real package' -Encoding UTF8
 
         function Invoke-Pester {
             param(
@@ -76,14 +80,33 @@ Describe 'Private gallery command metadata' {
 
             [pscustomobject]@{
                 FailedCount = 0
+                PassedCount = 2
+                SkippedCount = 0
+                TotalCount  = 2
                 Result      = 'Passed'
+                Duration    = [TimeSpan]::FromMilliseconds(250)
             }
         }
 
         try {
-            $result = & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Feed Modules -ModuleName ModuleA -PassThru
+            $result = & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Project Platform -Feed Modules -ModuleName ModuleA -PublishPackagePath $packagePath -OutputFile $outputPath -EvidenceFile $evidencePath -PassThru
             $result.FailedCount | Should -Be 0
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+            $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+            $evidence.Succeeded | Should -BeTrue
+            $evidence.Provider | Should -Be 'AzureArtifacts'
+            $evidence.Organization | Should -Be 'contoso'
+            $evidence.Project | Should -Be 'Platform'
+            $evidence.Feed | Should -Be 'Modules'
+            $evidence.ModuleName | Should -Be 'ModuleA'
+            $evidence.ProfileName | Should -Be 'LiveAzureArtifacts'
+            $evidence.PublishPackageSupplied | Should -BeTrue
+            $evidence.PublishPackageName | Should -Be 'Company.Tools.1.2.3.nupkg'
+            $evidence.Pester.TotalCount | Should -Be 2
+            $evidence.Pester.PassedCount | Should -Be 2
+            $evidence.Pester.FailedCount | Should -Be 0
+            $evidence.Pester.OutputFile | Should -Be $outputPath
+            $evidence.Pester.OutputFormat | Should -Be 'NUnitXml'
         } finally {
             Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
@@ -93,18 +116,26 @@ Describe 'Private gallery command metadata' {
     It 'fails the Azure Artifacts live validation runner when Pester reports failures' {
         $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles-failed.json'
         $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+        $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'failed-live.evidence.json'
 
         function Invoke-Pester {
             [pscustomobject]@{
                 FailedCount = 2
+                PassedCount = 1
+                SkippedCount = 0
+                TotalCount  = 3
                 Result      = 'Failed'
             }
         }
 
         try {
-            { & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Feed Modules -ModuleName ModuleA } |
+            { & $script:PrivateGalleryLiveValidationRunnerPath -Organization contoso -Feed Modules -ModuleName ModuleA -EvidenceFile $evidencePath } |
                 Should -Throw "Live Azure Artifacts private gallery validation failed: 2 Pester test(s) failed."
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+            $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+            $evidence.Succeeded | Should -BeFalse
+            $evidence.Pester.Result | Should -Be 'Failed'
+            $evidence.Pester.FailedCount | Should -Be 2
         } finally {
             Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
