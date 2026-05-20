@@ -16,6 +16,15 @@ The helper fails the script when the live Pester run reports failed tests.
     -Feed Modules `
     -ModuleName ModuleA `
     -EvidenceFile .\private-gallery-live.evidence.json
+
+.EXAMPLE
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
+    -Organization contoso `
+    -Project Platform `
+    -Feed Modules `
+    -ModuleName ModuleA `
+    -GenerateDisposablePackage `
+    -EvidenceFile .\private-gallery-live-publish.evidence.json
 #>
 [CmdletBinding()]
 param(
@@ -41,6 +50,17 @@ param(
     [Parameter()]
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
     [string] $PublishPackagePath,
+
+    [Parameter()]
+    [switch] $GenerateDisposablePackage,
+
+    [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$')]
+    [string] $DisposablePackageName = 'PSPublishModule.PrivateGallery.LiveValidation',
+
+    [Parameter()]
+    [ValidatePattern('^\d+\.\d+\.\d+([-.][A-Za-z0-9][A-Za-z0-9.-]*)?$')]
+    [string] $DisposablePackageVersion,
 
     [Parameter()]
     [ValidateSet('Detailed', 'Diagnostic', 'Normal', 'Minimal', 'None')]
@@ -82,6 +102,10 @@ $envNames = @(
 )
 $previous = @{}
 $evidenceDataPath = $null
+$generatedPackageRoot = $null
+$generatedPackagePath = $null
+$resolvedPublishPackagePath = $null
+$resolvedDisposablePackageVersion = $null
 
 function Test-ValidationItemSucceeded {
     param(
@@ -113,11 +137,75 @@ function Get-ValidationItemValue {
     return $null
 }
 
+function New-DisposableNuGetPackage {
+    param(
+        [Parameter(Mandatory)]
+        [string] $PackageId,
+
+        [Parameter(Mandatory)]
+        [string] $PackageVersion,
+
+        [Parameter(Mandatory)]
+        [string] $OutputDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $OutputDirectory)) {
+        New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+    }
+
+    $packagePath = Join-Path $OutputDirectory "$PackageId.$PackageVersion.nupkg"
+    $nuspec = @"
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>$([Security.SecurityElement]::Escape($PackageId))</id>
+    <version>$([Security.SecurityElement]::Escape($PackageVersion))</version>
+    <authors>PSPublishModule</authors>
+    <description>Disposable Azure Artifacts private gallery live validation package.</description>
+    <packageTypes>
+      <packageType name="Dependency" />
+    </packageTypes>
+  </metadata>
+</package>
+"@
+
+    $fileStream = [IO.File]::Open($packagePath, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($fileStream, [IO.Compression.ZipArchiveMode]::Create, $false)
+        try {
+            $entry = $archive.CreateEntry("$PackageId.nuspec")
+            $entryStream = $entry.Open()
+            try {
+                $writer = [IO.StreamWriter]::new($entryStream, [Text.UTF8Encoding]::new($false))
+                try {
+                    $writer.Write($nuspec)
+                } finally {
+                    $writer.Dispose()
+                }
+            } finally {
+                $entryStream.Dispose()
+            }
+        } finally {
+            $archive.Dispose()
+        }
+    } finally {
+        $fileStream.Dispose()
+    }
+
+    return $packagePath
+}
+
 foreach ($name in $envNames) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 
 try {
+    if ($GenerateDisposablePackage.IsPresent -and
+        $PSBoundParameters.ContainsKey('PublishPackagePath') -and
+        -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) {
+        throw "GenerateDisposablePackage cannot be combined with PublishPackagePath."
+    }
+
     $env:PSPUBLISHMODULE_AZDO_LIVE = '1'
     $env:PSPUBLISHMODULE_AZDO_ORGANIZATION = $Organization
     $env:PSPUBLISHMODULE_AZDO_FEED = $Feed
@@ -130,10 +218,24 @@ try {
         Remove-Item Env:\PSPUBLISHMODULE_AZDO_PROJECT -ErrorAction SilentlyContinue
     }
 
-    if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) {
+    if ($GenerateDisposablePackage.IsPresent) {
+        $generatedPackageRoot = Join-Path ([IO.Path]::GetTempPath()) ("PSPublishModule.PrivateGallery.GeneratedPackage." + [guid]::NewGuid().ToString('N'))
+        $resolvedDisposablePackageVersion = if ($PSBoundParameters.ContainsKey('DisposablePackageVersion') -and -not [string]::IsNullOrWhiteSpace($DisposablePackageVersion)) {
+            $DisposablePackageVersion
+        } else {
+            "0.0.1-live.$([DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmss'))"
+        }
+
+        $generatedPackagePath = New-DisposableNuGetPackage -PackageId $DisposablePackageName -PackageVersion $resolvedDisposablePackageVersion -OutputDirectory $generatedPackageRoot
+        $resolvedPublishPackagePath = $generatedPackagePath
         $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE = '1'
-        $env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH = (Resolve-Path -LiteralPath $PublishPackagePath).Path
+        $env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH = $resolvedPublishPackagePath
+    } elseif ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) {
+        $resolvedPublishPackagePath = (Resolve-Path -LiteralPath $PublishPackagePath).Path
+        $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE = '1'
+        $env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH = $resolvedPublishPackagePath
     } else {
+        $resolvedPublishPackagePath = $null
         Remove-Item Env:\PSPUBLISHMODULE_AZDO_PUBLISH_LIVE -ErrorAction SilentlyContinue
         Remove-Item Env:\PSPUBLISHMODULE_AZDO_PACKAGE_PATH -ErrorAction SilentlyContinue
     }
@@ -245,7 +347,7 @@ try {
                 }
             }
 
-            if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) {
+            if (-not [string]::IsNullOrWhiteSpace($resolvedPublishPackagePath)) {
                 $publishEvidence = $validationItems | Where-Object { $_.Name -eq 'PublishPackage' } | Select-Object -First 1
                 if ($null -eq $publishEvidence) {
                     $evidenceValidationErrors += "Required validation item 'PublishPackage' was not written."
@@ -260,7 +362,10 @@ try {
                         $evidenceValidationErrors += "Validation item 'PublishPackage' did not prove FailedCount = 0."
                     }
 
-                    $pushedPackages = @(Get-ValidationItemValue -Item $publishEvidence -PropertyName 'PushedPackageNames')
+                    $pushedPackages = @(
+                        @(Get-ValidationItemValue -Item $publishEvidence -PropertyName 'PushedPackageNames') |
+                            Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
+                    )
                     if ($pushedPackages.Count -eq 0) {
                         $evidenceValidationErrors += "Validation item 'PublishPackage' did not record pushed package names."
                     }
@@ -283,8 +388,11 @@ try {
             Feed                 = $Feed
             ModuleName           = $ModuleName
             ProfileName          = $ProfileName
-            PublishPackageSupplied = $PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)
-            PublishPackageName   = if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) { [IO.Path]::GetFileName($PublishPackagePath) } else { $null }
+            PublishPackageSupplied = -not [string]::IsNullOrWhiteSpace($resolvedPublishPackagePath)
+            PublishPackageName   = if (-not [string]::IsNullOrWhiteSpace($resolvedPublishPackagePath)) { [IO.Path]::GetFileName($resolvedPublishPackagePath) } else { $null }
+            GeneratedDisposablePackage = $GenerateDisposablePackage.IsPresent
+            DisposablePackageName = if ($GenerateDisposablePackage.IsPresent) { $DisposablePackageName } else { $null }
+            DisposablePackageVersion = if ($GenerateDisposablePackage.IsPresent) { $resolvedDisposablePackageVersion } else { $null }
             ValidationItems      = $validationItems
             EvidenceValidationErrors = $evidenceValidationErrors
             Pester               = [ordered]@{
@@ -324,5 +432,9 @@ try {
 
     if (-not [string]::IsNullOrWhiteSpace($evidenceDataPath) -and (Test-Path -LiteralPath $evidenceDataPath -PathType Leaf)) {
         Remove-Item -LiteralPath $evidenceDataPath -Force -ErrorAction SilentlyContinue
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($generatedPackageRoot) -and (Test-Path -LiteralPath $generatedPackageRoot)) {
+        Remove-Item -LiteralPath $generatedPackageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

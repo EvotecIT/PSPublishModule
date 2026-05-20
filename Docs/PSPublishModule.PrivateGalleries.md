@@ -209,6 +209,9 @@ credential-free publish configuration, install/update execution, and optional
 package-push evidence. When `-EvidenceFile` is used, the helper also treats
 missing or incomplete required assertion details as a validation failure so the
 JSON artifact cannot look successful while omitting the evidence operators need.
+For publish proof, use either `-PublishPackagePath` with a prebuilt disposable
+package or `-GenerateDisposablePackage` to create a unique non-secret validation
+package for the run.
 To run the harness directly, set:
 
 ```powershell
@@ -238,11 +241,26 @@ Recommended production-readiness evidence:
 - `New-ConfigurationPublish -ProfileName <name> -Enabled` produces a repository
   configuration with an Azure Artifacts v3 URI and no stored credential.
 - `Publish-NugetPackage -ProfileName <name>` succeeds for a disposable package
-  when `PSPUBLISHMODULE_AZDO_PUBLISH_LIVE=1` is intentionally enabled.
+  when package-push validation is intentionally enabled with
+  `-PublishPackagePath` or `-GenerateDisposablePackage`.
 
-To prove a real package push as well, opt in separately with a package path.
-This mutates the target feed, so it is intentionally not part of the default
-live smoke:
+To prove a real package push as well, opt in separately. This mutates the target
+feed, so it is intentionally not part of the default live smoke. The simplest
+operator path is to let the helper create a disposable package with a timestamp
+version:
+
+```powershell
+.\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `
+    -Organization contoso `
+    -Project Platform `
+    -Feed Modules `
+    -ModuleName ModuleA `
+    -GenerateDisposablePackage `
+    -OutputFile .\private-gallery-live-publish.xml `
+    -EvidenceFile .\private-gallery-live-publish.evidence.json
+```
+
+You can also supply a prebuilt package:
 
 ```powershell
 .\Module\Tests\Invoke-PrivateGalleryAzureArtifactsLiveValidation.ps1 `

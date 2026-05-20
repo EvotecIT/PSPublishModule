@@ -95,6 +95,7 @@ Describe 'Private gallery command metadata' {
                     ProfileName          = 'LiveAzureArtifacts'
                     AccessProbeSucceeded = $true
                     PackageName          = 'Company.Tools.1.2.3.nupkg'
+                    PushedPackageNames   = @('Company.Tools.1.2.3.nupkg')
                     FailedCount          = 0
                 }
             ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH -Encoding UTF8
@@ -131,12 +132,86 @@ Describe 'Private gallery command metadata' {
             $evidence.ValidationItems[0].UpdateResultReturned | Should -BeTrue
             $evidence.ValidationItems[1].Name | Should -Be 'PublishPackage'
             $evidence.ValidationItems[1].PackageName | Should -Be 'Company.Tools.1.2.3.nupkg'
+            $evidence.ValidationItems[1].PushedPackageNames | Should -Contain 'Company.Tools.1.2.3.nupkg'
             $evidence.ValidationItems[1].FailedCount | Should -Be 0
             $evidence.Pester.TotalCount | Should -Be 2
             $evidence.Pester.PassedCount | Should -Be 2
             $evidence.Pester.FailedCount | Should -Be 0
             $evidence.Pester.OutputFile | Should -Be $outputPath
             $evidence.Pester.OutputFormat | Should -Be 'NUnitXml'
+        } finally {
+            Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+        }
+    }
+
+    It 'generates a disposable package for Azure Artifacts live publish validation' {
+        $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles-generated-package.json'
+        $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+        $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'generated-package-live.evidence.json'
+
+        function Invoke-Pester {
+            param(
+                [string] $Path,
+                [string] $Output,
+                [switch] $PassThru
+            )
+
+            $PassThru.IsPresent | Should -BeTrue
+            $env:PSPUBLISHMODULE_AZDO_PUBLISH_LIVE | Should -Be '1'
+            $env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH | Should -Not -BeNullOrEmpty
+            Test-Path -LiteralPath $env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH -PathType Leaf | Should -BeTrue
+            [IO.Path]::GetFileName($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH) | Should -Be 'Company.LiveValidation.0.0.1-live.1.nupkg'
+
+            @(
+                [ordered]@{
+                    Name                              = 'OnboardingInstallUpdate'
+                    Succeeded                         = $true
+                    ProfileName                       = 'LiveAzureArtifacts'
+                    AccessProbeSucceeded              = $true
+                    PublishConfigurationHasCredential = $false
+                    InstallResultReturned             = $true
+                    UpdateResultReturned              = $true
+                },
+                [ordered]@{
+                    Name                 = 'PublishPackage'
+                    Succeeded            = $true
+                    ProfileName          = 'LiveAzureArtifacts'
+                    AccessProbeSucceeded = $true
+                    PackageName          = [IO.Path]::GetFileName($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH)
+                    PushedPackageNames   = @([IO.Path]::GetFileName($env:PSPUBLISHMODULE_AZDO_PACKAGE_PATH))
+                    FailedCount          = 0
+                }
+            ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH -Encoding UTF8
+
+            [pscustomobject]@{
+                FailedCount = 0
+                PassedCount = 2
+                SkippedCount = 0
+                TotalCount  = 2
+                Result      = 'Passed'
+            }
+        }
+
+        try {
+            & $script:PrivateGalleryLiveValidationRunnerPath `
+                -Organization contoso `
+                -Feed Modules `
+                -ModuleName ModuleA `
+                -GenerateDisposablePackage `
+                -DisposablePackageName 'Company.LiveValidation' `
+                -DisposablePackageVersion '0.0.1-live.1' `
+                -EvidenceFile $evidencePath
+
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+            $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+            $evidence.Succeeded | Should -BeTrue
+            $evidence.PublishPackageSupplied | Should -BeTrue
+            $evidence.GeneratedDisposablePackage | Should -BeTrue
+            $evidence.DisposablePackageName | Should -Be 'Company.LiveValidation'
+            $evidence.DisposablePackageVersion | Should -Be '0.0.1-live.1'
+            $evidence.PublishPackageName | Should -Be 'Company.LiveValidation.0.0.1-live.1.nupkg'
+            $evidence.EvidenceValidationErrors | Should -BeNullOrEmpty
         } finally {
             Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath

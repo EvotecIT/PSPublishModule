@@ -123,7 +123,8 @@ LONG DESCRIPTION
           and writes a non-secret evidence JSON file with -EvidenceFile. The evidence should include the
           access probe, credential-free publish configuration, install/update, and optional package-push checks.
           Missing or incomplete required evidence details make the helper fail so the JSON cannot look successful
-          while omitting the proof operators need.
+          while omitting the proof operators need. For package-push proof, use -GenerateDisposablePackage or pass
+          a prebuilt disposable package with -PublishPackagePath.
         - Initialize-ModuleRepository -Path <profile.json> -ProfileName <name> -Overwrite -InstallPrerequisites
           succeeds on a clean workstation and reports Connection.AccessProbeSucceeded = True.
         - Install-PrivateModule -ProfileName <name> -Name <known module> succeeds with no PAT or explicit
@@ -131,8 +132,8 @@ LONG DESCRIPTION
         - Update-PrivateModule -ProfileName <name> -Name <known module> succeeds for an installed private module.
         - New-ConfigurationPublish -ProfileName <name> -Enabled produces an Azure Artifacts v3 URI and no stored
           credential.
-        - Publish-NugetPackage -ProfileName <name> succeeds for a disposable package when publish validation is
-          intentionally enabled.
+        - Publish-NugetPackage -ProfileName <name> succeeds for a disposable package when package-push validation
+          is intentionally enabled with -GenerateDisposablePackage or -PublishPackagePath.
 
     PAT FALLBACK
 
