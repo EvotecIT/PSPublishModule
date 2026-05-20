@@ -134,7 +134,13 @@ LONG DESCRIPTION
           feed access. For unattended validation, configure the Azure Artifacts Credential Provider with
           ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS for access-token based automation or
           ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for managed identity/service-principal based automation. Do
-          not put those secrets in PSPublishModule profiles. The workflow writes a non-secret run summary and uploads
+          not put those secrets in PSPublishModule profiles. The included workflows pass through these GitHub
+          secrets when present:
+              PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS
+              PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS -> ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS
+              PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS -> VSS_NUGET_EXTERNAL_FEED_ENDPOINTS
+          The evidence JSON and step summary report only whether each unattended credential-provider endpoint
+          variable was configured, never the secret value. The workflow writes a non-secret run summary and uploads
           the XML/evidence JSON artifacts for release records.
         - Before the new standalone workflow exists on the default branch, dispatch the existing Test & Build Module
           workflow against the feature branch with privateGalleryLiveValidation = true. That gated job uses the same

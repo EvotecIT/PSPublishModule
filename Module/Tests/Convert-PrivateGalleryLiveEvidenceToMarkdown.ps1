@@ -62,6 +62,14 @@ $lines.Add("| Passed / Failed / Skipped | $(ConvertTo-MarkdownTableValue $pester
 $lines.Add("| Publish proof enabled | $(ConvertTo-MarkdownTableValue $evidence.PublishPackageSupplied) |")
 $lines.Add("| Generated disposable package | $(ConvertTo-MarkdownTableValue $evidence.GeneratedDisposablePackage) |")
 
+$unattendedEnvironment = $evidence.PSObject.Properties['UnattendedCredentialProviderEnvironment']
+if ($unattendedEnvironment -and $null -ne $unattendedEnvironment.Value) {
+    $providerEnvironment = $unattendedEnvironment.Value
+    $lines.Add("| Credential-provider external endpoints configured | $(ConvertTo-MarkdownTableValue $providerEnvironment.ArtifactsExternalFeedEndpointsConfigured) |")
+    $lines.Add("| Credential-provider feed endpoints configured | $(ConvertTo-MarkdownTableValue $providerEnvironment.ArtifactsFeedEndpointsConfigured) |")
+    $lines.Add("| Legacy VSS external endpoints configured | $(ConvertTo-MarkdownTableValue $providerEnvironment.LegacyVssExternalFeedEndpointsConfigured) |")
+}
+
 $errors = @($evidence.EvidenceValidationErrors | Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) })
 if ($errors.Count -gt 0) {
     $lines.Add('')

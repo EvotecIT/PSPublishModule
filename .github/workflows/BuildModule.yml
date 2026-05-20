@@ -134,6 +134,9 @@ jobs:
           AZDO_GENERATE_DISPOSABLE_PACKAGE: ${{ inputs.privateGalleryGenerateDisposablePackage }}
           AZDO_DISPOSABLE_PACKAGE_NAME: ${{ inputs.privateGalleryDisposablePackageName }}
           AZDO_DISPOSABLE_PACKAGE_VERSION: ${{ inputs.privateGalleryDisposablePackageVersion }}
+          ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS }}
+          ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS }}
+          VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS }}
         run: |
           $missing = @()
           if ([string]::IsNullOrWhiteSpace($env:AZDO_ORGANIZATION)) { $missing += 'privateGalleryOrganization' }

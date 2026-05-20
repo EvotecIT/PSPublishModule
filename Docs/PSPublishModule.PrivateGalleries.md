@@ -238,8 +238,19 @@ Credential Provider using its supported endpoint environment variables, such as
 `ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS` for access-token based
 automation or `ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS` for managed
 identity/service-principal based automation. PSPublishModule does not write
-those secrets into profiles. The workflow adds a non-secret run summary from
-the evidence JSON and uploads
+those secrets into profiles. The included workflows pass through the matching
+GitHub secrets when they exist:
+
+- `PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS` to
+  `ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS`
+- `PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS` to
+  `ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS`
+- `PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS` to the legacy
+  `VSS_NUGET_EXTERNAL_FEED_ENDPOINTS`
+
+The evidence JSON and step summary report only whether each unattended
+credential-provider endpoint variable was configured, never the secret value.
+The workflow adds a non-secret run summary from the evidence JSON and uploads
 `private-gallery-live.xml` and `private-gallery-live.evidence.json` as the
 `private-gallery-live-validation` artifact.
 

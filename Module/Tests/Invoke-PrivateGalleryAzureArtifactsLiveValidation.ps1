@@ -404,6 +404,11 @@ try {
             GeneratedDisposablePackage = $GenerateDisposablePackage.IsPresent
             DisposablePackageName = if ($GenerateDisposablePackage.IsPresent) { $DisposablePackageName } else { $null }
             DisposablePackageVersion = if ($GenerateDisposablePackage.IsPresent) { $resolvedDisposablePackageVersion } else { $null }
+            UnattendedCredentialProviderEnvironment = [ordered]@{
+                ArtifactsExternalFeedEndpointsConfigured = -not [string]::IsNullOrWhiteSpace($env:ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS)
+                ArtifactsFeedEndpointsConfigured = -not [string]::IsNullOrWhiteSpace($env:ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS)
+                LegacyVssExternalFeedEndpointsConfigured = -not [string]::IsNullOrWhiteSpace($env:VSS_NUGET_EXTERNAL_FEED_ENDPOINTS)
+            }
             ValidationItems      = $validationItems
             EvidenceValidationErrors = $evidenceValidationErrors
             Pester               = [ordered]@{

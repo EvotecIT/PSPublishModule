@@ -95,6 +95,9 @@ jobs:
           AZDO_GENERATE_DISPOSABLE_PACKAGE: ${{ inputs.generateDisposablePackage }}
           AZDO_DISPOSABLE_PACKAGE_NAME: ${{ inputs.disposablePackageName }}
           AZDO_DISPOSABLE_PACKAGE_VERSION: ${{ inputs.disposablePackageVersion }}
+          ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS }}
+          ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS }}
+          VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: ${{ secrets.PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS }}
         run: |
           $outputRoot = Join-Path $PWD 'live-validation-output'
           New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null

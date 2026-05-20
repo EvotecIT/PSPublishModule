@@ -67,6 +67,9 @@ Describe 'Private gallery command metadata' {
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'runnerLabels:'
         $workflow | Should -Match 'runs-on:\s+\$\{\{\s*fromJSON\(inputs\.runnerLabels\)\s*\}\}'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS'
         $workflow | Should -Match 'Invoke-PrivateGalleryAzureArtifactsLiveValidation\.ps1'
         $workflow | Should -Match 'Convert-PrivateGalleryLiveEvidenceToMarkdown\.ps1'
         $workflow | Should -Match 'GenerateDisposablePackage'
@@ -83,6 +86,9 @@ Describe 'Private gallery command metadata' {
         $workflow | Should -Match 'PrivateGalleryLiveValidation:'
         $workflow | Should -Match 'inputs\.privateGalleryLiveValidation\s+==\s+true'
         $workflow | Should -Match 'privateGalleryRunnerLabels:'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_ARTIFACTS_EXTERNAL_FEED_ENDPOINTS'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_ARTIFACTS_FEED_ENDPOINTS'
+        $workflow | Should -Match 'PSPUBLISHMODULE_AZDO_VSS_NUGET_EXTERNAL_FEED_ENDPOINTS'
         $workflow | Should -Match 'Invoke-PrivateGalleryAzureArtifactsLiveValidation\.ps1'
         $workflow | Should -Match 'Convert-PrivateGalleryLiveEvidenceToMarkdown\.ps1'
         $workflow | Should -Match 'private-gallery-live-validation'
@@ -105,6 +111,11 @@ Describe 'Private gallery command metadata' {
             GeneratedDisposablePackage = $true
             DisposablePackageName  = 'Company.Tools'
             DisposablePackageVersion = '1.2.3'
+            UnattendedCredentialProviderEnvironment = [ordered]@{
+                ArtifactsExternalFeedEndpointsConfigured = $true
+                ArtifactsFeedEndpointsConfigured = $false
+                LegacyVssExternalFeedEndpointsConfigured = $false
+            }
             ValidationItems        = @(
                 [ordered]@{
                     Name                              = 'OnboardingInstallUpdate'
@@ -141,6 +152,9 @@ Describe 'Private gallery command metadata' {
         $summary | Should -Match '\| Passed / Failed / Skipped \| 2 / 0 / 0 \|'
         $summary | Should -Match '\| Publish proof enabled \| True \|'
         $summary | Should -Match '\| Generated disposable package \| True \|'
+        $summary | Should -Match '\| Credential-provider external endpoints configured \| True \|'
+        $summary | Should -Match '\| Credential-provider feed endpoints configured \| False \|'
+        $summary | Should -Match '\| Legacy VSS external endpoints configured \| False \|'
         $summary | Should -Match '\| OnboardingInstallUpdate \| True \| AccessProbe=True, Install=True, Update=True \|'
         $summary | Should -Match '\| PublishPackage \| True \| AccessProbe=True, PushedPackages=1, FailedPackages=0 \|'
     }
@@ -208,6 +222,9 @@ Describe 'Private gallery command metadata' {
             $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
             $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
             $evidence.Succeeded | Should -BeTrue
+            $evidence.UnattendedCredentialProviderEnvironment.ArtifactsExternalFeedEndpointsConfigured | Should -BeFalse
+            $evidence.UnattendedCredentialProviderEnvironment.ArtifactsFeedEndpointsConfigured | Should -BeFalse
+            $evidence.UnattendedCredentialProviderEnvironment.LegacyVssExternalFeedEndpointsConfigured | Should -BeFalse
             $evidence.Provider | Should -Be 'AzureArtifacts'
             $evidence.Organization | Should -Be 'contoso'
             $evidence.Project | Should -Be 'Platform'
