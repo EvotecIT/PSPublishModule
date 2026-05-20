@@ -206,7 +206,10 @@ JSON evidence summary with the provider, organization, project, feed, module,
 profile name, publish opt-in state, Pester counts, optional result-file
 metadata, and sanitized live assertion details such as access probe success,
 credential-free publish configuration, install/update execution, and optional
-package-push evidence. To run the harness directly, set:
+package-push evidence. When `-EvidenceFile` is used, the helper also treats
+missing or incomplete required assertion details as a validation failure so the
+JSON artifact cannot look successful while omitting the evidence operators need.
+To run the harness directly, set:
 
 ```powershell
 $env:PSPUBLISHMODULE_AZDO_LIVE = '1'

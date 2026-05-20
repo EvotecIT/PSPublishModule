@@ -83,6 +83,36 @@ $envNames = @(
 $previous = @{}
 $evidenceDataPath = $null
 
+function Test-ValidationItemSucceeded {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Item,
+
+        [Parameter(Mandatory)]
+        [string] $PropertyName
+    )
+
+    $property = $Item.PSObject.Properties[$PropertyName]
+    return $property -and $null -ne $property.Value -and [bool] $property.Value
+}
+
+function Get-ValidationItemValue {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Item,
+
+        [Parameter(Mandatory)]
+        [string] $PropertyName
+    )
+
+    $property = $Item.PSObject.Properties[$PropertyName]
+    if ($property) {
+        return $property.Value
+    }
+
+    return $null
+}
+
 foreach ($name in $envNames) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
@@ -183,11 +213,58 @@ try {
 
     if ($PSBoundParameters.ContainsKey('EvidenceFile') -and -not [string]::IsNullOrWhiteSpace($EvidenceFile)) {
         $validationItems = @()
+        $evidenceValidationErrors = @()
         if (-not [string]::IsNullOrWhiteSpace($evidenceDataPath) -and (Test-Path -LiteralPath $evidenceDataPath -PathType Leaf)) {
             $rawEvidenceItems = Get-Content -LiteralPath $evidenceDataPath -Raw
             if (-not [string]::IsNullOrWhiteSpace($rawEvidenceItems)) {
                 $parsedEvidenceItems = $rawEvidenceItems | ConvertFrom-Json
                 $validationItems = @($parsedEvidenceItems)
+            }
+        }
+
+        $pesterSucceeded = $failedCount -eq 0 -and $resultText -ne 'Failed'
+        if ($pesterSucceeded) {
+            $onboardingEvidence = $validationItems | Where-Object { $_.Name -eq 'OnboardingInstallUpdate' } | Select-Object -First 1
+            if ($null -eq $onboardingEvidence) {
+                $evidenceValidationErrors += "Required validation item 'OnboardingInstallUpdate' was not written."
+            } else {
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'Succeeded')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not report Succeeded = true."
+                }
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'AccessProbeSucceeded')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove AccessProbeSucceeded = true."
+                }
+                if ((Get-ValidationItemValue -Item $onboardingEvidence -PropertyName 'PublishConfigurationHasCredential') -ne $false) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove publish configuration was credential-free."
+                }
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'InstallResultReturned')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove install execution returned a result."
+                }
+                if (-not (Test-ValidationItemSucceeded -Item $onboardingEvidence -PropertyName 'UpdateResultReturned')) {
+                    $evidenceValidationErrors += "Validation item 'OnboardingInstallUpdate' did not prove update execution returned a result."
+                }
+            }
+
+            if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) {
+                $publishEvidence = $validationItems | Where-Object { $_.Name -eq 'PublishPackage' } | Select-Object -First 1
+                if ($null -eq $publishEvidence) {
+                    $evidenceValidationErrors += "Required validation item 'PublishPackage' was not written."
+                } else {
+                    if (-not (Test-ValidationItemSucceeded -Item $publishEvidence -PropertyName 'Succeeded')) {
+                        $evidenceValidationErrors += "Validation item 'PublishPackage' did not report Succeeded = true."
+                    }
+                    if (-not (Test-ValidationItemSucceeded -Item $publishEvidence -PropertyName 'AccessProbeSucceeded')) {
+                        $evidenceValidationErrors += "Validation item 'PublishPackage' did not prove AccessProbeSucceeded = true."
+                    }
+                    if ([int] (Get-ValidationItemValue -Item $publishEvidence -PropertyName 'FailedCount') -ne 0) {
+                        $evidenceValidationErrors += "Validation item 'PublishPackage' did not prove FailedCount = 0."
+                    }
+
+                    $pushedPackages = @(Get-ValidationItemValue -Item $publishEvidence -PropertyName 'PushedPackageNames')
+                    if ($pushedPackages.Count -eq 0) {
+                        $evidenceValidationErrors += "Validation item 'PublishPackage' did not record pushed package names."
+                    }
+                }
             }
         }
 
@@ -199,7 +276,7 @@ try {
         $evidence = [ordered]@{
             SchemaVersion        = 1
             GeneratedAtUtc       = [DateTimeOffset]::UtcNow.ToString('o')
-            Succeeded            = $failedCount -eq 0 -and $resultText -ne 'Failed'
+            Succeeded            = $pesterSucceeded -and $evidenceValidationErrors.Count -eq 0
             Provider             = 'AzureArtifacts'
             Organization         = $Organization
             Project              = if ($PSBoundParameters.ContainsKey('Project') -and -not [string]::IsNullOrWhiteSpace($Project)) { $Project } else { $null }
@@ -209,6 +286,7 @@ try {
             PublishPackageSupplied = $PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)
             PublishPackageName   = if ($PSBoundParameters.ContainsKey('PublishPackagePath') -and -not [string]::IsNullOrWhiteSpace($PublishPackagePath)) { [IO.Path]::GetFileName($PublishPackagePath) } else { $null }
             ValidationItems      = $validationItems
+            EvidenceValidationErrors = $evidenceValidationErrors
             Pester               = [ordered]@{
                 Result               = $resultText
                 TotalCount           = $totalCount
@@ -222,6 +300,10 @@ try {
         }
 
         $evidence | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $EvidenceFile -Encoding UTF8
+
+        if ($evidenceValidationErrors.Count -gt 0) {
+            throw "Live Azure Artifacts evidence validation failed: $($evidenceValidationErrors -join ' ')"
+        }
     }
 
     if ($failedCount -gt 0) {

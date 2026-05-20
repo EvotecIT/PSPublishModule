@@ -172,6 +172,54 @@ Describe 'Private gallery command metadata' {
         }
     }
 
+    It 'fails the Azure Artifacts live validation runner when required evidence details are missing' {
+        $originalProfilePath = Join-Path $script:PrivateGalleryProfileRoot 'caller-profiles-missing-evidence.json'
+        $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $originalProfilePath
+        $evidencePath = Join-Path $script:PrivateGalleryProfileRoot 'missing-evidence-live.evidence.json'
+        $packagePath = Join-Path $script:PrivateGalleryProfileRoot 'Company.Tools.9.9.9.nupkg'
+        Set-Content -LiteralPath $packagePath -Value 'not a real package' -Encoding UTF8
+
+        function Invoke-Pester {
+            param(
+                [string] $Path,
+                [string] $Output,
+                [switch] $PassThru
+            )
+
+            $PassThru.IsPresent | Should -BeTrue
+            $env:PSPUBLISHMODULE_AZDO_EVIDENCE_DATA_PATH | Should -Not -BeNullOrEmpty
+
+            [pscustomobject]@{
+                FailedCount = 0
+                PassedCount = 2
+                SkippedCount = 0
+                TotalCount  = 2
+                Result      = 'Passed'
+            }
+        }
+
+        try {
+            {
+                & $script:PrivateGalleryLiveValidationRunnerPath `
+                    -Organization contoso `
+                    -Feed Modules `
+                    -ModuleName ModuleA `
+                    -PublishPackagePath $packagePath `
+                    -EvidenceFile $evidencePath
+            } | Should -Throw "*Live Azure Artifacts evidence validation failed*"
+
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH | Should -Be $originalProfilePath
+            $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+            $evidence.Succeeded | Should -BeFalse
+            $evidence.Pester.Result | Should -Be 'Passed'
+            $evidence.EvidenceValidationErrors | Should -Contain "Required validation item 'OnboardingInstallUpdate' was not written."
+            $evidence.EvidenceValidationErrors | Should -Contain "Required validation item 'PublishPackage' was not written."
+        } finally {
+            Remove-Item Function:\Invoke-Pester -ErrorAction SilentlyContinue
+            $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $script:PrivateGalleryProfilePath
+        }
+    }
+
     It 'exposes the private gallery wrapper cmdlets' {
         $module = $script:PrivateGalleryTestModule
         $module.ExportedCmdlets.Keys | Should -Contain 'Connect-ModuleRepository'
