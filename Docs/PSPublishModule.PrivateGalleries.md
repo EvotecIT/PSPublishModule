@@ -229,6 +229,22 @@ as a workflow run with downloadable evidence artifacts. Dispatch it with:
 - `runnerLabels` set to a JSON array for the runner that owns the enterprise
   authentication policy, for example `["self-hosted","windows"]`.
 
+For a managed repository, define GitHub variables once and leave the matching
+manual inputs blank during dispatch:
+
+- `PSPUBLISHMODULE_AZDO_ORGANIZATION`
+- `PSPUBLISHMODULE_AZDO_PROJECT` for project-scoped feeds
+- `PSPUBLISHMODULE_AZDO_FEED`
+- `PSPUBLISHMODULE_AZDO_MODULE_NAME`
+- `PSPUBLISHMODULE_AZDO_PROFILE_NAME`
+- `PSPUBLISHMODULE_AZDO_RUNNER_LABELS`
+- `PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_NAME`
+- `PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_VERSION`
+
+Workflow inputs override variables when both are provided. The pre-merge
+`Test & Build Module` workflow uses the same variable names for its opt-in
+`PrivateGalleryLiveValidation` job.
+
 Prefer a self-hosted Windows runner that is allowed to use the Azure Artifacts
 Credential Provider and already has a cached or policy-provided identity for
 the target feed. Hosted runners generally do not have the interactive or cached

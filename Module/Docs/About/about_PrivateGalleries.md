@@ -136,7 +136,18 @@ a prebuilt disposable package with -PublishPackagePath.
 - The manual GitHub Actions workflow named Private Gallery Live Validation succeeds on a runner that owns
 the enterprise Azure Artifacts credential-provider policy. Prefer runnerLabels = ["self-hosted","windows"]
 or another approved self-hosted runner because hosted runners usually cannot prove cached Entra-backed
-feed access. For unattended validation, configure the Azure Artifacts Credential Provider with
+feed access. For managed repository defaults, define GitHub variables once and leave matching manual
+inputs blank during dispatch:
+PSPUBLISHMODULE_AZDO_ORGANIZATION
+PSPUBLISHMODULE_AZDO_PROJECT
+PSPUBLISHMODULE_AZDO_FEED
+PSPUBLISHMODULE_AZDO_MODULE_NAME
+PSPUBLISHMODULE_AZDO_PROFILE_NAME
+PSPUBLISHMODULE_AZDO_RUNNER_LABELS
+PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_NAME
+PSPUBLISHMODULE_AZDO_DISPOSABLE_PACKAGE_VERSION
+Workflow inputs override variables when both are provided. For unattended validation, configure the Azure
+Artifacts Credential Provider with
 ARTIFACTS_CREDENTIALPROVIDER_EXTERNAL_FEED_ENDPOINTS for access-token based automation or
 ARTIFACTS_CREDENTIALPROVIDER_FEED_ENDPOINTS for managed identity/service-principal based automation. Do
 not put those secrets in PSPublishModule profiles. The included workflows pass through these GitHub
