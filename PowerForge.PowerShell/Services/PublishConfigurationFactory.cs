@@ -133,6 +133,7 @@ internal sealed class PublishConfigurationFactory
                 OverwriteTagName = request.OverwriteTagName,
                 DoNotMarkAsPreRelease = request.DoNotMarkAsPreRelease,
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
+                UseAsDependencyVersionSource = request.UseAsDependencyVersionSource,
                 Verbose = request.Verbose
             }
         };

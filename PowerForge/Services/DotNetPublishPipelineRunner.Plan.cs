@@ -748,7 +748,16 @@ public sealed partial class DotNetPublishPipelineRunner
             CompanyFolderName = definition.CompanyFolderName,
             UseCompanyFolder = definition.UseCompanyFolder,
             InstallDirectoryName = definition.InstallDirectoryName,
-            PayloadComponentGroupId = definition.PayloadComponentGroupId
+            PayloadComponentGroupId = definition.PayloadComponentGroupId,
+            ExitLaunch = definition.ExitLaunch is null
+                ? null
+                : new PowerForgeInstallerExitLaunch
+                {
+                    Enabled = definition.ExitLaunch.Enabled,
+                    Text = definition.ExitLaunch.Text,
+                    Target = definition.ExitLaunch.Target,
+                    Condition = definition.ExitLaunch.Condition
+                }
         };
 
         foreach (var input in definition.Inputs)

@@ -31,5 +31,6 @@ internal sealed class PublishConfigurationRequest
     public string? ID { get; set; }
     public bool DoNotMarkAsPreRelease { get; set; }
     public bool GenerateReleaseNotes { get; set; }
+    public bool UseAsDependencyVersionSource { get; set; }
     public bool Verbose { get; set; }
 }

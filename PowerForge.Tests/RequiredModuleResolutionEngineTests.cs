@@ -17,7 +17,8 @@ public sealed class RequiredModuleResolutionEngineTests
                 moduleVersion: "Latest",
                 minimumVersion: null,
                 requiredVersion: null,
-                guid: "Auto")
+                guid: "Auto",
+                versionSource: ModuleDependencyVersionSource.Auto)
         };
 
         var resolved = engine.ResolveRequiredModules(

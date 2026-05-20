@@ -49,6 +49,11 @@ public sealed class PowerForgeInstallerDefinition
     public List<PowerForgeInstallerDialog> Dialogs { get; set; } = new();
 
     /// <summary>
+    /// Optional action exposed as a checkbox on the final installer page.
+    /// </summary>
+    public PowerForgeInstallerExitLaunch? ExitLaunch { get; set; }
+
+    /// <summary>
     /// Additional directory trees required by installer components.
     /// </summary>
     public List<PowerForgeInstallerDirectoryTree> Directories { get; set; } = new();
@@ -93,6 +98,32 @@ public sealed class PowerForgeInstallerProduct
     /// Downgrade message shown when a newer version is installed.
     /// </summary>
     public string DowngradeErrorMessage { get; set; } = "A newer version of [ProductName] is already installed.";
+}
+
+/// <summary>
+/// Optional launch action shown on the final WiX exit dialog.
+/// </summary>
+public sealed class PowerForgeInstallerExitLaunch
+{
+    /// <summary>
+    /// Whether the final-page launch checkbox and shell execution action are emitted.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Checkbox text shown on the final installer page.
+    /// </summary>
+    public string Text { get; set; } = "Launch [ProductName]";
+
+    /// <summary>
+    /// Target opened through the shell, for example a URL or formatted executable path.
+    /// </summary>
+    public string Target { get; set; } = string.Empty;
+
+    /// <summary>
+    /// WiX condition controlling the launch action.
+    /// </summary>
+    public string Condition { get; set; } = "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed";
 }
 
 /// <summary>

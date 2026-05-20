@@ -282,6 +282,11 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var spec = CreateBaseSpec(root, app);
             var authoring = CreateSimpleAuthoring("ProductFiles");
+            authoring.ExitLaunch = new PowerForgeInstallerExitLaunch
+            {
+                Text = "Open app",
+                Target = "http://127.0.0.1:9000/"
+            };
             authoring.Inputs.Add(new PowerForgeInstallerInput
             {
                 Id = "LicenseKey",
@@ -310,6 +315,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var installerPlan = Assert.Single(plan.Installers);
             Assert.NotNull(installerPlan.Authoring);
             Assert.Equal("ProductFiles", installerPlan.HarvestComponentGroupId);
+            Assert.NotNull(installerPlan.Authoring!.ExitLaunch);
+            Assert.Equal("Open app", installerPlan.Authoring.ExitLaunch!.Text);
+            Assert.Equal("http://127.0.0.1:9000/", installerPlan.Authoring.ExitLaunch.Target);
             var input = Assert.Single(installerPlan.Authoring!.Inputs);
             Assert.True(input.Required);
             Assert.Equal("Enter a license key before continuing.", input.RequiredMessage);

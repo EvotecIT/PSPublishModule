@@ -145,6 +145,21 @@ public enum ModuleDependencyKind
 }
 
 /// <summary>
+/// Source used when resolving Auto/Latest module dependency versions.
+/// </summary>
+public enum ModuleDependencyVersionSource
+{
+    /// <summary>Use the build default: installed metadata, with online lookup only when enabled or needed.</summary>
+    Auto,
+    /// <summary>Resolve from locally installed module metadata.</summary>
+    Installed,
+    /// <summary>Resolve from the PowerShell Gallery repository.</summary>
+    PSGallery,
+    /// <summary>Resolve from a publish configuration marked as the dependency version source.</summary>
+    PublishRepository
+}
+
+/// <summary>
 /// Encoding values used by file consistency configuration.
 /// </summary>
 public enum FileConsistencyEncoding

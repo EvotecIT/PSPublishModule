@@ -75,7 +75,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 args.Add("--self-contained");
                 args.Add("true");
-                args.Add("/p:NativeAotPublish=true");
+                args.Add("/p:PublishAot=true");
                 args.Add("/p:StripSymbols=true");
                 args.Add($"/p:IlcOptimizationPreference={(style == DotNetPublishStyle.AotSize ? "Size" : "Speed")}");
                 args.Add("/p:InvariantGlobalization=false");

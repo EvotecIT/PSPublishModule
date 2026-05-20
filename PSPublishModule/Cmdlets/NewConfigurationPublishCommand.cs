@@ -172,6 +172,12 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     public SwitchParameter GenerateReleaseNotes { get; set; }
 
+    /// <summary>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    public SwitchParameter UseAsDependencyVersionSource { get; set; }
+
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -206,6 +212,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             ID = ID,
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
+            UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         });
 

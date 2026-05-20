@@ -14,13 +14,33 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(runtime))
         {
             var runtimeValue = runtime!;
-            foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
+            var restoreRequests = new HashSet<(string ProjectPath, string Framework)>();
+            foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             {
-                _logger.Info($"Restore ({runtimeValue}) -> {p}");
+                var combinations = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+                    .Where(combination => string.Equals(combination.Runtime, runtimeValue, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (combinations.Length == 0)
+                {
+                    restoreRequests.Add((target.ProjectPath, string.Empty));
+                    continue;
+                }
 
-                var args = new List<string> { "restore", p, "--nologo" };
+                foreach (var framework in combinations.Select(combination => combination.Framework).Distinct(StringComparer.OrdinalIgnoreCase))
+                    restoreRequests.Add((target.ProjectPath, framework ?? string.Empty));
+            }
+
+            foreach (var request in restoreRequests)
+            {
+                var framework = request.Framework;
+                var label = string.IsNullOrWhiteSpace(framework) ? runtimeValue : $"{runtimeValue}, {framework}";
+                _logger.Info($"Restore ({label}) -> {request.ProjectPath}");
+
+                var args = new List<string> { "restore", request.ProjectPath, "--nologo" };
                 args.AddRange(new[] { "-r", runtimeValue });
-                args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, p, runtimeValue)));
+                args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, request.ProjectPath, runtimeValue, framework)));
+                if (!string.IsNullOrWhiteSpace(framework))
+                    args.Add($"/p:TargetFramework={framework}");
 
                 RunDotnet(workDir, args);
             }
@@ -46,7 +66,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static Dictionary<string, string> BuildRestoreMsBuildProperties(
         DotNetPublishPlan plan,
         string projectPath,
-        string runtime)
+        string runtime,
+        string? framework = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
@@ -58,6 +79,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             var styles = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
                 .Where(combination => string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
+                .Where(combination => string.IsNullOrWhiteSpace(framework)
+                    || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
                 .Select(combination => combination.Style)
                 .Distinct()
                 .ToArray();
@@ -87,8 +110,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     if (!merged.ContainsKey("SelfContained"))
                         merged["SelfContained"] = "true";
-                    if (!merged.ContainsKey("NativeAotPublish"))
-                        merged["NativeAotPublish"] = "true";
+                    if (!merged.ContainsKey("PublishAot"))
+                        merged["PublishAot"] = "true";
                 }
             }
         }

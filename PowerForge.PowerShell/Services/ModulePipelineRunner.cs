@@ -48,14 +48,27 @@ public sealed partial class ModulePipelineRunner
         public string? MinimumVersion { get; }
         public string? RequiredVersion { get; }
         public string? Guid { get; }
+        public ModuleDependencyVersionSource VersionSource { get; }
 
         public RequiredModuleDraft(string moduleName, string? moduleVersion, string? minimumVersion, string? requiredVersion, string? guid)
+            : this(moduleName, moduleVersion, minimumVersion, requiredVersion, guid, ModuleDependencyVersionSource.Auto)
+        {
+        }
+
+        public RequiredModuleDraft(
+            string moduleName,
+            string? moduleVersion,
+            string? minimumVersion,
+            string? requiredVersion,
+            string? guid,
+            ModuleDependencyVersionSource versionSource)
         {
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
             MinimumVersion = minimumVersion;
             RequiredVersion = requiredVersion;
             Guid = guid;
+            VersionSource = versionSource;
         }
     }
 

@@ -35,6 +35,12 @@ internal static class PowerForgeInstallerDefinitionValidator
         Require(definition.InstallDirectoryName, nameof(definition.InstallDirectoryName));
         if (!string.IsNullOrWhiteSpace(definition.PayloadComponentGroupId))
             RequireWixIdentifier(definition.PayloadComponentGroupId, nameof(definition.PayloadComponentGroupId));
+        if (definition.ExitLaunch is { Enabled: true } exitLaunch)
+        {
+            Require(exitLaunch.Text, nameof(definition.ExitLaunch.Text));
+            Require(exitLaunch.Target, nameof(definition.ExitLaunch.Target));
+            Require(exitLaunch.Condition, nameof(definition.ExitLaunch.Condition));
+        }
 
         EnsureUnique(
             definition.Inputs.Select(input => input.Id),

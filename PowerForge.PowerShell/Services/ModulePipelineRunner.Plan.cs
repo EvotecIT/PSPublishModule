@@ -138,7 +138,8 @@ public sealed partial class ModulePipelineRunner
                     moduleVersion: module.ModuleVersion,
                     minimumVersion: module.ModuleVersion,
                     requiredVersion: module.RequiredVersion,
-                    guid: module.Guid);
+                    guid: module.Guid,
+                    versionSource: ModuleDependencyVersionSource.Auto);
 
                 if (requiredIndex.TryGetValue(draft.ModuleName, out var idx))
                     requiredModulesDraft[idx] = draft;
@@ -318,7 +319,8 @@ public sealed partial class ModulePipelineRunner
                         moduleVersion: md.ModuleVersion,
                         minimumVersion: md.MinimumVersion,
                         requiredVersion: md.RequiredVersion,
-                        guid: md.Guid);
+                        guid: md.Guid,
+                        versionSource: md.VersionSource);
 
                     if (requiredIndex.TryGetValue(name, out var idx))
                         requiredModulesDraft[idx] = draft;
@@ -620,11 +622,16 @@ public sealed partial class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ModulePipelinePlanningHelpers.ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
-        if (!resolveMissingModulesOnlineSet && HasAutoRequiredModules(requiredModulesDraft))
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft))
         {
             resolveMissingModulesOnline = true;
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
         }
+
+        var enabledPublishes = publishes
+            .Where(p => p is not null && p.Configuration?.Enabled == true)
+            .ToArray();
+        var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(enabledPublishes);
 
         var requiredModules = ResolveRequiredModules(
             requiredModulesDraft,
@@ -632,7 +639,8 @@ public sealed partial class ModulePipelineRunner
             warnIfRequiredModulesOutdated,
             installMissingModulesPrerelease,
             installMissingModulesRepository,
-            installMissingModulesCredential);
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
         if (importModules?.PreferBinaryConflictOrder == true)
             requiredModules = ReorderRequiredModulesForBinaryConflicts(requiredModules, compatible);
         var requiredModulesForPackaging = AreRequiredModuleDraftListsEquivalent(requiredModulesDraft, requiredModulesDraftForPackaging)
@@ -643,7 +651,8 @@ public sealed partial class ModulePipelineRunner
                 warnIfRequiredModulesOutdated,
                 installMissingModulesPrerelease,
                 installMissingModulesRepository,
-                installMissingModulesCredential);
+                installMissingModulesCredential,
+                dependencyVersionSourceRepository);
 
         var approved = approvedModules
             .Where(m => !string.IsNullOrWhiteSpace(m))
@@ -707,9 +716,6 @@ public sealed partial class ModulePipelineRunner
 
         var enabledArtefacts = artefacts
             .Where(a => a is not null && a.Configuration?.Enabled == true)      
-            .ToArray();
-        var enabledPublishes = publishes
-            .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
         if (formatting is not null &&
@@ -821,6 +827,36 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter);
+    }
+
+    private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)
+    {
+        var candidates = (enabledPublishes ?? Array.Empty<ConfigurationPublishSegment>())
+            .Where(static publish => publish?.Configuration?.Enabled == true)
+            .Select(static publish => publish.Configuration)
+            .Where(static publish => publish.UseAsDependencyVersionSource)
+            .ToArray();
+
+        if (candidates.Length == 0)
+            return null;
+
+        if (candidates.Length > 1)
+            throw new InvalidOperationException("Only one enabled New-ConfigurationPublish segment can use -UseAsDependencyVersionSource.");
+
+        var publish = candidates[0];
+        if (publish.Destination != PublishDestination.PowerShellGallery)
+            throw new InvalidOperationException("-UseAsDependencyVersionSource can only be used with PowerShell repository publish destinations.");
+
+        var repository = publish.Repository?.Name ?? publish.RepositoryName;
+        if (string.IsNullOrWhiteSpace(repository))
+            repository = "PSGallery";
+
+        _logger.Info($"Dependency version source: resolving Auto/Latest module dependencies from repository '{repository}'.");
+        return new DependencyVersionSourceRepository(
+            repository,
+            publish.Repository?.Credential,
+            preferOnlineMetadata: true,
+            allowOnlineLookup: true);
     }
 
     private static string[] BuildMissingCsprojReasonList(
